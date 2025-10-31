@@ -91,3 +91,31 @@ md-render/
   - 预览区域默认全宽显示，如需居中版心可在 `#markdown-output` 添加 `max-width` 与 `margin: 0 auto`
   - 详见"实现原理"中的"空白与间距策略"和"嵌套列表实现"
 
+
+## 部署到 GitHub Pages
+
+本项目为纯静态站点（`index.html` + JS/CSS），可通过 GitHub Actions 自动部署到 GitHub Pages。
+
+### 一次性配置
+
+1. 在 GitHub 仓库中打开 Settings → Pages。
+2. 将 Source 设置为 “GitHub Actions”。
+3. 确认仓库分支为 `main`（或根据你使用的默认分支调整）。
+
+### 自动部署
+
+- 已内置工作流：`.github/workflows/deploy-pages.yml`
+- 当你向 `main` 分支 `push` 时，会自动构建并部署到 GitHub Pages。
+- 也可在 Actions 页签中手动运行（Workflow Dispatch）。
+
+### 访问地址
+
+- 成功部署后，页面将通过环境链接暴露；一般为：
+  - 个人主页：`https://<username>.github.io/`
+  - 项目页：`https://<username>.github.io/<repo>/`
+
+### 自定义与常见问题
+
+- 若你的静态文件不在仓库根目录，请修改工作流中的 `actions/upload-pages-artifact@v3` 的 `path`。
+- 工作流已设置必要权限：`pages: write` 与 `id-token: write`。
+- 若仓库默认分支不是 `main`，请同步修改工作流触发分支。
