@@ -1,0 +1,292 @@
+/* Markdown 渲染器样式 */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    line-height: 1.6;
+}
+h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 100%;
+    font-weight: normal;
+    font-style: normal;
+    font-family: inherit;
+    vertical-align: baseline;
+    box-sizing: border-box;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+    gap: 2px;
+    background: #2d2d2d;
+}
+
+.editor-panel,
+.preview-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #252526;
+}
+
+.panel-header {
+    padding: 12px 16px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3e3e3e;
+}
+
+.panel-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #cccccc;
+}
+
+#markdown-input {
+    flex: 1;
+    padding: 16px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    resize: none;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+#markdown-input:focus {
+    outline: none;
+}
+
+#markdown-input::placeholder {
+    color: #6a6a6a;
+}
+
+#markdown-output {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    background: #1e1e1e;
+}
+
+/* Markdown 渲染样式 */
+#markdown-output h1 {
+    font-size: 2em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid #3e3e3e;
+    color: #ffffff;
+}
+
+#markdown-output h2 {
+    font-size: 1.5em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid #3e3e3e;
+    color: #ffffff;
+}
+
+#markdown-output h3 {
+    font-size: 1.17em;
+    color: #ffffff;
+}
+
+#markdown-output h4 {
+    font-size: 1em;
+    color: #ffffff;
+}
+
+#markdown-output h5 {
+    font-size: 0.83em;
+    color: #ffffff;
+}
+
+#markdown-output h6 {
+    font-size: 0.67em;
+    color: #aaaaaa;
+}
+
+#markdown-output p {
+    color: #d4d4d4;
+}
+
+#markdown-output ul,
+#markdown-output ol {
+    padding-left: 2em;
+    margin-bottom: 0.8em;
+}
+
+#markdown-output ul {
+    list-style-type: disc;
+}
+
+#markdown-output ol {
+    list-style-type: decimal;
+}
+
+#markdown-output li {
+    color: #d4d4d4;
+}
+
+#markdown-output code {
+    background: #2d2d2d;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #d7ba7d;
+}
+
+/* 代码块容器（接近 VS Code Markdown 预览） */
+.code-block {
+    margin: 0.8em 0;
+    border: 1px solid #3e3e3e;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #1f1f1f;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+
+.code-block .code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 28px;
+    padding: 0 10px;
+    background: #2a2a2a;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.code-block .code-lang {
+    font-size: 12px;
+    color: #9aa0a6;
+    text-transform: lowercase;
+}
+
+.code-block .code-copy-btn {
+    position: relative;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9aa0a6;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+    gap: 4px;
+}
+
+.code-block .code-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #d4d4d4;
+    opacity: 1;
+}
+
+.code-block .code-copy-btn:active {
+    transform: scale(0.95);
+}
+
+.code-block .code-copy-btn.copied {
+    color: #4ec9b0;
+    opacity: 1;
+}
+
+.code-block .code-copy-btn.copied svg {
+    display: none;
+}
+
+.code-block .code-copy-btn.copied::after {
+    content: '已复制';
+    font-size: 11px;
+    color: #4ec9b0;
+    white-space: nowrap;
+}
+
+.code-block pre {
+    background: transparent;
+    padding: 14px 16px;
+    border-radius: 0;
+    overflow-x: auto;
+    margin: 0;
+}
+
+#markdown-output pre {
+    background: #2d2d2d;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    border: 1px solid #3e3e3e;
+}
+
+#markdown-output pre code {
+    background: transparent;
+    padding: 0;
+    color: #d4d4d4;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+#markdown-output blockquote {
+    padding: 10px 16px;
+    border-left: 4px solid #6ea7ff;
+    color: #b8c1ce;
+    background: rgba(80, 130, 200, 0.08);
+}
+
+#markdown-output a {
+    color: #4ec9b0;
+    text-decoration: none;
+}
+
+#markdown-output a:hover {
+    text-decoration: underline;
+}
+
+#markdown-output hr {
+    border: none;
+    border-top: 1px solid #3e3e3e;
+}
+
+#markdown-output strong {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+#markdown-output em {
+    font-style: italic;
+}
+
+/* 滚动条样式 */
+#markdown-input::-webkit-scrollbar,
+#markdown-output::-webkit-scrollbar {
+    width: 10px;
+}
+
+#markdown-input::-webkit-scrollbar-track,
+#markdown-output::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+#markdown-input::-webkit-scrollbar-thumb,
+#markdown-output::-webkit-scrollbar-thumb {
+    background: #424242;
+    border-radius: 5px;
+}
+
+#markdown-input::-webkit-scrollbar-thumb:hover,
+#markdown-output::-webkit-scrollbar-thumb:hover {
+    background: #4e4e4e;
+}
+
