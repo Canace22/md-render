@@ -268,6 +268,45 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     font-style: italic;
 }
 
+#markdown-output del {
+    text-decoration: line-through;
+    color: #888888;
+}
+
+#markdown-output img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 0.5em 0;
+}
+
+#markdown-output table {
+    border-collapse: collapse;
+    margin: 0.8em 0;
+    width: 100%;
+}
+
+#markdown-output table th,
+#markdown-output table td {
+    border: 1px solid #3e3e3e;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+#markdown-output table th {
+    background: #2a2a2a;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+#markdown-output table td {
+    color: #d4d4d4;
+}
+
+#markdown-output table tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
 /* 滚动条样式 */
 #markdown-input::-webkit-scrollbar,
 #markdown-output::-webkit-scrollbar {

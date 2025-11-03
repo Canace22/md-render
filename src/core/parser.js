@@ -34,12 +34,10 @@ export class MarkdownParser {
             }
 
             // 引用
-            if (trimmedLine.startsWith('> ')) {
-                tokens.push({
-                    type: 'blockquote',
-                    content: trimmedLine.substring(2)
-                });
-                i++;
+            if (trimmedLine.startsWith('>')) {
+                const blockquote = this.parseBlockquote(lines, i);
+                tokens.push(blockquote.token);
+                i = blockquote.nextIndex;
                 continue;
             }
 
@@ -49,6 +47,16 @@ export class MarkdownParser {
                 tokens.push(heading);
                 i++;
                 continue;
+            }
+
+            // 表格
+            if (trimmedLine.startsWith('|')) {
+                const table = this.parseTable(lines, i);
+                if (table.token) {
+                    tokens.push(table.token);
+                    i = table.nextIndex;
+                    continue;
+                }
             }
 
             // 无序列表
@@ -136,6 +144,100 @@ export class MarkdownParser {
     }
 
     /**
+     * 解析块引用（支持多行引用）
+     */
+    parseBlockquote(lines, startIndex) {
+        const quoteLines = [];
+        let i = startIndex;
+
+        while (i < lines.length) {
+            const line = lines[i];
+            const trimmedLine = line.trim();
+
+            // 如果是引用行，提取内容
+            if (trimmedLine.startsWith('>')) {
+                // 移除 > 符号，可能后面跟空格
+                const content = trimmedLine.substring(1).trim();
+                quoteLines.push(content);
+                i++;
+            } else if (trimmedLine === '') {
+                // 空行可能表示引用结束（但在某些情况下可能继续引用）
+                // 检查下一行是否是继续的引用
+                if (i + 1 < lines.length && lines[i + 1].trim().startsWith('>')) {
+                    quoteLines.push(''); // 保留空行
+                    i++;
+                } else {
+                    // 下一行不是引用，结束
+                    break;
+                }
+            } else {
+                // 非引用行，结束
+                break;
+            }
+        }
+
+        return {
+            token: {
+                type: 'blockquote',
+                content: quoteLines.join('\n')
+            },
+            nextIndex: i
+        };
+    }
+
+    /**
+     * 解析表格
+     */
+    parseTable(lines, startIndex) {
+        const rows = [];
+        let i = startIndex;
+
+        while (i < lines.length) {
+            const line = lines[i].trim();
+
+            // 如果不是表格行，结束
+            if (!line.startsWith('|')) {
+                break;
+            }
+
+            // 检查是否是分隔行 (|---| 或 |---|---|)
+            if (/^\|[-:\s|]+\|$/.test(line)) {
+                i++;
+                continue; // 跳过分隔行
+            }
+
+            // 解析表格行
+            const cells = line.split('|')
+                .map(cell => cell.trim())
+                .filter(cell => cell !== ''); // 移除空字符串（首尾的 | 产生的）
+
+            if (cells.length > 0) {
+                rows.push(cells);
+            }
+
+            i++;
+        }
+
+        // 至少需要一行数据（不包括分隔行）
+        if (rows.length === 0) {
+            return { token: null, nextIndex: startIndex };
+        }
+
+        // 确定列数（使用第一行）
+        const columnCount = rows[0].length;
+
+        return {
+            token: {
+                type: 'table',
+                headers: rows[0] || [],
+                rows: rows.slice(1) || [],
+                columnCount
+            },
+            nextIndex: i
+        };
+    }
+
+    /**
      * 解析列表（支持多层嵌套）
      */
     parseList(lines, startIndex, listType, baseIndent = 0) {
@@ -214,13 +316,29 @@ export class MarkdownParser {
         // 先处理代码（避免与其他语法冲突）
         text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
 
+        // 处理图片 ![alt](url "title") 或 ![alt](url)
+        text = text.replace(/!\[([^\]]*)\]\(([^)]+)("([^"]+)")?\)/g, (match, alt, url, hasTitle, title) => {
+            if (hasTitle && title) {
+                return `<img src="${url}" alt="${alt}" title="${title}">`;
+            }
+            return `<img src="${url}" alt="${alt}">`;
+        });
+
+        // 处理删除线 ~~text~~
+        text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
         // 处理粗体和斜体
         text = text.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
         text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
-        // 处理链接 [text](url)
-        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+        // 处理链接 [text](url "title") 或 [text](url)
+        text = text.replace(/\[([^\]]+)\]\(([^)]+)("([^"]+)")?\)/g, (match, text, url, hasTitle, title) => {
+            if (hasTitle && title) {
+                return `<a href="${url}" title="${title}">${text}</a>`;
+            }
+            return `<a href="${url}">${text}</a>`;
+        });
 
         return {
             content: text,

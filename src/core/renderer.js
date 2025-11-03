@@ -43,6 +43,8 @@ export class MarkdownRenderer {
                 return this.renderList(token);
             case 'blockquote':
                 return this.renderBlockquote(token);
+            case 'table':
+                return this.renderTable(token);
             case 'hr':
                 return '<hr>';
             case 'empty':
@@ -124,8 +126,59 @@ export class MarkdownRenderer {
      * 渲染引用
      */
     renderBlockquote(token) {
-        const inlineContent = this.parser.parseInline(token.content);
-        return `<blockquote>${inlineContent.content}</blockquote>`;
+        // 多行引用需要按段落渲染
+        const lines = token.content.split('\n');
+        const paragraphs = [];
+        let currentParagraph = [];
+
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine === '') {
+                // 空行，结束当前段落
+                if (currentParagraph.length > 0) {
+                    const inlineContent = this.parser.parseInline(currentParagraph.join('\n'));
+                    paragraphs.push(`<p>${inlineContent.content}</p>`);
+                    currentParagraph = [];
+                }
+            } else {
+                currentParagraph.push(line);
+            }
+        }
+
+        // 处理最后一个段落
+        if (currentParagraph.length > 0) {
+            const inlineContent = this.parser.parseInline(currentParagraph.join('\n'));
+            paragraphs.push(`<p>${inlineContent.content}</p>`);
+        }
+
+        return `<blockquote>${paragraphs.join('')}</blockquote>`;
+    }
+
+    /**
+     * 渲染表格
+     */
+    renderTable(token) {
+        let html = '<table><thead><tr>';
+        
+        // 渲染表头
+        for (const header of token.headers) {
+            const inlineContent = this.parser.parseInline(header);
+            html += `<th>${inlineContent.content}</th>`;
+        }
+        html += '</tr></thead><tbody>';
+        
+        // 渲染数据行
+        for (const row of token.rows) {
+            html += '<tr>';
+            for (const cell of row) {
+                const inlineContent = this.parser.parseInline(cell);
+                html += `<td>${inlineContent.content}</td>`;
+            }
+            html += '</tr>';
+        }
+        
+        html += '</tbody></table>';
+        return html;
     }
 
     /**

@@ -5,14 +5,22 @@ import '../styles/styles.css';
 
 const DEFAULT_MARKDOWN = `# 欢迎使用 Markdown 渲染器
 
-这是一个简单的 Markdown 渲染器示例。
+这是一个支持 CommonMark 规范的 Markdown 渲染器示例。
+
+![22](https://Canace22.github.io/picx-images-hosting/22.6ikg63uj2n.webp)
 
 ## 功能特性
 
 - 支持标题
-- 支持列表
-- 支持代码块
+- 支持列表（有序和无序）
+- 支持嵌套列表
+- 支持代码块（语法高亮）
+- 支持行内代码
 - 支持链接和强调
+- 支持删除线
+- 支持图片
+- 支持表格
+- 支持多行引用
 
 ### 示例代码
 
@@ -24,11 +32,33 @@ function hello() {
 
 ### 示例链接
 
-访问 [GitHub](https://github.com) 了解更多。
+访问 [GitHub](https://github.com "点击访问 GitHub") 了解更多。
 
-**粗体文本** 和 *斜体文本*
+**粗体文本**、*斜体文本* 和 ~~删除线~~
 
-> 这是一条引用
+### 示例图片
+
+![Markdown Logo](https://via.placeholder.com/400x100?text=Markdown+Renderer "Markdown 渲染器")
+
+### 多行引用示例
+
+> 第一行引用
+> 
+> 第二行引用
+> 
+> 引用中可以包含**粗体**和*斜体*
+
+### 表格示例
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 标题 | ✅ | 支持 H1-H6 |
+| 列表 | ✅ | 有序和无序列表 |
+| 代码块 | ✅ | 支持语法高亮 |
+| 表格 | ✅ | GFM 表格支持 |
+| 图片 | ✅ | 支持 alt 和 title |
+
+### 嵌套列表示例
 
 - 列表项 1
 - 列表项 2
