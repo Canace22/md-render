@@ -3,7 +3,7 @@
  * 将 Markdown 文本解析为结构化的 token 数组
  */
 
-class MarkdownParser {
+export class MarkdownParser {
     /**
      * 解析 Markdown 文本
      * @param {string} text - Markdown 文本

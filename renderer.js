@@ -3,7 +3,13 @@
  * 将解析后的 token 数组转换为 HTML
  */
 
-class MarkdownRenderer {
+import { MarkdownParser } from './parser.js';
+
+export class MarkdownRenderer {
+    constructor() {
+        this.parser = new MarkdownParser();
+    }
+
     /**
      * 渲染 token 数组为 HTML
      * @param {Array} tokens - 解析后的 token 数组
@@ -50,8 +56,7 @@ class MarkdownRenderer {
      * 渲染标题
      */
     renderHeading(token) {
-        const parser = new MarkdownParser();
-        const inlineContent = parser.parseInline(token.content);
+        const inlineContent = this.parser.parseInline(token.content);
         return `<h${token.level}>${inlineContent.content}</h${token.level}>`;
     }
 
@@ -59,8 +64,7 @@ class MarkdownRenderer {
      * 渲染段落
      */
     renderParagraph(token) {
-        const parser = new MarkdownParser();
-        const inlineContent = parser.parseInline(token.content);
+        const inlineContent = this.parser.parseInline(token.content);
         return `<p>${inlineContent.content}</p>`;
     }
 
@@ -120,8 +124,7 @@ class MarkdownRenderer {
      * 渲染引用
      */
     renderBlockquote(token) {
-        const parser = new MarkdownParser();
-        const inlineContent = parser.parseInline(token.content);
+        const inlineContent = this.parser.parseInline(token.content);
         return `<blockquote>${inlineContent.content}</blockquote>`;
     }
 
