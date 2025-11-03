@@ -1,182 +1,183 @@
-# Markdown 渲染器
+# Markdown Renderer
 
-一个简单、轻量级的 Markdown 渲染器，使用原生 JavaScript 实现，支持 CommonMark 规范，无需任何依赖。
+[中文版说明](./README.zh.md)
 
-## 功能特性
+A simple, lightweight Markdown renderer built with vanilla JavaScript, supporting CommonMark specification, with no dependencies required.
 
-- ✅ 标题（H1-H6）
-- ✅ 段落
-- ✅ 无序列表和有序列表
-- ✅ 嵌套列表
-- ✅ 代码块（集成 highlight.js 语法高亮，支持一键复制）
-- ✅ 行内代码
-- ✅ 链接（支持 title 属性）
-- ✅ 粗体和斜体文本
-- ✅ 删除线
-- ✅ 图片（支持 alt 和 title 属性）
-- ✅ 引用块（支持多行引用）
-- ✅ 水平分割线
-- ✅ 表格（GFM 扩展）
-- ✅ 实时预览
+## Features
 
-## 使用方法
+- ✅ Headings (H1-H6)
+- ✅ Paragraphs
+- ✅ Unordered and ordered lists
+- ✅ Nested lists
+- ✅ Code blocks (integrated highlight.js syntax highlighting with one-click copy)
+- ✅ Inline code
+- ✅ Links (with title attribute support)
+- ✅ Bold and italic text
+- ✅ Strikethrough
+- ✅ Images (with alt and title attribute support)
+- ✅ Blockquotes (with multi-line support)
+- ✅ Horizontal rules
+- ✅ Tables (GFM extension)
+- ✅ Real-time preview
 
-### 开发模式
+## Usage
 
-1. 安装依赖：
+### Development Mode
+
+1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. 启动开发服务器：
+2. Start the development server:
 ```bash
 npm run dev
 ```
 
-3. 在浏览器中打开 `http://localhost:3000`
-4. 在左侧输入框中输入 Markdown 文本
-5. 右侧会实时显示渲染结果
+3. Open `http://localhost:3000` in your browser
+4. Enter Markdown text in the left input area
+5. The right side will display the rendered result in real-time
 
-### 生产构建
+### Production Build
 
 ```bash
 npm run build
 ```
 
-构建产物将输出到 `dist/` 目录。
+The build output will be generated in the `dist/` directory.
 
-## 项目结构
+## Project Structure
 
 ```
 md-render/
-├── index.html              # 应用入口 HTML
-├── package.json            # 项目配置和依赖
-├── vite.config.js          # Vite 构建配置
-├── src/                    # 源代码目录
-│   ├── main.jsx            # React 应用入口
-│   ├── components/         # React 组件
-│   │   └── MarkdownEditor.jsx  # 主编辑器组件
-│   ├── core/               # 核心功能模块
-│   │   ├── parser.js       # Markdown 解析器
-│   │   └── renderer.js     # HTML 渲染器
-│   └── styles/             # 样式文件
-│       └── styles.css      # 主样式文件
-├── README.md               # 项目说明
-├── ARCHITECTURE.md         # 架构文档
-└── REACT_MIGRATION.md      # React 迁移分析报告
+├── index.html              # Application entry HTML
+├── package.json            # Project configuration and dependencies
+├── vite.config.js          # Vite build configuration
+├── src/                    # Source code directory
+│   ├── main.jsx            # React application entry
+│   ├── components/         # React components
+│   │   └── MarkdownEditor.jsx  # Main editor component
+│   ├── core/               # Core functionality modules
+│   │   ├── parser.js       # Markdown parser
+│   │   └── renderer.js     # HTML renderer
+│   └── styles/             # Style files
+│       └── styles.css      # Main style file
+├── README.md               # Project documentation
+├── ARCHITECTURE.md         # Architecture documentation
+└── REACT_MIGRATION.md      # React migration analysis report
 ```
 
-## 支持的 Markdown 语法
+## Supported Markdown Syntax
 
-### 块级元素
+### Block Elements
 
-- `# 标题` - 标题（H1-H6，使用 1-6 个 #）
-- `` ```代码块```` - 代码块（支持语言标记进行语法高亮，如 ` ```javascript `）
-- `> 引用` - 引用块（支持多行引用）
-- `- 列表项` - 无序列表
-- `1. 列表项` - 有序列表
-- 嵌套列表：使用缩进（2个或更多空格）创建嵌套列表
+- `# Heading` - Headings (H1-H6, using 1-6 # characters)
+- `` ```code block```` - Code blocks (supports language tags for syntax highlighting, e.g., ` ```javascript `)
+- `> Quote` - Blockquotes (supports multi-line quotes)
+- `- List item` - Unordered lists
+- `1. List item` - Ordered lists
+- Nested lists: Use indentation (2 or more spaces) to create nested lists
   ```markdown
-  - 一级列表
-    - 二级嵌套列表
-      - 三级嵌套列表
-    1. 二级有序列表
-    2. 另一个有序项
+  - First level item
+    - Second level nested item
+      - Third level nested item
+    1. Second level ordered item
+    2. Another ordered item
   ```
-- `---` / `***` / `___` - 水平分割线（至少3个字符）
-- 表格（GFM 扩展）：
+- `---` / `***` / `___` - Horizontal rules (at least 3 characters)
+- Tables (GFM extension):
   ```markdown
-  | 列1 | 列2 | 列3 |
-  |-----|-----|-----|
-  | 内容1 | 内容2 | 内容3 |
+  | Column 1 | Column 2 | Column 3 |
+  |----------|----------|----------|
+  | Content 1 | Content 2 | Content 3 |
   ```
 
-### 行内元素
+### Inline Elements
 
-- `**粗体**` - 粗体文本
-- `*斜体*` - 斜体文本
-- `***粗斜体***` - 粗体+斜体组合
-- `~~删除线~~` - 删除线文本
-- `` `代码` `` - 行内代码
-- `[链接](url)` - 基本链接
-- `[链接](url "标题")` - 带标题的链接
-- `![图片](url)` - 基本图片
-- `![图片](url "标题")` - 带标题的图片
+- `**bold**` - Bold text
+- `*italic*` - Italic text
+- `***bold italic***` - Bold + italic combination
+- `~~strikethrough~~` - Strikethrough text
+- `` `code` `` - Inline code
+- `[link](url)` - Basic link
+- `[link](url "title")` - Link with title
+- `![image](url)` - Basic image
+- `![image](url "title")` - Image with title
 
-## 技术实现
+## Technical Implementation
 
-- 纯 JavaScript，核心功能无依赖
-- 集成 highlight.js 提供代码语法高亮（通过 CDN 引入）
-- 模块化设计，易于扩展
-- 暗黑主题，护眼舒适
+- Pure JavaScript, core functionality has no dependencies
+- Integrated highlight.js for code syntax highlighting (via CDN)
+- Modular design, easy to extend
+- Dark theme, comfortable for the eyes
 
-## 实现原理
+## Implementation Principles
 
-详细的实现原理、架构设计和执行流程，请参阅 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+For detailed implementation principles, architecture design, and execution flow, please refer to [ARCHITECTURE.md](./ARCHITECTURE.md).
 
+## Changelog
 
-## 变更记录
+### v2.0 - CommonMark Support
 
-### v2.0 - CommonMark 支持
+- ✅ Strikethrough support (`~~text~~`)
+- ✅ Image support (`![alt](url)` and `![alt](url "title")`)
+- ✅ Link title attribute support (`[text](url "title")`)
+- ✅ Multi-line blockquote support (consecutive blockquotes are merged)
+- ✅ Table support (GFM extension)
+- ✅ Optimized inline element parsing order
+- ✅ Added image and table styles
 
-- ✅ 删除线支持（`~~text~~`）
-- ✅ 图片支持（`![alt](url)` 和 `![alt](url "title")`）
-- ✅ 链接 title 属性支持（`[text](url "title")`）
-- ✅ 多行引用支持（连续引用块合并）
-- ✅ 表格支持（GFM 扩展）
-- ✅ 优化行内元素解析顺序
-- ✅ 添加图片和表格样式
+### v1.3 - Code Block Enhancements
 
-### v1.3 - 代码块增强
+- ✅ Code block copy: Copy button in the top-right corner of each code block
+- ✅ Uses Clipboard API with fallback to `execCommand('copy')`
+- ✅ Shows "Copied" feedback on success
+- ✅ Code syntax highlighting: Integrated highlight.js
+- ✅ Uses github-dark-dimmed theme, adapted for dark interface
+- ✅ Supports all languages supported by highlight.js
 
-- ✅ 代码块复制：每个代码块右上角提供复制按钮
-- ✅ 使用 Clipboard API，降级到 `execCommand('copy')`
-- ✅ 成功后显示"已复制"反馈
-- ✅ 代码语法高亮：集成 highlight.js
-- ✅ 使用 github-dark-dimmed 主题，适配暗黑界面
-- ✅ 支持所有 highlight.js 支持的语言
+### v1.2 - Nested List Support
 
-### v1.2 - 嵌套列表支持
+- ✅ Supports multi-level nested lists (identified by indentation levels)
+- ✅ Supports mixed ordered and unordered lists (can be mixed in the same document)
+- ✅ Recursive parsing and rendering, supports arbitrary nesting depth
 
-- ✅ 支持多层嵌套列表（通过缩进识别层级）
-- ✅ 支持混合有序和无序列表（可在同一文档中混合使用）
-- ✅ 递归解析和渲染，支持任意深度的嵌套
+### v1.1 - UI and Spacing Adjustments
 
-### v1.1 - UI 与间距调整
+- ✅ Empty lines rendered as `<br>`, providing appropriate paragraph separation
+- ✅ Top and bottom margins of paragraphs, lists, code blocks, and blockquotes adjusted to `0.8em` for comfortable reading spacing
+- ✅ Top and bottom margins of horizontal rules adjusted to `1em`
+- ✅ Heading margins recalibrated to ensure clear hierarchy
+- ✅ Code blocks now have language header (similar to VS Code preview), structure: `figure.code-block > .code-header + pre`
+- ✅ Blockquotes use light background with light blue border for enhanced readability
+- ✅ Preview area defaults to full-width display; to center the content, add `max-width` and `margin: 0 auto` to `#markdown-output`
 
-- ✅ 空行渲染为 `<br>`，提供适当的段落分隔
-- ✅ 段落、列表、代码块、引用块的上下外边距调整为 `0.8em`，提供舒适的阅读间距
-- ✅ 分割线的上下外边距调整为 `1em`
-- ✅ 标题上下边距重新校准，确保层次分明
-- ✅ 代码块新增语言头部（接近 VS Code 预览），结构为 `figure.code-block > .code-header + pre`
-- ✅ 引用块采用浅色背景与浅蓝边框以增强可读性
-- ✅ 预览区域默认全宽显示，如需居中版心可在 `#markdown-output` 添加 `max-width` 与 `margin: 0 auto`
+## Deploy to GitHub Pages
 
+This project is a pure static site (`index.html` + JS/CSS) and can be automatically deployed to GitHub Pages via GitHub Actions.
 
-## 部署到 GitHub Pages
+### One-time Configuration
 
-本项目为纯静态站点（`index.html` + JS/CSS），可通过 GitHub Actions 自动部署到 GitHub Pages。
+1. Open Settings → Pages in your GitHub repository.
+2. Set Source to "GitHub Actions".
+3. Confirm the repository branch is `main` (or adjust according to your default branch).
 
-### 一次性配置
+### Automatic Deployment
 
-1. 在 GitHub 仓库中打开 Settings → Pages。
-2. 将 Source 设置为 “GitHub Actions”。
-3. 确认仓库分支为 `main`（或根据你使用的默认分支调整）。
+- Built-in workflow: `.github/workflows/deploy-pages.yml`
+- When you `push` to the `main` branch, it will automatically build and deploy to GitHub Pages.
+- You can also manually run it in the Actions tab (Workflow Dispatch).
 
-### 自动部署
+### Access URL
 
-- 已内置工作流：`.github/workflows/deploy-pages.yml`
-- 当你向 `main` 分支 `push` 时，会自动构建并部署到 GitHub Pages。
-- 也可在 Actions 页签中手动运行（Workflow Dispatch）。
+- After successful deployment, the page will be exposed through the environment link; generally:
+  - Personal homepage: `https://<username>.github.io/`
+  - Project page: `https://<username>.github.io/<repo>/`
 
-### 访问地址
+### Customization and Common Issues
 
-- 成功部署后，页面将通过环境链接暴露；一般为：
-  - 个人主页：`https://<username>.github.io/`
-  - 项目页：`https://<username>.github.io/<repo>/`
+- If your static files are not in the repository root, modify the `path` in the workflow's `actions/upload-pages-artifact@v3`.
+- The workflow has been configured with necessary permissions: `pages: write` and `id-token: write`.
+- If your repository's default branch is not `main`, please update the workflow trigger branch accordingly.
 
-### 自定义与常见问题
-
-- 若你的静态文件不在仓库根目录，请修改工作流中的 `actions/upload-pages-artifact@v3` 的 `path`。
-- 工作流已设置必要权限：`pages: write` 与 `id-token: write`。
-- 若仓库默认分支不是 `main`，请同步修改工作流触发分支。
