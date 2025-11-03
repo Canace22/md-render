@@ -18,19 +18,49 @@
 
 ## 使用方法
 
-1. 直接在浏览器中打开 `index.html` 文件
-2. 在左侧输入框中输入 Markdown 文本
-3. 右侧会实时显示渲染结果
+### 开发模式
+
+1. 安装依赖：
+```bash
+npm install
+```
+
+2. 启动开发服务器：
+```bash
+npm run dev
+```
+
+3. 在浏览器中打开 `http://localhost:3000`
+4. 在左侧输入框中输入 Markdown 文本
+5. 右侧会实时显示渲染结果
+
+### 生产构建
+
+```bash
+npm run build
+```
+
+构建产物将输出到 `dist/` 目录。
 
 ## 项目结构
 
 ```
 md-render/
-├── index.html      # 主页面
-├── parser.js       # Markdown 解析器
-├── renderer.js     # HTML 渲染器
-├── app.js          # 应用主逻辑
-└── styles.css      # 样式文件
+├── index.html              # 应用入口 HTML
+├── package.json            # 项目配置和依赖
+├── vite.config.js          # Vite 构建配置
+├── src/                    # 源代码目录
+│   ├── main.jsx            # React 应用入口
+│   ├── components/         # React 组件
+│   │   └── MarkdownEditor.jsx  # 主编辑器组件
+│   ├── core/               # 核心功能模块
+│   │   ├── parser.js       # Markdown 解析器
+│   │   └── renderer.js     # HTML 渲染器
+│   └── styles/             # 样式文件
+│       └── styles.css      # 主样式文件
+├── README.md               # 项目说明
+├── ARCHITECTURE.md         # 架构文档
+└── REACT_MIGRATION.md      # React 迁移分析报告
 ```
 
 ## 支持的 Markdown 语法
