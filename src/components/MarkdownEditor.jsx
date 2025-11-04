@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MarkdownParser } from '../core/parser.js';
-import { MarkdownRenderer } from '../core/renderer.js';
+import { MarkdownParser, MarkdownRenderer } from '../core';
 import '../styles/styles.css';
 
 const DEFAULT_MARKDOWN = `# 欢迎使用 Markdown 渲染器
