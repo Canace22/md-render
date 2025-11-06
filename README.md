@@ -20,6 +20,7 @@ A simple, lightweight Markdown renderer built with vanilla JavaScript, supportin
 - ✅ Horizontal rules
 - ✅ Tables (GFM extension)
 - ✅ Real-time preview
+- ✅ Copy to WeChat Official Account format
 
 ## Usage
 
@@ -38,6 +39,19 @@ npm run dev
 3. Open `http://localhost:3000` in your browser
 4. Enter Markdown text in the left input area
 5. The right side will display the rendered result in real-time
+
+### Copy to WeChat Official Account
+
+1. Enter or edit Markdown text in the left input area
+2. The right side will display the rendered result in real-time
+3. Click the "复制到微信公众号" (Copy to WeChat Official Account) button in the top right corner of the preview panel
+4. The converted HTML content will be automatically copied to the clipboard
+5. Paste it into the WeChat Official Account editor
+
+**Notes:**
+- Code blocks will be automatically converted to WeChat-compatible `<pre><code>` format
+- Image links will be automatically converted to HTTPS (if originally HTTP)
+- All custom class attributes and data-* attributes will be removed to ensure compatibility
 
 ### Production Build
 
