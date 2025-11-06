@@ -182,6 +182,7 @@ This project is a pure static site (`index.html` + JS/CSS) and can be automatica
 - Built-in workflow: `.github/workflows/deploy-pages.yml`
 - When you `push` to the `main` branch, it will automatically build and deploy to GitHub Pages.
 - You can also manually run it in the Actions tab (Workflow Dispatch).
+- Vite base path is handled automatically for project pages. During Actions builds, the `base` is inferred as `/<repo>/`; locally it's `/` so development is unaffected.
 
 ### Access URL
 
@@ -194,4 +195,5 @@ This project is a pure static site (`index.html` + JS/CSS) and can be automatica
 - If your static files are not in the repository root, modify the `path` in the workflow's `actions/upload-pages-artifact@v3`.
 - The workflow has been configured with necessary permissions: `pages: write` and `id-token: write`.
 - If your repository's default branch is not `main`, please update the workflow trigger branch accordingly.
+- If assets 404 on Pages, ensure the `vite.config.js` `base` points to `/<repo>/` for project pages. This repo auto-inferrs base during CI via `GITHUB_REPOSITORY`.
 

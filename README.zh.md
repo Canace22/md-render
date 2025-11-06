@@ -182,6 +182,7 @@ md-render/
 - 已内置工作流：`.github/workflows/deploy-pages.yml`
 - 当你向 `main` 分支 `push` 时，会自动构建并部署到 GitHub Pages。
 - 也可在 Actions 页签中手动运行（Workflow Dispatch）。
+- 为了适配项目页路径，Vite 的 `base` 会在 Actions 中自动推断为 `/<repo>/`，本地开发仍为 `/`，互不影响。
 
 ### 访问地址
 
@@ -194,3 +195,4 @@ md-render/
 - 若你的静态文件不在仓库根目录，请修改工作流中的 `actions/upload-pages-artifact@v3` 的 `path`。
 - 工作流已设置必要权限：`pages: write` 与 `id-token: write`。
 - 若仓库默认分支不是 `main`，请同步修改工作流触发分支。
+- 如果 Pages 上出现静态资源 404，请确认 `vite.config.js` 的 `base` 指向 `/<repo>/`（本仓库在 CI 中会通过 `GITHUB_REPOSITORY` 自动推断）。
