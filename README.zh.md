@@ -19,6 +19,7 @@
 - ✅ 表格（GFM 扩展）
 - ✅ 实时预览
 - ✅ 复制到微信公众号格式
+- ✅ 目录面板，支持 localStorage 本地保存
 
 ## 使用方法
 
@@ -53,6 +54,14 @@ npm run dev
 - 版式预设符合公众号要求：全部文本固定字号 `16px`、段后间距 `8px`、行高 `1.6`
 - 提供通用工具 `src/utils/wechatCopy.js`，可在其他模块复用转换与复制逻辑
 
+### 目录与本地保存
+
+1. 左侧目录面板可以管理多个 Markdown 文件和文件夹
+2. 点击「新建文件」会在当前文件夹下创建空白文档
+3. 点击「新建文件夹」可对笔记进行分组管理
+4. 使用重命名或删除按钮管理条目（根目录不可删除）
+5. 目录结构与文件内容会自动写入浏览器 `localStorage`，下次打开自动恢复
+
 ### 生产构建
 
 ```bash
@@ -71,7 +80,8 @@ md-render/
 ├── src/                    # 源代码目录
 │   ├── main.jsx            # React 应用入口
 │   ├── components/         # React 组件
-│   │   └── MarkdownEditor.jsx  # 主编辑器组件
+│   │   ├── MarkdownEditor.jsx   # 编辑器主壳层
+│   │   └── WorkspaceSidebar.jsx # 目录侧栏组件
 │   ├── core/               # 核心功能模块
 │   │   ├── parser.js       # Markdown 解析器
 │   │   └── renderer.js     # HTML 渲染器
@@ -132,6 +142,12 @@ md-render/
 
 
 ## 变更记录
+
+### v2.1 - 目录与本地存储
+
+- ✅ 新增目录侧栏，支持多级文件夹
+- ✅ 在同一工作区里管理多个 Markdown 文件
+- ✅ 自动保存目录与内容至浏览器 `localStorage`
 
 ### v2.0 - CommonMark 支持
 

@@ -33,6 +33,14 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     /* background: #2d2d2d; */
 }
 
+.workspace-panel {
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e0e0e0;
+    background: #f9f9f9;
+}
+
 .editor-panel,
 .preview-panel {
     flex: 1;
@@ -54,6 +62,86 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     font-size: 14px;
     font-weight: 600;
     color: #333333;
+}
+
+.workspace-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.workspace-actions button {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #d0d0d0;
+    background: #ffffff;
+    color: #333333;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.workspace-actions button:hover:not(:disabled) {
+    border-color: #4ec9b0;
+    color: #4ec9b0;
+    background: #e8f5f3;
+}
+
+.workspace-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.workspace-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+}
+
+.tree-node {
+    display: block;
+}
+
+.tree-node-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: transparent;
+    color: #333333;
+    font-size: 13px;
+    padding: 6px 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.tree-node-button .tree-node-icon {
+    width: 18px;
+    text-align: center;
+}
+
+.tree-node-button:hover {
+    background: rgba(78, 201, 176, 0.12);
+    color: #2a8d78;
+}
+
+.tree-node.active .tree-node-button {
+    background: rgba(78, 201, 176, 0.18);
+    color: #228a74;
+    font-weight: 600;
+}
+
+.tree-node.folder .tree-node-button {
+    font-weight: 600;
+}
+
+.tree-node-children {
+    border-left: 1px dashed #d0d0d0;
+    margin-left: 16px;
 }
 
 .copy-wechat-btn {

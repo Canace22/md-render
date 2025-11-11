@@ -21,6 +21,7 @@ A simple, lightweight Markdown renderer built with vanilla JavaScript, supportin
 - ✅ Tables (GFM extension)
 - ✅ Real-time preview
 - ✅ Copy to WeChat Official Account format
+- ✅ Workspace directory with localStorage persistence
 
 ## Usage
 
@@ -55,6 +56,14 @@ npm run dev
 - Layout preset matches WeChat requirements: all text fixed at `16px`, paragraph spacing `8px`, and line height `1.6`
 - Reusable helper `src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
 
+### Workspace & Local Storage
+
+1. Use the directory panel on the left to organise Markdown files and folders
+2. Click **New File** to create an empty Markdown document under the current folder
+3. Click **New Folder** to group related notes with nested directories
+4. Rename or delete entries via the action buttons (the root directory cannot be removed)
+5. Workspace structure and file contents are auto-saved to browser `localStorage`, and will be restored next time you open the app
+
 ### Production Build
 
 ```bash
@@ -73,7 +82,8 @@ md-render/
 ├── src/                    # Source code directory
 │   ├── main.jsx            # React application entry
 │   ├── components/         # React components
-│   │   └── MarkdownEditor.jsx  # Main editor component
+│   │   ├── MarkdownEditor.jsx   # Main editor shell
+│   │   └── WorkspaceSidebar.jsx # Directory sidebar component
 │   ├── core/               # Core functionality modules
 │   │   ├── parser.js       # Markdown parser
 │   │   └── renderer.js     # HTML renderer
@@ -133,6 +143,12 @@ md-render/
 For detailed implementation principles, architecture design, and execution flow, please refer to [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Changelog
+
+### v2.1 - Workspace & Local Storage
+
+- ✅ Added directory sidebar with nested folder support
+- ✅ Manage multiple Markdown files within one workspace
+- ✅ Auto-save workspace structure and content to browser `localStorage`
 
 ### v2.0 - CommonMark Support
 
