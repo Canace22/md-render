@@ -52,6 +52,8 @@ npm run dev
 - Code blocks will be automatically converted to WeChat-compatible `<pre><code>` format
 - Image links will be automatically converted to HTTPS (if originally HTTP)
 - All custom class attributes and data-* attributes will be removed to ensure compatibility
+- Layout preset matches WeChat requirements: all text fixed at `16px`, paragraph spacing `8px`, and line height `1.6`
+- Reusable helper `src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
 
 ### Production Build
 
