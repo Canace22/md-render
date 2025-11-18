@@ -22,6 +22,8 @@ A simple, lightweight Markdown renderer built with vanilla JavaScript, supportin
 - ✅ Real-time preview
 - ✅ Copy to WeChat Official Account format
 - ✅ Workspace directory with localStorage persistence
+- ✅ Mermaid diagram preview (```mermaid fenced code blocks)
+- ✅ Mermaid fullscreen preview (per-diagram fullscreen button)
 
 ## Usage
 
@@ -71,6 +73,31 @@ npm run build
 ```
 
 The build output will be generated in the `dist/` directory.
+
+## Mermaid Diagram Preview
+
+- Supported by adding a fenced code block with language `mermaid`. Example:
+
+```markdown
+```mermaid
+graph TD
+  A[Start] --> B{Choice}
+  B -->|Yes| C[Do something]
+  B -->|No| D[Do nothing]
+  C --> E[End]
+  D --> E
+```
+```
+
+- The page loads Mermaid via CDN and renders diagrams after each preview update.
+- Theme auto-detects system preference (dark/default).
+- Security level is set to `loose` for convenience; adjust as needed for stricter environments.
+
+### Mermaid Fullscreen
+
+- Hover a diagram to reveal the top-right fullscreen button.
+- Click it to open a modal overlay with the diagram scaled to fit the screen.
+- Close via the close button, clicking the backdrop, or pressing Escape.
 
 ## Project Structure
 

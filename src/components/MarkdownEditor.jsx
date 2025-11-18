@@ -505,6 +505,174 @@ function MarkdownEditor() {
     if (window.hljs) {
       window.hljs.highlightAll();
     }
+    // 初始化并渲染 Mermaid 图表
+    if (window.mermaid && outputRef.current.querySelector('.mermaid')) {
+      try {
+        // 仅初始化一次全局配置
+        if (!window.__mermaidInitialized) {
+          window.mermaid.initialize({
+            startOnLoad: false,
+            theme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'default',
+            securityLevel: 'loose'
+          });
+          window.__mermaidInitialized = true;
+        }
+        // 仅对当前容器内的 mermaid 节点进行渲染
+        window.mermaid.run({
+          querySelector: '#markdown-output .mermaid'
+        });
+      } catch (e) {
+        console.error('Mermaid 渲染失败:', e);
+      }
+    }
+    // 增强 Mermaid：增加全屏查看按钮与事件
+    const enhanceMermaid = () => {
+      if (!outputRef.current) return;
+      const mermaidNodes = outputRef.current.querySelectorAll('.mermaid');
+      mermaidNodes.forEach((node) => {
+        // 避免重复包装
+        const wrapper = node.closest('.mermaid-figure');
+        if (wrapper) return;
+        const container = document.createElement('div');
+        container.className = 'mermaid-figure';
+        node.parentNode.insertBefore(container, node);
+        container.appendChild(node);
+
+        const actions = document.createElement('div');
+        actions.className = 'mermaid-actions';
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.type = 'button';
+        fullscreenBtn.className = 'mermaid-fullscreen-btn';
+        fullscreenBtn.title = '全屏预览';
+        fullscreenBtn.setAttribute('aria-label', '全屏预览');
+        fullscreenBtn.innerHTML = `
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <path d="M7 3H3V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17 3H21V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M21 17V21H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M7 21H3V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'mermaid-copy-btn';
+        copyBtn.title = '复制图表';
+        copyBtn.setAttribute('aria-label', '复制图表');
+        copyBtn.innerHTML = `
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <path d="M9 9H19C20.1046 9 21 9.89543 21 11V19C21 20.1046 20.1046 21 19 21H11C9.89543 21 9 20.1046 9 19V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M15 3H5C3.89543 3 3 3.89543 3 5V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+        actions.appendChild(copyBtn);
+        actions.appendChild(fullscreenBtn);
+        container.appendChild(actions);
+
+        const copyMermaid = async () => {
+          try {
+            // 找到已渲染的 SVG
+            const svg = node.querySelector('svg');
+            if (!svg) {
+              // 若未渲染成功，尝试复制 DSL 文本
+              await navigator.clipboard.writeText(node.textContent || '');
+              return;
+            }
+            // 先尝试复制 PNG 图片到剪贴板（新浏览器）
+            const serializer = new XMLSerializer();
+            const svgString = serializer.serializeToString(svg);
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+            const img = new Image();
+            // 设定白色/深色背景下的底色画布
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const bgColor = prefersDark ? '#1e1e1e' : '#ffffff';
+            await new Promise((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = reject;
+              img.src = url;
+            });
+            const canvas = document.createElement('canvas');
+            const width = img.naturalWidth || 1200;
+            const height = img.naturalHeight || 800;
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+            const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+            if (pngBlob && navigator.clipboard && window.ClipboardItem) {
+              try {
+                await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': pngBlob })]);
+                return; // 复制 PNG 成功
+              } catch (_) {
+                // 回退复制 SVG 文本
+              }
+            }
+            // 回退：复制 SVG 文本
+            await navigator.clipboard.writeText(svgString);
+          } catch (err) {
+            console.error('复制 Mermaid 图表失败:', err);
+            // 最后回退：复制 DSL 文本
+            try {
+              await navigator.clipboard.writeText(node.textContent || '');
+            } catch {}
+          }
+        };
+
+        const openFullscreen = () => {
+          // 创建/复用全屏遮罩
+          let backdrop = document.getElementById('mermaid-fullscreen-backdrop');
+          if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.id = 'mermaid-fullscreen-backdrop';
+            backdrop.className = 'mermaid-fullscreen-backdrop';
+            backdrop.innerHTML = `
+  <div class="mermaid-fullscreen-toolbar">
+    <button type="button" class="mermaid-fullscreen-close" title="关闭" aria-label="关闭">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+  <div class="mermaid-fullscreen-content"></div>
+`;
+            document.body.appendChild(backdrop);
+          }
+          const content = backdrop.querySelector('.mermaid-fullscreen-content');
+          content.innerHTML = '';
+          // 克隆当前图表的 SVG/内容
+          const clone = node.cloneNode(true);
+          content.appendChild(clone);
+
+          const onKeyDown = (evt) => {
+            if (evt.key === 'Escape') {
+              closeFullscreen();
+            }
+          };
+          const closeBtn = backdrop.querySelector('.mermaid-fullscreen-close');
+          const closeFullscreen = () => {
+            backdrop.classList.remove('visible');
+            document.removeEventListener('keydown', onKeyDown);
+          };
+          // 绑定一次性事件
+          closeBtn.onclick = closeFullscreen;
+          backdrop.onclick = (e) => {
+            if (e.target === backdrop) {
+              closeFullscreen();
+            }
+          };
+          document.addEventListener('keydown', onKeyDown);
+
+          // 展示
+          backdrop.classList.add('visible');
+        };
+
+        copyBtn.addEventListener('click', copyMermaid);
+        fullscreenBtn.addEventListener('click', openFullscreen);
+      });
+    };
+    enhanceMermaid();
     bindCopyButtons();
   }, [html]);
 

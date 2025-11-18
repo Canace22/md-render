@@ -428,6 +428,125 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     background: rgba(0, 0, 0, 0.02);
 }
 
+/* Mermaid 图表容器与全屏样式 */
+.mermaid-figure {
+    position: relative;
+    margin: 0.8em 0;
+}
+.mermaid-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 6px;
+    opacity: 0.6; /* 提高默认可见度 */
+    transition: opacity 0.2s ease;
+}
+.mermaid-figure:hover .mermaid-actions {
+    opacity: 1;
+}
+/* 触摸设备/无悬停环境：始终显示操作区 */
+@media (hover: none) {
+    .mermaid-actions {
+        opacity: 1;
+    }
+}
+.mermaid-fullscreen-btn {
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 4px 10px rgba(0,0,0,0.25);
+}
+.mermaid-fullscreen-btn:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+.mermaid-fullscreen-btn:focus-visible {
+    outline: 2px solid #4ec9b0;
+    outline-offset: 1px;
+}
+.mermaid-copy-btn {
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 4px 10px rgba(0,0,0,0.25);
+}
+.mermaid-copy-btn:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+.mermaid-copy-btn:focus-visible {
+    outline: 2px solid #4ec9b0;
+    outline-offset: 1px;
+}
+
+.mermaid-fullscreen-backdrop {
+    position: fixed;
+    inset: 0;
+    background: #000000; /* 全不透明背景 */
+    display: none;
+    z-index: 9999;
+    overflow: auto;
+}
+.mermaid-fullscreen-backdrop.visible {
+    display: block;
+}
+.mermaid-fullscreen-toolbar {
+    position: sticky;
+    top: 0;
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.4), transparent);
+    z-index: 1;
+}
+.mermaid-fullscreen-close {
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.mermaid-fullscreen-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+.mermaid-fullscreen-content {
+    max-width: 1280px;
+    margin: 24px auto 48px auto;
+    padding: 0 16px 24px 16px;
+}
+.mermaid-fullscreen-content .mermaid,
+.mermaid-fullscreen-content svg {
+    width: 100%;
+    height: auto;
+}
+
+/* Mermaid 图表背景与内边距（普通预览） */
+#markdown-output .mermaid-figure .mermaid {
+    max-width: 720px; /* 让普通预览更小，便于阅读 */
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    overflow: auto;
+}
+@media (prefers-color-scheme: dark) {
+    #markdown-output .mermaid-figure .mermaid {
+        background: #1e1e1e;
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+}
+/* 确保 SVG 随容器缩放 */
+#markdown-output .mermaid-figure .mermaid svg {
+    width: 100%;
+    height: auto;
+}
+
 /* 滚动条样式 */
 #markdown-input::-webkit-scrollbar,
 #markdown-output::-webkit-scrollbar {
