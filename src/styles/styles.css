@@ -529,6 +529,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 /* Mermaid 图表背景与内边距（普通预览） */
 #markdown-output .mermaid-figure .mermaid {
     max-width: 720px; /* 让普通预览更小，便于阅读 */
+    margin: 0 auto; /* 居中显示 */
     background: #ffffff;
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 8px;
