@@ -29,12 +29,12 @@
 
 1. 安装依赖：
 ```bash
-npm install
+pnpm install
 ```
 
 2. 启动开发服务器：
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 3. 在浏览器中打开 `http://localhost:3000`
@@ -67,7 +67,7 @@ npm run dev
 ### 生产构建
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 构建产物将输出到 `dist/` 目录。

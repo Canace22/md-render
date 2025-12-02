@@ -691,12 +691,14 @@ function MarkdownEditor() {
         <div className="panel-header">
           <h2>Markdown 输入</h2>
         </div>
-        <textarea
-          id="markdown-input"
-          placeholder="在这里输入 Markdown 文本..."
-          value={markdown}
-          onChange={(e) => handleMarkdownChange(e.target.value)}
-        />
+        <div className="panel-body">
+          <textarea
+            id="markdown-input"
+            placeholder="在这里输入 Markdown 文本..."
+            value={markdown}
+            onChange={(e) => handleMarkdownChange(e.target.value)}
+          />
+        </div>
       </div>
       <div className="preview-panel">
         <div className="panel-header">
@@ -710,7 +712,9 @@ function MarkdownEditor() {
             复制到微信公众号
           </button>
         </div>
-        <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="panel-body">
+          <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
       </div>
     </div>
   );

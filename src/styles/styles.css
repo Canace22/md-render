@@ -30,6 +30,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     display: flex;
     height: 100vh;
     gap: 2px;
+    align-items: stretch;
     /* background: #2d2d2d; */
 }
 
@@ -46,6 +47,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    min-height: 0;
     /* background: #252526; */
 }
 
@@ -56,6 +59,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
 .panel-header h2 {
@@ -174,6 +179,12 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     opacity: 1;
 }
 
+.panel-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
 #markdown-input {
     flex: 1;
     padding: 16px;
@@ -192,6 +203,11 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 #markdown-input::placeholder {
     color: #999999;
+}
+
+.panel-body #markdown-output {
+    flex: 1;
+    min-height: 0;
 }
 
 #markdown-output {
