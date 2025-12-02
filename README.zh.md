@@ -72,6 +72,18 @@ pnpm run build
 
 构建产物将输出到 `dist/` 目录。
 
+### 端到端测试（Playwright）
+
+```bash
+# 在无头模式下运行全部端到端用例
+pnpm run test:e2e
+
+# 打开交互式 Playwright Test UI
+pnpm run test:e2e:ui
+```
+
+默认情况下，测试会假定应用运行在 `http://localhost:3000`。  
+请先在另一个终端中通过 `pnpm run dev` 启动开发服务，再执行测试命令。
 ## Mermaid 图表预览
 
 - 通过 `mermaid` 语言标记的围栏代码块启用。示例：

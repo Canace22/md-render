@@ -74,6 +74,19 @@ pnpm run build
 
 The build output will be generated in the `dist/` directory.
 
+### End-to-End Testing (Playwright)
+
+```bash
+# run all end-to-end tests in headless mode
+pnpm run test:e2e
+
+# open Playwright Test UI (interactive mode)
+pnpm run test:e2e:ui
+```
+
+By default, tests assume the app is available at `http://localhost:3000`.  
+Start the dev server in another terminal with `pnpm run dev` before running the tests.
+
 ## Mermaid Diagram Preview
 
 - Supported by adding a fenced code block with language `mermaid`. Example:

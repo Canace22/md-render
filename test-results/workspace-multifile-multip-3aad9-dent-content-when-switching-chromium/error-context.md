@@ -1,0 +1,132 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: 🔍
+        - textbox "搜索文档" [ref=e8]:
+          - /placeholder: 搜索  ⌘+F
+      - button "＋" [ref=e9] [cursor=pointer]
+    - generic [ref=e11]: 我的文档
+    - generic [ref=e12]:
+      - button "📄" [ref=e13] [cursor=pointer]
+      - button "📁" [ref=e14] [cursor=pointer]
+      - button "✏️" [ref=e15] [cursor=pointer]
+      - button "🗑️" [ref=e16] [cursor=pointer]
+    - generic [ref=e18]:
+      - button "📁 工作区" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: 📁
+        - generic [ref=e21]: 工作区
+      - generic [ref=e22]:
+        - button "📄 示例文档.md" [active] [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: 📄
+          - generic [ref=e26]: 示例文档.md
+        - button "📄 未命名.md" [ref=e28] [cursor=pointer]:
+          - generic [ref=e29]: 📄
+          - generic [ref=e30]: 未命名.md
+        - button "📄 未命名 1.md" [ref=e32] [cursor=pointer]:
+          - generic [ref=e33]: 📄
+          - generic [ref=e34]: 未命名 1.md
+  - generic [ref=e35]:
+    - heading "Markdown 输入" [level=2] [ref=e37]
+    - textbox "在这里输入 Markdown 文本..." [ref=e39]: "# 欢迎使用 Markdown 渲染器 这是一个支持 CommonMark 规范的 Markdown 渲染器示例。 ## 功能特性 - 支持标题 - 支持列表（有序和无序） - 支持嵌套列表 - 支持代码块（语法高亮） - 支持行内代码 - 支持链接和强调 - 支持删除线 - 支持图片 - 支持表格 - 支持多行引用 ### 示例代码 ```javascript function hello() { console.log('Hello, Markdown!'); } ``` ### 示例链接 访问 [GitHub](https://github.com \"点击访问 GitHub\") 了解更多。 **粗体文本**、*斜体文本* 和 ~~删除线~~ ### 示例图片 ![22](https://Canace22.github.io/picx-images-hosting/22.6ikg63uj2n.webp) ### 多行引用示例 > 第一行引用 > > 第二行引用 > > 引用中可以包含**粗体**和*斜体* ### 表格示例 | 功能 | 状态 | 说明 | |------|------|------| | 标题 | ✅ | 支持 H1-H6 | | 列表 | ✅ | 有序和无序列表 | | 代码块 | ✅ | 支持语法高亮 | | 表格 | ✅ | GFM 表格支持 | | 图片 | ✅ | 支持 alt 和 title | ### 嵌套列表示例 - 列表项 1 - 列表项 2 - 嵌套列表项 1 - 嵌套列表项 2 - 三级嵌套列表项 - 另一个三级项 - 列表项 3 1. 嵌套有序列表 2. 第二个有序项"
+  - generic [ref=e40]:
+    - generic [ref=e41]:
+      - heading "渲染预览" [level=2] [ref=e42]
+      - button "复制到微信公众号" [ref=e43] [cursor=pointer]
+    - generic [ref=e45]:
+      - heading "欢迎使用 Markdown 渲染器" [level=1] [ref=e46]
+      - paragraph [ref=e47]: 这是一个支持 CommonMark 规范的 Markdown 渲染器示例。
+      - heading "功能特性" [level=2] [ref=e48]
+      - list [ref=e49]:
+        - listitem [ref=e50]: 支持标题
+        - listitem [ref=e51]: 支持列表（有序和无序）
+        - listitem [ref=e52]: 支持嵌套列表
+        - listitem [ref=e53]: 支持代码块（语法高亮）
+        - listitem [ref=e54]: 支持行内代码
+        - listitem [ref=e55]: 支持链接和强调
+        - listitem [ref=e56]: 支持删除线
+        - listitem [ref=e57]: 支持图片
+        - listitem [ref=e58]: 支持表格
+        - listitem [ref=e59]: 支持多行引用
+      - heading "示例代码" [level=3] [ref=e60]
+      - figure [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e63]: javascript
+          - button "复制代码" [ref=e64] [cursor=pointer]:
+            - img [ref=e65]
+        - code [ref=e69]:
+          - text: function hello(
+          - text: ") { console.log('Hello, Markdown!'); }"
+      - heading "示例链接" [level=3] [ref=e70]
+      - paragraph [ref=e71]:
+        - text: 访问
+        - link "GitHub" [ref=e72] [cursor=pointer]:
+          - /url: "https://github.com "
+        - text: 了解更多。
+      - paragraph [ref=e73]:
+        - strong [ref=e74]: 粗体文本
+        - text: 、
+        - emphasis [ref=e75]: 斜体文本
+        - text: 和
+        - deletion [ref=e76]: 删除线
+      - heading "示例图片" [level=3] [ref=e77]
+      - paragraph [ref=e78]:
+        - img "22" [ref=e79]
+      - heading "多行引用示例" [level=3] [ref=e80]
+      - blockquote [ref=e81]:
+        - paragraph [ref=e82]: 第一行引用
+        - paragraph [ref=e83]: 第二行引用
+        - paragraph [ref=e84]:
+          - text: 引用中可以包含
+          - strong [ref=e85]: 粗体
+          - text: 和
+          - emphasis [ref=e86]: 斜体
+      - heading "表格示例" [level=3] [ref=e87]
+      - table [ref=e88]:
+        - rowgroup [ref=e89]:
+          - row "功能 状态 说明" [ref=e90]:
+            - columnheader "功能" [ref=e91]
+            - columnheader "状态" [ref=e92]
+            - columnheader "说明" [ref=e93]
+        - rowgroup [ref=e94]:
+          - row "标题 ✅ 支持 H1-H6" [ref=e95]:
+            - cell "标题" [ref=e96]
+            - cell "✅" [ref=e97]
+            - cell "支持 H1-H6" [ref=e98]
+          - row "列表 ✅ 有序和无序列表" [ref=e99]:
+            - cell "列表" [ref=e100]
+            - cell "✅" [ref=e101]
+            - cell "有序和无序列表" [ref=e102]
+          - row "代码块 ✅ 支持语法高亮" [ref=e103]:
+            - cell "代码块" [ref=e104]
+            - cell "✅" [ref=e105]
+            - cell "支持语法高亮" [ref=e106]
+          - row "表格 ✅ GFM 表格支持" [ref=e107]:
+            - cell "表格" [ref=e108]
+            - cell "✅" [ref=e109]
+            - cell "GFM 表格支持" [ref=e110]
+          - row "图片 ✅ 支持 alt 和 title" [ref=e111]:
+            - cell "图片" [ref=e112]
+            - cell "✅" [ref=e113]
+            - cell "支持 alt 和 title" [ref=e114]
+      - heading "嵌套列表示例" [level=3] [ref=e115]
+      - list [ref=e116]:
+        - listitem [ref=e117]: 列表项 1
+        - listitem [ref=e118]:
+          - text: 列表项 2
+          - list [ref=e119]:
+            - listitem [ref=e120]: 嵌套列表项 1
+            - listitem [ref=e121]:
+              - text: 嵌套列表项 2
+              - list [ref=e122]:
+                - listitem [ref=e123]: 三级嵌套列表项
+                - listitem [ref=e124]: 另一个三级项
+        - listitem [ref=e125]:
+          - text: 列表项 3
+          - list [ref=e126]:
+            - listitem [ref=e127]: 嵌套有序列表
+            - listitem [ref=e128]: 第二个有序项
+```

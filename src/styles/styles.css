@@ -35,11 +35,12 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .workspace-panel {
-    width: 260px;
+    width: 280px;
     display: flex;
     flex-direction: column;
     border-right: 1px solid #e0e0e0;
-    background: #f9f9f9;
+    background: #fafafa;
+    padding-top: 8px;
 }
 
 .editor-panel,
@@ -71,38 +72,51 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 .workspace-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
     border-bottom: 1px solid #e0e0e0;
 }
 
-.workspace-actions button {
-    padding: 6px 10px;
-    border-radius: 4px;
-    border: 1px solid #d0d0d0;
-    background: #ffffff;
-    color: #333333;
+.workspace-actions-compact {
+    padding-top: 2px;
+    padding-bottom: 6px;
+}
+
+.workspace-action-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
     cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s ease;
+    font-size: 16px;
+    line-height: 1;
+    transition: background 0.15s ease, transform 0.1s ease, color 0.15s ease;
 }
 
-.workspace-actions button:hover:not(:disabled) {
-    border-color: #4ec9b0;
-    color: #4ec9b0;
-    background: #e8f5f3;
+.workspace-action-btn:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.04);
+    transform: translateY(-1px);
 }
 
-.workspace-actions button:disabled {
-    opacity: 0.5;
+.workspace-action-btn:disabled {
+    opacity: 0.4;
     cursor: not-allowed;
+}
+
+.workspace-action-btn.danger:hover:not(:disabled) {
+    color: #d64545;
+    background: rgba(214, 69, 69, 0.08);
 }
 
 .workspace-tree {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 0;
+    padding: 4px 0 8px 0;
 }
 
 .tree-node {
@@ -130,13 +144,13 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .tree-node-button:hover {
-    background: rgba(78, 201, 176, 0.12);
-    color: #2a8d78;
+    background: rgba(0, 0, 0, 0.04);
+    color: #111827;
 }
 
 .tree-node.active .tree-node-button {
-    background: rgba(78, 201, 176, 0.18);
-    color: #228a74;
+    background: rgba(37, 99, 235, 0.1);
+    color: #1d4ed8;
     font-weight: 600;
 }
 
@@ -145,8 +159,174 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .tree-node-children {
-    border-left: 1px dashed #d0d0d0;
+    border-left: 1px solid #e5e7eb;
     margin-left: 16px;
+}
+
+/* Notion 风格侧边栏：用户信息、搜索、快速入口 */
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    padding: 12px 12px 8px 12px;
+    gap: 10px;
+}
+
+.sidebar-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #fb7185, #f97316, #fbbf24);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.sidebar-user-meta {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sidebar-user-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.sidebar-user-subtitle {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.sidebar-user-toggle {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #6b7280;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+}
+
+.sidebar-user-toggle:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.sidebar-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 8px 12px;
+}
+
+.sidebar-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    padding: 4px 10px;
+}
+
+.sidebar-search-icon {
+    font-size: 13px;
+}
+
+.sidebar-search input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    color: #111827;
+}
+
+.sidebar-search input::placeholder {
+    color: #9ca3af;
+}
+
+.sidebar-search input:focus {
+    outline: none;
+}
+
+.sidebar-add-entry {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: none;
+    background: #111827;
+    color: #f9fafb;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-add-entry:hover {
+    background: #0f172a;
+    box-shadow: 0 6px 12px rgba(15, 23, 42, 0.25);
+    transform: translateY(-1px);
+}
+
+.sidebar-quick-section {
+    padding: 4px 4px 4px 4px;
+}
+
+.sidebar-quick-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    color: #111827;
+    justify-content: flex-start;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-quick-item .sidebar-quick-icon {
+    width: 20px;
+    text-align: center;
+}
+
+.sidebar-quick-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.sidebar-quick-item.active {
+    background: rgba(37, 99, 235, 0.08);
+    color: #1d4ed8;
+}
+
+.sidebar-section-header {
+    padding: 8px 12px 4px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #6b7280;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sidebar-section-title {
+    font-weight: 500;
 }
 
 .copy-wechat-btn {
