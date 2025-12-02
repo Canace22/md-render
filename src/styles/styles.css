@@ -10,8 +10,9 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
         sans-serif;
-    background: #ffffff;
-    color: #333333;
+    /* 更接近 Notion：极简浅灰背景，无明显渐变 */
+    background: #f5f5f5;
+    color: #111827;
     line-height: 1.6;
 }
 h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
@@ -29,17 +30,22 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 .container {
     display: flex;
     height: 100vh;
-    gap: 2px;
+    gap: 1px;
     align-items: stretch;
-    /* background: #2d2d2d; */
+    padding: 0;
+    max-width: 100%;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #e5e5e5;
+    border-radius: 0;
 }
 
 .workspace-panel {
-    width: 280px;
+    width: 260px;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #e0e0e0;
-    background: #fafafa;
+    border-right: 1px solid #e5e5e5;
+    background: #fbfbfb;
     padding-top: 8px;
 }
 
@@ -50,24 +56,47 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    /* background: #252526; */
+    background: #ffffff;
 }
 
 .panel-header {
-    padding: 12px 16px;
-    /* background: #2d2d2d; */
-    border-bottom: 1px solid #e0e0e0;
+    padding: 8px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #ededed;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     flex-shrink: 0;
 }
 
 .panel-header h2 {
-    font-size: 14px;
-    font-weight: 600;
-    color: #333333;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #444444;
+}
+
+.panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.theme-select {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #e5e5e5;
+    background: #fbfbfb;
+    font-size: 12px;
+    color: #555555;
+    outline: none;
+}
+
+.theme-select:focus {
+    border-color: #d4d4d4;
+    background: #f5f5f5;
 }
 
 .workspace-actions {
@@ -99,7 +128,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .workspace-action-btn:hover:not(:disabled) {
-    background: rgba(0, 0, 0, 0.04);
+    background: rgba(15, 23, 42, 0.04);
     transform: translateY(-1px);
 }
 
@@ -330,11 +359,11 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .copy-wechat-btn {
-    padding: 6px 12px;
-    background: #f5f5f5;
-    color: #333333;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
+    padding: 4px 10px;
+    background: #fbfbfb;
+    color: #444444;
+    border: 1px solid #e5e5e5;
+    border-radius: 999px;
     cursor: pointer;
     font-size: 12px;
     transition: all 0.2s ease;
@@ -342,9 +371,9 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .copy-wechat-btn:hover {
-    background: #e8f5f3;
-    border-color: #4ec9b0;
-    color: #4ec9b0;
+    background: #f3f3f3;
+    border-color: #d4d4d4;
+    color: #111111;
     opacity: 1;
 }
 
@@ -369,7 +398,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     flex: 1;
     padding: 16px;
     background: #ffffff;
-    color: #333333;
+    color: #111827;
     border: none;
     resize: none;
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -402,38 +431,38 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     font-size: 2em;
     padding-bottom: 0.3em;
     border-bottom: 1px solid #e0e0e0;
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output h2 {
     font-size: 1.5em;
     padding-bottom: 0.3em;
     border-bottom: 1px solid #e0e0e0;
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output h3 {
     font-size: 1.17em;
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output h4 {
     font-size: 1em;
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output h5 {
     font-size: 0.83em;
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output h6 {
     font-size: 0.67em;
-    color: #666666;
+    color: #4b5563;
 }
 
 #markdown-output p {
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output ul,
@@ -451,7 +480,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 #markdown-output li {
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output code {
@@ -613,11 +642,11 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 #markdown-output table th {
     background: #f5f5f5;
     font-weight: 600;
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output table td {
-    color: #333333;
+    color: #111827;
 }
 
 #markdown-output table tr:nth-child(even) {
@@ -765,4 +794,442 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 #markdown-output::-webkit-scrollbar-thumb:hover {
     background: #999999;
 }
+    
+/* 暗色模式适配：跟随系统 prefers-color-scheme */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #101010;
+        color: #e5e7eb;
+    }
 
+    .container {
+        background: #181818;
+        border-color: #262626;
+    }
+
+    .workspace-panel {
+        background: #161616;
+        border-right-color: #262626;
+    }
+
+    .editor-panel,
+    .preview-panel {
+        background: #181818;
+    }
+
+    .panel-header {
+        background: #181818;
+        border-bottom-color: #262626;
+    }
+
+    .panel-header h2 {
+        color: #e5e7eb;
+    }
+
+    .workspace-action-btn:hover:not(:disabled) {
+        background: rgba(148, 163, 184, 0.16);
+    }
+
+    .tree-node-button {
+        color: #cbd5f5;
+    }
+
+    .tree-node-button:hover {
+        background: rgba(30, 64, 175, 0.4);
+        color: #e5edff;
+    }
+
+    .tree-node.active .tree-node-button {
+        background: rgba(37, 99, 235, 0.55);
+        color: #f9fafb;
+    }
+
+    .tree-node-children {
+        border-left-color: rgba(30, 64, 175, 0.75);
+    }
+
+    .sidebar-search {
+        background: rgba(15, 23, 42, 0.9);
+        border-color: rgba(51, 65, 85, 0.9);
+    }
+
+    .sidebar-search input {
+        color: #e5e7eb;
+    }
+
+    .sidebar-search input::placeholder {
+        color: #64748b;
+    }
+
+    .sidebar-add-entry {
+        background: #22c55e;
+        color: #052e16;
+    }
+
+    .sidebar-add-entry:hover {
+        background: #16a34a;
+        box-shadow: 0 10px 25px rgba(22, 163, 74, 0.45);
+    }
+
+    .sidebar-section-header {
+        color: #64748b;
+    }
+
+    .sidebar-quick-item {
+        color: #e5e7eb;
+    }
+
+    .sidebar-quick-item:hover {
+        background: rgba(30, 64, 175, 0.45);
+    }
+
+    .sidebar-quick-item.active {
+        background: rgba(37, 99, 235, 0.65);
+        color: #f9fafb;
+    }
+
+    .copy-wechat-btn {
+        background: #22c55e;
+        border-color: #22c55e;
+        color: #022c22;
+    }
+
+    .copy-wechat-btn:hover {
+        background: #16a34a;
+        border-color: #16a34a;
+        color: #e5f9f5;
+    }
+
+    .copy-wechat-btn.copied {
+        background: rgba(34, 197, 94, 0.2);
+        border-color: #22c55e;
+        color: #bbf7d0;
+    }
+
+    #markdown-input {
+        background: #020617;
+        color: #e5e7eb;
+    }
+
+    #markdown-input::placeholder {
+        color: #64748b;
+    }
+
+    #markdown-output {
+        background: #020617;
+    }
+
+    #markdown-output h1,
+    #markdown-output h2,
+    #markdown-output h3,
+    #markdown-output h4,
+    #markdown-output h5,
+    #markdown-output h6,
+    #markdown-output p,
+    #markdown-output li {
+        color: #e5e7eb;
+    }
+
+    #markdown-output code {
+        background: rgba(15, 23, 42, 0.85);
+        color: #fbbf24;
+    }
+
+    #markdown-output pre {
+        background: #020617;
+        border-color: rgba(30, 64, 175, 0.7);
+    }
+
+    #markdown-output pre code {
+        color: #e5e7eb;
+    }
+
+    #markdown-output blockquote {
+        border-left-color: #38bdf8;
+        background: rgba(56, 189, 248, 0.12);
+        color: #bfdbfe;
+    }
+
+    #markdown-output a {
+        color: #38bdf8;
+    }
+
+    #markdown-output hr {
+        border-top-color: rgba(51, 65, 85, 0.9);
+    }
+
+    #markdown-output table th {
+        background: rgba(15, 23, 42, 0.9);
+        color: #e5e7eb;
+    }
+
+    #markdown-output table td {
+        color: #e5e7eb;
+    }
+
+    #markdown-output table,
+    #markdown-output table th,
+    #markdown-output table td {
+        border-color: rgba(51, 65, 85, 0.9);
+    }
+
+    #markdown-input::-webkit-scrollbar-track,
+    #markdown-output::-webkit-scrollbar-track {
+        background: #020617;
+    }
+
+    #markdown-input::-webkit-scrollbar-thumb,
+    #markdown-output::-webkit-scrollbar-thumb {
+        background: #334155;
+    }
+
+    #markdown-input::-webkit-scrollbar-thumb:hover,
+    #markdown-output::-webkit-scrollbar-thumb:hover {
+        background: #475569;
+    }
+}
+
+/* 手动主题：强制深色（不依赖系统偏好） */
+body.theme-dark {
+    background: #101010;
+    color: #e5e7eb;
+}
+
+body.theme-dark .container {
+    background: #181818;
+    border-color: #262626;
+}
+
+body.theme-dark .workspace-panel {
+    background: #161616;
+    border-right-color: #262626;
+}
+
+body.theme-dark .editor-panel,
+body.theme-dark .preview-panel {
+    background: #181818;
+}
+
+body.theme-dark .panel-header {
+    background: #181818;
+    border-bottom-color: #262626;
+}
+
+body.theme-dark .panel-header h2 {
+    color: #e5e7eb;
+}
+
+body.theme-dark .workspace-action-btn:hover:not(:disabled) {
+    background: rgba(148, 163, 184, 0.16);
+}
+
+body.theme-dark .tree-node-button {
+    color: #cbd5f5;
+}
+
+body.theme-dark .tree-node-button:hover {
+    background: rgba(30, 64, 175, 0.4);
+    color: #e5edff;
+}
+
+body.theme-dark .tree-node.active .tree-node-button {
+    background: rgba(37, 99, 235, 0.55);
+    color: #f9fafb;
+}
+
+body.theme-dark .tree-node-children {
+    border-left-color: rgba(30, 64, 175, 0.75);
+}
+
+body.theme-dark .sidebar-search {
+    background: rgba(15, 23, 42, 0.9);
+    border-color: rgba(51, 65, 85, 0.9);
+}
+
+body.theme-dark .sidebar-search input {
+    color: #e5e7eb;
+}
+
+body.theme-dark .sidebar-search input::placeholder {
+    color: #64748b;
+}
+
+body.theme-dark .sidebar-add-entry {
+    background: #22c55e;
+    color: #052e16;
+}
+
+body.theme-dark .sidebar-add-entry:hover {
+    background: #16a34a;
+    box-shadow: 0 10px 25px rgba(22, 163, 74, 0.45);
+}
+
+body.theme-dark .sidebar-section-header {
+    color: #64748b;
+}
+
+body.theme-dark .sidebar-quick-item {
+    color: #e5e7eb;
+}
+
+body.theme-dark .sidebar-quick-item:hover {
+    background: rgba(30, 64, 175, 0.45);
+}
+
+body.theme-dark .sidebar-quick-item.active {
+    background: rgba(37, 99, 235, 0.65);
+    color: #f9fafb;
+}
+
+body.theme-dark .copy-wechat-btn {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: #022c22;
+}
+
+body.theme-dark .copy-wechat-btn:hover {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: #e5f9f5;
+}
+
+body.theme-dark .copy-wechat-btn.copied {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: #22c55e;
+    color: #bbf7d0;
+}
+
+body.theme-dark #markdown-input {
+    background: #020617;
+    color: #e5e7eb;
+}
+
+body.theme-dark #markdown-input::placeholder {
+    color: #64748b;
+}
+
+body.theme-dark #markdown-output {
+    background: #020617;
+}
+
+body.theme-dark #markdown-output h1,
+body.theme-dark #markdown-output h2,
+body.theme-dark #markdown-output h3,
+body.theme-dark #markdown-output h4,
+body.theme-dark #markdown-output h5,
+body.theme-dark #markdown-output h6,
+body.theme-dark #markdown-output p,
+body.theme-dark #markdown-output li {
+    color: #e5e7eb;
+}
+
+body.theme-dark #markdown-output code {
+    background: rgba(15, 23, 42, 0.85);
+    color: #fbbf24;
+}
+
+body.theme-dark #markdown-output pre {
+    background: #020617;
+    border-color: rgba(30, 64, 175, 0.7);
+}
+
+body.theme-dark #markdown-output pre code {
+    color: #e5e7eb;
+}
+
+body.theme-dark #markdown-output blockquote {
+    border-left-color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+    color: #bfdbfe;
+}
+
+body.theme-dark #markdown-output a {
+    color: #38bdf8;
+}
+
+body.theme-dark #markdown-output hr {
+    border-top-color: rgba(51, 65, 85, 0.9);
+}
+
+body.theme-dark #markdown-output table th {
+    background: rgba(15, 23, 42, 0.9);
+    color: #e5e7eb;
+}
+
+body.theme-dark #markdown-output table td {
+    color: #e5e7eb;
+}
+
+body.theme-dark #markdown-output table,
+body.theme-dark #markdown-output table th,
+body.theme-dark #markdown-output table td {
+    border-color: rgba(51, 65, 85, 0.9);
+}
+
+body.theme-dark #markdown-input::-webkit-scrollbar-track,
+body.theme-dark #markdown-output::-webkit-scrollbar-track {
+    background: #020617;
+}
+
+body.theme-dark #markdown-input::-webkit-scrollbar-thumb,
+body.theme-dark #markdown-output::-webkit-scrollbar-thumb {
+    background: #334155;
+}
+
+body.theme-dark #markdown-input::-webkit-scrollbar-thumb:hover,
+body.theme-dark #markdown-output::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+/* 手动主题：强制浅色，覆盖系统暗色 */
+body.theme-light {
+    background: #f5f5f5;
+    color: #111827;
+}
+
+body.theme-light .container {
+    background: #ffffff;
+    border-color: #e5e5e5;
+}
+
+body.theme-light .workspace-panel {
+    background: #fbfbfb;
+    border-right-color: #e5e5e5;
+}
+
+body.theme-light .editor-panel,
+body.theme-light .preview-panel {
+    background: #ffffff;
+}
+
+body.theme-light .panel-header {
+    background: #ffffff;
+    border-bottom-color: #ededed;
+}
+
+body.theme-light .panel-header h2 {
+    color: #444444;
+}
+
+body.theme-light .tree-node-button {
+    color: #333333;
+}
+
+body.theme-light .tree-node-button:hover {
+    background: rgba(0, 0, 0, 0.04);
+    color: #111827;
+}
+
+body.theme-light .tree-node.active .tree-node-button {
+    background: rgba(37, 99, 235, 0.1);
+    color: #1d4ed8;
+}
+
+body.theme-light #markdown-input {
+    background: #ffffff;
+    color: #111827;
+}
+
+body.theme-light #markdown-output {
+    background: #ffffff;
+}

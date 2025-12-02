@@ -24,6 +24,8 @@ A simple, lightweight Markdown renderer built with vanilla JavaScript, supportin
 - ✅ Workspace directory with localStorage persistence
 - ✅ Mermaid diagram preview (```mermaid fenced code blocks)
 - ✅ Mermaid fullscreen preview (per-diagram fullscreen button)
+- ✅ Modern three-panel layout with light/dark mode following system preference
+ - ✅ Theme switcher: choose between system / light / dark modes in the preview header
 
 ## Usage
 

@@ -4,3 +4,8 @@ alwaysApply: true
 # Documentation Update Rule
 
 - Always update README with two version: Chinese and English
+
+# Coding Rule
+
+- Make the code as modular as possible to support reuse.
+- Update tests after update code

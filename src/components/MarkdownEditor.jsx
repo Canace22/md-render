@@ -5,6 +5,7 @@ import { copyToWeChat } from '../utils/wechatCopy';
 import '../styles/styles.css';
 
 const STORAGE_KEY = 'md-renderer-workspace';
+const THEME_STORAGE_KEY = 'md-renderer-theme';
 const DEFAULT_FILE_ID = 'file-default';
 
 const DEFAULT_MARKDOWN = `# 欢迎使用 Markdown 渲染器
@@ -248,6 +249,18 @@ function MarkdownEditor() {
   const [selectedId, setSelectedId] = useState(DEFAULT_FILE_ID);
   const [markdown, setMarkdown] = useState(DEFAULT_MARKDOWN);
   const [html, setHtml] = useState('');
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'system';
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
+        return stored;
+      }
+      return 'system';
+    } catch (e) {
+      return 'system';
+    }
+  });
   const outputRef = useRef(null);
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
@@ -268,12 +281,19 @@ function MarkdownEditor() {
   };
 
   const schedulePersist = (nextWorkspace) => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
+    // 为保证工作区和内容在刷新前可靠持久化，这里改为立即写入 localStorage
+    persistWorkspace(nextWorkspace);
+  };
+
+  const applyThemeToBody = (nextTheme) => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    body.classList.remove('theme-light', 'theme-dark');
+    if (nextTheme === 'light') {
+      body.classList.add('theme-light');
+    } else if (nextTheme === 'dark') {
+      body.classList.add('theme-dark');
     }
-    saveTimerRef.current = setTimeout(() => {
-      persistWorkspace(nextWorkspace);
-    }, 500);
   };
 
   const handleCopyToWeChat = async () => {
@@ -360,6 +380,13 @@ function MarkdownEditor() {
 
   const handleSelect = (nodeId) => {
     setSelectedId(nodeId);
+    // 立即同步编辑区内容，避免依赖异步 effect 导致内容短暂不一致
+    const node = findNodeById(workspace, nodeId);
+    if (node?.type === 'file') {
+      const content = node.content ?? '';
+      setMarkdown(content);
+      updatePreview(content);
+    }
   };
 
   const handleAddFile = () => {
@@ -478,6 +505,17 @@ function MarkdownEditor() {
       updatePreview(DEFAULT_MARKDOWN);
     }
   }, []);
+
+  // 主题切换时同步到 body class & localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    applyThemeToBody(theme);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (e) {
+      // 写入失败可以忽略
+    }
+  }, [theme]);
 
   useEffect(() => {
     return () => {
@@ -703,14 +741,27 @@ function MarkdownEditor() {
       <div className="preview-panel">
         <div className="panel-header">
           <h2>渲染预览</h2>
-          <button
-            id="copy-wechat-btn"
-            className="copy-wechat-btn"
-            onClick={handleCopyToWeChat}
-            title="复制为微信公众号格式"
-          >
-            复制到微信公众号
-          </button>
+          <div className="panel-header-actions">
+            <select
+              className="theme-select"
+              data-testid="theme-select"
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              aria-label="选择主题"
+            >
+              <option value="system">跟随系统</option>
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+            <button
+              id="copy-wechat-btn"
+              className="copy-wechat-btn"
+              onClick={handleCopyToWeChat}
+              title="复制为微信公众号格式"
+            >
+              复制到微信公众号
+            </button>
+          </div>
         </div>
         <div className="panel-body">
           <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
