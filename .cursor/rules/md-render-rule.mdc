@@ -1,11 +1,80 @@
 ---
 alwaysApply: true
 ---
-# Documentation Update Rule
+## 技术栈
 
-- Always update README with two version: Chinese and English
+### 核心框架
+- **React 18.2.0** + **React DOM** - UI 框架
+- **Vite 5.0.8** - 构建工具和开发服务器
+- **@vitejs/plugin-react 4.2.1** - Vite React 插件
 
-# Coding Rule
+### 开发工具
+- **@playwright/test 1.57.0** - E2E 测试框架
 
-- Make the code as modular as possible to support reuse.
-- Update tests after update code
+### 外部依赖
+- **highlight.js** (CDN) - 代码语法高亮，使用 `github-dark-dimmed` 主题
+
+### 核心技术
+- **自研 Markdown 解析器** (`core/parser.js`) - 支持 CommonMark 和 GFM
+- **自研 Markdown 渲染器** (`core/renderer.js`) - Token 到 HTML 的转换
+
+## 项目架构
+
+### 目录结构
+```
+src/
+├── main.jsx                    # 应用入口，渲染 MarkdownEditor
+├── components/                 # React 组件层
+│   ├── MarkdownEditor.jsx     # 主编辑器组件（核心）
+│   ├── WorkspaceSidebar.jsx   # 文件系统侧边栏
+│   └── Icon.jsx               # 图标组件
+├── core/                       # 核心业务层
+│   ├── index.js               # 导出入口
+│   ├── parser.js              # Markdown 解析器（文本 → Token）
+│   └── renderer.js            # Markdown 渲染器（Token → HTML）
+├── utils/                      # 工具函数
+│   └── wechatCopy.js          # 微信公众号复制工具
+└── styles/
+    └── styles.css             # 全局样式（暗黑主题）
+```
+
+### 架构分层
+```
+┌─────────────────────────────────┐
+│   React 组件层 (UI)              │
+│   - MarkdownEditor               │
+│   - WorkspaceSidebar             │
+└──────────────┬──────────────────┘
+               │
+┌──────────────▼──────────────────┐
+│   核心业务层 (Core)              │
+│   - MarkdownParser               │
+│   - MarkdownRenderer             │
+└──────────────┬──────────────────┘
+               │
+┌──────────────▼──────────────────┐
+│   工具层 (Utils)                 │
+│   - wechatCopy                   │
+└─────────────────────────────────┘
+```
+
+### 数据流
+```
+用户输入 → MarkdownEditor (状态管理)
+    ↓
+MarkdownParser.parse() (文本 → Token 数组)
+    ↓
+MarkdownRenderer.render() (Token 数组 → HTML 字符串)
+    ↓
+React 更新 DOM (dangerouslySetInnerHTML)
+    ↓
+highlight.js 代码高亮 + 复制按钮绑定
+```
+
+## 项目信息
+
+这是一个基于自研 markdown 渲染器的编辑器，主要功能包括：
+
+- 文件系统，支持文档的增删改查
+- markdown 文档实时预览，支持 CommonMark 和 GFM 两种格式，支持 mermaid 预览
+- 复制：支持微信公众号定制模板格式的内容复制
