@@ -68,6 +68,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    height: 34px;
+    box-sizing: border-box;
 }
 
 .panel-header h2 {
@@ -76,6 +78,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     letter-spacing: 0;
     text-transform: none;
     color: #444444;
+    line-height: 1;
+    margin: 0;
 }
 
 .panel-header-actions {
