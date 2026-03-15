@@ -2,7 +2,7 @@
 
 [中文版说明](./README.zh.md)
 
-A simple, lightweight Markdown renderer built with vanilla JavaScript, supporting CommonMark specification, with no dependencies required.
+A simple, lightweight Markdown renderer built with **React + Vite**, supporting CommonMark and GFM. The core parser and renderer are pure JavaScript with no runtime dependencies.
 
 ## Features
 
@@ -25,7 +25,7 @@ A simple, lightweight Markdown renderer built with vanilla JavaScript, supportin
 - ✅ Mermaid diagram preview (```mermaid fenced code blocks)
 - ✅ Mermaid fullscreen preview (per-diagram fullscreen button)
 - ✅ Modern three-panel layout with light/dark mode following system preference
- - ✅ Theme switcher: choose between system / light / dark modes in the preview header
+- ✅ Theme switcher: choose between system / light / dark modes in the preview header
 
 ## Usage
 
@@ -75,6 +75,14 @@ pnpm run build
 ```
 
 The build output will be generated in the `dist/` directory.
+
+### Preview Production Build
+
+```bash
+pnpm run preview
+```
+
+Serves the built app locally (default: `http://localhost:4173`).
 
 ### End-to-End Testing (Playwright)
 
@@ -127,13 +135,18 @@ md-render/
 │   │   ├── MarkdownEditor.jsx   # Main editor shell
 │   │   └── WorkspaceSidebar.jsx # Directory sidebar component
 │   ├── core/               # Core functionality modules
-│   │   ├── parser.js       # Markdown parser
-│   │   └── renderer.js     # HTML renderer
+│   │   ├── index.js        # Parser and renderer exports
+│   │   ├── parser.js       # Markdown parser (text → tokens)
+│   │   └── renderer.js     # HTML renderer (tokens → HTML)
+│   ├── utils/              # Utility modules
+│   │   ├── wechatCopy.js   # WeChat Official Account copy logic
+│   │   └── wechatTemplates.js  # WeChat format templates
 │   └── styles/             # Style files
-│       └── styles.css      # Main style file
+│       ├── styles.css      # Main styles
+│       └── design-tokens.css    # Design tokens (colors, spacing)
+├── tests/                  # Playwright E2E tests
 ├── README.md               # Project documentation
-├── ARCHITECTURE.md         # Architecture documentation
-└── REACT_MIGRATION.md      # React migration analysis report
+└── ARCHITECTURE.md         # Architecture documentation
 ```
 
 ## Supported Markdown Syntax
@@ -175,10 +188,13 @@ md-render/
 
 ## Technical Implementation
 
-- Pure JavaScript, core functionality has no dependencies
-- Integrated highlight.js for code syntax highlighting (via CDN)
+- **React 18 + Vite** for the UI and build pipeline
+- **Self-built parser and renderer** (`core/`) — pure JavaScript, no runtime dependencies
+- **highlight.js** (CDN) for code syntax highlighting
+- **lucide-react** for icons
+- **Mermaid** (CDN) for diagram rendering
 - Modular design, easy to extend
-- Dark theme, comfortable for the eyes
+- Light/dark theme with system preference support
 
 ## Implementation Principles
 
