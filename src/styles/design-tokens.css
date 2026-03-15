@@ -28,6 +28,8 @@
   --color-primary-btn-hover: #06AD56;
   --color-text-secondary: var(--color-text-muted);
   --color-text-active: var(--color-brand-primary);
+  /* 简约图标：中性灰，不用主题色 */
+  --color-icon-neutral: var(--color-text-muted);
   --color-code-text: #E2E8F0;
   --color-inline-code: #DC2626;
   --color-border: var(--color-border-subtle);

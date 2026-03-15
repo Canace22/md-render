@@ -249,6 +249,7 @@ function MarkdownEditor() {
   const [selectedId, setSelectedId] = useState(DEFAULT_FILE_ID);
   const [markdown, setMarkdown] = useState(DEFAULT_MARKDOWN);
   const [html, setHtml] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'system';
     try {
@@ -426,8 +427,9 @@ function MarkdownEditor() {
     });
   };
 
-  const handleRename = () => {
-    const node = findNodeById(workspace, selectedId);
+  const handleRename = (nodeId) => {
+    const targetId = nodeId ?? selectedId;
+    const node = findNodeById(workspace, targetId);
     if (!node) return;
     const nextName = window.prompt('请输入新名称', node.name);
     if (!nextName) return;
@@ -438,7 +440,7 @@ function MarkdownEditor() {
       return;
     }
     setWorkspace((prev) => {
-      const updated = updateNodeById(prev, selectedId, (current) => ({
+      const updated = updateNodeById(prev, targetId, (current) => ({
         ...current,
         name: trimmed,
       }));
@@ -447,12 +449,13 @@ function MarkdownEditor() {
     });
   };
 
-  const handleDelete = () => {
-    if (selectedId === 'root') {
+  const handleDelete = (nodeId) => {
+    const targetId = nodeId ?? selectedId;
+    if (targetId === 'root') {
       alert('根目录不能删除');
       return;
     }
-    const node = findNodeById(workspace, selectedId);
+    const node = findNodeById(workspace, targetId);
     if (!node) return;
     const isFolder = node.type === 'folder';
     const confirmed = window.confirm(
@@ -461,7 +464,7 @@ function MarkdownEditor() {
     if (!confirmed) return;
 
     setWorkspace((prev) => {
-      const result = removeNodeById(prev, selectedId);
+      const result = removeNodeById(prev, targetId);
       if (!result.removed) {
         return prev;
       }
@@ -724,6 +727,10 @@ function MarkdownEditor() {
         onAddFolder={handleAddFolder}
         onRename={handleRename}
         onDelete={handleDelete}
+        theme={theme}
+        onThemeChange={setTheme}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
       />
       <div className="editor-panel">
         <div className="panel-header">
@@ -742,17 +749,6 @@ function MarkdownEditor() {
         <div className="panel-header">
           <h2>PREVIEW</h2>
           <div className="panel-header-actions">
-            <select
-              className="theme-select"
-              data-testid="theme-select"
-              value={theme}
-              onChange={(e) => setTheme(e.target.value)}
-              aria-label="选择主题"
-            >
-              <option value="system">跟随系统</option>
-              <option value="light">浅色</option>
-              <option value="dark">深色</option>
-            </select>
             <button
               id="copy-wechat-btn"
               className="copy-wechat-btn"
