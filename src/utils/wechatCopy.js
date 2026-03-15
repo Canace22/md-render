@@ -36,7 +36,7 @@ const convertListsToParagraphs = (tempDiv, template) => {
 };
 
 const applyTemplateStyles = (tempDiv, template) => {
-  const { base, linkColor, borderColor, headingBorderColor, spacing, blockquote, code, image } =
+  const { base, linkColor, borderColor, headingBorderColor, headingFontSize, headingAlign, spacing, blockquote, statement, code, codeBlockBg, image } =
     template;
 
   convertListsToParagraphs(tempDiv, template);
@@ -66,7 +66,7 @@ const applyTemplateStyles = (tempDiv, template) => {
       .replace(/>/g, '&gt;');
     const withBr = escaped.replace(/\n/g, '<br/>');
 
-    const codeBg = base.backgroundColor === '#1e1e1e' ? '#2d2d2d' : '#f7f7f7';
+    const codeBg = codeBlockBg ?? (base.backgroundColor === '#1e1e1e' ? '#2d2d2d' : '#f7f7f7');
     const codeBorder = base.backgroundColor === '#1e1e1e' ? '#444' : '#ececec';
 
     const newPre = document.createElement('pre');
@@ -124,21 +124,25 @@ const applyTemplateStyles = (tempDiv, template) => {
 
   const blockquotes = tempDiv.querySelectorAll('blockquote');
   blockquotes.forEach((bq) => {
-    bq.setAttribute(
-      'style',
-      `padding: ${blockquote.padding}; border-left: ${blockquote.borderLeft}; margin: ${spacing.block} 0;`
-    );
+    const text = (bq.textContent || '').trim();
+    const isStatement = statement && text.startsWith('声明');
+    const style = isStatement ? statement : blockquote;
+    let bqStyle = `padding: ${style.padding}; margin: ${spacing.block} 0;`;
+    if (style.border) bqStyle += ` border: ${style.border};`;
+    else if (style.borderLeft) bqStyle += ` border-left: ${style.borderLeft};`;
+    if (style.color) bqStyle += ` color: ${style.color};`;
+    if (style.fontStyle) bqStyle += ` font-style: ${style.fontStyle};`;
+    bq.setAttribute('style', bqStyle);
   });
 
   const headings = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  const headingSize = (tag) => (headingFontSize?.[tag] ?? base.fontSize);
   headings.forEach((heading) => {
     const tag = heading.tagName.toLowerCase();
     const top = spacing.headingTop[tag] ?? spacing.headingTop.h6;
     const bottom = spacing.headingBottom[tag] ?? spacing.headingBottom.h6;
-    let style = `font-size: ${base.fontSize}; font-weight: 600; line-height: ${base.lineHeight}; margin-top: ${top}; margin-bottom: ${bottom};`;
-    if (tag === 'h2') {
-      style += ` border-bottom: 1px solid ${headingBorderColor}; padding-bottom: 0.3em;`;
-    }
+    let style = `font-size: ${headingSize(tag)}; font-weight: 600; line-height: ${base.lineHeight}; margin-top: ${top}; margin-bottom: ${bottom};`;
+    if (headingAlign?.[tag]) style += ` text-align: ${headingAlign[tag]};`;
     heading.setAttribute('style', style);
   });
 
@@ -244,6 +248,12 @@ const convertToWeChatHTML = (htmlString, templateId = 'default') => {
   tempDiv.innerHTML = htmlString;
 
   const template = getTemplateById(templateId);
+  if (template.autoStatement) {
+    const bq = document.createElement('blockquote');
+    bq.innerHTML = template.autoStatement;
+    tempDiv.appendChild(bq);
+  }
+
   applyTemplateStyles(tempDiv, template);
   removeRedundantBr(tempDiv);
   stripDataAndClass(tempDiv);
@@ -251,10 +261,9 @@ const convertToWeChatHTML = (htmlString, templateId = 'default') => {
   const wrapper = document.createElement('div');
   const { base } = template;
   const bg = base.backgroundColor ?? '#ffffff';
-  wrapper.setAttribute(
-    'style',
-    `font-size: ${base.fontSize}; line-height: ${base.lineHeight}; color: ${base.color}; background-color: ${bg};`
-  );
+  let wrapperStyle = `font-size: ${base.fontSize}; line-height: ${base.lineHeight}; color: ${base.color}; background-color: ${bg};`;
+  if (base.fontFamily) wrapperStyle += ` font-family: ${base.fontFamily};`;
+  wrapper.setAttribute('style', wrapperStyle);
   wrapper.innerHTML = tempDiv.innerHTML;
 
   return wrapper.outerHTML;
@@ -288,19 +297,37 @@ const copyToWeChat = async (html, options = {}) => {
   };
 
   const wechatHTML = convertToWeChatHTML(html, templateId);
+  const plainText = (() => {
+    const div = document.createElement('div');
+    div.innerHTML = wechatHTML;
+    return div.textContent || div.innerText || '';
+  })();
 
   /**
-   * 参照 wechat-format 复制逻辑：直接选区 + execCommand，由浏览器自然序列化 DOM
-   * @see https://github.com/lyricat/wechat-format/blob/master/src/assets/scripts/editor.js
+   * 优先使用 Clipboard API 写入原始 HTML，保证所选模板样式完整进入剪贴板。
+   * execCommand 从 DOM 序列化可能被父容器样式干扰，导致粘贴后样式不符。
    */
-  const doCopy = () => {
+  const writeWithClipboardAPI = async () => {
+    if (!navigator.clipboard?.write) return false;
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([wechatHTML], { type: 'text/html;charset=utf-8' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain;charset=utf-8' }),
+      }),
+    ]);
+    return true;
+  };
+
+  /**
+   * 降级：execCommand 复制。容器仅做定位，不设置 font-size/line-height 避免干扰子元素样式。
+   * @see https://github.com/lyricat/wechat-format
+   */
+  const writeWithExecCommand = () => {
     const container = document.createElement('div');
     container.innerHTML = wechatHTML;
-    container.style.cssText =
-      'position:fixed;left:-9999px;top:0;font-size:16px;line-height:1.6;';
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;';
     document.body.appendChild(container);
 
-    container.focus?.();
     const sel = window.getSelection();
     sel.removeAllRanges();
     const range = document.createRange();
@@ -314,29 +341,21 @@ const copyToWeChat = async (html, options = {}) => {
   };
 
   try {
-    doCopy();
+    const ok = await writeWithClipboardAPI();
+    if (ok) {
+      copySuccess();
+      return;
+    }
+  } catch (_) {
+    /* clipboard API 不可用或失败，继续降级 */
+  }
+
+  try {
+    writeWithExecCommand();
     copySuccess();
   } catch (err) {
     console.error('复制失败:', err);
-    try {
-      const plainDiv = document.createElement('div');
-      plainDiv.innerHTML = wechatHTML;
-      const plainText = plainDiv.textContent || plainDiv.innerText || '';
-      if (navigator.clipboard?.write) {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            'text/html': new Blob([wechatHTML], { type: 'text/html;charset=utf-8' }),
-            'text/plain': new Blob([plainText], { type: 'text/plain;charset=utf-8' }),
-          }),
-        ]);
-        copySuccess();
-      } else {
-        throw err;
-      }
-    } catch (err2) {
-      console.error('降级复制也失败:', err2);
-      throw err2;
-    }
+    throw err;
   }
 };
 

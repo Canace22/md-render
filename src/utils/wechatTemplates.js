@@ -28,6 +28,13 @@ const defaultSimple = {
     borderLeft: '0.25em solid #dfe2e5',
     padding: '0 1em',
   },
+  statement: {
+    border: '1px solid #c9302c',
+    padding: '12px 16px',
+    color: '#c9302c',
+    fontStyle: 'normal',
+  },
+  autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: '"Consolas", "Monaco", "Courier New", monospace',
   },
@@ -39,6 +46,7 @@ const defaultSimple = {
 
 /**
  * InfoQ 风格：大间距、行高 1.8、蓝色强调
+ * 对齐 infoQ 公众号：标题/副标题居中，分级字号、引用 secondary 色+斜体
  */
 const infoq = {
   id: 'infoq',
@@ -48,10 +56,14 @@ const infoq = {
     lineHeight: '1.8',
     color: '#242424',
     backgroundColor: '#ffffff',
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   },
   linkColor: '#0052CC',
   borderColor: '#E5E6EB',
   headingBorderColor: '#DCDFE6',
+  headingFontSize: { h1: '24px', h2: '20px', h3: '18px', h4: '16px', h5: '15px', h6: '14px' },
+  /** 标题 ##、副标题 ### 居中 */
+  headingAlign: { h2: 'center', h3: 'center' },
   spacing: {
     paragraph: '24px',
     block: '16px',
@@ -61,10 +73,22 @@ const infoq = {
   blockquote: {
     borderLeft: '4px solid #0052CC',
     padding: '0 16px',
+    color: '#666666',
+    fontStyle: 'italic',
   },
+  /** 文章末尾声明块：以「声明」开头的 blockquote 使用此样式 */
+  statement: {
+    border: '1px solid #c9302c',
+    padding: '12px 16px',
+    color: '#c9302c',
+    fontStyle: 'normal',
+  },
+  /** 复制时自动追加到文末的声明，留空则不追加 */
+  autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
   },
+  codeBlockBg: '#F5F7FA',
   image: {
     margin: '16px auto',
     borderRadius: '8px',
@@ -96,6 +120,13 @@ const dark = {
     borderLeft: '0.25em solid #58a6ff',
     padding: '0 1em',
   },
+  statement: {
+    border: '1px solid #c9302c',
+    padding: '12px 16px',
+    color: '#c9302c',
+    fontStyle: 'normal',
+  },
+  autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: '"Consolas", "Monaco", "Courier New", monospace',
   },
