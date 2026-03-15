@@ -928,8 +928,6 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 #markdown-output h2 {
     font-size: var(--text-h2-size);
-    padding-bottom: 0.3em;
-    border-bottom: 1px solid var(--color-border);
     color: var(--color-text-primary);
 }
 
@@ -1145,6 +1143,94 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 #markdown-output table tr:nth-child(even) {
     background: rgba(0, 0, 0, 0.02);
 }
+
+/* ========== 排版风格：预览区随 copyStyle 切换 ========== */
+/* data-style="default" 使用上方 base 样式，跟随全局 theme */
+
+/* InfoQ 风格：强制浅色背景（覆盖 theme-dark） */
+.preview-panel[data-style="infoq"],
+.preview-panel[data-style="infoq"] .panel-body,
+body.theme-dark .preview-panel[data-style="infoq"],
+body.theme-dark .preview-panel[data-style="infoq"] .panel-body {
+    background: #ffffff;
+}
+
+/* InfoQ 风格：大间距、行高 1.8、h2/h3 居中、蓝色引用 */
+.preview-panel[data-style="infoq"] #markdown-output {
+    font-size: 17px;
+    line-height: 1.8;
+    color: #242424;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+.preview-panel[data-style="infoq"] #markdown-output h1 { font-size: 24px; margin-top: 24px; margin-bottom: 12px; border-bottom: none; padding-bottom: 0; }
+.preview-panel[data-style="infoq"] #markdown-output h2 { font-size: 20px; margin-top: 20px; margin-bottom: 10px; text-align: center; border-bottom: none; padding-bottom: 0; }
+.preview-panel[data-style="infoq"] #markdown-output h3 { font-size: 18px; margin-top: 18px; margin-bottom: 8px; text-align: center; }
+.preview-panel[data-style="infoq"] #markdown-output h4 { font-size: 16px; margin-top: 16px; margin-bottom: 6px; }
+.preview-panel[data-style="infoq"] #markdown-output h5 { font-size: 15px; margin-top: 14px; margin-bottom: 6px; }
+.preview-panel[data-style="infoq"] #markdown-output h6 { font-size: 14px; margin-top: 12px; margin-bottom: 6px; }
+.preview-panel[data-style="infoq"] #markdown-output p { margin-bottom: 24px; }
+.preview-panel[data-style="infoq"] #markdown-output blockquote {
+    border-left: 4px solid #0052CC;
+    padding: 0 16px;
+    color: #666666;
+    font-style: italic;
+    background: transparent;
+}
+.preview-panel[data-style="infoq"] #markdown-output a { color: #0052CC; }
+.preview-panel[data-style="infoq"] #markdown-output pre { background: #F5F7FA; }
+.preview-panel[data-style="infoq"] #markdown-output code { background: #F5F7FA; color: #242424; }
+.preview-panel[data-style="infoq"] #markdown-output img { margin: 16px auto; border-radius: 8px; }
+.preview-panel[data-style="infoq"] #markdown-output table th,
+.preview-panel[data-style="infoq"] #markdown-output table td { border-color: #E5E6EB; }
+.preview-panel[data-style="infoq"] #markdown-output table th { background: #F5F7FA; color: #242424; }
+.preview-panel[data-style="infoq"] #markdown-output hr { border-top-color: #DCDFE6; }
+
+/* 暗黑风格：强制深色背景（覆盖 theme-light） */
+.preview-panel[data-style="dark"],
+.preview-panel[data-style="dark"] .panel-body,
+body.theme-light .preview-panel[data-style="dark"],
+body.theme-light .preview-panel[data-style="dark"] .panel-body {
+    background: #1e1e1e;
+}
+
+/* 暗黑风格：深色背景、浅色文字 */
+.preview-panel[data-style="dark"] #markdown-output {
+    font-size: 16px;
+    line-height: 1.6;
+    color: #e6edf3;
+    background: #1e1e1e;
+}
+.preview-panel[data-style="dark"] #markdown-output h1,
+.preview-panel[data-style="dark"] #markdown-output h2,
+.preview-panel[data-style="dark"] #markdown-output h3,
+.preview-panel[data-style="dark"] #markdown-output h4,
+.preview-panel[data-style="dark"] #markdown-output h5,
+.preview-panel[data-style="dark"] #markdown-output h6,
+.preview-panel[data-style="dark"] #markdown-output p,
+.preview-panel[data-style="dark"] #markdown-output li { color: #e6edf3; }
+.preview-panel[data-style="dark"] #markdown-output h1,
+.preview-panel[data-style="dark"] #markdown-output h2 { border-bottom: none; padding-bottom: 0; }
+.preview-panel[data-style="dark"] #markdown-output blockquote {
+    border-left: 0.25em solid #58a6ff;
+    padding: 0 1em;
+    color: #e6edf3;
+    background: transparent;
+}
+.preview-panel[data-style="dark"] #markdown-output a { color: #58a6ff; }
+.preview-panel[data-style="dark"] #markdown-output code { background: #30363d; color: #e6edf3; }
+.preview-panel[data-style="dark"] #markdown-output pre { background: #0d1117; border-color: #30363d; }
+.preview-panel[data-style="dark"] #markdown-output pre code { color: #e6edf3; }
+.preview-panel[data-style="dark"] #markdown-output strong { color: #e6edf3; }
+.preview-panel[data-style="dark"] #markdown-output hr { border-top-color: #30363d; }
+.preview-panel[data-style="dark"] #markdown-output table th,
+.preview-panel[data-style="dark"] #markdown-output table td { border-color: #30363d; color: #e6edf3; }
+.preview-panel[data-style="dark"] #markdown-output table th { background: #21262d; }
+.preview-panel[data-style="dark"] #markdown-output table tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
+.preview-panel[data-style="dark"] .code-block { background: #0d1117; border-color: #30363d; }
+.preview-panel[data-style="dark"] .code-block .code-header { background: rgba(0, 0, 0, 0.3); border-bottom-color: #30363d; }
+.preview-panel[data-style="dark"] .code-block .code-lang,
+.preview-panel[data-style="dark"] .code-block .code-copy-btn { color: #e6edf3; }
 
 /* Mermaid 图表容器与全屏样式 */
 .mermaid-figure {

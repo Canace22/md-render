@@ -210,7 +210,7 @@ const WorkspaceSidebar = ({
 
       {!collapsed && (
         <>
-          {/* 我的文档 + 新建文件/文件夹图标 */}
+          {/* 我的文档 + 新建文件/文件夹 */}
           <div className="sidebar-docs-header">
             <span className="sidebar-section-title">我的文档</span>
             <div className="sidebar-add-icons">

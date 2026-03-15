@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, RefreshCw, ChevronDown, MoreVertical } from 'lucide-react';
+import { Copy, RefreshCw, ChevronDown, MoreVertical, Upload, Download } from 'lucide-react';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import { copyToWeChat } from '../utils/wechatCopy';
+import { exportWorkspaceToJSON, parseWorkspaceFromJSON } from '../utils/workspaceIO';
 import { TEMPLATES, getTemplateById } from '../utils/wechatTemplates';
 import '../styles/styles.css';
 
@@ -279,6 +280,7 @@ function MarkdownEditor() {
   const [styleDropdownOpen, setStyleDropdownOpen] = useState(false);
   const styleDropdownRef = useRef(null);
   const outputRef = useRef(null);
+  const importInputRef = useRef(null);
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const saveTimerRef = useRef(null);
@@ -504,6 +506,46 @@ function MarkdownEditor() {
       setSelectedId(nextFileId ?? nextWorkspace.id);
       return nextWorkspace;
     });
+  };
+
+  const handleExport = () => {
+    const json = exportWorkspaceToJSON(workspace);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `workspace-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e) => {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const { workspace: imported, error } = parseWorkspaceFromJSON(r.result);
+      if (error) {
+        alert(error);
+        return;
+      }
+      const confirmed = window.confirm('导入将替换当前工作区，是否继续？');
+      if (!confirmed) return;
+      setWorkspace(imported);
+      const firstFileId = findFirstFileId(imported);
+      setSelectedId(firstFileId ?? imported?.id ?? 'root');
+      const node = findNodeById(imported, firstFileId);
+      if (node?.type === 'file') {
+        setMarkdown(node.content ?? '');
+        updatePreview(node.content ?? '');
+      } else {
+        setMarkdown('');
+        updatePreview('');
+      }
+      schedulePersist(imported);
+    };
+    r.readAsText(file, 'UTF-8');
+    e.target.value = '';
   };
 
   useEffect(() => {
@@ -778,6 +820,14 @@ function MarkdownEditor() {
 
   return (
     <div className="container">
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".json,application/json"
+        style={{ display: 'none' }}
+        onChange={handleImport}
+        aria-hidden
+      />
       <WorkspaceSidebar
         workspace={workspace}
         selectedId={selectedId}
@@ -842,6 +892,24 @@ function MarkdownEditor() {
             <button
               type="button"
               className="header-more-btn"
+              onClick={() => importInputRef.current?.click()}
+              title="导入工作区"
+              aria-label="导入工作区"
+            >
+              <Upload size={16} strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              className="header-more-btn"
+              onClick={handleExport}
+              title="导出工作区"
+              aria-label="导出工作区"
+            >
+              <Download size={16} strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              className="header-more-btn"
               title="更多选项"
               aria-label="更多选项"
             >
@@ -877,7 +945,7 @@ function MarkdownEditor() {
             </div>
           </div>
           <div className="right-area-divider" aria-hidden />
-          <div className="preview-panel">
+          <div className="preview-panel" data-style={copyStyle}>
             <div className="panel-body">
               <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
             </div>
