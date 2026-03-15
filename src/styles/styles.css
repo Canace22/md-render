@@ -290,6 +290,33 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     justify-content: flex-start;
 }
 
+.panel-tab-save-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-caption-size);
+}
+
+.save-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.save-status-dot.saved {
+    background: var(--color-brand-success);
+}
+
+.save-status-dot.unsaved {
+    background: var(--color-text-muted);
+}
+
+.save-status-text {
+    color: var(--color-text-muted);
+}
+
 .panel-tab-preview {
     background: rgb(255, 255, 255);
     color: rgb(170, 184, 194);

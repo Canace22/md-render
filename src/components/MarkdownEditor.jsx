@@ -278,13 +278,17 @@ function MarkdownEditor() {
     }
   });
   const [styleDropdownOpen, setStyleDropdownOpen] = useState(false);
+  const [isSaved, setIsSaved] = useState(true);
   const styleDropdownRef = useRef(null);
   const outputRef = useRef(null);
   const importInputRef = useRef(null);
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const saveTimerRef = useRef(null);
+  const persistRef = useRef(null);
   const skipFirstPersistRef = useRef(true);
+
+  const PERSIST_DEBOUNCE_MS = 400;
 
   const selectedFile = useMemo(() => {
     const node = findNodeById(workspace, selectedId);
@@ -300,9 +304,30 @@ function MarkdownEditor() {
     }
   };
 
+  const cancelEditorPersist = () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    persistRef.current = null;
+  };
+
   const schedulePersist = (nextWorkspace) => {
-    // 为保证工作区和内容在刷新前可靠持久化，这里改为立即写入 localStorage
+    cancelEditorPersist();
     persistWorkspace(nextWorkspace);
+    setIsSaved(true);
+  };
+
+  const scheduleEditorPersist = (nextWorkspace) => {
+    persistRef.current = nextWorkspace;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      if (persistRef.current) {
+        persistWorkspace(persistRef.current);
+        persistRef.current = null;
+      }
+      setIsSaved(true);
+    }, PERSIST_DEBOUNCE_MS);
   };
 
   const applyThemeToBody = (nextTheme) => {
@@ -391,6 +416,7 @@ function MarkdownEditor() {
   };
 
   const handleMarkdownChange = (value) => {
+    setIsSaved(false);
     setMarkdown(value);
     setWorkspace((prev) => {
       const updated = updateNodeById(prev, selectedId, (node) => {
@@ -402,13 +428,15 @@ function MarkdownEditor() {
           content: value,
         };
       });
-      schedulePersist(updated);
+      scheduleEditorPersist(updated);
       return updated;
     });
     updatePreview(value);
   };
 
   const handleSelect = (nodeId) => {
+    cancelEditorPersist();
+    setIsSaved(true);
     setSelectedId(nodeId);
     // 立即同步编辑区内容，避免依赖异步 effect 导致内容短暂不一致
     const node = findNodeById(workspace, nodeId);
@@ -421,6 +449,8 @@ function MarkdownEditor() {
 
   /** @param {string} [contextNodeId] 菜单所在节点 id，有则优先用其所在文件夹作为目标，否则用 selectedId */
   const handleAddFile = (contextNodeId) => {
+    cancelEditorPersist();
+    setIsSaved(true);
     const fileId = createId('file');
     setWorkspace((prev) => {
       const name = buildUniqueName(prev, '未命名', '.md');
@@ -531,6 +561,8 @@ function MarkdownEditor() {
       }
       const confirmed = window.confirm('导入将替换当前工作区，是否继续？');
       if (!confirmed) return;
+      cancelEditorPersist();
+      setIsSaved(true);
       setWorkspace(imported);
       const firstFileId = findFirstFileId(imported);
       setSelectedId(firstFileId ?? imported?.id ?? 'root');
@@ -611,10 +643,15 @@ function MarkdownEditor() {
   }, [theme]);
 
   useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
+    const onBeforeUnload = () => {
+      if (persistRef.current) {
+        persistWorkspace(persistRef.current);
       }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      window.removeEventListener('beforeunload', onBeforeUnload);
     };
   }, []);
 
@@ -920,6 +957,10 @@ function MarkdownEditor() {
         <div className="panel-tabs">
           <div className="panel-tab panel-tab-editor">
             <span>EDITOR</span>
+            <div className="panel-tab-save-status">
+              <span className={`save-status-dot ${isSaved ? 'saved' : 'unsaved'}`} aria-hidden />
+              <span className="save-status-text">{isSaved ? '已保存' : '未保存'}</span>
+            </div>
           </div>
           <div className="panel-tab panel-tab-preview">
             <span>PREVIEW</span>
