@@ -7,6 +7,7 @@ import { TEMPLATES, getTemplateById } from '../utils/wechatTemplates';
 import '../styles/styles.css';
 
 const STORAGE_KEY = 'md-renderer-workspace';
+const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
 const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
 const DEFAULT_FILE_ID = 'file-default';
@@ -281,6 +282,7 @@ function MarkdownEditor() {
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const saveTimerRef = useRef(null);
+  const skipFirstPersistRef = useRef(true);
 
   const selectedFile = useMemo(() => {
     const node = findNodeById(workspace, selectedId);
@@ -515,7 +517,10 @@ function MarkdownEditor() {
         return;
       }
       setWorkspace(parsed);
-      const initialFileId = findFirstFileId(parsed) ?? DEFAULT_FILE_ID;
+      const storedId = localStorage.getItem(SELECTED_ID_STORAGE_KEY);
+      const storedNode = storedId ? findNodeById(parsed, storedId) : null;
+      const initialFileId =
+        storedNode?.type === 'file' ? storedId : (findFirstFileId(parsed) ?? DEFAULT_FILE_ID);
       setSelectedId(initialFileId);
       const node = findNodeById(parsed, initialFileId);
       if (node?.type === 'file') {
@@ -534,7 +539,22 @@ function MarkdownEditor() {
     }
   }, []);
 
-  // 主题切换时同步到 body class & localStorage
+  // 持久化当前选中的文档 ID（跳过首次挂载，避免覆盖 load 前的初始值）
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (skipFirstPersistRef.current) {
+      skipFirstPersistRef.current = false;
+      return;
+    }
+    if (selectedFile) {
+      try {
+        localStorage.setItem(SELECTED_ID_STORAGE_KEY, selectedId);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  }, [selectedId, selectedFile]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     applyThemeToBody(theme);
