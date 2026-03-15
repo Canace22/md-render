@@ -727,7 +727,7 @@ function MarkdownEditor() {
       />
       <div className="editor-panel">
         <div className="panel-header">
-          <h2>Markdown 输入</h2>
+          <h2>EDITOR</h2>
         </div>
         <div className="panel-body">
           <textarea
@@ -740,7 +740,7 @@ function MarkdownEditor() {
       </div>
       <div className="preview-panel">
         <div className="panel-header">
-          <h2>渲染预览</h2>
+          <h2>PREVIEW</h2>
           <div className="panel-header-actions">
             <select
               className="theme-select"

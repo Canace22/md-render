@@ -1,0 +1,151 @@
+/**
+ * ProEditor Design Tokens（官方导出）
+ * 定义编辑器的核心视觉语言
+ */
+
+:root {
+  /* === 1. 核心色彩 (Colors) === */
+  /* 品牌色 */
+  --color-brand-primary: #4F46E5;
+  --color-brand-success: #07C160;
+
+  /* 基础色彩 - 浅色模式 */
+  --color-surface-base: #F8FAFC;
+  --color-surface-elevated: #FFFFFF;
+  --color-border-subtle: #E2E8F0;
+  --color-text-primary: #1E293B;
+  --color-text-muted: #64748B;
+
+  /* 语义别名（供 styles.css 使用） */
+  --color-bg-page: var(--color-surface-base);
+  --color-bg-surface: var(--color-surface-elevated);
+  --color-bg-sidebar: var(--color-surface-elevated);
+  --color-bg-active: rgba(79, 70, 229, 0.12);
+  --color-bg-code: #0F172A;
+  --color-bg-inline-code: #F1F5F9;
+  --color-primary: var(--color-brand-primary);
+  --color-primary-btn: var(--color-brand-success);
+  --color-primary-btn-hover: #06AD56;
+  --color-text-secondary: var(--color-text-muted);
+  --color-text-active: var(--color-brand-primary);
+  --color-code-text: #E2E8F0;
+  --color-inline-code: #DC2626;
+  --color-border: var(--color-border-subtle);
+
+  /* === 2. 间距 (Spacing) === */
+  --space-xs: 4px;
+  --space-s: 8px;
+  --space-m: 16px;
+  --space-l: 24px;
+  --space-xl: 40px;
+  /* 兼容旧名 */
+  --space-sm: var(--space-s);
+  --space-md: var(--space-m);
+  --space-lg: var(--space-l);
+
+  /* === 3. 圆角 (Radius) === */
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --radius-xl: 16px;
+  /* 兼容旧名 */
+  --radius-sm: var(--radius-s);
+  --radius-md: var(--radius-m);
+  --radius-lg: var(--radius-l);
+
+  /* === 4. 阴影 (Shadows) === */
+  --shadow-soft: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-medium: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-brand: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
+  /* 兼容旧名 */
+  --shadow-sm: var(--shadow-soft);
+  --shadow-md: var(--shadow-medium);
+  --shadow-btn: var(--shadow-soft);
+
+  /* === 5. 字体排版 (Typography) === */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-serif: Georgia, serif;
+
+  --text-display: 30px;
+  --text-heading: 20px;
+  --text-body: 14px;
+  --text-caption: 12px;
+  --line-height-display: 1.2;
+  --line-height-heading: 1.4;
+  --line-height-body: 1.6;
+  --line-height-caption: 1.5;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  /* 兼容旧名 */
+  --text-h1-size: var(--text-display);
+  --text-h2-size: var(--text-heading);
+  --text-h3-size: 1.17rem;
+  --text-code-size: var(--text-body);
+  --text-caption-size: var(--text-caption);
+  --line-height-tight: 1.3;
+
+  /* === 6. 交互 (Interactions) === */
+  --duration-transition: 300ms;
+  --easing: cubic-bezier(0.4, 0, 0.2, 1);
+  /* 兼容旧名 */
+  --duration-fast: 150ms;
+  --duration-normal: var(--duration-transition);
+}
+
+/* 深色模式 */
+body.theme-dark,
+[data-theme="dark"] {
+  --color-surface-base: #0F172A;
+  --color-surface-elevated: #1E293B;
+  --color-border-subtle: #1E293B;
+  --color-text-primary: #F1F5F9;
+  --color-text-muted: #94A3B8;
+
+  --color-bg-page: var(--color-surface-base);
+  --color-bg-surface: var(--color-surface-elevated);
+  --color-bg-sidebar: var(--color-surface-elevated);
+  --color-bg-active: rgba(79, 70, 229, 0.25);
+  --color-bg-code: #0F172A;
+  --color-bg-inline-code: #1E293B;
+  --color-border: var(--color-border-subtle);
+}
+
+/* 跟随系统深色 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface-base: #0F172A;
+    --color-surface-elevated: #1E293B;
+    --color-border-subtle: #1E293B;
+    --color-text-primary: #F1F5F9;
+    --color-text-muted: #94A3B8;
+
+    --color-bg-page: var(--color-surface-base);
+    --color-bg-surface: var(--color-surface-elevated);
+    --color-bg-sidebar: var(--color-surface-elevated);
+    --color-bg-active: rgba(79, 70, 229, 0.25);
+    --color-bg-code: #0F172A;
+    --color-bg-inline-code: #1E293B;
+    --color-border: var(--color-border-subtle);
+  }
+}
+
+/* 强制浅色：覆盖系统深色 */
+body.theme-light {
+  --color-surface-base: #F8FAFC;
+  --color-surface-elevated: #FFFFFF;
+  --color-border-subtle: #E2E8F0;
+  --color-text-primary: #1E293B;
+  --color-text-muted: #64748B;
+
+  --color-bg-page: var(--color-surface-base);
+  --color-bg-surface: var(--color-surface-elevated);
+  --color-bg-sidebar: var(--color-surface-elevated);
+  --color-bg-active: rgba(79, 70, 229, 0.12);
+  --color-bg-code: #0F172A;
+  --color-bg-inline-code: #F1F5F9;
+  --color-border: var(--color-border-subtle);
+}

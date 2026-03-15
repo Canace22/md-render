@@ -1,4 +1,5 @@
-/* Markdown 渲染器样式 */
+/* Markdown 渲染器样式 — ProEditor 风格 */
+@import './design-tokens.css';
 
 * {
     margin: 0;
@@ -7,13 +8,11 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-        sans-serif;
-    /* 更接近 Notion：极简浅灰背景，无明显渐变 */
-    background: #f5f5f5;
-    color: #111827;
-    line-height: 1.6;
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--line-height-body);
+    background: var(--color-bg-page);
+    color: var(--color-text-primary);
 }
 h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     margin: 0;
@@ -35,8 +34,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     padding: 0;
     max-width: 100%;
     margin: 0 auto;
-    background: #ffffff;
-    border: 1px solid #e5e5e5;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
     border-radius: 0;
 }
 
@@ -44,9 +43,9 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     width: 260px;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #e5e5e5;
-    background: #fbfbfb;
-    padding-top: 8px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-bg-sidebar);
+    padding-top: var(--space-sm);
 }
 
 .editor-panel,
@@ -56,28 +55,28 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    background: #ffffff;
+    background: var(--color-bg-surface);
 }
 
 .panel-header {
-    padding: 8px 16px;
-    background: #ffffff;
-    border-bottom: 1px solid #ededed;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-surface);
+    border-bottom: 1px solid var(--color-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-sm);
     flex-shrink: 0;
     height: 34px;
     box-sizing: border-box;
 }
 
 .panel-header h2 {
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0;
-    text-transform: none;
-    color: #444444;
+    font-size: var(--text-caption-size);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
     line-height: 1;
     margin: 0;
 }
@@ -89,18 +88,19 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .theme-select {
-    padding: 2px 8px;
+    padding: 2px var(--space-sm);
     border-radius: 999px;
-    border: 1px solid #e5e5e5;
-    background: #fbfbfb;
-    font-size: 12px;
-    color: #555555;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-surface);
+    font-size: var(--text-caption-size);
+    color: var(--color-text-secondary);
     outline: none;
+    transition: border-color var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
 }
 
 .theme-select:focus {
-    border-color: #d4d4d4;
-    background: #f5f5f5;
+    border-color: var(--color-text-muted);
+    background: var(--color-bg-page);
 }
 
 .workspace-actions {
@@ -160,15 +160,15 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-sm);
     border: none;
     background: transparent;
-    color: #333333;
+    color: var(--color-text-primary);
     font-size: 13px;
     padding: 6px 12px;
     cursor: pointer;
     text-align: left;
-    transition: background 0.2s ease, color 0.2s ease;
+    transition: background var(--duration-normal) var(--easing), color var(--duration-normal) var(--easing);
 }
 
 .tree-node-button .tree-node-icon {
@@ -178,13 +178,13 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 .tree-node-button:hover {
     background: rgba(0, 0, 0, 0.04);
-    color: #111827;
+    color: var(--color-text-primary);
 }
 
 .tree-node.active .tree-node-button {
-    background: rgba(37, 99, 235, 0.1);
-    color: #1d4ed8;
-    font-weight: 600;
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+    font-weight: var(--font-weight-bold);
 }
 
 .tree-node.folder .tree-node-button {
@@ -192,8 +192,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .tree-node-children {
-    border-left: 1px solid #e5e7eb;
-    margin-left: 16px;
+    border-left: 1px solid var(--color-border);
+    margin-left: var(--space-md);
 }
 
 /* Notion 风格侧边栏：用户信息、搜索、快速入口 */
@@ -266,8 +266,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     align-items: center;
     gap: 6px;
     border-radius: 999px;
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
     padding: 4px 10px;
 }
 
@@ -296,20 +296,20 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     height: 28px;
     border-radius: 999px;
     border: none;
-    background: #111827;
-    color: #f9fafb;
+    background: var(--color-primary-btn);
+    color: #ffffff;
     cursor: pointer;
     font-size: 16px;
     line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.1s ease, box-shadow 0.15s ease, background 0.15s ease;
+    transition: transform var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
 }
 
 .sidebar-add-entry:hover {
-    background: #0f172a;
-    box-shadow: 0 6px 12px rgba(15, 23, 42, 0.25);
+    background: var(--color-primary-btn-hover);
+    box-shadow: var(--shadow-md);
     transform: translateY(-1px);
 }
 
@@ -343,8 +343,8 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .sidebar-quick-item.active {
-    background: rgba(37, 99, 235, 0.08);
-    color: #1d4ed8;
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
 }
 
 .sidebar-section-header {
@@ -363,33 +363,31 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .copy-wechat-btn {
-    padding: 4px 10px;
-    background: #fbfbfb;
-    color: #444444;
-    border: 1px solid #e5e5e5;
-    border-radius: 999px;
+    padding: 6px 16px;
+    background: var(--color-primary-btn);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-m);
     cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s ease;
-    opacity: 0.8;
+    font-size: var(--text-caption-size);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.02em;
+    box-shadow: var(--shadow-soft);
+    transition: all var(--duration-transition) var(--easing);
 }
 
 .copy-wechat-btn:hover {
-    background: #f3f3f3;
-    border-color: #d4d4d4;
-    color: #111111;
-    opacity: 1;
+    background: var(--color-primary-btn-hover);
+    box-shadow: var(--shadow-medium);
 }
 
 .copy-wechat-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.98);
 }
 
 .copy-wechat-btn.copied {
-    background: rgba(78, 201, 176, 0.2);
-    border-color: #4ec9b0;
-    color: #4ec9b0;
-    opacity: 1;
+    background: rgba(16, 185, 129, 0.85);
+    color: #ffffff;
 }
 
 .panel-body {
@@ -400,14 +398,14 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 #markdown-input {
     flex: 1;
-    padding: 16px;
-    background: #ffffff;
-    color: #111827;
+    padding: var(--space-md);
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
     border: none;
     resize: none;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 14px;
-    line-height: 1.6;
+    font-family: var(--font-mono);
+    font-size: var(--text-code-size);
+    line-height: var(--line-height-body);
 }
 
 #markdown-input:focus {
@@ -425,48 +423,48 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 #markdown-output {
     flex: 1;
-    padding: 16px;
+    padding: var(--space-md);
     overflow-y: auto;
-    background: #ffffff;
+    background: var(--color-bg-surface);
 }
 
 /* Markdown 渲染样式 */
 #markdown-output h1 {
-    font-size: 2em;
+    font-size: var(--text-h1-size);
     padding-bottom: 0.3em;
-    border-bottom: 1px solid #e0e0e0;
-    color: #111827;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
 }
 
 #markdown-output h2 {
-    font-size: 1.5em;
+    font-size: var(--text-h2-size);
     padding-bottom: 0.3em;
-    border-bottom: 1px solid #e0e0e0;
-    color: #111827;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
 }
 
 #markdown-output h3 {
-    font-size: 1.17em;
-    color: #111827;
+    font-size: var(--text-h3-size);
+    color: var(--color-text-primary);
 }
 
 #markdown-output h4 {
     font-size: 1em;
-    color: #111827;
+    color: var(--color-text-primary);
 }
 
 #markdown-output h5 {
     font-size: 0.83em;
-    color: #111827;
+    color: var(--color-text-primary);
 }
 
 #markdown-output h6 {
     font-size: 0.67em;
-    color: #4b5563;
+    color: var(--color-text-secondary);
 }
 
 #markdown-output p {
-    color: #111827;
+    color: var(--color-text-primary);
 }
 
 #markdown-output ul,
@@ -488,22 +486,22 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 #markdown-output code {
-    background: #f5f5f5;
+    background: var(--color-bg-inline-code);
     padding: 2px 6px;
-    border-radius: 3px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
     font-size: 0.9em;
-    color: #c7254e;
+    color: var(--color-inline-code);
 }
 
-/* 代码块容器（接近 VS Code Markdown 预览） */
+/* 代码块容器 — ProEditor 风格（深色背景） */
 .code-block {
     margin: 0.8em 0;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    background: #f8f8f8;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    background: var(--color-bg-code);
+    box-shadow: var(--shadow-md);
 }
 
 .code-block .code-header {
@@ -512,13 +510,13 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     align-items: center;
     height: 28px;
     padding: 0 10px;
-    background: #f0f0f0;
-    border-bottom: 1px solid #e0e0e0;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .code-block .code-lang {
-    font-size: 12px;
-    color: #666666;
+    font-size: var(--text-caption-size);
+    color: var(--color-code-text);
     text-transform: lowercase;
 }
 
@@ -531,16 +529,16 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #666666;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-    opacity: 0.7;
+    color: var(--color-code-text);
+    border-radius: var(--radius-sm);
+    transition: all var(--duration-fast) var(--easing);
+    opacity: 0.8;
     gap: 4px;
 }
 
 .code-block .code-copy-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: #333333;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
     opacity: 1;
 }
 
@@ -549,7 +547,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .code-block .code-copy-btn.copied {
-    color: #4ec9b0;
+    color: #34d399;
     opacity: 1;
 }
 
@@ -560,7 +558,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 .code-block .code-copy-btn.copied::after {
     content: '已复制';
     font-size: 11px;
-    color: #4ec9b0;
+    color: #34d399;
     white-space: nowrap;
 }
 
@@ -573,19 +571,20 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 #markdown-output pre {
-    background: #f5f5f5;
-    padding: 16px;
-    border-radius: 6px;
+    background: var(--color-bg-code);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
     overflow-x: auto;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
 }
 
 #markdown-output pre code {
     background: transparent;
     padding: 0;
-    color: #333333;
-    font-size: 14px;
-    line-height: 1.5;
+    color: var(--color-code-text);
+    font-size: var(--text-code-size);
+    line-height: var(--line-height-body);
 }
 
 #markdown-output blockquote {
@@ -1229,8 +1228,8 @@ body.theme-light .tree-node-button:hover {
 }
 
 body.theme-light .tree-node.active .tree-node-button {
-    background: rgba(37, 99, 235, 0.1);
-    color: #1d4ed8;
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
 }
 
 body.theme-light .tree-node-children {
@@ -1251,13 +1250,13 @@ body.theme-light .sidebar-search input::placeholder {
 }
 
 body.theme-light .sidebar-add-entry {
-    background: #111827;
-    color: #f9fafb;
+    background: var(--color-primary-btn);
+    color: #ffffff;
 }
 
 body.theme-light .sidebar-add-entry:hover {
-    background: #0f172a;
-    box-shadow: 0 6px 12px rgba(15, 23, 42, 0.25);
+    background: var(--color-primary-btn-hover);
+    box-shadow: var(--shadow-md);
 }
 
 body.theme-light .sidebar-section-header {
@@ -1289,21 +1288,18 @@ body.theme-light .theme-select:focus {
 }
 
 body.theme-light .copy-wechat-btn {
-    background: #fbfbfb;
-    border-color: #e5e5e5;
-    color: #444444;
+    background: var(--color-primary-btn);
+    border: none;
+    color: #ffffff;
 }
 
 body.theme-light .copy-wechat-btn:hover {
-    background: #f3f3f3;
-    border-color: #d4d4d4;
-    color: #111111;
+    background: var(--color-primary-btn-hover);
 }
 
 body.theme-light .copy-wechat-btn.copied {
-    background: rgba(78, 201, 176, 0.2);
-    border-color: #4ec9b0;
-    color: #4ec9b0;
+    background: rgba(16, 185, 129, 0.85);
+    color: #ffffff;
 }
 
 body.theme-light #markdown-input {
@@ -1331,8 +1327,8 @@ body.theme-light #markdown-output li {
 }
 
 body.theme-light #markdown-output code {
-    background: #f5f5f5;
-    color: #c7254e;
+    background: var(--color-bg-inline-code);
+    color: var(--color-inline-code);
 }
 
 body.theme-light #markdown-output pre {
