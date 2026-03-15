@@ -105,10 +105,10 @@ const TreeNode = ({
           </button>
           {menuOpen && (
             <div className="tree-node-menu">
-              <button type="button" onClick={runAndClose(onAddFile)}>
+              <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
                 <File size={14} strokeWidth={1.5} /> 新建文件
               </button>
-              <button type="button" onClick={runAndClose(onAddFolder)}>
+              <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
                 <Folder size={14} strokeWidth={1.5} /> 新建文件夹
               </button>
             </div>

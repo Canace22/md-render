@@ -417,7 +417,8 @@ function MarkdownEditor() {
     }
   };
 
-  const handleAddFile = () => {
+  /** @param {string} [contextNodeId] 菜单所在节点 id，有则优先用其所在文件夹作为目标，否则用 selectedId */
+  const handleAddFile = (contextNodeId) => {
     const fileId = createId('file');
     setWorkspace((prev) => {
       const name = buildUniqueName(prev, '未命名', '.md');
@@ -427,7 +428,7 @@ function MarkdownEditor() {
         name,
         content: '',
       };
-      const targetFolderId = resolveTargetFolderId(prev, selectedId);
+      const targetFolderId = resolveTargetFolderId(prev, contextNodeId ?? selectedId);
       const nextWorkspace = addChildNode(prev, targetFolderId, newFile);
       schedulePersist(nextWorkspace);
       return nextWorkspace;
@@ -437,7 +438,8 @@ function MarkdownEditor() {
     updatePreview('');
   };
 
-  const handleAddFolder = () => {
+  /** @param {string} [contextNodeId] 菜单所在节点 id，有则优先用其所在文件夹作为目标，否则用 selectedId */
+  const handleAddFolder = (contextNodeId) => {
     const folderId = createId('folder');
     setWorkspace((prev) => {
       const folderName = buildUniqueName(prev, '新建文件夹');
@@ -447,11 +449,12 @@ function MarkdownEditor() {
         name: folderName,
         children: [],
       };
-      const targetFolderId = resolveTargetFolderId(prev, selectedId);
+      const targetFolderId = resolveTargetFolderId(prev, contextNodeId ?? selectedId);
       const nextWorkspace = addChildNode(prev, targetFolderId, newFolder);
       schedulePersist(nextWorkspace);
       return nextWorkspace;
     });
+    setSelectedId(folderId);
   };
 
   const handleRename = (nodeId) => {
