@@ -194,7 +194,7 @@ const WorkspaceSidebar = ({
             <span className="sidebar-header-logo" aria-hidden>
               <FileText size={18} strokeWidth={1.5} />
             </span>
-            <span className="sidebar-header-title">ProEditor</span>
+            <span className="sidebar-header-title">Canace's Editor</span>
           </div>
           <button
             type="button"

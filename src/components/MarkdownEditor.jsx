@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Copy, RefreshCw, ChevronDown, MoreVertical } from 'lucide-react';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import { copyToWeChat } from '../utils/wechatCopy';
@@ -732,35 +733,73 @@ function MarkdownEditor() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
       />
-      <div className="editor-panel">
-        <div className="panel-header">
-          <h2>EDITOR</h2>
-        </div>
-        <div className="panel-body">
-          <textarea
-            id="markdown-input"
-            placeholder="在这里输入 Markdown 文本..."
-            value={markdown}
-            onChange={(e) => handleMarkdownChange(e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="preview-panel">
-        <div className="panel-header">
-          <h2>PREVIEW</h2>
-          <div className="panel-header-actions">
+      <div className="right-area">
+        <div className="right-area-header">
+          <span className="right-area-doc-title">{selectedFile?.name ?? '未命名'}</span>
+          <div className="right-area-actions">
+            <button
+              type="button"
+              className="header-style-dropdown"
+              title="风格选择"
+              aria-label="风格选择"
+            >
+              <RefreshCw size={14} strokeWidth={1.5} />
+              <span>风格: 默认简约</span>
+              <ChevronDown size={14} strokeWidth={1.5} />
+            </button>
             <button
               id="copy-wechat-btn"
+              type="button"
               className="copy-wechat-btn"
               onClick={handleCopyToWeChat}
               title="复制为微信公众号格式"
             >
-              复制到微信公众号
+              <Copy size={14} strokeWidth={1.5} />
+              <span>复制到微信公众号</span>
+            </button>
+            <button
+              type="button"
+              className="header-more-btn"
+              title="更多选项"
+              aria-label="更多选项"
+            >
+              <MoreVertical size={16} strokeWidth={1.5} />
             </button>
           </div>
         </div>
-        <div className="panel-body">
-          <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="panel-tabs">
+          <div className="panel-tab panel-tab-editor">
+            <span>EDITOR</span>
+          </div>
+          <div className="panel-tab panel-tab-preview">
+            <span>PREVIEW</span>
+            <button
+              type="button"
+              className="panel-tab-more"
+              title="更多选项"
+              aria-label="更多选项"
+            >
+              <MoreVertical size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+        <div className="right-area-content">
+          <div className="editor-panel">
+            <div className="panel-body">
+              <textarea
+                id="markdown-input"
+                placeholder="在这里输入 Markdown 文本..."
+                value={markdown}
+                onChange={(e) => handleMarkdownChange(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="right-area-divider" aria-hidden />
+          <div className="preview-panel">
+            <div className="panel-body">
+              <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
