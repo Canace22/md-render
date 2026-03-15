@@ -187,6 +187,24 @@ const applyTemplateStyles = (tempDiv, template) => {
     span.setAttribute('style', `${style}; display: inline;`.replace(/^;\s*/, ''));
     section.parentNode?.replaceChild(span, section);
   });
+
+  // 去除首尾空白：首元素 margin-top、末元素 margin-bottom 置 0，避免粘贴后前后大段留白
+  const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'DIV', 'UL', 'OL', 'TABLE', 'HR'];
+  const blocks = Array.from(tempDiv.children).filter((el) =>
+    el.nodeType === Node.ELEMENT_NODE && blockTags.includes(el.tagName)
+  );
+  const first = blocks[0];
+  const last = blocks[blocks.length - 1];
+  const trimMarginTop = (el) => {
+    const s = (el.getAttribute('style') || '').replace(/\bmargin-top:\s*[^;]+;?\s*/gi, '').trim();
+    el.setAttribute('style', (s ? s + '; ' : '') + 'margin-top: 0;');
+  };
+  const trimMarginBottom = (el) => {
+    const s = (el.getAttribute('style') || '').replace(/\bmargin-bottom:\s*[^;]+;?\s*/gi, '').trim();
+    el.setAttribute('style', (s ? s + '; ' : '') + 'margin-bottom: 0;');
+  };
+  if (first) trimMarginTop(first);
+  if (last) trimMarginBottom(last);
 };
 
 const stripDataAndClass = (tempDiv) => {
@@ -243,9 +261,34 @@ const removeRedundantBr = (tempDiv) => {
  * @param {string} [templateId='default'] - 模板 ID
  * @returns {string} 转换后的 HTML
  */
+/** 移除首尾的 br、空块、空白文本节点，避免粘贴后前后大段留白 */
+const removeLeadingTrailingWhitespace = (tempDiv) => {
+  const isBlank = (node) => {
+    if (!node) return true;
+    if (node.nodeType === Node.TEXT_NODE) return !node.textContent.trim();
+    if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') return true;
+    if (node.nodeType === Node.ELEMENT_NODE && ['P', 'DIV'].includes(node.tagName)) {
+      return !node.textContent.trim();
+    }
+    return false;
+  };
+  let node = tempDiv.firstChild;
+  while (node && isBlank(node)) {
+    const next = node.nextSibling;
+    node.remove();
+    node = next;
+  }
+  node = tempDiv.lastChild;
+  while (node && isBlank(node)) {
+    const prev = node.previousSibling;
+    node.remove();
+    node = prev;
+  }
+};
+
 const convertToWeChatHTML = (htmlString, templateId = 'default') => {
   const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = htmlString;
+  tempDiv.innerHTML = htmlString.trim();
 
   const template = getTemplateById(templateId);
   if (template.autoStatement) {
@@ -254,6 +297,7 @@ const convertToWeChatHTML = (htmlString, templateId = 'default') => {
     tempDiv.appendChild(bq);
   }
 
+  removeLeadingTrailingWhitespace(tempDiv);
   applyTemplateStyles(tempDiv, template);
   removeRedundantBr(tempDiv);
   stripDataAndClass(tempDiv);
@@ -261,7 +305,7 @@ const convertToWeChatHTML = (htmlString, templateId = 'default') => {
   const wrapper = document.createElement('div');
   const { base } = template;
   const bg = base.backgroundColor ?? '#ffffff';
-  let wrapperStyle = `font-size: ${base.fontSize}; line-height: ${base.lineHeight}; color: ${base.color}; background-color: ${bg};`;
+  let wrapperStyle = `margin: 0; padding: 0; font-size: ${base.fontSize}; line-height: ${base.lineHeight}; color: ${base.color}; background-color: ${bg};`;
   if (base.fontFamily) wrapperStyle += ` font-family: ${base.fontFamily};`;
   wrapper.setAttribute('style', wrapperStyle);
   wrapper.innerHTML = tempDiv.innerHTML;
