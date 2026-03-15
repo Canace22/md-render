@@ -1,0 +1,112 @@
+/**
+ * 微信公众号复制排版模板
+ * 每个模板定义一套独立的样式参数，用于 convertToWeChatHTML 转换
+ */
+
+/**
+ * 默认简约：16px 字号、紧凑间距、浅灰边框
+ */
+const defaultSimple = {
+  id: 'default',
+  name: '默认简约',
+  base: {
+    fontSize: '16px',
+    lineHeight: '1.6',
+    color: '#24292e',
+    backgroundColor: '#ffffff',
+  },
+  linkColor: '#0366d6',
+  borderColor: '#dfe2e5',
+  headingBorderColor: '#eaecef',
+  spacing: {
+    paragraph: '8px',
+    block: '8px',
+    headingTop: { h1: '16px', h2: '14px', h3: '12px', h4: '10px', h5: '10px', h6: '10px' },
+    headingBottom: { h1: '6px', h2: '5px', h3: '4px', h4: '4px', h5: '4px', h6: '4px' },
+  },
+  blockquote: {
+    borderLeft: '0.25em solid #dfe2e5',
+    padding: '0 1em',
+  },
+  code: {
+    fontFamily: '"Consolas", "Monaco", "Courier New", monospace',
+  },
+  image: {
+    margin: '8px auto',
+    borderRadius: '4px',
+  },
+};
+
+/**
+ * InfoQ 风格：大间距、行高 1.8、蓝色强调
+ */
+const infoq = {
+  id: 'infoq',
+  name: 'InfoQ 风格',
+  base: {
+    fontSize: '17px',
+    lineHeight: '1.8',
+    color: '#242424',
+    backgroundColor: '#ffffff',
+  },
+  linkColor: '#0052CC',
+  borderColor: '#E5E6EB',
+  headingBorderColor: '#DCDFE6',
+  spacing: {
+    paragraph: '24px',
+    block: '16px',
+    headingTop: { h1: '24px', h2: '20px', h3: '18px', h4: '16px', h5: '14px', h6: '12px' },
+    headingBottom: { h1: '12px', h2: '10px', h3: '8px', h4: '6px', h5: '6px', h6: '6px' },
+  },
+  blockquote: {
+    borderLeft: '4px solid #0052CC',
+    padding: '0 16px',
+  },
+  code: {
+    fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
+  },
+  image: {
+    margin: '16px auto',
+    borderRadius: '8px',
+  },
+};
+
+/**
+ * 暗黑风格：深色背景、浅色文字，适合暗色主题公众号
+ */
+const dark = {
+  id: 'dark',
+  name: '暗黑风格',
+  base: {
+    fontSize: '16px',
+    lineHeight: '1.6',
+    color: '#e6edf3',
+    backgroundColor: '#1e1e1e',
+  },
+  linkColor: '#58a6ff',
+  borderColor: '#30363d',
+  headingBorderColor: '#21262d',
+  spacing: {
+    paragraph: '8px',
+    block: '8px',
+    headingTop: { h1: '16px', h2: '14px', h3: '12px', h4: '10px', h5: '10px', h6: '10px' },
+    headingBottom: { h1: '6px', h2: '5px', h3: '4px', h4: '4px', h5: '4px', h6: '4px' },
+  },
+  blockquote: {
+    borderLeft: '0.25em solid #58a6ff',
+    padding: '0 1em',
+  },
+  code: {
+    fontFamily: '"Consolas", "Monaco", "Courier New", monospace',
+  },
+  image: {
+    margin: '8px auto',
+    borderRadius: '4px',
+  },
+};
+
+const TEMPLATES = [defaultSimple, infoq, dark];
+
+const getTemplateById = (id) => TEMPLATES.find((t) => t.id === id) ?? defaultSimple;
+
+export { TEMPLATES, getTemplateById, defaultSimple, infoq, dark };

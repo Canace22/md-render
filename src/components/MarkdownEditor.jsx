@@ -3,10 +3,12 @@ import { Copy, RefreshCw, ChevronDown, MoreVertical } from 'lucide-react';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import { copyToWeChat } from '../utils/wechatCopy';
+import { TEMPLATES, getTemplateById } from '../utils/wechatTemplates';
 import '../styles/styles.css';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
+const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
 const DEFAULT_FILE_ID = 'file-default';
 
 const DEFAULT_MARKDOWN = `# 欢迎使用 Markdown 渲染器
@@ -263,6 +265,18 @@ function MarkdownEditor() {
       return 'system';
     }
   });
+  const [copyStyle, setCopyStyle] = useState(() => {
+    if (typeof window === 'undefined') return 'default';
+    try {
+      const stored = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
+      if (stored && TEMPLATES.some((t) => t.id === stored)) return stored;
+      return 'default';
+    } catch (e) {
+      return 'default';
+    }
+  });
+  const [styleDropdownOpen, setStyleDropdownOpen] = useState(false);
+  const styleDropdownRef = useRef(null);
   const outputRef = useRef(null);
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
@@ -305,9 +319,19 @@ function MarkdownEditor() {
     }
 
     try {
-      await copyToWeChat(html, { buttonId: 'copy-wechat-btn' });
+      await copyToWeChat(html, { buttonId: 'copy-wechat-btn', templateId: copyStyle });
     } catch (error) {
       alert('复制失败，请手动复制');
+    }
+  };
+
+  const handleSelectCopyStyle = (templateId) => {
+    setCopyStyle(templateId);
+    setStyleDropdownOpen(false);
+    try {
+      window.localStorage.setItem(COPY_STYLE_STORAGE_KEY, templateId);
+    } catch (e) {
+      /* ignore */
     }
   };
 
@@ -530,6 +554,17 @@ function MarkdownEditor() {
   }, []);
 
   useEffect(() => {
+    if (!styleDropdownOpen) return;
+    const onOutside = (e) => {
+      if (styleDropdownRef.current && !styleDropdownRef.current.contains(e.target)) {
+        setStyleDropdownOpen(false);
+      }
+    };
+    document.addEventListener('click', onOutside);
+    return () => document.removeEventListener('click', onOutside);
+  }, [styleDropdownOpen]);
+
+  useEffect(() => {
     if (selectedFile && selectedFile.content !== markdown) {
       setMarkdown(selectedFile.content);
       updatePreview(selectedFile.content);
@@ -737,16 +772,40 @@ function MarkdownEditor() {
         <div className="right-area-header">
           <span className="right-area-doc-title">{selectedFile?.name ?? '未命名'}</span>
           <div className="right-area-actions">
-            <button
-              type="button"
-              className="header-style-dropdown"
-              title="风格选择"
-              aria-label="风格选择"
-            >
-              <RefreshCw size={14} strokeWidth={1.5} />
-              <span>风格: 默认简约</span>
-              <ChevronDown size={14} strokeWidth={1.5} />
-            </button>
+            <div className="header-style-dropdown-wrap" ref={styleDropdownRef}>
+              <button
+                type="button"
+                className="header-style-dropdown"
+                title="风格选择"
+                aria-label="风格选择"
+                aria-expanded={styleDropdownOpen}
+                aria-haspopup="listbox"
+                onClick={() => setStyleDropdownOpen((o) => !o)}
+              >
+                <RefreshCw size={14} strokeWidth={1.5} />
+                <span>风格: {getTemplateById(copyStyle).name}</span>
+                <ChevronDown size={14} strokeWidth={1.5} />
+              </button>
+              {styleDropdownOpen && (
+                <ul
+                  className="header-style-dropdown-menu"
+                  role="listbox"
+                  aria-label="排版风格"
+                >
+                  {TEMPLATES.map((t) => (
+                    <li key={t.id} role="option" aria-selected={copyStyle === t.id}>
+                      <button
+                        type="button"
+                        className={copyStyle === t.id ? 'active' : ''}
+                        onClick={() => handleSelectCopyStyle(t.id)}
+                      >
+                        {t.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <button
               id="copy-wechat-btn"
               type="button"
