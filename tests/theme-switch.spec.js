@@ -21,8 +21,7 @@ test('theme selection lives in settings panel and persists after reload', async 
   expect(bodyClass).toContain('theme-dark');
   expect(bodyClass).not.toContain('theme-light');
 
-  await page.getByRole('button', { name: '切换到跟随系统' }).click();
+  await page.reload();
   bodyClass = await page.evaluate(() => document.body.className);
-  expect(bodyClass).not.toContain('theme-dark');
-  expect(bodyClass).not.toContain('theme-light');
+  expect(bodyClass).toContain('theme-dark');
 });
