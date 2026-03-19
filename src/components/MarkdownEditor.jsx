@@ -1,334 +1,192 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, RefreshCw, ChevronDown, MoreVertical, Upload, Download } from 'lucide-react';
-import { MarkdownParser, MarkdownRenderer } from '../core';
+import { useCreateBlockNote } from '@blocknote/react';
+import { BlockNoteEditor } from '@blocknote/core';
+import { BlockNoteView } from '@blocknote/mantine';
+import { zh } from '@blocknote/core/locales';
+import { ArrowLeft, Copy, Download, Monitor, Moon, Sun, Upload } from 'lucide-react';
+import '@blocknote/core/fonts/inter.css';
+import '@blocknote/mantine/style.css';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import { copyToWeChat } from '../utils/wechatCopy';
 import { exportWorkspaceToJSON, parseWorkspaceFromJSON } from '../utils/workspaceIO';
 import { TEMPLATES, getTemplateById } from '../utils/wechatTemplates';
+import { MarkdownParser, MarkdownRenderer } from '../core';
+import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
+import { findNodeById } from '../store/workspaceUtils.js';
 import '../styles/styles.css';
 
-const STORAGE_KEY = 'md-renderer-workspace';
-const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
-const THEME_STORAGE_KEY = 'md-renderer-theme';
-const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
-const DEFAULT_FILE_ID = 'file-default';
+const THEME_OPTIONS = [
+  { id: 'system', label: '跟随系统', icon: Monitor },
+  { id: 'light', label: '浅色', icon: Sun },
+  { id: 'dark', label: '深色', icon: Moon },
+];
 
-const DEFAULT_MARKDOWN = `# 欢迎使用 Markdown 渲染器
+const BLOCKNOTE_OPTIONS = {
+  dictionary: zh,
+  defaultStyles: false,
+  setIdAttribute: true,
+  tables: {
+    headers: true,
+    splitCells: true,
+    cellBackgroundColor: true,
+    cellTextColor: true,
+  },
+};
 
-这是一个支持 CommonMark 规范的 Markdown 渲染器示例。
+const createEmptyDocument = () => [{ type: 'paragraph', content: '' }];
 
-## 功能特性
+const normalizeMarkdown = (value = '') => {
+  return value.replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ').trimEnd();
+};
 
-- 支持标题
-- 支持列表（有序和无序）
-- 支持嵌套列表
-- 支持代码块（语法高亮）
-- 支持行内代码
-- 支持链接和强调
-- 支持删除线
-- 支持图片
-- 支持表格
-- 支持多行引用
+function SettingsPanel({
+  selectedFileName,
+  theme,
+  copyStyle,
+  onThemeChange,
+  onCopyStyleChange,
+  onImport,
+  onExport,
+  onClose,
+}) {
+  return (
+    <section className="settings-panel" data-testid="settings-panel">
+      <div className="settings-panel-header">
+        <button type="button" className="settings-back-btn" onClick={onClose}>
+          <ArrowLeft size={16} strokeWidth={1.8} />
+          <span>返回文稿</span>
+        </button>
+        <div className="settings-panel-intro">
+          <p className="settings-kicker">SETTINGS</p>
+          <h2>编辑器设置</h2>
+          <p>当前文档：{selectedFileName ?? '未命名'}</p>
+        </div>
+      </div>
 
-### 示例代码
+      <div className="settings-group">
+        <div className="settings-group-title">主题</div>
+        <div className="settings-option-grid">
+          {THEME_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className={`settings-option-card ${theme === option.id ? 'active' : ''}`}
+                onClick={() => onThemeChange(option.id)}
+                aria-label={`切换到${option.label}`}
+              >
+                <Icon size={18} strokeWidth={1.6} />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-\`\`\`javascript
-function hello() {
-    console.log('Hello, Markdown!');
+      <div className="settings-group">
+        <div className="settings-group-title">排版风格</div>
+        <div className="settings-template-list">
+          {TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              className={`settings-template-item ${copyStyle === template.id ? 'active' : ''}`}
+              onClick={() => onCopyStyleChange(template.id)}
+              aria-label={`切换到${template.name}风格`}
+            >
+              <span>{template.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <div className="settings-group-title">工作区</div>
+        <div className="settings-action-list">
+          <button type="button" className="settings-action-btn" onClick={onImport}>
+            <Upload size={16} strokeWidth={1.6} />
+            <span>导入工作区 JSON</span>
+          </button>
+          <button type="button" className="settings-action-btn" onClick={onExport}>
+            <Download size={16} strokeWidth={1.6} />
+            <span>导出当前工作区</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
-\`\`\`
-
-### 示例链接
-
-访问 [GitHub](https://github.com "点击访问 GitHub") 了解更多。
-
-**粗体文本**、*斜体文本* 和 ~~删除线~~
-
-### 示例图片
-
-![22](https://Canace22.github.io/picx-images-hosting/22.6ikg63uj2n.webp)
-
-### 多行引用示例
-
-> 第一行引用
-> 
-> 第二行引用
-> 
-> 引用中可以包含**粗体**和*斜体*
-
-### 表格示例
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 标题 | ✅ | 支持 H1-H6 |
-| 列表 | ✅ | 有序和无序列表 |
-| 代码块 | ✅ | 支持语法高亮 |
-| 表格 | ✅ | GFM 表格支持 |
-| 图片 | ✅ | 支持 alt 和 title |
-
-### 嵌套列表示例
-
-- 列表项 1
-- 列表项 2
-  - 嵌套列表项 1
-  - 嵌套列表项 2
-    - 三级嵌套列表项
-    - 另一个三级项
-- 列表项 3
-  1. 嵌套有序列表
-  2. 第二个有序项`;
-
-const createId = (prefix) => {
-  return `${prefix}-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`;
-};
-
-const createDefaultWorkspace = () => ({
-  id: 'root',
-  name: '工作区',
-  type: 'folder',
-  children: [
-    {
-      id: DEFAULT_FILE_ID,
-      type: 'file',
-      name: '示例文档.md',
-      content: DEFAULT_MARKDOWN,
-    },
-  ],
-});
-
-const findNodeById = (node, targetId) => {
-  if (!node) return null;
-  if (node.id === targetId) return node;
-
-  if (node.type === 'folder' && Array.isArray(node.children)) {
-    for (const child of node.children) {
-      const result = findNodeById(child, targetId);
-      if (result) return result;
-    }
-  }
-  return null;
-};
-
-const findParentId = (node, targetId, parentId = null) => {
-  if (!node) return null;
-  if (node.id === targetId) return parentId;
-
-  if (node.type === 'folder' && Array.isArray(node.children)) {
-    for (const child of node.children) {
-      const result = findParentId(child, targetId, node.id);
-      if (result) return result;
-    }
-  }
-  return null;
-};
-
-const findFirstFileId = (node) => {
-  if (!node) return null;
-  if (node.type === 'file') return node.id;
-  if (node.type === 'folder' && Array.isArray(node.children)) {
-    for (const child of node.children) {
-      const result = findFirstFileId(child);
-      if (result) return result;
-    }
-  }
-  return null;
-};
-
-const updateNodeById = (node, targetId, updater) => {
-  if (!node) return node;
-  if (node.id === targetId) {
-    return updater(node);
-  }
-
-  if (node.type === 'folder' && Array.isArray(node.children)) {
-    let changed = false;
-    const nextChildren = node.children.map((child) => {
-      const updatedChild = updateNodeById(child, targetId, updater);
-      if (updatedChild !== child) {
-        changed = true;
-      }
-      return updatedChild;
-    });
-    if (changed) {
-      return { ...node, children: nextChildren };
-    }
-  }
-
-  return node;
-};
-
-const removeNodeById = (node, targetId) => {
-  if (!node || node.id === targetId) {
-    return { node, removed: node?.id === targetId };
-  }
-
-  if (node.type !== 'folder' || !Array.isArray(node.children)) {
-    return { node, removed: false };
-  }
-
-  let removed = false;
-  const nextChildren = node.children
-    .map((child) => {
-      if (child.id === targetId) {
-        removed = true;
-        return null;
-      }
-      const result = removeNodeById(child, targetId);
-      if (result.removed) {
-        removed = true;
-      }
-      return result.node;
-    })
-    .filter(Boolean);
-
-  if (removed) {
-    return { node: { ...node, children: nextChildren }, removed: true };
-  }
-
-  return { node, removed: false };
-};
-
-const nameExists = (node, name) => {
-  if (!node) return false;
-  if (node.name === name) return true;
-  if (node.type === 'folder' && Array.isArray(node.children)) {
-    return node.children.some((child) => nameExists(child, name));
-  }
-  return false;
-};
-
-const buildUniqueName = (workspace, baseName, extension = '') => {
-  let candidate = `${baseName}${extension}`;
-  let index = 1;
-  while (nameExists(workspace, candidate)) {
-    candidate = `${baseName} ${index}${extension}`;
-    index += 1;
-  }
-  return candidate;
-};
-
-const addChildNode = (node, folderId, childNode) => {
-  if (!node) return node;
-  if (node.id === folderId && node.type === 'folder') {
-    const children = Array.isArray(node.children) ? node.children : [];
-    return {
-      ...node,
-      children: [...children, childNode],
-    };
-  }
-
-  if (node.type === 'folder' && Array.isArray(node.children)) {
-    let changed = false;
-    const nextChildren = node.children.map((child) => {
-      const updatedChild = addChildNode(child, folderId, childNode);
-      if (updatedChild !== child) {
-        changed = true;
-      }
-      return updatedChild;
-    });
-    if (changed) {
-      return { ...node, children: nextChildren };
-    }
-  }
-
-  return node;
-};
-
-const resolveTargetFolderId = (workspace, selectedId) => {
-  if (!workspace) return null;
-  if (!selectedId) return workspace.id;
-
-  const selectedNode = findNodeById(workspace, selectedId);
-  if (!selectedNode) return workspace.id;
-
-  if (selectedNode.type === 'folder') {
-    return selectedNode.id;
-  }
-
-  const parentId = findParentId(workspace, selectedId);
-  return parentId ?? workspace.id;
-};
 
 function MarkdownEditor() {
-  const [workspace, setWorkspace] = useState(() => createDefaultWorkspace());
-  const [selectedId, setSelectedId] = useState(DEFAULT_FILE_ID);
-  const [markdown, setMarkdown] = useState(DEFAULT_MARKDOWN);
-  const [html, setHtml] = useState('');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'system';
-    try {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (stored === 'light' || stored === 'dark' || stored === 'system') {
-        return stored;
-      }
-      return 'system';
-    } catch (e) {
-      return 'system';
-    }
-  });
-  const [copyStyle, setCopyStyle] = useState(() => {
-    if (typeof window === 'undefined') return 'default';
-    try {
-      const stored = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
-      if (stored && TEMPLATES.some((t) => t.id === stored)) return stored;
-      return 'default';
-    } catch (e) {
-      return 'default';
-    }
-  });
-  const [styleDropdownOpen, setStyleDropdownOpen] = useState(false);
-  const [isSaved, setIsSaved] = useState(true);
-  const styleDropdownRef = useRef(null);
-  const outputRef = useRef(null);
+  const {
+    workspace,
+    selectedId,
+    markdown,
+    sidebarCollapsed,
+    theme,
+    copyStyle,
+    surface,
+    setTheme,
+    setCopyStyle,
+    setSurface,
+    toggleSidebarCollapsed,
+    updateSelectedFileContent,
+    selectNode,
+    addFile,
+    addFolder,
+    applyRename,
+    deleteNode,
+    importWorkspace,
+    syncMarkdownFromSelectedFile,
+    syncSelectedIdFromWorkspace,
+  } = useEditorStore();
+
+  const selectedFile = useSelectedFile();
   const importInputRef = useRef(null);
+  const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
-  const saveTimerRef = useRef(null);
-  const persistRef = useRef(null);
-  const skipFirstPersistRef = useRef(true);
+  const titleInputRef = useRef(null);
+  const titleMeasureRef = useRef(null);
+  const [systemTheme, setSystemTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+  const [isTitleEditing, setIsTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [titleInputWidth, setTitleInputWidth] = useState(160);
 
-  const PERSIST_DEBOUNCE_MS = 400;
+  const initialContent = useMemo(() => {
+    const sourceMarkdown = normalizeMarkdown(markdown);
+    lastSyncedMarkdownRef.current = sourceMarkdown;
 
-  const selectedFile = useMemo(() => {
-    const node = findNodeById(workspace, selectedId);
-    return node?.type === 'file' ? node : null;
-  }, [workspace, selectedId]);
-
-  const persistWorkspace = (nextWorkspace) => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextWorkspace));
-    } catch (err) {
-      console.error('保存工作区失败:', err);
+    if (!sourceMarkdown) {
+      return createEmptyDocument();
     }
-  };
 
-  const cancelEditorPersist = () => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    persistRef.current = null;
-  };
+    const parserEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
+    const parsedBlocks = parserEditor.tryParseMarkdownToBlocks(sourceMarkdown);
+    return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
+  }, [selectedId]);
 
-  const schedulePersist = (nextWorkspace) => {
-    cancelEditorPersist();
-    persistWorkspace(nextWorkspace);
-    setIsSaved(true);
-  };
+  const editor = useCreateBlockNote(
+    {
+      ...BLOCKNOTE_OPTIONS,
+      initialContent,
+    },
+    [selectedId],
+  );
 
-  const scheduleEditorPersist = (nextWorkspace) => {
-    persistRef.current = nextWorkspace;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      if (persistRef.current) {
-        persistWorkspace(persistRef.current);
-        persistRef.current = null;
-      }
-      setIsSaved(true);
-    }, PERSIST_DEBOUNCE_MS);
-  };
+  const wechatSourceHtml = useMemo(() => {
+    const tokens = parserRef.current.parse(markdown);
+    return rendererRef.current.render(tokens);
+  }, [markdown]);
+
+  const resolvedTheme = useMemo(() => {
+    if (theme === 'system') return systemTheme;
+    return theme === 'dark' ? 'dark' : 'light';
+  }, [systemTheme, theme]);
 
   const applyThemeToBody = (nextTheme) => {
     if (typeof document === 'undefined') return;
@@ -341,152 +199,28 @@ function MarkdownEditor() {
     }
   };
 
+  const handleEditorChange = () => {
+    const nextMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
+    if (nextMarkdown === lastSyncedMarkdownRef.current) return;
+    lastSyncedMarkdownRef.current = nextMarkdown;
+    updateSelectedFileContent(nextMarkdown);
+  };
+
   const handleCopyToWeChat = async () => {
-    if (!html) {
+    const html = wechatSourceHtml;
+    if (!html.trim()) {
       alert('没有可复制的内容');
       return;
     }
 
     try {
-      await copyToWeChat(html, { buttonId: 'copy-wechat-btn', templateId: copyStyle });
+      await copyToWeChat(html, {
+        buttonId: 'paper-copy-wechat-btn',
+        templateId: copyStyle,
+      });
     } catch (error) {
       alert('复制失败，请手动复制');
     }
-  };
-
-  const handleSelectCopyStyle = (templateId) => {
-    setCopyStyle(templateId);
-    setStyleDropdownOpen(false);
-    try {
-      window.localStorage.setItem(COPY_STYLE_STORAGE_KEY, templateId);
-    } catch (e) {
-      /* ignore */
-    }
-  };
-
-  const copyCode = (button, codeContent) => {
-    navigator.clipboard
-      .writeText(codeContent)
-      .then(() => {
-        button.classList.add('copied');
-        setTimeout(() => {
-          button.classList.remove('copied');
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error('复制失败:', err);
-        const textArea = document.createElement('textarea');
-        textArea.value = codeContent;
-        textArea.style.position = 'fixed';
-        textArea.style.opacity = '0';
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {
-          document.execCommand('copy');
-          button.classList.add('copied');
-          setTimeout(() => {
-            button.classList.remove('copied');
-          }, 2000);
-        } catch (err2) {
-          console.error('降级复制也失败:', err2);
-        }
-        document.body.removeChild(textArea);
-      });
-  };
-
-  const bindCopyButtons = () => {
-    if (!outputRef.current) return;
-    const copyButtons = outputRef.current.querySelectorAll('.code-copy-btn');
-    copyButtons.forEach((button) => {
-      const newButton = button.cloneNode(true);
-      button.parentNode.replaceChild(newButton, button);
-      const codeBlock = newButton.closest('.code-block');
-      const encodedContent = codeBlock.getAttribute('data-code');
-      const codeContent = decodeURIComponent(encodedContent);
-      newButton.addEventListener('click', () => {
-        copyCode(newButton, codeContent);
-      });
-    });
-  };
-
-  const updatePreview = (nextMarkdown) => {
-    const tokens = parserRef.current.parse(nextMarkdown);
-    const htmlString = rendererRef.current.render(tokens);
-    setHtml(htmlString);
-  };
-
-  const handleMarkdownChange = (value) => {
-    setIsSaved(false);
-    setMarkdown(value);
-    setWorkspace((prev) => {
-      const updated = updateNodeById(prev, selectedId, (node) => {
-        if (node.type !== 'file') {
-          return node;
-        }
-        return {
-          ...node,
-          content: value,
-        };
-      });
-      scheduleEditorPersist(updated);
-      return updated;
-    });
-    updatePreview(value);
-  };
-
-  const handleSelect = (nodeId) => {
-    cancelEditorPersist();
-    setIsSaved(true);
-    setSelectedId(nodeId);
-    // 立即同步编辑区内容，避免依赖异步 effect 导致内容短暂不一致
-    const node = findNodeById(workspace, nodeId);
-    if (node?.type === 'file') {
-      const content = node.content ?? '';
-      setMarkdown(content);
-      updatePreview(content);
-    }
-  };
-
-  /** @param {string} [contextNodeId] 菜单所在节点 id，有则优先用其所在文件夹作为目标，否则用 selectedId */
-  const handleAddFile = (contextNodeId) => {
-    cancelEditorPersist();
-    setIsSaved(true);
-    const fileId = createId('file');
-    setWorkspace((prev) => {
-      const name = buildUniqueName(prev, '未命名', '.md');
-      const newFile = {
-        id: fileId,
-        type: 'file',
-        name,
-        content: '',
-      };
-      const targetFolderId = resolveTargetFolderId(prev, contextNodeId ?? selectedId);
-      const nextWorkspace = addChildNode(prev, targetFolderId, newFile);
-      schedulePersist(nextWorkspace);
-      return nextWorkspace;
-    });
-    setSelectedId(fileId);
-    setMarkdown('');
-    updatePreview('');
-  };
-
-  /** @param {string} [contextNodeId] 菜单所在节点 id，有则优先用其所在文件夹作为目标，否则用 selectedId */
-  const handleAddFolder = (contextNodeId) => {
-    const folderId = createId('folder');
-    setWorkspace((prev) => {
-      const folderName = buildUniqueName(prev, '新建文件夹');
-      const newFolder = {
-        id: folderId,
-        type: 'folder',
-        name: folderName,
-        children: [],
-      };
-      const targetFolderId = resolveTargetFolderId(prev, contextNodeId ?? selectedId);
-      const nextWorkspace = addChildNode(prev, targetFolderId, newFolder);
-      schedulePersist(nextWorkspace);
-      return nextWorkspace;
-    });
-    setSelectedId(folderId);
   };
 
   const handleRename = (nodeId) => {
@@ -495,20 +229,37 @@ function MarkdownEditor() {
     if (!node) return;
     const nextName = window.prompt('请输入新名称', node.name);
     if (!nextName) return;
-    const trimmed = nextName.trim();
-    if (!trimmed) return;
-    if (nameExists(workspace, trimmed) && trimmed !== node.name) {
+    if (!applyRename(targetId, nextName)) {
       alert('名称已存在，请换一个。');
+    }
+  };
+
+  const startTitleEditing = () => {
+    if (!selectedFile) return;
+    setTitleDraft(selectedFile.name);
+    setIsTitleEditing(true);
+  };
+
+  const commitTitleEditing = () => {
+    if (!selectedFile) {
+      setIsTitleEditing(false);
+      setTitleDraft('');
       return;
     }
-    setWorkspace((prev) => {
-      const updated = updateNodeById(prev, targetId, (current) => ({
-        ...current,
-        name: trimmed,
-      }));
-      schedulePersist(updated);
-      return updated;
-    });
+
+    const nextName = titleDraft.trim();
+    if (!nextName) {
+      setTitleDraft(selectedFile.name);
+      setIsTitleEditing(false);
+      return;
+    }
+
+    if (!applyRename(selectedFile.id, nextName)) {
+      alert('名称已存在，请换一个。');
+      setTitleDraft(selectedFile.name);
+    }
+
+    setIsTitleEditing(false);
   };
 
   const handleDelete = (nodeId) => {
@@ -524,18 +275,7 @@ function MarkdownEditor() {
       `确定删除${isFolder ? '文件夹及其全部内容' : '文件'}「${node.name}」吗？`,
     );
     if (!confirmed) return;
-
-    setWorkspace((prev) => {
-      const result = removeNodeById(prev, targetId);
-      if (!result.removed) {
-        return prev;
-      }
-      const nextWorkspace = result.node;
-      const nextFileId = findFirstFileId(nextWorkspace);
-      schedulePersist(nextWorkspace);
-      setSelectedId(nextFileId ?? nextWorkspace.id);
-      return nextWorkspace;
-    });
+    deleteNode(targetId);
   };
 
   const handleExport = () => {
@@ -549,314 +289,71 @@ function MarkdownEditor() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImport = (e) => {
-    const file = e?.target?.files?.[0];
+  const handleImport = (event) => {
+    const file = event?.target?.files?.[0];
     if (!file) return;
-    const r = new FileReader();
-    r.onload = () => {
-      const { workspace: imported, error } = parseWorkspaceFromJSON(r.result);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { workspace: imported, error } = parseWorkspaceFromJSON(reader.result);
       if (error) {
         alert(error);
         return;
       }
       const confirmed = window.confirm('导入将替换当前工作区，是否继续？');
       if (!confirmed) return;
-      cancelEditorPersist();
-      setIsSaved(true);
-      setWorkspace(imported);
-      const firstFileId = findFirstFileId(imported);
-      setSelectedId(firstFileId ?? imported?.id ?? 'root');
-      const node = findNodeById(imported, firstFileId);
-      if (node?.type === 'file') {
-        setMarkdown(node.content ?? '');
-        updatePreview(node.content ?? '');
-      } else {
-        setMarkdown('');
-        updatePreview('');
-      }
-      schedulePersist(imported);
+      importWorkspace(imported);
     };
-    r.readAsText(file, 'UTF-8');
-    e.target.value = '';
+    reader.readAsText(file, 'UTF-8');
+    event.target.value = '';
   };
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        updatePreview(DEFAULT_MARKDOWN);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') {
-        updatePreview(DEFAULT_MARKDOWN);
-        return;
-      }
-      setWorkspace(parsed);
-      const storedId = localStorage.getItem(SELECTED_ID_STORAGE_KEY);
-      const storedNode = storedId ? findNodeById(parsed, storedId) : null;
-      const initialFileId =
-        storedNode?.type === 'file' ? storedId : (findFirstFileId(parsed) ?? DEFAULT_FILE_ID);
-      setSelectedId(initialFileId);
-      const node = findNodeById(parsed, initialFileId);
-      if (node?.type === 'file') {
-        setMarkdown(node.content ?? '');
-        updatePreview(node.content ?? '');
-      } else {
-        setMarkdown('');
-        updatePreview('');
-      }
-    } catch (err) {
-      console.error('读取工作区失败，使用默认内容:', err);
-      setWorkspace(createDefaultWorkspace());
-      setSelectedId(DEFAULT_FILE_ID);
-      setMarkdown(DEFAULT_MARKDOWN);
-      updatePreview(DEFAULT_MARKDOWN);
+    if (typeof window === 'undefined') return undefined;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const updateSystemTheme = () => {
+      setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
+    };
+
+    updateSystemTheme();
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateSystemTheme);
+      return () => mediaQuery.removeEventListener('change', updateSystemTheme);
     }
+
+    mediaQuery.addListener(updateSystemTheme);
+    return () => mediaQuery.removeListener(updateSystemTheme);
   }, []);
 
-  // 持久化当前选中的文档 ID（跳过首次挂载，避免覆盖 load 前的初始值）
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (skipFirstPersistRef.current) {
-      skipFirstPersistRef.current = false;
-      return;
-    }
-    if (selectedFile) {
-      try {
-        localStorage.setItem(SELECTED_ID_STORAGE_KEY, selectedId);
-      } catch (e) {
-        /* ignore */
-      }
-    }
-  }, [selectedId, selectedFile]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
     applyThemeToBody(theme);
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch (e) {
-      // 写入失败可以忽略
-    }
   }, [theme]);
 
   useEffect(() => {
-    const onBeforeUnload = () => {
-      if (persistRef.current) {
-        persistWorkspace(persistRef.current);
-      }
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      window.removeEventListener('beforeunload', onBeforeUnload);
-    };
-  }, []);
+    if (!isTitleEditing || !titleInputRef.current) return;
+    titleInputRef.current.focus();
+    titleInputRef.current.select();
+  }, [isTitleEditing]);
 
   useEffect(() => {
-    if (!styleDropdownOpen) return;
-    const onOutside = (e) => {
-      if (styleDropdownRef.current && !styleDropdownRef.current.contains(e.target)) {
-        setStyleDropdownOpen(false);
-      }
-    };
-    document.addEventListener('click', onOutside);
-    return () => document.removeEventListener('click', onOutside);
-  }, [styleDropdownOpen]);
+    if (!isTitleEditing || !titleMeasureRef.current) return;
+    const measuredWidth = Math.ceil(titleMeasureRef.current.getBoundingClientRect().width) + 8;
+    setTitleInputWidth(Math.max(120, measuredWidth));
+  }, [isTitleEditing, titleDraft]);
 
   useEffect(() => {
-    if (selectedFile && selectedFile.content !== markdown) {
-      setMarkdown(selectedFile.content);
-      updatePreview(selectedFile.content);
+    if (!selectedFile) return;
+    if (!isTitleEditing) {
+      setTitleDraft(selectedFile.name);
     }
-    if (!selectedFile) {
-      const firstFileId = findFirstFileId(workspace);
-      if (firstFileId) {
-        setSelectedId(firstFileId);
-      }
-    }
-  }, [selectedFile, workspace]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFile, isTitleEditing]);
 
   useEffect(() => {
-    if (!outputRef.current) return;
-    if (window.hljs) {
-      window.hljs.highlightAll();
-    }
-    // 初始化并渲染 Mermaid 图表
-    if (window.mermaid && outputRef.current.querySelector('.mermaid')) {
-      try {
-        // 仅初始化一次全局配置
-        if (!window.__mermaidInitialized) {
-          window.mermaid.initialize({
-            startOnLoad: false,
-            theme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'default',
-            securityLevel: 'loose'
-          });
-          window.__mermaidInitialized = true;
-        }
-        // 仅对当前容器内的 mermaid 节点进行渲染
-        window.mermaid.run({
-          querySelector: '#markdown-output .mermaid'
-        });
-      } catch (e) {
-        console.error('Mermaid 渲染失败:', e);
-      }
-    }
-    // 增强 Mermaid：增加全屏查看按钮与事件
-    const enhanceMermaid = () => {
-      if (!outputRef.current) return;
-      const mermaidNodes = outputRef.current.querySelectorAll('.mermaid');
-      mermaidNodes.forEach((node) => {
-        // 避免重复包装
-        const wrapper = node.closest('.mermaid-figure');
-        if (wrapper) return;
-        const container = document.createElement('div');
-        container.className = 'mermaid-figure';
-        node.parentNode.insertBefore(container, node);
-        container.appendChild(node);
-
-        const actions = document.createElement('div');
-        actions.className = 'mermaid-actions';
-        const fullscreenBtn = document.createElement('button');
-        fullscreenBtn.type = 'button';
-        fullscreenBtn.className = 'mermaid-fullscreen-btn';
-        fullscreenBtn.title = '全屏预览';
-        fullscreenBtn.setAttribute('aria-label', '全屏预览');
-        fullscreenBtn.innerHTML = `
-<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-  <path d="M7 3H3V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M17 3H21V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M21 17V21H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M7 21H3V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
-        const copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'mermaid-copy-btn';
-        copyBtn.title = '复制图表';
-        copyBtn.setAttribute('aria-label', '复制图表');
-        copyBtn.innerHTML = `
-<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-  <path d="M9 9H19C20.1046 9 21 9.89543 21 11V19C21 20.1046 20.1046 21 19 21H11C9.89543 21 9 20.1046 9 19V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M15 3H5C3.89543 3 3 3.89543 3 5V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
-        actions.appendChild(copyBtn);
-        actions.appendChild(fullscreenBtn);
-        container.appendChild(actions);
-
-        const copyMermaid = async () => {
-          try {
-            // 找到已渲染的 SVG
-            const svg = node.querySelector('svg');
-            if (!svg) {
-              // 若未渲染成功，尝试复制 DSL 文本
-              await navigator.clipboard.writeText(node.textContent || '');
-              return;
-            }
-            // 先尝试复制 PNG 图片到剪贴板（新浏览器）
-            const serializer = new XMLSerializer();
-            const svgString = serializer.serializeToString(svg);
-            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
-            const img = new Image();
-            // 设定白色/深色背景下的底色画布
-            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const bgColor = prefersDark ? '#1e1e1e' : '#ffffff';
-            await new Promise((resolve, reject) => {
-              img.onload = () => resolve();
-              img.onerror = reject;
-              img.src = url;
-            });
-            const canvas = document.createElement('canvas');
-            const width = img.naturalWidth || 1200;
-            const height = img.naturalHeight || 800;
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = bgColor;
-            ctx.fillRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0);
-            URL.revokeObjectURL(url);
-            const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-            if (pngBlob && navigator.clipboard && window.ClipboardItem) {
-              try {
-                await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': pngBlob })]);
-                return; // 复制 PNG 成功
-              } catch (_) {
-                // 回退复制 SVG 文本
-              }
-            }
-            // 回退：复制 SVG 文本
-            await navigator.clipboard.writeText(svgString);
-          } catch (err) {
-            console.error('复制 Mermaid 图表失败:', err);
-            // 最后回退：复制 DSL 文本
-            try {
-              await navigator.clipboard.writeText(node.textContent || '');
-            } catch {}
-          }
-        };
-
-        const openFullscreen = () => {
-          // 创建/复用全屏遮罩
-          let backdrop = document.getElementById('mermaid-fullscreen-backdrop');
-          if (!backdrop) {
-            backdrop = document.createElement('div');
-            backdrop.id = 'mermaid-fullscreen-backdrop';
-            backdrop.className = 'mermaid-fullscreen-backdrop';
-            backdrop.innerHTML = `
-  <div class="mermaid-fullscreen-toolbar">
-    <button type="button" class="mermaid-fullscreen-close" title="关闭" aria-label="关闭">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-        <path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
-  </div>
-  <div class="mermaid-fullscreen-content"></div>
-`;
-            document.body.appendChild(backdrop);
-          }
-          const content = backdrop.querySelector('.mermaid-fullscreen-content');
-          content.innerHTML = '';
-          // 克隆当前图表的 SVG/内容
-          const clone = node.cloneNode(true);
-          content.appendChild(clone);
-
-          const onKeyDown = (evt) => {
-            if (evt.key === 'Escape') {
-              closeFullscreen();
-            }
-          };
-          const closeBtn = backdrop.querySelector('.mermaid-fullscreen-close');
-          const closeFullscreen = () => {
-            backdrop.classList.remove('visible');
-            document.removeEventListener('keydown', onKeyDown);
-          };
-          // 绑定一次性事件
-          closeBtn.onclick = closeFullscreen;
-          backdrop.onclick = (e) => {
-            if (e.target === backdrop) {
-              closeFullscreen();
-            }
-          };
-          document.addEventListener('keydown', onKeyDown);
-
-          // 展示
-          backdrop.classList.add('visible');
-        };
-
-        copyBtn.addEventListener('click', copyMermaid);
-        fullscreenBtn.addEventListener('click', openFullscreen);
-      });
-    };
-    enhanceMermaid();
-    bindCopyButtons();
-  }, [html]);
+    syncMarkdownFromSelectedFile();
+    syncSelectedIdFromWorkspace();
+  }, [selectedFile, workspace, markdown, syncMarkdownFromSelectedFile, syncSelectedIdFromWorkspace]);
 
   return (
-    <div className="container">
+    <div className="container immersive-shell">
       <input
         ref={importInputRef}
         type="file"
@@ -868,134 +365,121 @@ function MarkdownEditor() {
       <WorkspaceSidebar
         workspace={workspace}
         selectedId={selectedId}
-        onSelect={handleSelect}
-        onAddFile={handleAddFile}
-        onAddFolder={handleAddFolder}
+        onSelect={selectNode}
+        onAddFile={addFile}
+        onAddFolder={addFolder}
         onRename={handleRename}
         onDelete={handleDelete}
-        theme={theme}
-        onThemeChange={setTheme}
         collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        onToggleCollapse={toggleSidebarCollapsed}
+        onOpenSettings={() => setSurface(surface === 'settings' ? 'paper' : 'settings')}
+        settingsActive={surface === 'settings'}
       />
-      <div className="right-area">
-        <div className="right-area-header">
-          <span className="right-area-doc-title">{selectedFile?.name ?? '未命名'}</span>
-          <div className="right-area-actions">
-            <div className="header-style-dropdown-wrap" ref={styleDropdownRef}>
-              <button
-                type="button"
-                className="header-style-dropdown"
-                title="风格选择"
-                aria-label="风格选择"
-                aria-expanded={styleDropdownOpen}
-                aria-haspopup="listbox"
-                onClick={() => setStyleDropdownOpen((o) => !o)}
-              >
-                <RefreshCw size={14} strokeWidth={1.5} />
-                <span>风格: {getTemplateById(copyStyle).name}</span>
-                <ChevronDown size={14} strokeWidth={1.5} />
-              </button>
-              {styleDropdownOpen && (
-                <ul
-                  className="header-style-dropdown-menu"
-                  role="listbox"
-                  aria-label="排版风格"
+      <div className="right-area immersive-main">
+        {surface === 'settings' ? (
+          <SettingsPanel
+            selectedFileName={selectedFile?.name}
+            theme={theme}
+            copyStyle={copyStyle}
+            onThemeChange={setTheme}
+            onCopyStyleChange={setCopyStyle}
+            onImport={() => importInputRef.current?.click()}
+            onExport={handleExport}
+            onClose={() => setSurface('paper')}
+          />
+        ) : (
+          <>
+            <div className="right-area-header">
+              <div className="right-area-doc-title">
+                <span
+                  ref={titleMeasureRef}
+                  className="right-area-doc-title-measure"
+                  aria-hidden="true"
                 >
-                  {TEMPLATES.map((t) => (
-                    <li key={t.id} role="option" aria-selected={copyStyle === t.id}>
-                      <button
-                        type="button"
-                        className={copyStyle === t.id ? 'active' : ''}
-                        onClick={() => handleSelectCopyStyle(t.id)}
-                      >
-                        {t.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                  {titleDraft || selectedFile?.name || '未命名'}
+                </span>
+                {isTitleEditing ? (
+                  <input
+                    ref={titleInputRef}
+                    className="right-area-doc-title-input"
+                    style={{ width: `${titleInputWidth}px` }}
+                    value={titleDraft}
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    onBlur={commitTitleEditing}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        commitTitleEditing();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setTitleDraft(selectedFile?.name ?? '');
+                        setIsTitleEditing(false);
+                      }
+                    }}
+                    aria-label="编辑文件标题"
+                  />
+                ) : (
+                  <span
+                    className="right-area-doc-title-clickable"
+                    onClick={startTitleEditing}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        startTitleEditing();
+                      }
+                    }}
+                  >
+                    {selectedFile?.name ?? '未命名'}
+                  </span>
+                )}
+              </div>
+              <div className="right-area-actions" />
             </div>
-            <button
-              id="copy-wechat-btn"
-              type="button"
-              className="copy-wechat-btn"
-              onClick={handleCopyToWeChat}
-              title="复制为微信公众号格式"
-            >
-              <Copy size={14} strokeWidth={1.5} />
-              <span>复制到微信公众号</span>
-            </button>
-            <button
-              type="button"
-              className="header-more-btn"
-              onClick={() => importInputRef.current?.click()}
-              title="导入工作区"
-              aria-label="导入工作区"
-            >
-              <Upload size={16} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="header-more-btn"
-              onClick={handleExport}
-              title="导出工作区"
-              aria-label="导出工作区"
-            >
-              <Download size={16} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="header-more-btn"
-              title="更多选项"
-              aria-label="更多选项"
-            >
-              <MoreVertical size={16} strokeWidth={1.5} />
-            </button>
-          </div>
-        </div>
-        <div className="panel-tabs">
-          <div className="panel-tab panel-tab-editor">
-            <span>EDITOR</span>
-            <div className="panel-tab-save-status">
-              <span className={`save-status-dot ${isSaved ? 'saved' : 'unsaved'}`} aria-hidden />
-              <span className="save-status-text">{isSaved ? '已保存' : '未保存'}</span>
+            <div className="paper-stage">
+              <div className="paper-surface" data-testid="paper-surface">
+                <div className="paper-floating-actions">
+                  <button
+                    id="paper-copy-wechat-btn"
+                    data-testid="paper-copy-wechat"
+                    type="button"
+                    className="copy-wechat-btn paper-copy-wechat-btn"
+                    onClick={handleCopyToWeChat}
+                    title={`复制为微信公众号格式（${getTemplateById(copyStyle).name}）`}
+                    aria-label="复制到微信公众号"
+                  >
+                    <Copy size={18} strokeWidth={1.7} />
+                  </button>
+                </div>
+
+                <div id="markdown-output" className="paper-content">
+                  <div className="blocknote-paper">
+                    <BlockNoteView
+                      editor={editor}
+                      className="blocknote-editor"
+                      data-testid="blocknote-editor"
+                      theme={resolvedTheme}
+                      editable={Boolean(selectedFile)}
+                      formattingToolbar
+                      linkToolbar
+                      slashMenu
+                      sideMenu
+                      filePanel={false}
+                      tableHandles
+                      emojiPicker={false}
+                      onChange={handleEditorChange}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="panel-tab panel-tab-preview">
-            <span>PREVIEW</span>
-            <button
-              type="button"
-              className="panel-tab-more"
-              title="更多选项"
-              aria-label="更多选项"
-            >
-              <MoreVertical size={14} strokeWidth={1.5} />
-            </button>
-          </div>
-        </div>
-        <div className="right-area-content">
-          <div className="editor-panel">
-            <div className="panel-body">
-              <textarea
-                id="markdown-input"
-                placeholder="在这里输入 Markdown 文本..."
-                value={markdown}
-                onChange={(e) => handleMarkdownChange(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="right-area-divider" aria-hidden />
-          <div className="preview-panel" data-style={copyStyle}>
-            <div className="panel-body">
-              <div id="markdown-output" ref={outputRef} dangerouslySetInnerHTML={{ __html: html }} />
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 export default MarkdownEditor;
-

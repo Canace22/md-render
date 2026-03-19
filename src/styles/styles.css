@@ -242,6 +242,43 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     font-size: var(--text-body);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-primary);
+    position: relative;
+}
+
+.right-area-doc-title-clickable {
+    cursor: pointer;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    border-radius: 4px;
+}
+
+.right-area-doc-title-clickable:hover {
+    background: var(--color-bg-active);
+}
+
+.right-area-doc-title-input {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    outline: none;
+    max-width: min(520px, calc(100vw - 480px));
+}
+
+.right-area-doc-title-input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.right-area-doc-title-measure {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+    white-space: pre;
+    font: inherit;
+    padding: 2px 6px;
+    border: 1px solid transparent;
 }
 
 .right-area-actions {
@@ -940,7 +977,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 #markdown-output {
     flex: 1;
-    padding: var(--space-md);
+    padding: 30px;
     overflow-y: auto;
     background: var(--color-bg-surface);
 }
@@ -1964,6 +2001,22 @@ body.theme-light .copy-wechat-btn.copied {
     color: #ffffff;
 }
 
+/* paper 复制按钮：浅色主题下需深色图标，否则会被 body.theme-light .copy-wechat-btn 的 color:#fff 覆盖导致不可见 */
+body.theme-light .paper-copy-wechat-btn {
+    background: transparent !important;
+    color: #475569;
+}
+
+body.theme-light .paper-copy-wechat-btn:hover {
+    background: transparent !important;
+    color: #64748b;
+}
+
+body.theme-light .paper-copy-wechat-btn.copied {
+    background: transparent !important;
+    color: #16a34a;
+}
+
 body.theme-light #markdown-input {
     background: #ffffff;
     color: #111827;
@@ -1991,6 +2044,661 @@ body.theme-light #markdown-output li {
 body.theme-light #markdown-output code {
     background: var(--color-bg-inline-code);
     color: var(--color-inline-code);
+}
+
+/* Immersive paper editor */
+.immersive-shell {
+    height: 100vh;
+    gap: 0;
+    border: none;
+    background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 36%),
+        linear-gradient(180deg, #f8f5ef 0%, #f4efe7 100%);
+}
+
+.immersive-shell .workspace-panel {
+    border-right: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.5);
+}
+
+.immersive-shell .right-area {
+    background: transparent;
+}
+
+.immersive-main {
+    min-height: 0;
+}
+
+.sidebar-footer-icon[data-active="true"] {
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--color-text-primary);
+}
+
+.paper-stage {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 32px 24px 48px;
+}
+
+.paper-surface {
+    position: relative;
+    width: min(980px, calc(100vw - 88px));
+    margin: 0 auto;
+    background: transparent;
+    padding: 0;
+}
+
+.paper-surface:hover,
+.paper-surface:focus-within {
+    transform: none;
+}
+
+.paper-floating-actions {
+    /* position: sticky;
+    top: 18px; */
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-bottom: -32px;
+    padding-right: 18px;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.paper-surface:hover .paper-floating-actions,
+.paper-surface:focus-within .paper-floating-actions {
+    pointer-events: auto;
+}
+
+.paper-copy-wechat-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    color: #94a3b8;
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--easing);
+}
+
+.paper-surface:hover .paper-copy-wechat-btn,
+.paper-surface:focus-within .paper-copy-wechat-btn {
+    opacity: 1;
+}
+
+.paper-copy-wechat-btn:hover {
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #475569;
+}
+
+.paper-copy-wechat-btn:active {
+    transform: none;
+}
+
+.paper-copy-wechat-btn.copied {
+    background: transparent !important;
+    color: #16a34a;
+}
+
+.paper-content {
+    padding: 88px 104px 104px;
+    background: #ffffff;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: calc(100vh - 96px);
+}
+
+.blocknote-paper {
+    min-height: calc(100vh - 224px);
+}
+
+.blocknote-editor {
+    width: 100%;
+}
+
+.blocknote-editor.bn-container {
+    --bn-font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bn-border-radius: 0px;
+    --bn-colors-editor-background: transparent;
+    --bn-colors-editor-text: #2b3645;
+    --bn-colors-menu-background: rgba(255, 255, 255, 0.98);
+    --bn-colors-menu-text: #1f2937;
+    --bn-colors-tooltip-background: rgba(15, 23, 42, 0.96);
+    --bn-colors-tooltip-text: #ffffff;
+    --bn-colors-hovered-background: rgba(15, 23, 42, 0.06);
+    --bn-colors-hovered-text: #1f2937;
+    --bn-colors-selected-background: #111827;
+    --bn-colors-selected-text: #ffffff;
+    --bn-colors-disabled-background: rgba(148, 163, 184, 0.12);
+    --bn-colors-disabled-text: #94a3b8;
+    --bn-colors-shadow: rgba(15, 23, 42, 0.14);
+    --bn-colors-border: rgba(148, 163, 184, 0.16);
+    --bn-colors-side-menu: rgba(100, 116, 139, 0.28);
+    background: transparent;
+}
+
+.blocknote-editor .bn-editor {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    padding-inline: 0;
+}
+
+.blocknote-editor .ProseMirror {
+    padding: 0;
+    outline: none;
+}
+
+.blocknote-editor .bn-block-content {
+    padding: 4px 0;
+}
+
+.blocknote-editor .bn-inline-content {
+    min-height: 1.9em;
+}
+
+.blocknote-editor .bn-editor h1,
+.blocknote-editor .bn-editor h2,
+.blocknote-editor .bn-editor h3,
+.blocknote-editor .bn-editor h4,
+.blocknote-editor .bn-editor h5,
+.blocknote-editor .bn-editor h6 {
+    color: #1f2937;
+    font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: -0.015em;
+}
+
+.blocknote-editor .bn-editor h1 {
+    font-size: 2.02rem;
+    line-height: 1.18;
+    font-weight: 680;
+}
+
+.blocknote-editor .bn-editor h2 {
+    font-size: 1.52rem;
+    line-height: 1.24;
+    font-weight: 640;
+}
+
+.blocknote-editor .bn-editor h3 {
+    font-size: 1.22rem;
+    line-height: 1.26;
+    font-weight: 620;
+}
+
+.blocknote-editor .bn-editor p,
+.blocknote-editor .bn-editor li,
+.blocknote-editor .bn-editor blockquote {
+    color: #475467;
+    font-size: 0.99rem;
+    line-height: 1.92;
+    font-weight: 400;
+}
+
+.blocknote-editor .bn-editor blockquote {
+    border-left: 3px solid rgba(148, 163, 184, 0.48);
+    color: #667085;
+}
+
+.blocknote-editor .bn-editor a {
+    color: #3b82f6;
+}
+
+.blocknote-editor .bn-editor strong {
+    color: #344054;
+    font-weight: 600;
+}
+
+.blocknote-editor .bn-editor ul,
+.blocknote-editor .bn-editor ol {
+    padding-left: 1.7em;
+}
+
+.blocknote-editor .bn-editor [data-content-type="table"] th,
+.blocknote-editor .bn-editor [data-content-type="table"] td {
+    font-size: 0.94rem;
+    line-height: 1.6;
+}
+
+.blocknote-editor .bn-editor [data-content-type="table"] th {
+    color: #344054;
+    font-weight: 600;
+}
+
+.blocknote-editor .bn-editor [data-content-type="codeBlock"] > pre,
+.blocknote-editor .bn-editor code {
+    font-family: "JetBrains Mono", "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.blocknote-editor .bn-editor [data-content-type="codeBlock"] > pre {
+    border-radius: 0;
+}
+
+.blocknote-editor .bn-side-menu {
+    margin-left: -30px;
+}
+
+.paper-block {
+    position: relative;
+    margin: 0;
+    border-radius: 16px;
+    padding: 8px 12px;
+    cursor: text;
+    transition: background var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
+}
+
+.paper-block + .paper-block {
+    margin-top: 10px;
+}
+
+.paper-block:hover {
+    background: rgba(15, 23, 42, 0.03);
+}
+
+.paper-block.is-editing {
+    background: transparent;
+    box-shadow: none;
+}
+
+.paper-block:focus-visible {
+    outline: 2px solid rgba(79, 70, 229, 0.45);
+    outline-offset: 3px;
+}
+
+.paper-block > h1,
+.paper-block > h2,
+.paper-block > h3,
+.paper-block > h4,
+.paper-block > h5,
+.paper-block > h6,
+.paper-block > p,
+.paper-block > ul,
+.paper-block > ol,
+.paper-block > blockquote,
+.paper-block > table,
+.paper-block > figure,
+.paper-block > hr {
+    margin: 0;
+}
+
+.paper-block h1 {
+    font-size: 2.35rem;
+    line-height: 1.22;
+    font-weight: 700;
+    border-bottom: none;
+}
+
+.paper-block h2 {
+    font-size: 1.7rem;
+    line-height: 1.28;
+    border-bottom: none;
+}
+
+.paper-block h3 {
+    font-size: 1.35rem;
+    line-height: 1.32;
+}
+
+.paper-block p,
+.paper-block li,
+.paper-block blockquote {
+    font-size: 1.08rem;
+    line-height: 1.92;
+}
+
+.paper-block blockquote {
+    padding: 8px 18px;
+    border-left: 3px solid rgba(79, 70, 229, 0.55);
+    background: rgba(99, 102, 241, 0.05);
+    color: #475569;
+}
+
+.paper-block ul,
+.paper-block ol {
+    padding-left: 2.1em;
+}
+
+.paper-block table {
+    margin: 6px 0;
+}
+
+.paper-block hr {
+    border-top-color: rgba(148, 163, 184, 0.45);
+}
+
+.paper-block-editor {
+    display: block;
+    width: 100%;
+    min-height: 2.5em;
+    resize: none;
+    overflow: hidden;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    color: var(--color-text-primary);
+    font-size: 1.08rem;
+    line-height: 1.92;
+    font-family: 'Iowan Old Style', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif;
+    caret-color: currentColor;
+}
+
+.paper-block-editor:focus {
+    outline: none;
+}
+
+.paper-block-editor-heading {
+    font-weight: 700;
+}
+
+.paper-block-editor-heading-level-1 {
+    font-size: 2.35rem;
+    line-height: 1.22;
+}
+
+.paper-block-editor-heading-level-2 {
+    font-size: 1.7rem;
+    line-height: 1.28;
+}
+
+.paper-block-editor-heading-level-3 {
+    font-size: 1.35rem;
+    line-height: 1.32;
+}
+
+.paper-empty-placeholder {
+    color: #94a3b8;
+}
+
+.settings-panel {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 48px 56px 72px;
+}
+
+.settings-panel-header {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin: 0 auto 32px;
+    width: min(760px, 100%);
+}
+
+.settings-back-btn {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--color-text-primary);
+    cursor: pointer;
+}
+
+.settings-panel-intro .settings-kicker {
+    margin-bottom: 10px;
+    color: #94a3b8;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+}
+
+.settings-panel-intro h2 {
+    font-size: 2rem;
+    line-height: 1.2;
+    margin-bottom: 10px;
+}
+
+.settings-panel-intro p {
+    color: var(--color-text-muted);
+    font-size: 15px;
+}
+
+.settings-group {
+    width: min(760px, 100%);
+    margin: 0 auto 20px;
+    padding: 28px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.84);
+    box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+}
+
+.settings-group-title {
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.settings-option-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.settings-option-card,
+.settings-template-item,
+.settings-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 16px;
+    background: #ffffff;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--easing), transform var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
+}
+
+.settings-option-card:hover,
+.settings-template-item:hover,
+.settings-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.settings-option-card.active,
+.settings-template-item.active {
+    border-color: rgba(79, 70, 229, 0.42);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    color: var(--color-text-active);
+}
+
+.settings-template-list,
+.settings-action-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.settings-template-item,
+.settings-action-btn {
+    justify-content: flex-start;
+}
+
+.settings-template-item {
+    min-width: 160px;
+}
+
+body.theme-dark .immersive-shell,
+body.theme-dark .paper-stage,
+body.theme-dark .settings-panel {
+    background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 34%),
+        linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+body.theme-dark .paper-surface {
+    background: transparent;
+}
+
+body.theme-dark .paper-content,
+body.theme-dark .settings-group,
+body.theme-dark .settings-back-btn {
+    background: rgba(15, 23, 42, 0.9);
+    border-color: rgba(71, 85, 105, 0.5);
+    color: #e5e7eb;
+}
+
+body.theme-dark .paper-block:hover,
+body.theme-dark .paper-block.is-editing {
+    background: rgba(51, 65, 85, 0.45);
+}
+
+body.theme-dark .paper-block.is-editing {
+    background: transparent;
+}
+
+body.theme-dark .paper-block blockquote {
+    background: rgba(56, 189, 248, 0.1);
+    color: #cbd5e1;
+}
+
+body.theme-dark .paper-block-editor {
+    color: #e5e7eb;
+}
+
+body.theme-dark .blocknote-editor.bn-container,
+.blocknote-editor.bn-container[data-color-scheme="dark"] {
+    --bn-colors-editor-background: transparent;
+    --bn-colors-editor-text: #e5e7eb;
+    --bn-colors-menu-background: rgba(15, 23, 42, 0.98);
+    --bn-colors-menu-text: #e5e7eb;
+    --bn-colors-tooltip-background: rgba(255, 255, 255, 0.96);
+    --bn-colors-tooltip-text: #0f172a;
+    --bn-colors-hovered-background: rgba(148, 163, 184, 0.1);
+    --bn-colors-hovered-text: #e5e7eb;
+    --bn-colors-selected-background: #e5e7eb;
+    --bn-colors-selected-text: #111827;
+    --bn-colors-disabled-background: rgba(51, 65, 85, 0.65);
+    --bn-colors-disabled-text: #94a3b8;
+    --bn-colors-shadow: rgba(2, 6, 23, 0.5);
+    --bn-colors-border: rgba(71, 85, 105, 0.62);
+    --bn-colors-side-menu: rgba(148, 163, 184, 0.32);
+}
+
+body.theme-dark .blocknote-editor .bn-editor h1,
+body.theme-dark .blocknote-editor .bn-editor h2,
+body.theme-dark .blocknote-editor .bn-editor h3,
+body.theme-dark .blocknote-editor .bn-editor h4,
+body.theme-dark .blocknote-editor .bn-editor h5,
+body.theme-dark .blocknote-editor .bn-editor h6 {
+    color: #f3f6fb;
+}
+
+body.theme-dark .blocknote-editor .bn-editor p,
+body.theme-dark .blocknote-editor .bn-editor li,
+body.theme-dark .blocknote-editor .bn-editor blockquote {
+    color: #cfd8e3;
+}
+
+body.theme-dark .blocknote-editor .bn-editor strong,
+body.theme-dark .blocknote-editor .bn-editor [data-content-type="table"] th {
+    color: #f3f6fb;
+}
+
+body.theme-dark .blocknote-editor .bn-editor blockquote {
+    color: #cbd5e1;
+    border-left-color: rgba(148, 163, 184, 0.42);
+}
+
+body.theme-dark .blocknote-editor .bn-editor a {
+    color: #67e8f9;
+}
+
+body.theme-dark .paper-copy-wechat-btn {
+    background: transparent !important;
+    color: #94a3b8;
+}
+
+body.theme-dark .paper-copy-wechat-btn:hover {
+    background: transparent !important;
+    color: #e2e8f0;
+}
+
+body.theme-dark .paper-copy-wechat-btn.copied {
+    background: transparent !important;
+    color: #4ade80;
+}
+
+body.theme-dark .settings-option-card,
+body.theme-dark .settings-template-item,
+body.theme-dark .settings-action-btn {
+    background: rgba(15, 23, 42, 0.95);
+    border-color: rgba(71, 85, 105, 0.7);
+    color: #e5e7eb;
+}
+
+body.theme-dark .sidebar-footer-icon[data-active="true"] {
+    background: rgba(148, 163, 184, 0.12);
+    color: #e5e7eb;
+}
+
+body.theme-light .immersive-shell,
+body.theme-light .paper-stage,
+body.theme-light .settings-panel {
+    background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 36%),
+        linear-gradient(180deg, #f8f5ef 0%, #f4efe7 100%);
+}
+
+@media (hover: none) {
+    .paper-floating-actions {
+        pointer-events: auto;
+    }
+    .paper-copy-wechat-btn {
+        opacity: 1;
+    }
+}
+
+@media (max-width: 960px) {
+    .paper-stage,
+    .settings-panel {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .paper-surface {
+        width: 100%;
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .paper-content {
+        padding: 72px 28px 56px;
+        border-radius: 0;
+        min-height: auto;
+    }
+
+    .paper-floating-actions {
+        top: 12px;
+        padding-right: 12px;
+    }
+
+    .blocknote-editor .bn-side-menu {
+        margin-left: 0;
+    }
+
+    .settings-group {
+        padding: 20px;
+    }
+
+    .settings-option-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 body.theme-light #markdown-output pre {

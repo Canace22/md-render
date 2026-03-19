@@ -13,6 +13,15 @@ export class MarkdownParser {
         const lines = text.split('\n');
         const tokens = [];
         let i = 0;
+        let blockIndex = 0;
+
+        const withMeta = (token, startLine, nextIndex) => ({
+            ...token,
+            id: `block-${blockIndex++}`,
+            source: lines.slice(startLine, nextIndex).join('\n'),
+            startLine,
+            endLine: nextIndex - 1,
+        });
 
         while (i < lines.length) {
             const line = lines[i];
@@ -20,7 +29,7 @@ export class MarkdownParser {
 
             // 空行
             if (!trimmedLine) {
-                tokens.push({ type: 'empty' });
+                tokens.push(withMeta({ type: 'empty' }, i, i + 1));
                 i++;
                 continue;
             }
@@ -28,7 +37,7 @@ export class MarkdownParser {
             // 代码块
             if (trimmedLine.startsWith('```')) {
                 const block = this.parseCodeBlock(lines, i);
-                tokens.push(block.token);
+                tokens.push(withMeta(block.token, i, block.nextIndex));
                 i = block.nextIndex;
                 continue;
             }
@@ -36,7 +45,7 @@ export class MarkdownParser {
             // 引用
             if (trimmedLine.startsWith('>')) {
                 const blockquote = this.parseBlockquote(lines, i);
-                tokens.push(blockquote.token);
+                tokens.push(withMeta(blockquote.token, i, blockquote.nextIndex));
                 i = blockquote.nextIndex;
                 continue;
             }
@@ -44,7 +53,7 @@ export class MarkdownParser {
             // 标题
             const heading = this.parseHeading(line);
             if (heading) {
-                tokens.push(heading);
+                tokens.push(withMeta(heading, i, i + 1));
                 i++;
                 continue;
             }
@@ -53,7 +62,7 @@ export class MarkdownParser {
             if (trimmedLine.startsWith('|')) {
                 const table = this.parseTable(lines, i);
                 if (table.token) {
-                    tokens.push(table.token);
+                    tokens.push(withMeta(table.token, i, table.nextIndex));
                     i = table.nextIndex;
                     continue;
                 }
@@ -62,7 +71,7 @@ export class MarkdownParser {
             // 无序列表
             if (/^[\-\*\+]\s/.test(trimmedLine)) {
                 const list = this.parseList(lines, i, 'unordered');
-                tokens.push(list.token);
+                tokens.push(withMeta(list.token, i, list.nextIndex));
                 i = list.nextIndex;
                 continue;
             }
@@ -70,23 +79,23 @@ export class MarkdownParser {
             // 有序列表
             if (/^\d+\.\s/.test(trimmedLine)) {
                 const list = this.parseList(lines, i, 'ordered');
-                tokens.push(list.token);
+                tokens.push(withMeta(list.token, i, list.nextIndex));
                 i = list.nextIndex;
                 continue;
             }
 
             // 水平分割线
             if (/^[-*_]{3,}$/.test(trimmedLine)) {
-                tokens.push({ type: 'hr' });
+                tokens.push(withMeta({ type: 'hr' }, i, i + 1));
                 i++;
                 continue;
             }
 
             // 普通段落
-            tokens.push({
+            tokens.push(withMeta({
                 type: 'paragraph',
                 content: line
-            });
+            }, i, i + 1));
             i++;
         }
 
@@ -347,3 +356,13 @@ export class MarkdownParser {
     }
 }
 
+export function replaceBlockSource(markdown, token, nextSource) {
+    if (!token) return markdown;
+
+    const lines = markdown.split('\n');
+    const nextLines = nextSource.split('\n');
+    const deleteCount = token.endLine - token.startLine + 1;
+
+    lines.splice(token.startLine, deleteCount, ...nextLines);
+    return lines.join('\n');
+}

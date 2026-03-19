@@ -1,8 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Sun,
-  Moon,
-  Monitor,
   MoreVertical,
   File,
   Folder,
@@ -153,12 +150,6 @@ const renderTree = (workspace, selectedId, onSelect, handlers) => {
   ));
 };
 
-const THEME_ICONS = { system: Monitor, light: Sun, dark: Moon };
-const THEME_TITLES = { system: '跟随系统', light: '浅色', dark: '深色' };
-
-/** 用户只能选浅色/深色，点击在两者间切换；system 为初始默认，首次点击切到 light */
-const getNextTheme = (current) => (current === 'dark' ? 'light' : 'dark');
-
 const WorkspaceSidebar = ({
   workspace,
   selectedId,
@@ -167,10 +158,10 @@ const WorkspaceSidebar = ({
   onAddFolder,
   onRename,
   onDelete,
-  theme,
-  onThemeChange,
   collapsed,
   onToggleCollapse,
+  onOpenSettings,
+  settingsActive,
 }) => {
   return (
     <div className={`workspace-panel ${collapsed ? 'collapsed' : ''}`}>
@@ -250,25 +241,13 @@ const WorkspaceSidebar = ({
             <button
               type="button"
               className="sidebar-footer-icon"
+              data-testid="open-settings"
+              data-active={settingsActive ? 'true' : 'false'}
+              onClick={onOpenSettings}
               title="设置"
               aria-label="设置"
             >
               <Settings size={18} strokeWidth={1.5} />
-            </button>
-
-            <button
-              type="button"
-              className="sidebar-footer-icon"
-              data-testid="theme-select"
-              data-theme={theme}
-              onClick={() => onThemeChange(theme === 'system' ? 'light' : getNextTheme(theme))}
-              title={THEME_TITLES[theme]}
-              aria-label={`主题：${THEME_TITLES[theme]}，点击切换`}
-            >
-              {(() => {
-                const Icon = THEME_ICONS[theme] ?? Monitor;
-                return <Icon size={18} strokeWidth={1.5} />;
-              })()}
             </button>
 
             <a

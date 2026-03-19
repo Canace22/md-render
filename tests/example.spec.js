@@ -1,21 +1,15 @@
 import { test, expect } from '@playwright/test';
 
-test('loads home page and renders editor', async ({ page }) => {
+test('loads home page and supports typing in BlockNote on paper surface', async ({ page }) => {
   await page.goto('/');
 
-  // 检查页面标题或核心 UI 是否存在
   await expect(page).toHaveTitle(/Markdown/i);
+  await expect(page.getByTestId('paper-surface')).toBeVisible();
+  await expect(page.locator('.blocknote-editor')).toBeVisible();
 
-  // 左侧 Markdown 文本区域
-  const editor = page.locator('#markdown-input');
-  await expect(editor).toBeVisible();
+  await page.getByText('这是一个支持 CommonMark 规范的 Markdown 渲染器示例。').click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' Hello Playwright');
 
-  await editor.fill('# Hello Playwright');
-
-  // 右侧预览区域容器
-  const preview = page.locator('#markdown-output');
-  // 标题会被渲染为 <h1>Hello Playwright</h1>
-  await expect(preview.getByRole('heading', { name: 'Hello Playwright' })).toBeVisible();
+  await expect(page.locator('#markdown-output').getByText('Hello Playwright')).toBeVisible();
 });
-
-
