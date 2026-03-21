@@ -433,6 +433,7 @@ function MarkdownEditor() {
                   currentFileId={selectedFile?.id}
                   currentFileName={selectedFile?.name}
                   onClose={handleCloseNovelEntityPreview}
+                  onEntityUpdate={(entityId, patch) => updateNovelEntity(entityId, patch)}
                 />
               )}
 

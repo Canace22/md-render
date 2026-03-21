@@ -2409,13 +2409,31 @@ body.theme-light #markdown-output code {
 
 .novel-entity-preview-heading {
     min-width: 0;
+    flex: 1;
 }
 
-.novel-entity-preview-heading h3 {
+.novel-entity-preview-name-input.ant-input {
+    padding: 0;
     margin: 0 0 6px;
-    font-size: 30px;
-    line-height: 1.2;
     color: #1f2937;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.2;
+    background: transparent;
+}
+
+.novel-entity-preview-name-input.ant-input:focus,
+.novel-entity-preview-name-input.ant-input-focused {
+    background: rgba(255, 255, 255, 0.62);
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22);
+}
+
+.novel-entity-preview-editor {
+    display: block;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .novel-entity-preview-heading p,
@@ -2426,12 +2444,32 @@ body.theme-light #markdown-output code {
     line-height: 1.75;
 }
 
-.novel-entity-preview-summary {
-    margin-top: 18px;
-    padding-top: 18px;
-    border-top: 1px solid rgba(148, 163, 184, 0.12);
-    font-size: 16px;
-    color: #475467;
+.novel-entity-preview-textarea.ant-input,
+.novel-entity-preview-input.ant-input {
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    color: #344054;
+    box-shadow: none;
+}
+
+.novel-entity-preview-textarea.ant-input {
+    min-height: 96px;
+    font-size: 15px;
+    line-height: 1.75;
+}
+
+.novel-entity-preview-textarea.ant-input:focus,
+.novel-entity-preview-textarea.ant-input-focused,
+.novel-entity-preview-input.ant-input:focus,
+.novel-entity-preview-input.ant-input-focused {
+    border-color: rgba(96, 165, 250, 0.32);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.08);
+}
+
+.novel-entity-preview-input.ant-input {
+    height: 44px;
+    font-size: 14px;
 }
 
 .novel-entity-preview-grid {
@@ -3247,70 +3285,38 @@ body.theme-light #markdown-output code {
 }
 
 .blocknote-editor .bn-editor .novel-entity-highlight {
-    border-radius: 6px;
-    padding: 0 2px;
     cursor: pointer;
-    transition: background var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing), color var(--duration-fast) var(--easing);
-}
-
-.blocknote-editor .bn-editor .novel-entity-highlight.is-character {
-    background: rgba(59, 130, 246, 0.14);
-    color: #1d4ed8;
-}
-
-.blocknote-editor .bn-editor .novel-entity-highlight.is-location {
-    background: rgba(16, 185, 129, 0.15);
-    color: #047857;
-}
-
-.blocknote-editor .bn-editor .novel-entity-highlight.is-faction {
-    background: rgba(245, 158, 11, 0.16);
-    color: #b45309;
-}
-
-.blocknote-editor .bn-editor .novel-entity-highlight.is-item {
-    background: rgba(168, 85, 247, 0.14);
-    color: #7e22ce;
-}
-
-.blocknote-editor .bn-editor .novel-entity-highlight.is-mission {
-    background: rgba(239, 68, 68, 0.14);
-    color: #b91c1c;
+    text-decoration: underline;
+    text-decoration-color: #2563eb;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
 }
 
 .blocknote-editor .bn-editor .novel-entity-highlight.is-active {
-    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.14);
+    text-decoration-thickness: 2px;
+    text-decoration-color: #1d4ed8;
 }
 
-::highlight(novel-entity-character) {
-    background: rgba(59, 130, 246, 0.14);
-    color: #1d4ed8;
-}
-
-::highlight(novel-entity-location) {
-    background: rgba(16, 185, 129, 0.15);
-    color: #047857;
-}
-
-::highlight(novel-entity-faction) {
-    background: rgba(245, 158, 11, 0.16);
-    color: #b45309;
-}
-
-::highlight(novel-entity-item) {
-    background: rgba(168, 85, 247, 0.14);
-    color: #7e22ce;
-}
-
+::highlight(novel-entity-character),
+::highlight(novel-entity-location),
+::highlight(novel-entity-faction),
+::highlight(novel-entity-item),
 ::highlight(novel-entity-mission) {
-    background: rgba(239, 68, 68, 0.14);
-    color: #b91c1c;
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #2563eb;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
 }
 
 ::highlight(novel-entity-active) {
     text-decoration: underline;
-    text-decoration-color: rgba(15, 23, 42, 0.28);
+    text-decoration-color: #1d4ed8;
     text-decoration-thickness: 2px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
 }
 
 .blocknote-editor .bn-editor strong {
@@ -3682,64 +3688,33 @@ body.theme-dark .blocknote-editor .bn-editor a {
     color: #67e8f9;
 }
 
-body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-character {
-    background: rgba(96, 165, 250, 0.18);
-    color: #bfdbfe;
-}
-
-body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-location {
-    background: rgba(52, 211, 153, 0.18);
-    color: #bbf7d0;
-}
-
-body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-faction {
-    background: rgba(251, 191, 36, 0.18);
-    color: #fde68a;
-}
-
-body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-item {
-    background: rgba(192, 132, 252, 0.18);
-    color: #e9d5ff;
-}
-
-body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-mission {
-    background: rgba(248, 113, 113, 0.18);
-    color: #fecaca;
+body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight {
+    text-decoration-color: #60a5fa;
 }
 
 body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-active {
-    box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.2);
+    text-decoration-color: #93c5fd;
 }
 
-body.theme-dark ::highlight(novel-entity-character) {
-    background: rgba(96, 165, 250, 0.18);
-    color: #bfdbfe;
-}
-
-body.theme-dark ::highlight(novel-entity-location) {
-    background: rgba(52, 211, 153, 0.18);
-    color: #bbf7d0;
-}
-
-body.theme-dark ::highlight(novel-entity-faction) {
-    background: rgba(251, 191, 36, 0.18);
-    color: #fde68a;
-}
-
-body.theme-dark ::highlight(novel-entity-item) {
-    background: rgba(192, 132, 252, 0.18);
-    color: #e9d5ff;
-}
-
+body.theme-dark ::highlight(novel-entity-character),
+body.theme-dark ::highlight(novel-entity-location),
+body.theme-dark ::highlight(novel-entity-faction),
+body.theme-dark ::highlight(novel-entity-item),
 body.theme-dark ::highlight(novel-entity-mission) {
-    background: rgba(248, 113, 113, 0.18);
-    color: #fecaca;
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #60a5fa;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
 }
 
 body.theme-dark ::highlight(novel-entity-active) {
     text-decoration: underline;
-    text-decoration-color: rgba(226, 232, 240, 0.32);
+    text-decoration-color: #93c5fd;
     text-decoration-thickness: 2px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
 }
 
 body.theme-dark .paper-copy-wechat-btn {
