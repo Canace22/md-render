@@ -10,6 +10,7 @@ import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import NovelAssistantPanel from './NovelAssistantPanel.jsx';
+import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import NovelEntityMark from './NovelEntityMark.jsx';
 import NovelEntityPreviewModal from './NovelEntityPreviewModal.jsx';
@@ -34,6 +35,8 @@ import {
 import { applyThemeToBody } from '../utils/themeUtils';
 import { copyToWeChat } from '../utils/wechatCopy';
 import { getTemplateById } from '../utils/wechatTemplates';
+import { blocksToMarkdown, markdownToBlocks } from '../utils/notionConverter.js';
+import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../utils/notionService.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
@@ -114,9 +117,13 @@ function MarkdownEditor() {
     novelMemory,
     novelFindings,
     novelAgentSuggestions,
+    notionToken,
+    notionFilePages,
     setTheme,
     setCopyStyle,
     setSurface,
+    setNotionToken,
+    setFileNotionPageId,
     toggleMode,
     toggleNovelPanel,
     toggleSidebarCollapsed,
@@ -137,6 +144,8 @@ function MarkdownEditor() {
   } = useEditorStore();
 
   const selectedFile = useSelectedFile();
+  const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
+  const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
@@ -154,6 +163,11 @@ function MarkdownEditor() {
   });
   const [novelEntityPreviewOpen, setNovelEntityPreviewOpen] = useState(false);
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
+  const [contentResetKey, setContentResetKey] = useState(0);
+  const [notionMessage, setNotionMessage] = useState('');
+  const [notionError, setNotionError] = useState('');
+  const [notionPullLoading, setNotionPullLoading] = useState(false);
+  const [notionPushLoading, setNotionPushLoading] = useState(false);
 
   const initialContent = useMemo(() => {
     const sourceMarkdown = normalizeMarkdown(markdown);
@@ -166,7 +180,7 @@ function MarkdownEditor() {
     const parserEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
     const parsedBlocks = parserEditor.tryParseMarkdownToBlocks(sourceMarkdown);
     return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
-  }, [selectedId]);
+  }, [selectedId, contentResetKey]);
 
   const editor = useCreateBlockNote(
     {
@@ -224,7 +238,7 @@ function MarkdownEditor() {
         });
       },
     },
-    [selectedId],
+    [selectedId, contentResetKey],
   );
 
   const wechatSourceHtml = useMemo(() => {
@@ -298,6 +312,42 @@ function MarkdownEditor() {
     await copyToWeChat(html, { templateId: copyStyle });
   };
 
+  const handleNotionPull = useCallback(async () => {
+    if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
+    setNotionError('');
+    setNotionMessage('');
+    setNotionPullLoading(true);
+    try {
+      const id = cleanPageId(linkedNotionPageId);
+      const blocks = await fetchBlocks(id, notionToken);
+      const md = normalizeMarkdown(blocksToMarkdown(blocks));
+      updateSelectedFileContent(md);
+      setContentResetKey((k) => k + 1);
+      setNotionMessage('已从 Notion 拉取并覆盖当前文档。');
+    } catch (e) {
+      setNotionError(e?.message || '拉取失败');
+    } finally {
+      setNotionPullLoading(false);
+    }
+  }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, updateSelectedFileContent]);
+
+  const handleNotionPush = useCallback(async () => {
+    if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
+    setNotionError('');
+    setNotionMessage('');
+    setNotionPushLoading(true);
+    try {
+      const id = cleanPageId(linkedNotionPageId);
+      const blocks = markdownToBlocks(normalizeMarkdown(markdown));
+      await updatePageBlocks(id, blocks, notionToken);
+      setNotionMessage('已推送到 Notion。');
+    } catch (e) {
+      setNotionError(e?.message || '推送失败');
+    } finally {
+      setNotionPushLoading(false);
+    }
+  }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, markdown, updateSelectedFileContent]);
+
   const handleInsertNovelEntity = useCallback(
     (entity) => {
       if (!entity?.name || !selectedFile) return;
@@ -366,6 +416,13 @@ function MarkdownEditor() {
   useEffect(() => {
     applyThemeToBody(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (surface !== 'notion') {
+      setNotionMessage('');
+      setNotionError('');
+    }
+  }, [surface]);
 
   useEffect(() => {
     syncMarkdownFromSelectedFile();
@@ -451,7 +508,9 @@ function MarkdownEditor() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
         onOpenSettings={() => setSurface(surface === 'settings' ? 'paper' : 'settings')}
+        onOpenNotion={() => setSurface(surface === 'notion' ? 'paper' : 'notion')}
         settingsActive={surface === 'settings'}
+        notionActive={surface === 'notion'}
       />
       <div className="right-area immersive-main">
         {surface === 'settings' ? (
@@ -463,7 +522,26 @@ function MarkdownEditor() {
             onCopyStyleChange={setCopyStyle}
             onImport={() => importInputRef.current?.click()}
             onExport={handleExport}
+            onOpenNotion={() => setSurface('notion')}
             onClose={() => setSurface('paper')}
+          />
+        ) : surface === 'notion' ? (
+          <NotionPanel
+            selectedFileName={selectedFile?.name}
+            canSync={Boolean(selectedFile)}
+            token={notionToken}
+            pageId={linkedNotionPageId}
+            onTokenChange={setNotionToken}
+            onPageIdChange={(v) => {
+              if (selectedFile) setFileNotionPageId(selectedFile.id, v);
+            }}
+            onPull={handleNotionPull}
+            onPush={handleNotionPush}
+            onClose={() => setSurface('paper')}
+            pullLoading={notionPullLoading}
+            pushLoading={notionPushLoading}
+            message={notionMessage}
+            error={notionError}
           />
         ) : (
           <>
@@ -473,6 +551,8 @@ function MarkdownEditor() {
               toggleMode={toggleMode}
               novelPanelOpen={novelPanelOpen}
               toggleNovelPanel={toggleNovelPanel}
+              onOpenNotion={() => setSurface('notion')}
+              notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
               {...titleEditing}
             />
             <EditorQuickToolbar

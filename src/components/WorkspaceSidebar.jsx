@@ -10,6 +10,7 @@ import {
   ChevronRight,
   FileText,
   Settings,
+  Cloud,
 } from 'lucide-react';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
@@ -161,7 +162,9 @@ const WorkspaceSidebar = ({
   collapsed,
   onToggleCollapse,
   onOpenSettings,
+  onOpenNotion,
   settingsActive,
+  notionActive,
 }) => {
   return (
     <div className={`workspace-panel ${collapsed ? 'collapsed' : ''}`}>
@@ -249,6 +252,20 @@ const WorkspaceSidebar = ({
             >
               <Settings size={18} strokeWidth={1.5} />
             </button>
+
+            {onOpenNotion && (
+              <button
+                type="button"
+                className="sidebar-footer-icon"
+                data-testid="open-notion"
+                data-active={notionActive ? 'true' : 'false'}
+                onClick={onOpenNotion}
+                title="Notion 同步"
+                aria-label="Notion 同步"
+              >
+                <Cloud size={18} strokeWidth={1.5} />
+              </button>
+            )}
 
             <a
               href={GITHUB_URL}

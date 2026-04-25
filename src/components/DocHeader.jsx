@@ -1,9 +1,13 @@
+import { Cloud } from 'lucide-react';
+
 export default function DocHeader({
   selectedFile,
   mode,
   toggleMode,
   novelPanelOpen,
   toggleNovelPanel,
+  onOpenNotion,
+  notionLinked,
   isTitleEditing,
   titleDraft,
   titleInputWidth,
@@ -64,6 +68,18 @@ export default function DocHeader({
         )}
       </div>
       <div className="right-area-actions">
+        {onOpenNotion && (
+          <button
+            type="button"
+            className={`doc-header-notion-btn ${notionLinked ? 'is-linked' : ''}`}
+            data-testid="open-notion-from-header"
+            onClick={onOpenNotion}
+            title="Notion 同步"
+          >
+            <Cloud size={16} strokeWidth={1.6} />
+            <span>Notion</span>
+          </button>
+        )}
         <button
           type="button"
           className={`novel-mode-toggle ${mode === 'novel' ? 'active' : ''}`}

@@ -30,6 +30,8 @@ const NOVEL_FINDINGS_STORAGE_KEY = 'md-renderer-novel-findings';
 const NOVEL_AGENT_SUGGESTIONS_STORAGE_KEY = 'md-renderer-novel-agent-suggestions';
 const LAST_ANALYZED_FILE_STORAGE_KEY = 'md-renderer-last-analyzed-file';
 const NOVEL_PANEL_SEEN_STORAGE_KEY = 'md-renderer-novel-panel-seen';
+const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
+const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 
 const createDefaultNovelMemory = () => ({
   entities: [],
@@ -75,6 +77,9 @@ const editorStorage = {
       const novelAgentSuggestionsRaw = window.localStorage.getItem(NOVEL_AGENT_SUGGESTIONS_STORAGE_KEY);
       const lastAnalyzedFileId = window.localStorage.getItem(LAST_ANALYZED_FILE_STORAGE_KEY);
       const novelPanelSeen = window.localStorage.getItem(NOVEL_PANEL_SEEN_STORAGE_KEY);
+      const notionToken = window.localStorage.getItem(NOTION_TOKEN_STORAGE_KEY) ?? '';
+      const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
+      const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
 
       const workspace = safeParseJSON(workspaceRaw, null);
       const ws = workspace ?? createDefaultWorkspace();
@@ -102,13 +107,16 @@ const editorStorage = {
           theme: theme === 'light' || theme === 'dark' ? theme : 'light',
           copyStyle:
             copyStyle && TEMPLATES.some((t) => t.id === copyStyle) ? copyStyle : 'default',
-          surface: surface === 'settings' ? 'settings' : 'paper',
+          surface:
+            surface === 'settings' ? 'settings' : surface === 'notion' ? 'notion' : 'paper',
           novelPanelOpen: novelPanelOpen === 'true',
           novelPanelSeen: novelPanelSeen === 'true',
           novelMemory,
           novelFindings,
           novelAgentSuggestions,
           lastAnalyzedFileId: lastAnalyzedFileId || '',
+          notionToken: typeof notionToken === 'string' ? notionToken : '',
+          notionFilePages: notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
         },
         version: 0,
       };
@@ -159,6 +167,15 @@ const editorStorage = {
         LAST_ANALYZED_FILE_STORAGE_KEY,
         state.lastAnalyzedFileId ?? '',
       );
+      if (state.notionToken != null) {
+        window.localStorage.setItem(NOTION_TOKEN_STORAGE_KEY, state.notionToken);
+      }
+      if (state.notionFilePages != null) {
+        window.localStorage.setItem(
+          NOTION_FILE_PAGES_STORAGE_KEY,
+          JSON.stringify(state.notionFilePages),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -182,6 +199,8 @@ const persistConfig = {
     novelFindings: state.novelFindings,
     novelAgentSuggestions: state.novelAgentSuggestions,
     lastAnalyzedFileId: state.lastAnalyzedFileId,
+    notionToken: state.notionToken,
+    notionFilePages: state.notionFilePages,
   }),
 };
 
@@ -211,8 +230,22 @@ export const useEditorStore = create(
       novelFindings: [],
       novelAgentSuggestions: [],
       lastAnalyzedFileId: '',
+      notionToken: '',
+      notionFilePages: {},
       activeBlockId: null,
       activeBlockDraft: '',
+
+      setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
+      setFileNotionPageId: (fileId, pageId) =>
+        set((state) => {
+          const next = { ...(state.notionFilePages ?? {}) };
+          if (!pageId?.trim()) {
+            delete next[fileId];
+          } else {
+            next[fileId] = pageId.trim();
+          }
+          return { notionFilePages: next };
+        }),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

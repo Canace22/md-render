@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Upload } from 'lucide-react';
+import { ArrowLeft, Cloud, Download, Upload } from 'lucide-react';
 import { THEME_OPTIONS } from '../utils/themeUtils';
 import { TEMPLATES } from '../utils/wechatTemplates';
 
@@ -10,6 +10,7 @@ export default function SettingsPanel({
   onCopyStyleChange,
   onImport,
   onExport,
+  onOpenNotion,
   onClose,
 }) {
   return (
@@ -75,6 +76,17 @@ export default function SettingsPanel({
             <Download size={16} strokeWidth={1.6} />
             <span>导出当前工作区</span>
           </button>
+          {onOpenNotion && (
+            <button
+              type="button"
+              className="settings-action-btn"
+              data-testid="open-notion-from-settings"
+              onClick={onOpenNotion}
+            >
+              <Cloud size={16} strokeWidth={1.6} />
+              <span>Notion 页面同步</span>
+            </button>
+          )}
         </div>
       </div>
     </section>
