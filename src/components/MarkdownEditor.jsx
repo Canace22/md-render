@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { SuggestionMenuController } from '@blocknote/react';
-import { BlockNoteEditor } from '@blocknote/core';
+import { BlockNoteEditor, BlockNoteSchema, createCodeBlockSpec, defaultBlockSpecs } from '@blocknote/core';
 import { SuggestionMenu as SuggestionMenuExtension, filterSuggestionItems } from '@blocknote/core/extensions';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
@@ -23,6 +23,11 @@ import {
 } from '../utils/novelEntityHighlight';
 import {
   createEmptyDocument,
+  extractCodeBlockFromClipboardHtml,
+  getBlockTextContent,
+  getMarkdownCodeFenceLanguage,
+  looksLikeCodeBlockClipboardHtml,
+  looksLikeMarkdownCodeFenceClipboardText,
   looksLikeMarkdownClipboardText,
   normalizeMarkdown,
 } from '../utils/markdownUtils';
@@ -35,10 +40,50 @@ import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
 import '../styles/styles.css';
 
+const CODE_BLOCK_LANGUAGES = {
+  text: { name: 'Plain Text', aliases: ['txt', 'plaintext'] },
+  javascript: { name: 'JavaScript', aliases: ['js'] },
+  typescript: { name: 'TypeScript', aliases: ['ts'] },
+  jsx: { name: 'JSX' },
+  tsx: { name: 'TSX' },
+  json: { name: 'JSON' },
+  html: { name: 'HTML' },
+  css: { name: 'CSS' },
+  markdown: { name: 'Markdown', aliases: ['md'] },
+  bash: { name: 'Bash', aliases: ['sh', 'shell', 'zsh'] },
+  yaml: { name: 'YAML', aliases: ['yml'] },
+  sql: { name: 'SQL' },
+  python: { name: 'Python', aliases: ['py'] },
+  java: { name: 'Java' },
+  go: { name: 'Go' },
+  rust: { name: 'Rust', aliases: ['rs'] },
+};
+
+const createCodeBlockHighlighter = async () => {
+  const { createHighlighter } = await import('shiki');
+
+  return createHighlighter({
+    themes: ['github-dark'],
+    langs: Object.keys(CODE_BLOCK_LANGUAGES),
+  });
+};
+
+const EDITOR_SCHEMA = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    codeBlock: createCodeBlockSpec({
+      supportedLanguages: CODE_BLOCK_LANGUAGES,
+      defaultLanguage: 'text',
+      createHighlighter: createCodeBlockHighlighter,
+    }),
+  },
+});
+
 const BLOCKNOTE_OPTIONS = {
   dictionary: zh,
   defaultStyles: false,
   setIdAttribute: true,
+  schema: EDITOR_SCHEMA,
   tables: {
     headers: true,
     splitCells: true,
@@ -128,6 +173,44 @@ function MarkdownEditor() {
       initialContent,
       pasteHandler: ({ event, editor: pasteEditor, defaultPasteHandler }) => {
         const plainText = event.clipboardData?.getData('text/plain') ?? '';
+        const htmlText = event.clipboardData?.getData('text/html') ?? '';
+        const hasHtmlCodeBlock = looksLikeCodeBlockClipboardHtml(htmlText);
+
+        if (hasHtmlCodeBlock && looksLikeMarkdownCodeFenceClipboardText(plainText)) {
+          pasteEditor.pasteMarkdown(plainText);
+          return true;
+        }
+
+        if (hasHtmlCodeBlock) {
+          const codeBlock = extractCodeBlockFromClipboardHtml(htmlText);
+          const currentBlock = pasteEditor.getTextCursorPosition()?.block;
+
+          if (codeBlock?.content && currentBlock) {
+            const nextBlock = {
+              type: 'codeBlock',
+              props: { language: codeBlock.language || 'text' },
+              content: codeBlock.content,
+            };
+
+            const isCurrentParagraph =
+              currentBlock.type === 'paragraph' &&
+              !currentBlock.content?.length &&
+              !(currentBlock.children?.length > 0);
+
+            if (isCurrentParagraph) {
+              pasteEditor.updateBlock(currentBlock, nextBlock);
+              pasteEditor.setTextCursorPosition(currentBlock, 'end');
+            } else {
+              const [insertedBlock] = pasteEditor.insertBlocks([nextBlock], currentBlock, 'after');
+              if (insertedBlock) {
+                pasteEditor.setTextCursorPosition(insertedBlock, 'end');
+              }
+            }
+
+            pasteEditor.focus();
+            return true;
+          }
+        }
 
         if (looksLikeMarkdownClipboardText(plainText)) {
           pasteEditor.pasteMarkdown(plainText);
@@ -135,8 +218,8 @@ function MarkdownEditor() {
         }
 
         return defaultPasteHandler({
-          prioritizeMarkdownOverHTML: true,
-          plainTextAsMarkdown: true,
+          prioritizeMarkdownOverHTML: false,
+          plainTextAsMarkdown: false,
         });
       },
     },
@@ -168,7 +251,37 @@ function MarkdownEditor() {
     return visibleNovelEntities.find((entity) => entity.id === activeNovelEntityId) ?? null;
   }, [visibleNovelEntities, activeNovelEntityId]);
 
+  const tryConvertTypedMarkdownCodeFence = useCallback(() => {
+    const cursorPosition = editor.getTextCursorPosition();
+    const currentBlock = cursorPosition?.block;
+    const previousBlock = cursorPosition?.prevBlock;
+
+    if (cursorPosition?.parentBlock) return false;
+    if (currentBlock?.type !== 'paragraph' || previousBlock?.type !== 'paragraph') return false;
+    if (getBlockTextContent(currentBlock.content).trim()) return false;
+
+    const language = getMarkdownCodeFenceLanguage(getBlockTextContent(previousBlock.content));
+    if (!language) return false;
+
+    const { insertedBlocks } = editor.replaceBlocks([previousBlock.id, currentBlock.id], [
+      {
+        type: 'codeBlock',
+        props: { language },
+        content: '',
+      },
+    ]);
+
+    const insertedCodeBlock = insertedBlocks?.[0];
+    if (insertedCodeBlock) {
+      editor.setTextCursorPosition(insertedCodeBlock, 'end');
+    }
+    editor.focus();
+    return true;
+  }, [editor]);
+
   const handleEditorChange = () => {
+    tryConvertTypedMarkdownCodeFence();
+
     const nextMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
     if (nextMarkdown === lastSyncedMarkdownRef.current) return;
     lastSyncedMarkdownRef.current = nextMarkdown;

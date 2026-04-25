@@ -3298,11 +3298,7 @@ body.theme-light #markdown-output code {
     text-decoration-color: #1d4ed8;
 }
 
-::highlight(novel-entity-character),
-::highlight(novel-entity-location),
-::highlight(novel-entity-faction),
-::highlight(novel-entity-item),
-::highlight(novel-entity-mission) {
+::highlight(novel-entity-character) {
     background: transparent;
     text-decoration: underline;
     text-decoration-color: #2563eb;
@@ -3311,9 +3307,44 @@ body.theme-light #markdown-output code {
     text-decoration-skip-ink: auto;
 }
 
+::highlight(novel-entity-location) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #059669;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
+::highlight(novel-entity-faction) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #d97706;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
+::highlight(novel-entity-item) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #7c3aed;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
+::highlight(novel-entity-mission) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #dc2626;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
 ::highlight(novel-entity-active) {
     text-decoration: underline;
-    text-decoration-color: #1d4ed8;
     text-decoration-thickness: 2px;
     text-underline-offset: 0.22em;
     text-decoration-skip-ink: auto;
@@ -3347,6 +3378,19 @@ body.theme-light #markdown-output code {
 
 .blocknote-editor .bn-editor [data-content-type="codeBlock"] > pre {
     border-radius: 0;
+}
+
+.blocknote-editor .bn-editor [data-content-type="codeBlock"] > div > select {
+    opacity: 0.78;
+    transition-delay: 0s;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.blocknote-editor .bn-editor [data-content-type="codeBlock"]:hover > div > select,
+.blocknote-editor .bn-editor [data-content-type="codeBlock"] > div > select:focus {
+    opacity: 1;
 }
 
 .blocknote-editor .bn-side-menu {
@@ -3696,11 +3740,7 @@ body.theme-dark .blocknote-editor .bn-editor .novel-entity-highlight.is-active {
     text-decoration-color: #93c5fd;
 }
 
-body.theme-dark ::highlight(novel-entity-character),
-body.theme-dark ::highlight(novel-entity-location),
-body.theme-dark ::highlight(novel-entity-faction),
-body.theme-dark ::highlight(novel-entity-item),
-body.theme-dark ::highlight(novel-entity-mission) {
+body.theme-dark ::highlight(novel-entity-character) {
     background: transparent;
     text-decoration: underline;
     text-decoration-color: #60a5fa;
@@ -3709,9 +3749,44 @@ body.theme-dark ::highlight(novel-entity-mission) {
     text-decoration-skip-ink: auto;
 }
 
+body.theme-dark ::highlight(novel-entity-location) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #34d399;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
+body.theme-dark ::highlight(novel-entity-faction) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #fbbf24;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
+body.theme-dark ::highlight(novel-entity-item) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #a78bfa;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
+body.theme-dark ::highlight(novel-entity-mission) {
+    background: transparent;
+    text-decoration: underline;
+    text-decoration-color: #f87171;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+    text-decoration-skip-ink: auto;
+}
+
 body.theme-dark ::highlight(novel-entity-active) {
     text-decoration: underline;
-    text-decoration-color: #93c5fd;
     text-decoration-thickness: 2px;
     text-underline-offset: 0.22em;
     text-decoration-skip-ink: auto;
