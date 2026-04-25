@@ -41,6 +41,8 @@ import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
+import { buildUniqueName, findNodeById } from '../store/workspaceUtils.js';
+import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import '../styles/styles.css';
 
 const CODE_BLOCK_LANGUAGES = {
@@ -147,6 +149,7 @@ function MarkdownEditor() {
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
+  const markdownImportInputRef = useRef(null);
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
@@ -311,6 +314,36 @@ function MarkdownEditor() {
     }
     await copyToWeChat(html, { templateId: copyStyle });
   };
+
+  const handleExportMarkdown = useCallback(() => {
+    const state = useEditorStore.getState();
+    const node = findNodeById(state.workspace, state.selectedId);
+    if (node?.type !== 'file') {
+      alert('请先选中一个文档后再导出 Markdown。');
+      return;
+    }
+    const filename = ensureMarkdownDownloadName(node.name);
+    downloadMarkdownFile(normalizeMarkdown(state.markdown), filename);
+  }, []);
+
+  const handleImportMarkdown = useCallback((event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = normalizeMarkdown(String(reader.result ?? ''));
+      const { selectedId, addFile } = useEditorStore.getState();
+      addFile(selectedId);
+      const after = useEditorStore.getState();
+      after.updateSelectedFileContent(text);
+      const stem = file.name.replace(/\.(md|markdown|txt)$/i, '').trim() || '导入';
+      const uniqueName = buildUniqueName(after.workspace, stem, '.md');
+      after.applyRename(after.selectedId, uniqueName);
+      setContentResetKey((k) => k + 1);
+    };
+    reader.readAsText(file, 'UTF-8');
+    event.target.value = '';
+  }, []);
 
   const handleNotionPull = useCallback(async () => {
     if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
@@ -497,6 +530,15 @@ function MarkdownEditor() {
         onChange={handleImport}
         aria-hidden
       />
+      <input
+        ref={markdownImportInputRef}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        style={{ display: 'none' }}
+        onChange={handleImportMarkdown}
+        data-testid="import-markdown-input"
+        aria-hidden
+      />
       <WorkspaceSidebar
         workspace={workspace}
         selectedId={selectedId}
@@ -505,6 +547,8 @@ function MarkdownEditor() {
         onAddFolder={addFolder}
         onRename={handleRename}
         onDelete={handleDelete}
+        onImportMarkdown={() => markdownImportInputRef.current?.click()}
+        onExportMarkdown={handleExportMarkdown}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
         onOpenSettings={() => setSurface(surface === 'settings' ? 'paper' : 'settings')}

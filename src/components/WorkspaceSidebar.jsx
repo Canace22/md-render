@@ -11,6 +11,8 @@ import {
   FileText,
   Settings,
   Cloud,
+  Upload,
+  Download,
 } from 'lucide-react';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
@@ -159,6 +161,8 @@ const WorkspaceSidebar = ({
   onAddFolder,
   onRename,
   onDelete,
+  onImportMarkdown,
+  onExportMarkdown,
   collapsed,
   onToggleCollapse,
   onOpenSettings,
@@ -226,6 +230,30 @@ const WorkspaceSidebar = ({
               >
                 <Folder size={18} strokeWidth={1.5} />
               </button>
+              {onImportMarkdown && (
+                <button
+                  type="button"
+                  className="sidebar-add-icon"
+                  onClick={onImportMarkdown}
+                  title="导入为新建 Markdown 文档"
+                  aria-label="导入为新建 Markdown 文档"
+                  data-testid="sidebar-import-markdown"
+                >
+                  <Upload size={18} strokeWidth={1.5} />
+                </button>
+              )}
+              {onExportMarkdown && (
+                <button
+                  type="button"
+                  className="sidebar-add-icon"
+                  onClick={onExportMarkdown}
+                  title="导出当前文档为 .md"
+                  aria-label="导出 Markdown"
+                  data-testid="sidebar-export-markdown"
+                >
+                  <Download size={18} strokeWidth={1.5} />
+                </button>
+              )}
             </div>
           </div>
 
