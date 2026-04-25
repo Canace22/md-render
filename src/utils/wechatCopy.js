@@ -196,8 +196,7 @@ const applyTemplateStyles = (tempDiv, template) => {
   const paragraphs = tempDiv.querySelectorAll('p');
   paragraphs.forEach((p) => {
     if (p.getAttribute('data-guide')) {
-      // 引导语：border-top 做自然分隔，居中、14px、次级色
-      p.setAttribute('style', `margin: 32px 0 8px; padding-top: 24px; border-top: 1px solid #e5e7eb; line-height: ${base.lineHeight}; text-align: center; font-size: 14px; color: #6b7280;`);
+      p.setAttribute('style', `margin: 0 0 6px; line-height: 1.6; font-size: 13px; color: #6b7280;`);
     } else {
       p.setAttribute('style', `margin: 0 0 ${spacing.paragraph} 0; line-height: ${base.lineHeight};`);
     }
@@ -275,6 +274,12 @@ const applyTemplateStyles = (tempDiv, template) => {
   };
   if (first) trimMarginTop(first);
   if (last) trimMarginBottom(last);
+
+  // footer 块：浅灰底、圆角、左对齐，引导语与声明作为整体
+  const footer = tempDiv.querySelector('[data-footer]');
+  if (footer) {
+    footer.setAttribute('style', `margin-top: 32px; padding: 14px 16px; background: #f8f9fa; border-radius: 6px;`);
+  }
 };
 
 const stripDataAndClass = (tempDiv) => {
@@ -362,18 +367,25 @@ const convertToWeChatHTML = (htmlString, templateId = 'default') => {
 
   const template = getTemplateById(templateId);
 
-  // 引导语：插在声明前，border-top 自带分隔感
-  if (template.autoGuide) {
-    const guide = document.createElement('p');
-    guide.setAttribute('data-guide', '1');
-    guide.textContent = template.autoGuide;
-    tempDiv.appendChild(guide);
-  }
+  // 引导语 + 声明合为一个 footer 块，浅灰底、左对齐、视觉整体
+  if (template.autoGuide || template.autoStatement) {
+    const footer = document.createElement('div');
+    footer.setAttribute('data-footer', '1');
 
-  if (template.autoStatement) {
-    const bq = document.createElement('blockquote');
-    bq.innerHTML = template.autoStatement;
-    tempDiv.appendChild(bq);
+    if (template.autoGuide) {
+      const guide = document.createElement('p');
+      guide.setAttribute('data-guide', '1');
+      guide.textContent = template.autoGuide;
+      footer.appendChild(guide);
+    }
+
+    if (template.autoStatement) {
+      const bq = document.createElement('blockquote');
+      bq.innerHTML = template.autoStatement;
+      footer.appendChild(bq);
+    }
+
+    tempDiv.appendChild(footer);
   }
 
   removeLeadingTrailingWhitespace(tempDiv);
