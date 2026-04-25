@@ -5,7 +5,6 @@ import { BlockNoteEditor, BlockNoteSchema, createCodeBlockSpec, defaultBlockSpec
 import { SuggestionMenu as SuggestionMenuExtension, filterSuggestionItems } from '@blocknote/core/extensions';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
-import { Copy } from 'lucide-react';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
@@ -15,6 +14,7 @@ import SettingsPanel from './SettingsPanel.jsx';
 import NovelEntityMark from './NovelEntityMark.jsx';
 import NovelEntityPreviewModal from './NovelEntityPreviewModal.jsx';
 import NovelMentionMenu from './NovelMentionMenu.jsx';
+import WechatPreviewModal from './WechatPreviewModal.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import {
   applyNovelEntityHighlights,
@@ -153,6 +153,7 @@ function MarkdownEditor() {
     importWorkspace,
   });
   const [novelEntityPreviewOpen, setNovelEntityPreviewOpen] = useState(false);
+  const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
 
   const initialContent = useMemo(() => {
     const sourceMarkdown = normalizeMarkdown(markdown);
@@ -294,15 +295,7 @@ function MarkdownEditor() {
       alert('没有可复制的内容');
       return;
     }
-
-    try {
-      await copyToWeChat(html, {
-        buttonId: 'paper-copy-wechat-btn',
-        templateId: copyStyle,
-      });
-    } catch (error) {
-      alert('复制失败，请手动复制');
-    }
+    await copyToWeChat(html, { templateId: copyStyle });
   };
 
   const handleInsertNovelEntity = useCallback(
@@ -487,23 +480,13 @@ function MarkdownEditor() {
               disabled={!selectedFile}
               isNovelMode={mode === 'novel'}
               onOpenEntityMention={handleOpenEntityMentionMenu}
+              onPreviewWeChat={() => setWechatPreviewOpen(true)}
+              onCopyWeChat={handleCopyToWeChat}
+              copyStyleName={getTemplateById(copyStyle).name}
             />
             <div className={`novel-layout ${mode === 'novel' ? 'is-novel' : ''}`}>
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
-                  <div className="paper-floating-actions">
-                    <button
-                      id="paper-copy-wechat-btn"
-                      data-testid="paper-copy-wechat"
-                      type="button"
-                      className="copy-wechat-btn paper-copy-wechat-btn"
-                      onClick={handleCopyToWeChat}
-                      title={`复制为微信公众号格式（${getTemplateById(copyStyle).name}）`}
-                      aria-label="复制到微信公众号"
-                    >
-                      <Copy size={18} strokeWidth={1.7} />
-                    </button>
-                  </div>
 
                   <div id="markdown-output" className="paper-content">
                     <div ref={highlightRootRef} className="blocknote-paper">
@@ -589,6 +572,14 @@ function MarkdownEditor() {
           </>
         )}
       </div>
+
+      <WechatPreviewModal
+        open={wechatPreviewOpen}
+        onClose={() => setWechatPreviewOpen(false)}
+        sourceHtml={wechatSourceHtml}
+        initialTemplateId={copyStyle}
+        onTemplateChange={setCopyStyle}
+      />
     </div>
   );
 }

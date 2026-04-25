@@ -92,10 +92,10 @@ const applyTemplateStyles = (tempDiv, template) => {
       if (inlineCode) {
         c.setAttribute(
           'style',
-          `padding: ${inlineCode.padding ?? '2px 4px'}; margin: 0; font-size: 0.9em; font-family: ${code.fontFamily}; background: ${inlineCode.background ?? 'transparent'}; color: ${inlineCode.color ?? 'inherit'}; border-radius: ${inlineCode.borderRadius ?? '0'};`
+          `padding: ${inlineCode.padding ?? '2px 4px'}; margin: 0; font-size: 0.9em; font-family: ${code.fontFamily}; background: ${inlineCode.background ?? 'transparent'}; color: ${inlineCode.color ?? 'inherit'}; border-radius: ${inlineCode.borderRadius ?? '0'}; white-space: nowrap;`
         );
       } else {
-        c.setAttribute('style', `padding: 0; margin: 0; font-size: inherit; font-family: ${code.fontFamily};`);
+        c.setAttribute('style', `padding: 0; margin: 0; font-size: inherit; font-family: ${code.fontFamily}; white-space: nowrap;`);
       }
     }
   });
@@ -133,13 +133,45 @@ const applyTemplateStyles = (tempDiv, template) => {
   blockquotes.forEach((bq) => {
     const text = (bq.textContent || '').trim();
     const isStatement = statement && text.startsWith('声明');
-    const style = isStatement ? statement : blockquote;
+
+    if (isStatement) {
+      // div>span 结构：微信编辑器不向下继承父元素样式，字号/颜色必须打在 span 上
+      const style = statement;
+      let spanStyle = '';
+      if (style.color) spanStyle += `color: ${style.color};`;
+      if (style.fontSize) spanStyle += ` font-size: ${style.fontSize};`;
+      if (style.fontStyle && style.fontStyle !== 'normal') spanStyle += ` font-style: ${style.fontStyle};`;
+      if (style.whiteSpace) spanStyle += ` white-space: ${style.whiteSpace};`;
+
+      const span = bq.ownerDocument.createElement('span');
+      span.innerHTML = bq.innerHTML;
+      span.setAttribute('style', spanStyle.trim());
+
+      // strong/b 颜色跟随声明色，防止显示为默认黑色粗体
+      span.querySelectorAll('strong, b').forEach((el) => {
+        const existing = (el.getAttribute('style') || '').replace(/color:[^;]+;?/g, '').trim();
+        el.setAttribute('style', `${existing ? existing + ' ' : ''}font-weight: bold; display: inline;${style.color ? ` color: ${style.color};` : ''}`);
+      });
+
+      let divStyle = `margin: ${spacing.block} 0;`;
+      if (style.padding && style.padding !== '0') divStyle += ` padding: ${style.padding};`;
+
+      const div = bq.ownerDocument.createElement('div');
+      div.setAttribute('style', divStyle);
+      div.appendChild(span);
+      bq.parentNode?.replaceChild(div, bq);
+      return;
+    }
+
+    const style = blockquote;
     let bqStyle = `padding: ${style.padding}; margin: ${spacing.block} 0;`;
     if (style.border) bqStyle += ` border: ${style.border};`;
     else if (style.borderLeft) bqStyle += ` border-left: ${style.borderLeft};`;
     if (style.background) bqStyle += ` background: ${style.background};`;
     if (style.color) bqStyle += ` color: ${style.color};`;
     if (style.fontStyle) bqStyle += ` font-style: ${style.fontStyle};`;
+    if (style.fontSize) bqStyle += ` font-size: ${style.fontSize};`;
+    if (style.whiteSpace) bqStyle += ` white-space: ${style.whiteSpace};`;
     bq.setAttribute('style', bqStyle);
   });
 
@@ -163,12 +195,35 @@ const applyTemplateStyles = (tempDiv, template) => {
 
   const paragraphs = tempDiv.querySelectorAll('p');
   paragraphs.forEach((p) => {
-    p.setAttribute('style', `margin: 0 0 ${spacing.paragraph} 0; line-height: ${base.lineHeight};`);
+    if (p.getAttribute('data-guide')) {
+      // 引导语：border-top 做自然分隔，居中、14px、次级色
+      p.setAttribute('style', `margin: 32px 0 8px; padding-top: 24px; border-top: 1px solid #e5e7eb; line-height: ${base.lineHeight}; text-align: center; font-size: 14px; color: #6b7280;`);
+    } else {
+      p.setAttribute('style', `margin: 0 0 ${spacing.paragraph} 0; line-height: ${base.lineHeight};`);
+    }
   });
 
-  const links = tempDiv.querySelectorAll('a');
+  // 微信不允许外链：链接文字保持原样，URL 另起一行以小字灰色展示
+  const links = Array.from(tempDiv.querySelectorAll('a'));
   links.forEach((link) => {
-    link.setAttribute('style', `color: ${linkColor}; text-decoration: none;`);
+    const href = link.getAttribute('href') || '';
+    const text = link.textContent?.trim() || '';
+    const wrapper = link.ownerDocument.createElement('span');
+    if (text && text !== href) {
+      const textSpan = link.ownerDocument.createElement('span');
+      textSpan.textContent = text;
+      const urlSpan = link.ownerDocument.createElement('span');
+      urlSpan.textContent = href;
+      urlSpan.setAttribute('style', 'display: block; font-size: 12px; color: #9ca3af; word-break: break-all; margin-top: 2px;');
+      wrapper.appendChild(textSpan);
+      wrapper.appendChild(urlSpan);
+    } else {
+      const urlSpan = link.ownerDocument.createElement('span');
+      urlSpan.textContent = href;
+      urlSpan.setAttribute('style', 'font-size: 12px; color: #9ca3af; word-break: break-all;');
+      wrapper.appendChild(urlSpan);
+    }
+    link.parentNode?.replaceChild(wrapper, link);
   });
 
   const hrs = tempDiv.querySelectorAll('hr');
@@ -306,6 +361,15 @@ const convertToWeChatHTML = (htmlString, templateId = 'default') => {
   tempDiv.innerHTML = htmlString.trim();
 
   const template = getTemplateById(templateId);
+
+  // 引导语：插在声明前，border-top 自带分隔感
+  if (template.autoGuide) {
+    const guide = document.createElement('p');
+    guide.setAttribute('data-guide', '1');
+    guide.textContent = template.autoGuide;
+    tempDiv.appendChild(guide);
+  }
+
   if (template.autoStatement) {
     const bq = document.createElement('blockquote');
     bq.innerHTML = template.autoStatement;

@@ -4,6 +4,23 @@
  */
 
 /**
+ * 所有模板共用的末尾引导语，插入在声明之前
+ * 遵循公众号惯例：居中小字，引导点赞/在看/转发
+ */
+const autoGuide = '如果对你有帮助，点个在看 👇 让更多人看到';
+
+/**
+ * 所有模板共用的声明块样式：无边框、12px、单行
+ */
+const sharedStatement = {
+  padding: '0',
+  color: '#b0b7c3',
+  fontStyle: 'normal',
+  fontSize: '12px',
+  whiteSpace: 'nowrap',
+};
+
+/**
  * 默认简约：16px 字号、紧凑间距、浅灰边框
  */
 const defaultSimple = {
@@ -28,12 +45,8 @@ const defaultSimple = {
     borderLeft: '0.25em solid #dfe2e5',
     padding: '0 1em',
   },
-  statement: {
-    border: '1px solid #c9302c',
-    padding: '12px 16px',
-    color: '#c9302c',
-    fontStyle: 'normal',
-  },
+  statement: sharedStatement,
+  autoGuide,
   autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: '"Consolas", "Monaco", "Courier New", monospace',
@@ -62,7 +75,6 @@ const infoq = {
   borderColor: '#E5E6EB',
   headingBorderColor: '#DCDFE6',
   headingFontSize: { h1: '24px', h2: '20px', h3: '18px', h4: '16px', h5: '15px', h6: '14px' },
-  /** 标题 ##、副标题 ### 居中 */
   headingAlign: { h2: 'center', h3: 'center' },
   spacing: {
     paragraph: '24px',
@@ -76,14 +88,8 @@ const infoq = {
     color: '#666666',
     fontStyle: 'italic',
   },
-  /** 文章末尾声明块：以「声明」开头的 blockquote 使用此样式 */
-  statement: {
-    border: '1px solid #c9302c',
-    padding: '12px 16px',
-    color: '#c9302c',
-    fontStyle: 'normal',
-  },
-  /** 复制时自动追加到文末的声明，留空则不追加 */
+  statement: sharedStatement,
+  autoGuide,
   autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
@@ -120,12 +126,8 @@ const dark = {
     borderLeft: '0.25em solid #58a6ff',
     padding: '0 1em',
   },
-  statement: {
-    border: '1px solid #c9302c',
-    padding: '12px 16px',
-    color: '#c9302c',
-    fontStyle: 'normal',
-  },
+  statement: sharedStatement,
+  autoGuide,
   autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: '"Consolas", "Monaco", "Courier New", monospace',
@@ -153,7 +155,6 @@ const juejin = {
   borderColor: '#e4e6eb',
   headingBorderColor: '#e4e6eb',
   headingFontSize: { h1: '24px', h2: '20px', h3: '18px', h4: '16px', h5: '15px', h6: '14px' },
-  /** h2 左侧蓝色竖条，掘金标志性标题样式 */
   headingDecoration: {
     h2: {
       borderLeft: '4px solid #1e80ff',
@@ -176,19 +177,13 @@ const juejin = {
     color: '#72767b',
     fontStyle: 'normal',
   },
-  statement: {
-    border: '1px solid #c9302c',
-    padding: '12px 16px',
-    color: '#c9302c',
-    fontStyle: 'normal',
-  },
+  statement: sharedStatement,
+  autoGuide,
   autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
   code: {
     fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace",
   },
-  /** 代码块浅灰底，与掘金 light 主题对齐 */
   codeBlockBg: '#f0f2f5',
-  /** 行内代码橙色高亮，掘金特征之一 */
   inlineCode: {
     background: '#f2f3f5',
     color: '#e96900',
@@ -205,4 +200,4 @@ const TEMPLATES = [defaultSimple, infoq, dark, juejin];
 
 const getTemplateById = (id) => TEMPLATES.find((t) => t.id === id) ?? defaultSimple;
 
-export { TEMPLATES, getTemplateById, defaultSimple, infoq, dark, juejin };
+export { TEMPLATES, getTemplateById, autoGuide, sharedStatement, defaultSimple, infoq, dark, juejin };

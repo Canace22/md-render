@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from 'antd';
 import {
   Heading1,
@@ -7,6 +8,8 @@ import {
   Minus,
   AtSign,
   Quote,
+  Eye,
+  Copy,
 } from 'lucide-react';
 
 const TOOL_ITEMS = [
@@ -100,7 +103,23 @@ export default function EditorQuickToolbar({
   disabled,
   isNovelMode,
   onOpenEntityMention,
+  onPreviewWeChat,
+  onCopyWeChat,
+  copyStyleName,
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!onCopyWeChat) return;
+    try {
+      await onCopyWeChat();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // 错误由调用方处理
+    }
+  };
+
   const handleToolClick = (item) => {
     if (!editor || disabled) return;
     if (item.behavior === 'insert-divider') {
@@ -128,6 +147,28 @@ export default function EditorQuickToolbar({
             {item.label}
           </Button>
         ))}
+      </div>
+
+      <div className="editor-quick-toolbar-actions">
+        <div className="editor-quick-toolbar-divider" />
+        <Button
+          className="editor-quick-toolbar-btn"
+          icon={<Eye size={15} strokeWidth={1.9} />}
+          disabled={disabled}
+          onClick={onPreviewWeChat}
+          title={`预览微信格式${copyStyleName ? `（${copyStyleName}）` : ''}`}
+        >
+          预览
+        </Button>
+        <Button
+          className={`editor-quick-toolbar-btn ${copied ? 'is-copied' : ''}`}
+          icon={copied ? <Copy size={15} strokeWidth={1.9} /> : <Copy size={15} strokeWidth={1.9} />}
+          disabled={disabled}
+          onClick={handleCopy}
+          title={`复制为微信公众号格式${copyStyleName ? `（${copyStyleName}）` : ''}`}
+        >
+          {copied ? '已复制！' : '复制'}
+        </Button>
       </div>
     </div>
   );
