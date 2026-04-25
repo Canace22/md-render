@@ -136,8 +136,73 @@ const dark = {
   },
 };
 
-const TEMPLATES = [defaultSimple, infoq, dark];
+/**
+ * 掘金技术风：15px 字号、行高 1.8、h2 左侧蓝条、行内代码橙色、浅灰引用块
+ */
+const juejin = {
+  id: 'juejin',
+  name: '掘金技术风',
+  base: {
+    fontSize: '15px',
+    lineHeight: '1.8',
+    color: '#1d2129',
+    backgroundColor: '#ffffff',
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
+  },
+  linkColor: '#1e80ff',
+  borderColor: '#e4e6eb',
+  headingBorderColor: '#e4e6eb',
+  headingFontSize: { h1: '24px', h2: '20px', h3: '18px', h4: '16px', h5: '15px', h6: '14px' },
+  /** h2 左侧蓝色竖条，掘金标志性标题样式 */
+  headingDecoration: {
+    h2: {
+      borderLeft: '4px solid #1e80ff',
+      paddingLeft: '12px',
+    },
+    h3: {
+      color: '#4e5969',
+    },
+  },
+  spacing: {
+    paragraph: '20px',
+    block: '16px',
+    headingTop: { h1: '28px', h2: '28px', h3: '22px', h4: '18px', h5: '14px', h6: '12px' },
+    headingBottom: { h1: '14px', h2: '10px', h3: '8px', h4: '6px', h5: '6px', h6: '6px' },
+  },
+  blockquote: {
+    borderLeft: '4px solid #dfe2e5',
+    background: '#f8f9fa',
+    padding: '12px 16px',
+    color: '#72767b',
+    fontStyle: 'normal',
+  },
+  statement: {
+    border: '1px solid #c9302c',
+    padding: '12px 16px',
+    color: '#c9302c',
+    fontStyle: 'normal',
+  },
+  autoStatement: '<strong>声明:</strong>本文为Canace 原创,不代表平台观点,未经许可禁止转载。',
+  code: {
+    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace",
+  },
+  /** 代码块浅灰底，与掘金 light 主题对齐 */
+  codeBlockBg: '#f0f2f5',
+  /** 行内代码橙色高亮，掘金特征之一 */
+  inlineCode: {
+    background: '#f2f3f5',
+    color: '#e96900',
+    padding: '2px 6px',
+    borderRadius: '3px',
+  },
+  image: {
+    margin: '16px auto',
+    borderRadius: '8px',
+  },
+};
+
+const TEMPLATES = [defaultSimple, infoq, dark, juejin];
 
 const getTemplateById = (id) => TEMPLATES.find((t) => t.id === id) ?? defaultSimple;
 
-export { TEMPLATES, getTemplateById, defaultSimple, infoq, dark };
+export { TEMPLATES, getTemplateById, defaultSimple, infoq, dark, juejin };

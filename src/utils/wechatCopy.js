@@ -36,7 +36,7 @@ const convertListsToParagraphs = (tempDiv, template) => {
 };
 
 const applyTemplateStyles = (tempDiv, template) => {
-  const { base, linkColor, borderColor, headingBorderColor, headingFontSize, headingAlign, spacing, blockquote, statement, code, codeBlockBg, image } =
+  const { base, linkColor, borderColor, headingBorderColor, headingFontSize, headingAlign, headingDecoration, spacing, blockquote, statement, code, codeBlockBg, inlineCode, image } =
     template;
 
   convertListsToParagraphs(tempDiv, template);
@@ -89,7 +89,14 @@ const applyTemplateStyles = (tempDiv, template) => {
   const inlineCodes = tempDiv.querySelectorAll('code:not(pre code)');
   inlineCodes.forEach((c) => {
     if (!c.closest('pre')) {
-      c.setAttribute('style', `padding: 0; margin: 0; font-size: inherit; font-family: ${code.fontFamily};`);
+      if (inlineCode) {
+        c.setAttribute(
+          'style',
+          `padding: ${inlineCode.padding ?? '2px 4px'}; margin: 0; font-size: 0.9em; font-family: ${code.fontFamily}; background: ${inlineCode.background ?? 'transparent'}; color: ${inlineCode.color ?? 'inherit'}; border-radius: ${inlineCode.borderRadius ?? '0'};`
+        );
+      } else {
+        c.setAttribute('style', `padding: 0; margin: 0; font-size: inherit; font-family: ${code.fontFamily};`);
+      }
     }
   });
 
@@ -130,6 +137,7 @@ const applyTemplateStyles = (tempDiv, template) => {
     let bqStyle = `padding: ${style.padding}; margin: ${spacing.block} 0;`;
     if (style.border) bqStyle += ` border: ${style.border};`;
     else if (style.borderLeft) bqStyle += ` border-left: ${style.borderLeft};`;
+    if (style.background) bqStyle += ` background: ${style.background};`;
     if (style.color) bqStyle += ` color: ${style.color};`;
     if (style.fontStyle) bqStyle += ` font-style: ${style.fontStyle};`;
     bq.setAttribute('style', bqStyle);
@@ -143,6 +151,13 @@ const applyTemplateStyles = (tempDiv, template) => {
     const bottom = spacing.headingBottom[tag] ?? spacing.headingBottom.h6;
     let style = `font-size: ${headingSize(tag)}; font-weight: 600; line-height: ${base.lineHeight}; margin-top: ${top}; margin-bottom: ${bottom};`;
     if (headingAlign?.[tag]) style += ` text-align: ${headingAlign[tag]};`;
+    if (headingDecoration?.[tag]) {
+      const dec = headingDecoration[tag];
+      if (dec.borderLeft) style += ` border-left: ${dec.borderLeft};`;
+      if (dec.paddingLeft) style += ` padding-left: ${dec.paddingLeft};`;
+      if (dec.color) style += ` color: ${dec.color};`;
+      if (dec.background) style += ` background: ${dec.background};`;
+    }
     heading.setAttribute('style', style);
   });
 
