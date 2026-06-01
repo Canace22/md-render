@@ -903,8 +903,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     transition: background var(--duration-fast) var(--easing), color var(--duration-fast) var(--easing);
 }
 
-.tree-node-row:hover,
-.tree-node.active .tree-node-row {
+.tree-node-row:hover {
     background: var(--color-bg-active);
 }
 
@@ -925,7 +924,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .tree-node-row:hover .tree-node-button,
-.tree-node.active .tree-node-button {
+.tree-node.active > .tree-node-row > .tree-node-button {
     color: var(--color-text-active);
 }
 
@@ -1055,11 +1054,11 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     cursor: not-allowed;
 }
 
-.tree-node.active .tree-node-button {
+.tree-node.active > .tree-node-row > .tree-node-button {
     font-weight: var(--font-weight-bold);
 }
 
-.tree-node.folder .tree-node-button {
+.tree-node.folder > .tree-node-row > .tree-node-button {
     font-weight: 600;
 }
 
@@ -1809,13 +1808,12 @@ body.theme-light .preview-panel[data-style="dark"] .panel-body {
         color: #cbd5f5;
     }
 
-    .tree-node-row:hover,
-    .tree-node.active .tree-node-row {
+    .tree-node-row:hover {
         background: rgba(37, 99, 235, 0.55);
     }
 
     .tree-node-row:hover .tree-node-button,
-    .tree-node.active .tree-node-button {
+    .tree-node.active > .tree-node-row > .tree-node-button {
         color: #f9fafb;
     }
 
@@ -2037,13 +2035,12 @@ body.theme-dark .tree-node-button {
     color: #cbd5f5;
 }
 
-body.theme-dark .tree-node-row:hover,
-body.theme-dark .tree-node.active .tree-node-row {
+body.theme-dark .tree-node-row:hover {
     background: rgba(37, 99, 235, 0.55);
 }
 
 body.theme-dark .tree-node-row:hover .tree-node-button,
-body.theme-dark .tree-node.active .tree-node-button {
+body.theme-dark .tree-node.active > .tree-node-row > .tree-node-button {
     color: #f9fafb;
 }
 
@@ -2259,13 +2256,12 @@ body.theme-light .tree-node-button {
     color: #333333;
 }
 
-body.theme-light .tree-node-row:hover,
-body.theme-light .tree-node.active .tree-node-row {
+body.theme-light .tree-node-row:hover {
     background: var(--color-bg-active);
 }
 
 body.theme-light .tree-node-row:hover .tree-node-button,
-body.theme-light .tree-node.active .tree-node-button {
+body.theme-light .tree-node.active > .tree-node-row > .tree-node-button {
     color: var(--color-text-active);
 }
 
