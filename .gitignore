@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Test output
+test-results/
+
 # Environment variables
 .env
 .env.local
@@ -21,5 +24,3 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
-
-test-results/
