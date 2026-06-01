@@ -1,4 +1,6 @@
 import { Cloud } from 'lucide-react';
+import { countWords } from '../utils/wordCount.js';
+import TagBar from './TagBar.jsx';
 
 export default function DocHeader({
   selectedFile,
@@ -8,6 +10,7 @@ export default function DocHeader({
   toggleNovelPanel,
   onOpenNotion,
   notionLinked,
+  onTagsChange,
   isTitleEditing,
   titleDraft,
   titleInputWidth,
@@ -19,8 +22,10 @@ export default function DocHeader({
   setTitleDraft,
 }) {
   const displayName = titleDraft || selectedFile?.name || '未命名';
+  const wordCount = selectedFile ? countWords(selectedFile.content) : 0;
 
   return (
+    <div className="right-area-header-wrap">
     <div className="right-area-header">
       <div className="right-area-doc-title">
         <span
@@ -66,6 +71,11 @@ export default function DocHeader({
             {selectedFile?.name ?? '未命名'}
           </span>
         )}
+        {selectedFile && (
+          <span className="right-area-doc-wordcount" data-testid="doc-wordcount">
+            {wordCount} 字
+          </span>
+        )}
       </div>
       <div className="right-area-actions">
         {onOpenNotion && (
@@ -99,6 +109,13 @@ export default function DocHeader({
           </button>
         )}
       </div>
+    </div>
+    {selectedFile && (
+      <TagBar
+        tags={selectedFile.tags ?? []}
+        onChange={(nextTags) => onTagsChange?.(selectedFile.id, nextTags)}
+      />
+    )}
     </div>
   );
 }

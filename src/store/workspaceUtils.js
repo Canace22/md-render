@@ -229,6 +229,133 @@ export function addChildNode(node, folderId, childNode) {
   return node;
 }
 
+/**
+ * 按关键词过滤工作区树（纯函数）。
+ * 命中规则：文件/文件夹名包含关键词，或文件正文包含关键词。
+ * 命中文件会保留其所在的父文件夹路径，方便在树里看到上下文。
+ * 关键词为空时原样返回。
+ */
+export function filterWorkspace(node, keyword) {
+  const query = (keyword ?? '').trim().toLowerCase();
+  if (!node) return null;
+  if (!query) return node;
+
+  const matchesSelf = (target) => {
+    const name = (target.name ?? '').toLowerCase();
+    if (name.includes(query)) return true;
+    if (target.type === 'file') {
+      return (target.content ?? '').toLowerCase().includes(query);
+    }
+    return false;
+  };
+
+  if (node.type === 'file') {
+    return matchesSelf(node) ? node : null;
+  }
+
+  // folder：先递归过滤子节点，子节点有命中则保留该文件夹
+  const children = Array.isArray(node.children) ? node.children : [];
+  const filteredChildren = children
+    .map((child) => filterWorkspace(child, query))
+    .filter(Boolean);
+
+  if (filteredChildren.length > 0 || matchesSelf(node)) {
+    return { ...node, children: filteredChildren };
+  }
+  return null;
+}
+
+/**
+ * 收集工作区里所有文件（纯函数），扁平成数组。
+ */
+export function collectFiles(node, acc = []) {
+  if (!node) return acc;
+  if (node.type === 'file') {
+    acc.push(node);
+  } else if (node.type === 'folder' && Array.isArray(node.children)) {
+    node.children.forEach((child) => collectFiles(child, acc));
+  }
+  return acc;
+}
+
+/**
+ * 取最近编辑的前 N 篇文件，按 updatedAt 倒序（纯函数）。
+ * 没有 updatedAt 的老文件排在最后。
+ */
+export function collectRecentFiles(workspace, limit = 5) {
+  const files = collectFiles(workspace).filter((f) => f.updatedAt);
+  return files
+    .slice()
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+    .slice(0, limit);
+}
+
+/**
+ * 给缺少 updatedAt 的老文件补初始时间戳（纯函数，返回新树）。
+ * 用一个基准时间逐个递减，保证老笔记之间有稳定顺序、且都早于本次会话的新编辑。
+ * 已有 updatedAt 的文件保持不变。
+ */
+export function ensureFileTimestamps(node, baseTime = Date.now()) {
+  let counter = 0;
+  const walk = (current) => {
+    if (!current) return current;
+    if (current.type === 'file') {
+      if (current.updatedAt) return current;
+      counter += 1;
+      // 依次往前推 1 分钟，越靠前遍历到的越「新」一点
+      return { ...current, updatedAt: baseTime - counter * 60000 };
+    }
+    if (current.type === 'folder' && Array.isArray(current.children)) {
+      let changed = false;
+      const nextChildren = current.children.map((child) => {
+        const next = walk(child);
+        if (next !== child) changed = true;
+        return next;
+      });
+      // 没有任何子节点被补，则原样返回，便于上层判断是否需要落盘
+      return changed ? { ...current, children: nextChildren } : current;
+    }
+    return current;
+  };
+  return walk(node);
+}
+
+/**
+ * 收集工作区里所有用过的标签（纯函数），去重并按使用次数倒序。
+ * 返回 [{ tag, count }]。
+ */
+export function collectTags(workspace) {
+  const counts = new Map();
+  collectFiles(workspace).forEach((file) => {
+    (file.tags ?? []).forEach((tag) => {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    });
+  });
+  return Array.from(counts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+/**
+ * 按标签过滤工作区树（纯函数）：只保留带该标签的文件及其父文件夹路径。
+ * tag 为空时原样返回。
+ */
+export function filterWorkspaceByTag(node, tag) {
+  if (!node) return null;
+  if (!tag) return node;
+
+  if (node.type === 'file') {
+    return (node.tags ?? []).includes(tag) ? node : null;
+  }
+
+  const children = Array.isArray(node.children) ? node.children : [];
+  const filteredChildren = children
+    .map((child) => filterWorkspaceByTag(child, tag))
+    .filter(Boolean);
+
+  return filteredChildren.length > 0 ? { ...node, children: filteredChildren } : null;
+}
+
 export function resolveTargetFolderId(workspace, selectedId) {
   if (!workspace) return null;
   if (!selectedId) return workspace.id;

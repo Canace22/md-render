@@ -13,7 +13,15 @@ import {
   Cloud,
   Upload,
   Download,
+  Search,
+  Tag,
 } from 'lucide-react';
+import {
+  filterWorkspace,
+  collectRecentFiles,
+  collectTags,
+  filterWorkspaceByTag,
+} from '../store/workspaceUtils.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
 
@@ -170,6 +178,31 @@ const WorkspaceSidebar = ({
   settingsActive,
   notionActive,
 }) => {
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [activeTag, setActiveTag] = useState(null);
+  const isSearching = Boolean(searchKeyword.trim());
+
+  // 视图优先级：搜索 > 标签筛选 > 正常
+  const filteredWorkspace = isSearching
+    ? filterWorkspace(workspace, searchKeyword)
+    : activeTag
+      ? filterWorkspaceByTag(workspace, activeTag)
+      : workspace;
+
+  // 搜索或筛标签时隐藏「最近」区，专注结果
+  const recentFiles = isSearching || activeTag ? [] : collectRecentFiles(workspace, 5);
+  const allTags = collectTags(workspace);
+
+  const handleSearchChange = (value) => {
+    setSearchKeyword(value);
+    if (value.trim()) setActiveTag(null); // 搜索时清除标签筛选
+  };
+
+  const toggleTag = (tag) => {
+    setActiveTag((prev) => (prev === tag ? null : tag));
+    setSearchKeyword(''); // 选标签时清除搜索
+  };
+
   return (
     <div className={`workspace-panel ${collapsed ? 'collapsed' : ''}`}>
       {/* 收起时只显示展开按钮 */}
@@ -192,7 +225,7 @@ const WorkspaceSidebar = ({
             <span className="sidebar-header-logo" aria-hidden>
               <FileText size={18} strokeWidth={1.5} />
             </span>
-            <span className="sidebar-header-title">Canace's Editor</span>
+            <span className="sidebar-header-title">我的笔记本</span>
           </div>
           <button
             type="button"
@@ -208,9 +241,67 @@ const WorkspaceSidebar = ({
 
       {!collapsed && (
         <>
-          {/* 我的文档 + 新建文件/文件夹 */}
+          {/* 搜索框：按文件名/正文过滤 */}
+          <div className="notebook-search">
+            <Search size={15} strokeWidth={1.5} className="notebook-search-icon" aria-hidden />
+            <input
+              type="text"
+              className="notebook-search-input"
+              placeholder="搜索笔记…"
+              value={searchKeyword}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              data-testid="sidebar-search-input"
+              aria-label="搜索笔记"
+            />
+          </div>
+
+          {/* 最近编辑 */}
+          {recentFiles.length > 0 && (
+            <div className="notebook-recent" data-testid="recent-section">
+              <span className="sidebar-section-title notebook-recent-title">最近</span>
+              <div className="notebook-recent-list">
+                {recentFiles.map((file) => (
+                  <button
+                    key={file.id}
+                    type="button"
+                    className="notebook-recent-item"
+                    onClick={() => onSelect(file.id)}
+                    title={file.name}
+                  >
+                    <FileText size={14} strokeWidth={1.5} className="notebook-recent-icon" aria-hidden />
+                    <span className="notebook-recent-name">{file.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 标签筛选 */}
+          {!isSearching && allTags.length > 0 && (
+            <div className="notebook-tags" data-testid="tags-section">
+              <span className="sidebar-section-title notebook-tags-title">
+                <Tag size={13} strokeWidth={1.5} aria-hidden /> 标签
+              </span>
+              <div className="notebook-tags-list">
+                {allTags.map(({ tag, count }) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`notebook-tag-chip ${activeTag === tag ? 'active' : ''}`}
+                    onClick={() => toggleTag(tag)}
+                    data-testid="tag-filter-chip"
+                  >
+                    {tag}
+                    <span className="notebook-tag-count">{count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 笔记 + 新建文件/文件夹 */}
           <div className="sidebar-docs-header">
-            <span className="sidebar-section-title">我的文档</span>
+            <span className="sidebar-section-title">笔记</span>
             <div className="sidebar-add-icons">
               <button
                 type="button"
@@ -257,14 +348,22 @@ const WorkspaceSidebar = ({
             </div>
           </div>
 
-          {/* 文件树 */}
+          {/* 文件树（搜索时渲染过滤后的结果） */}
           <div className="workspace-tree">
-            {renderTree(workspace, selectedId, onSelect, {
-              onAddFile,
-              onAddFolder,
-              onRename,
-              onDelete,
-            })}
+            {filteredWorkspace
+              ? renderTree(filteredWorkspace, selectedId, onSelect, {
+                  onAddFile,
+                  onAddFolder,
+                  onRename,
+                  onDelete,
+                })
+              : (
+                <div className="workspace-tree-empty" data-testid="search-empty">
+                  {isSearching
+                    ? `没有匹配「${searchKeyword.trim()}」的笔记`
+                    : `没有带「${activeTag}」标签的笔记`}
+                </div>
+              )}
           </div>
 
           {/* 底部操作栏：设置、主题、GitHub，均匀分布 */}

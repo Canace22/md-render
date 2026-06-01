@@ -10,6 +10,7 @@ import {
   updateNodeById,
   removeNodeById,
   addChildNode,
+  ensureFileTimestamps,
   findFirstFileId,
   nameExists,
   buildUniqueName,
@@ -81,8 +82,13 @@ const editorStorage = {
       const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
       const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
 
-      const workspace = safeParseJSON(workspaceRaw, null);
-      const ws = workspace ?? createDefaultWorkspace();
+      const parsedWorkspace = safeParseJSON(workspaceRaw, null);
+      // 给老文件补 updatedAt，让「最近」区立即有内容（一次性迁移）
+      const ws = ensureFileTimestamps(parsedWorkspace ?? createDefaultWorkspace());
+      // 补过时间戳就落盘一次，避免下次加载顺序重算
+      if (ws !== parsedWorkspace) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
+      }
       const selId = selectedId || DEFAULT_FILE_ID;
       const selectedNode = findNodeById(ws, selId);
       const markdown =
@@ -313,10 +319,24 @@ export const useEditorStore = create(
         const { workspace, selectedId } = get();
         const updated = updateNodeById(workspace, selectedId, (node) => {
           if (node.type !== 'file') return node;
-          return { ...node, content: nextMarkdown };
+          return { ...node, content: nextMarkdown, updatedAt: Date.now() };
         });
         persistWorkspace(updated);
         set({ workspace: updated, markdown: nextMarkdown });
+      },
+
+      /** 设置某文件的标签（去重、去空、去首尾空格） */
+      setFileTags: (fileId, tags) => {
+        const { workspace } = get();
+        const cleaned = Array.from(
+          new Set((tags ?? []).map((t) => String(t).trim()).filter(Boolean)),
+        );
+        const updated = updateNodeById(workspace, fileId, (node) => {
+          if (node.type !== 'file') return node;
+          return { ...node, tags: cleaned };
+        });
+        persistWorkspace(updated);
+        set({ workspace: updated });
       },
 
       setWorkspace: (workspace) => set({ workspace }),

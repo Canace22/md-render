@@ -126,6 +126,7 @@ function MarkdownEditor() {
     setSurface,
     setNotionToken,
     setFileNotionPageId,
+    setFileTags,
     toggleMode,
     toggleNovelPanel,
     toggleSidebarCollapsed,
@@ -597,6 +598,7 @@ function MarkdownEditor() {
               toggleNovelPanel={toggleNovelPanel}
               onOpenNotion={() => setSurface('notion')}
               notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
+              onTagsChange={setFileTags}
               {...titleEditing}
             />
             <EditorQuickToolbar

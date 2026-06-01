@@ -176,18 +176,6 @@ const handleSubmit = async () => {
 - ✅ 禁止魔法数字：抽成常量并放在文件顶部
 - ✅ 组件超过 300 行考虑拆分
 
-## 测试
-
-```bash
-# 单元测试（vitest）
-pnpm test:unit
-
-# E2E 测试（playwright）
-pnpm test:e2e
-```
-
-改动后，默认跑一遍 `pnpm test:unit` 确认无回归。
-
 ## Git 提交规范
 
 ```
