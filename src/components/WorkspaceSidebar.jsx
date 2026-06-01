@@ -3,11 +3,13 @@ import {
   MoreVertical,
   File,
   Folder,
+  FolderOpen,
   Pencil,
   Trash2,
   Github,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FileText,
   Settings,
   Cloud,
@@ -39,6 +41,7 @@ const TreeNode = ({
   const isActive = node.id === selectedId;
   const isRoot = node.id === 'root';
   const [menuOpen, setMenuOpen] = useState(false);
+  const [folderOpen, setFolderOpen] = useState(true);
   const menuRef = useRef(null);
 
   const indentStyle = { paddingLeft: `${depth * 16 + 8}px` };
@@ -74,12 +77,26 @@ const TreeNode = ({
         <button
           type="button"
           className="tree-node-button"
-          onClick={() => onSelect(node.id)}
+          onClick={() => {
+            onSelect(node.id);
+            if (isFolder) setFolderOpen((v) => !v);
+          }}
         >
           <span className="tree-node-icon">
-            {isFolder ? <Folder size={16} strokeWidth={1.5} /> : <File size={16} strokeWidth={1.5} />}
+            {isFolder
+              ? (folderOpen
+                  ? <FolderOpen size={16} strokeWidth={1.5} />
+                  : <Folder size={16} strokeWidth={1.5} />)
+              : <File size={16} strokeWidth={1.5} />}
           </span>
           <span className="tree-node-text">{node.name}</span>
+          {isFolder && (
+            <ChevronDown
+              size={12}
+              strokeWidth={1.5}
+              className={`tree-node-chevron ${folderOpen ? 'open' : ''}`}
+            />
+          )}
         </button>
         <div className="tree-node-actions" ref={menuRef}>
           <button
@@ -123,7 +140,7 @@ const TreeNode = ({
           )}
         </div>
       </div>
-      {isFolder && Array.isArray(node.children) && node.children.length > 0 && (
+      {isFolder && folderOpen && Array.isArray(node.children) && node.children.length > 0 && (
         <div className="tree-node-children">
           {node.children.map((child) => (
             <TreeNode
@@ -225,7 +242,7 @@ const WorkspaceSidebar = ({
             <span className="sidebar-header-logo" aria-hidden>
               <FileText size={18} strokeWidth={1.5} />
             </span>
-            <span className="sidebar-header-title">我的笔记本</span>
+            <span className="sidebar-header-title">简记</span>
           </div>
           <button
             type="button"

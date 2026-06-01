@@ -9,6 +9,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
+import FolderFileList from './FolderFileList.jsx';
 import NovelAssistantPanel from './NovelAssistantPanel.jsx';
 import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -41,7 +42,7 @@ import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
-import { buildUniqueName, findNodeById } from '../store/workspaceUtils.js';
+import { buildUniqueName, collectFiles, findNodeById } from '../store/workspaceUtils.js';
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import '../styles/styles.css';
 
@@ -147,6 +148,13 @@ function MarkdownEditor() {
   } = useEditorStore();
 
   const selectedFile = useSelectedFile();
+  const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
+  const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
+  const folderFiles = useMemo(
+    () => (selectedFolder ? collectFiles(selectedFolder) : []),
+    [selectedFolder],
+  );
+  const contentSurface = selectedFolder ? 'folder' : 'paper';
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
@@ -552,8 +560,8 @@ function MarkdownEditor() {
         onExportMarkdown={handleExportMarkdown}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
-        onOpenSettings={() => setSurface(surface === 'settings' ? 'paper' : 'settings')}
-        onOpenNotion={() => setSurface(surface === 'notion' ? 'paper' : 'notion')}
+        onOpenSettings={() => setSurface(surface === 'settings' ? contentSurface : 'settings')}
+        onOpenNotion={() => setSurface(surface === 'notion' ? contentSurface : 'notion')}
         settingsActive={surface === 'settings'}
         notionActive={surface === 'notion'}
       />
@@ -568,7 +576,7 @@ function MarkdownEditor() {
             onImport={() => importInputRef.current?.click()}
             onExport={handleExport}
             onOpenNotion={() => setSurface('notion')}
-            onClose={() => setSurface('paper')}
+            onClose={() => setSurface(contentSurface)}
           />
         ) : surface === 'notion' ? (
           <NotionPanel
@@ -582,11 +590,17 @@ function MarkdownEditor() {
             }}
             onPull={handleNotionPull}
             onPush={handleNotionPush}
-            onClose={() => setSurface('paper')}
             pullLoading={notionPullLoading}
             pushLoading={notionPushLoading}
             message={notionMessage}
             error={notionError}
+            onClose={() => setSurface(contentSurface)}
+          />
+        ) : surface === 'folder' && selectedFolder ? (
+          <FolderFileList
+            folder={selectedFolder}
+            files={folderFiles}
+            onOpenFile={selectNode}
           />
         ) : (
           <>
@@ -625,7 +639,7 @@ function MarkdownEditor() {
                         formattingToolbar
                         linkToolbar
                         slashMenu
-                        sideMenu
+                        sideMenu={false}
                         filePanel={false}
                         tableHandles
                         emojiPicker={false}

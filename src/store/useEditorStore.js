@@ -114,7 +114,9 @@ const editorStorage = {
           copyStyle:
             copyStyle && TEMPLATES.some((t) => t.id === copyStyle) ? copyStyle : 'default',
           surface:
-            surface === 'settings' ? 'settings' : surface === 'notion' ? 'notion' : 'paper',
+            surface === 'settings' || surface === 'notion' || surface === 'folder'
+              ? surface
+              : 'paper',
           novelPanelOpen: novelPanelOpen === 'true',
           novelPanelSeen: novelPanelSeen === 'true',
           novelMemory,
@@ -305,9 +307,10 @@ export const useEditorStore = create(
       selectNode: (nodeId) => {
         const { workspace } = get();
         const node = findNodeById(workspace, nodeId);
-        const markdown = node?.type === 'file' ? (node.content ?? '') : get().markdown;
+        const isFolder = node?.type === 'folder';
+        const markdown = isFolder ? get().markdown : (node?.content ?? '');
         set({
-          surface: 'paper',
+          surface: isFolder ? 'folder' : 'paper',
           activeBlockId: null,
           activeBlockDraft: '',
           selectedId: nodeId,
@@ -362,7 +365,7 @@ export const useEditorStore = create(
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFolder);
         persistWorkspace(nextWorkspace);
-        set({ workspace: nextWorkspace, selectedId: folderId });
+        set({ workspace: nextWorkspace, selectedId: folderId, surface: 'folder' });
       },
 
       applyRename: (targetId, newName) => {
@@ -625,7 +628,7 @@ export const useEditorStore = create(
         const selectedNode = findNodeById(workspace, selectedId);
         if (!selectedNode) {
           const firstFileId = findFirstFileId(workspace);
-          if (firstFileId) set({ selectedId: firstFileId });
+          if (firstFileId) set({ selectedId: firstFileId, surface: 'paper' });
         }
       },
     }),
