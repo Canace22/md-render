@@ -40,13 +40,18 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .workspace-panel {
-    width: 260px;
+    width: 320px;
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--color-border);
     background: var(--color-bg-sidebar);
     flex-shrink: 0;
+    position: relative;
     transition: width var(--duration-fast) var(--easing);
+}
+
+.workspace-panel.resizing {
+    transition: none;
 }
 
 .workspace-panel.collapsed {
@@ -55,6 +60,37 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     overflow: visible;
     padding: 0;
     border-right: 1px solid var(--color-border);
+}
+
+.workspace-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -5px;
+    width: 10px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+}
+
+.workspace-resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 4px;
+    width: 2px;
+    height: 100%;
+    background: transparent;
+    transition: background var(--duration-fast) var(--easing);
+}
+
+.workspace-resize-handle:hover::after,
+.workspace-resize-handle:focus-visible::after,
+.workspace-panel.resizing .workspace-resize-handle::after {
+    background: var(--color-border);
+}
+
+.workspace-resize-handle:focus-visible {
+    outline: none;
 }
 
 .sidebar-expand-btn {

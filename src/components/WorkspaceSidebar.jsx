@@ -26,6 +26,14 @@ import {
 } from '../store/workspaceUtils.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
+const DEFAULT_SIDEBAR_WIDTH = 320;
+const MIN_SIDEBAR_WIDTH = 240;
+const MAX_SIDEBAR_WIDTH = 520;
+const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
+
+const clampSidebarWidth = (width) => {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
+};
 
 const TreeNode = ({
   node,
@@ -197,6 +205,9 @@ const WorkspaceSidebar = ({
 }) => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [activeTag, setActiveTag] = useState(null);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [resizing, setResizing] = useState(false);
+  const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const isSearching = Boolean(searchKeyword.trim());
 
   // 视图优先级：搜索 > 标签筛选 > 正常
@@ -220,8 +231,66 @@ const WorkspaceSidebar = ({
     setSearchKeyword(''); // 选标签时清除搜索
   };
 
+  useEffect(() => {
+    if (!resizing) return;
+
+    const handlePointerMove = (event) => {
+      const delta = event.clientX - resizeStartRef.current.pointerX;
+      setSidebarWidth(clampSidebarWidth(resizeStartRef.current.width + delta));
+    };
+
+    const handlePointerUp = () => {
+      setResizing(false);
+    };
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [resizing]);
+
+  const handleResizePointerDown = (event) => {
+    event.preventDefault();
+    resizeStartRef.current = {
+      pointerX: event.clientX,
+      width: sidebarWidth,
+    };
+    setResizing(true);
+  };
+
+  const handleResizeKeyDown = (event) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setSidebarWidth((width) => clampSidebarWidth(width - SIDEBAR_KEYBOARD_RESIZE_STEP));
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setSidebarWidth((width) => clampSidebarWidth(width + SIDEBAR_KEYBOARD_RESIZE_STEP));
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      setSidebarWidth(MIN_SIDEBAR_WIDTH);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      setSidebarWidth(MAX_SIDEBAR_WIDTH);
+    }
+  };
+
   return (
-    <div className={`workspace-panel ${collapsed ? 'collapsed' : ''}`}>
+    <div
+      className={`workspace-panel ${collapsed ? 'collapsed' : ''}${resizing ? ' resizing' : ''}`}
+      style={collapsed ? undefined : { width: `${sidebarWidth}px` }}
+    >
       {/* 收起时只显示展开按钮 */}
       {collapsed && (
         <button
@@ -423,6 +492,21 @@ const WorkspaceSidebar = ({
             </a>
           </div>
         </>
+      )}
+      {!collapsed && (
+        <div
+          className="workspace-resize-handle"
+          role="separator"
+          tabIndex={0}
+          aria-label="调整侧边栏宽度"
+          aria-orientation="vertical"
+          aria-valuemin={MIN_SIDEBAR_WIDTH}
+          aria-valuemax={MAX_SIDEBAR_WIDTH}
+          aria-valuenow={sidebarWidth}
+          title="拖拽调整侧边栏宽度"
+          onPointerDown={handleResizePointerDown}
+          onKeyDown={handleResizeKeyDown}
+        />
       )}
     </div>
   );
