@@ -37,10 +37,62 @@ const safeParseJSON = (value, fallback) => {
   }
 };
 
+/** 避免启动时用空 Notion 配置覆盖 localStorage 中已有值 */
+let editorPersistHydrated = false;
+
+const readNotionPersistSnapshot = () => {
+  try {
+    const notionToken = window.localStorage.getItem(NOTION_TOKEN_STORAGE_KEY) ?? '';
+    const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
+    const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
+    const notionDatabaseId = window.localStorage.getItem(NOTION_DATABASE_ID_STORAGE_KEY) ?? '';
+    return {
+      notionToken: typeof notionToken === 'string' ? notionToken : '',
+      notionFilePages:
+        notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
+      notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
+    };
+  } catch {
+    return { notionToken: '', notionFilePages: {}, notionDatabaseId: '' };
+  }
+};
+
+const persistNotionStringField = (key, nextValue) => {
+  if (nextValue == null) return;
+  const next = String(nextValue);
+  if (!editorPersistHydrated) {
+    const existing = window.localStorage.getItem(key) ?? '';
+    if (next === '' && existing !== '') return;
+  }
+  window.localStorage.setItem(key, next);
+};
+
+const persistNotionFilePagesField = (nextPages) => {
+  if (nextPages == null) return;
+  if (!editorPersistHydrated) {
+    const existing = safeParseJSON(
+      window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY),
+      {},
+    );
+    const hasExisting = existing && typeof existing === 'object' && Object.keys(existing).length > 0;
+    const hasNext =
+      nextPages && typeof nextPages === 'object' && Object.keys(nextPages).length > 0;
+    if (!hasNext && hasExisting) return;
+  }
+  window.localStorage.setItem(NOTION_FILE_PAGES_STORAGE_KEY, JSON.stringify(nextPages));
+};
+
+const persistNotionSnapshot = (state) => {
+  persistNotionStringField(NOTION_TOKEN_STORAGE_KEY, state.notionToken);
+  persistNotionFilePagesField(state.notionFilePages);
+  persistNotionStringField(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
+};
+
 /** 兼容现有 localStorage 多 key 的持久化存储 */
 const editorStorage = {
   getItem: () => {
     if (typeof window === 'undefined') return null;
+    const notionSnapshot = readNotionPersistSnapshot();
     try {
       const workspaceRaw = window.localStorage.getItem(STORAGE_KEY);
       const selectedId = window.localStorage.getItem(SELECTED_ID_STORAGE_KEY);
@@ -49,10 +101,6 @@ const editorStorage = {
       const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
       const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
       const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
-      const notionToken = window.localStorage.getItem(NOTION_TOKEN_STORAGE_KEY) ?? '';
-      const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
-      const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
-      const notionDatabaseId = window.localStorage.getItem(NOTION_DATABASE_ID_STORAGE_KEY) ?? '';
 
       const parsedWorkspace = safeParseJSON(workspaceRaw, null);
       // 给老文件补 updatedAt，让「最近」区立即有内容（一次性迁移）
@@ -79,20 +127,34 @@ const editorStorage = {
             surface === 'settings' || surface === 'notion' || surface === 'folder'
               ? surface
               : 'paper',
-          notionToken: typeof notionToken === 'string' ? notionToken : '',
-          notionFilePages: notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
-          notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
+          ...notionSnapshot,
         },
         version: 0,
       };
     } catch (e) {
-      return null;
+      console.error('加载编辑器状态失败:', e);
+      return {
+        state: {
+          workspace: createDefaultWorkspace(),
+          selectedId: DEFAULT_FILE_ID,
+          markdown: getDefaultMarkdown(),
+          theme: 'light',
+          copyStyle: 'default',
+          storageMode: 'local',
+          projectRootPath: '',
+          surface: 'paper',
+          ...notionSnapshot,
+        },
+        version: 0,
+      };
     }
   },
   setItem: (_, value) => {
     if (typeof window === 'undefined') return;
     try {
       const state = value?.state ?? value;
+      // Notion 配置体积小，先写入，避免工作区过大占满配额后 Token 丢失
+      persistNotionSnapshot(state);
       if (state.workspace) {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.workspace));
       }
@@ -114,18 +176,6 @@ const editorStorage = {
       if (state.surface) {
         window.localStorage.setItem(SURFACE_STORAGE_KEY, state.surface);
       }
-      if (state.notionToken != null) {
-        window.localStorage.setItem(NOTION_TOKEN_STORAGE_KEY, state.notionToken);
-      }
-      if (state.notionFilePages != null) {
-        window.localStorage.setItem(
-          NOTION_FILE_PAGES_STORAGE_KEY,
-          JSON.stringify(state.notionFilePages),
-        );
-      }
-      if (state.notionDatabaseId != null) {
-        window.localStorage.setItem(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
-      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -136,6 +186,11 @@ const editorStorage = {
 const persistConfig = {
   name: 'md-renderer-editor',
   storage: editorStorage,
+  onRehydrateStorage: () => {
+    return () => {
+      editorPersistHydrated = true;
+    };
+  },
   partialize: (state) => ({
     workspace: state.workspace,
     selectedId: state.selectedId,

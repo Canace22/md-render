@@ -108,21 +108,6 @@ export default function NotionPanel({
 
       {/* ── 批量同步 ── */}
       <div className="settings-group">
-        <div className="settings-group-title">批量同步（数据库）</div>
-        <div className="notion-batch-summary" aria-label="批量同步说明">
-          <div>
-            <strong>批量同步的方向是什么？</strong>
-            <span>双向同步</span>
-          </div>
-          <div>
-            <strong>Notion 页面的范围？</strong>
-            <span>指定数据库下的所有页面</span>
-          </div>
-          <div>
-            <strong>同步后本地文件如何组织？</strong>
-            <span>按 Notion 层级建文件夹</span>
-          </div>
-        </div>
         <label className="notion-field">
           <span>数据库 ID 或 URL</span>
           <input
