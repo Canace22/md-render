@@ -18,7 +18,7 @@ export function useTitleEditing(selectedFile, applyRename) {
     setIsTitleEditing(true);
   }, [selectedFile]);
 
-  const commitTitleEditing = useCallback(() => {
+  const commitTitleEditing = useCallback(async () => {
     if (!selectedFile) {
       setIsTitleEditing(false);
       setTitleDraft('');
@@ -30,7 +30,9 @@ export function useTitleEditing(selectedFile, applyRename) {
       setIsTitleEditing(false);
       return;
     }
-    if (!applyRename(selectedFile.id, nextName)) {
+    const result = applyRename(selectedFile.id, nextName);
+    const ok = result && typeof result.then === 'function' ? await result : result;
+    if (!ok) {
       alert('名称已存在，请换一个。');
       setTitleDraft(selectedFile.name);
     }

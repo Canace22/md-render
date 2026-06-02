@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   openLocalProject: () => ipcRenderer.invoke('open-local-project'),
   saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
+  ensureMdRenderWorkspace: () => ipcRenderer.invoke('ensure-md-render-workspace'),
+  createLocalProjectFile: (payload) => ipcRenderer.invoke('create-local-project-file', payload),
+  createLocalProjectFolder: (payload) => ipcRenderer.invoke('create-local-project-folder', payload),
+  renameLocalProjectEntry: (payload) => ipcRenderer.invoke('rename-local-project-entry', payload),
+  deleteLocalProjectEntry: (payload) => ipcRenderer.invoke('delete-local-project-entry', payload),
 
   // 通用 IPC：渲染进程 → 主进程
   invoke: (channel, ...args) => {

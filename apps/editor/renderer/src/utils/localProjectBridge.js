@@ -6,6 +6,10 @@ const hasDirectBridge = () => {
   return typeof window !== 'undefined' && typeof window.electronAPI?.openLocalProject === 'function';
 };
 
+const hasMdRenderWorkspaceBridge = () => {
+  return typeof window !== 'undefined' && typeof window.electronAPI?.ensureMdRenderWorkspace === 'function';
+};
+
 const hasLegacyBridge = () => {
   return typeof window !== 'undefined' && typeof window.electronAPI?.invoke === 'function';
 };
@@ -96,4 +100,39 @@ export async function saveLocalProjectFile(payload) {
     filePath,
     content: payload?.content ?? '',
   });
+}
+
+export async function ensureMdRenderWorkspace() {
+  if (!hasMdRenderWorkspaceBridge()) {
+    return null;
+  }
+  return window.electronAPI.ensureMdRenderWorkspace();
+}
+
+export async function createLocalProjectFileOnDisk(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFile === 'function') {
+    return window.electronAPI.createLocalProjectFile(payload);
+  }
+  throw new Error('本地新建文件仅支持桌面版应用');
+}
+
+export async function createLocalProjectFolderOnDisk(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFolder === 'function') {
+    return window.electronAPI.createLocalProjectFolder(payload);
+  }
+  throw new Error('本地新建文件夹仅支持桌面版应用');
+}
+
+export async function renameLocalProjectEntryOnDisk(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.renameLocalProjectEntry === 'function') {
+    return window.electronAPI.renameLocalProjectEntry(payload);
+  }
+  throw new Error('本地重命名仅支持桌面版应用');
+}
+
+export async function deleteLocalProjectEntryOnDisk(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.deleteLocalProjectEntry === 'function') {
+    return window.electronAPI.deleteLocalProjectEntry(payload);
+  }
+  throw new Error('本地删除仅支持桌面版应用');
 }

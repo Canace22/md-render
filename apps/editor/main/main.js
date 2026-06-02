@@ -1,7 +1,15 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { readLocalProjectWorkspace, saveLocalProjectFile } from './localProject.js';
+import {
+  readLocalProjectWorkspace,
+  saveLocalProjectFile,
+  ensureMdRenderWorkspaceData,
+  createLocalProjectFile,
+  createLocalProjectFolder,
+  renameLocalProjectEntry,
+  deleteLocalProjectEntry,
+} from './localProject.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +46,29 @@ ipcMain.handle('open-local-project', async () => {
 ipcMain.handle('save-local-project-file', async (_event, payload = {}) => {
   const { projectRootPath, relativePath, content } = payload;
   await saveLocalProjectFile(projectRootPath, relativePath, content);
+  return { ok: true };
+});
+
+ipcMain.handle('ensure-md-render-workspace', async () => ensureMdRenderWorkspaceData());
+
+ipcMain.handle('create-local-project-file', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath, content } = payload;
+  return createLocalProjectFile(projectRootPath, relativePath, content);
+});
+
+ipcMain.handle('create-local-project-folder', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath } = payload;
+  return createLocalProjectFolder(projectRootPath, relativePath);
+});
+
+ipcMain.handle('rename-local-project-entry', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath, newRelativePath } = payload;
+  return renameLocalProjectEntry(projectRootPath, relativePath, newRelativePath);
+});
+
+ipcMain.handle('delete-local-project-entry', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath } = payload;
+  await deleteLocalProjectEntry(projectRootPath, relativePath);
   return { ok: true };
 });
 

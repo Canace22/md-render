@@ -14,6 +14,14 @@ import {
   nameExists,
   buildUniqueName,
   resolveTargetFolderId,
+  resolveLocalProjectCreateTarget,
+  buildUniqueNameInFolder,
+  createLocalProjectFileNode,
+  createLocalProjectFolderNode,
+  stripLocalProjectMounts,
+  mergeProjectsChildren,
+  remapDiskNodeAfterRename,
+  findNodeIdByRelativePath,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 
@@ -380,6 +388,22 @@ export const useEditorStore = create(
         });
       },
 
+      /** 静默初始化 MdRender/Projects：侧边栏只展示 Projects 下已有内容 */
+      hydrateProjectsWorkspace: ({ projectRootPath, projectsChildren }) => {
+        if (!projectRootPath) return;
+
+        const { workspace } = get();
+        const cleaned = stripLocalProjectMounts(workspace);
+        const nextWorkspace = mergeProjectsChildren(cleaned, projectsChildren ?? []);
+
+        persistWorkspace(nextWorkspace);
+        set({
+          workspace: nextWorkspace,
+          projectRootPath,
+          storageMode: 'local',
+        });
+      },
+
       addFile: (contextNodeId) => {
         const { workspace, selectedId } = get();
         const fileId = createId('file');
@@ -414,6 +438,7 @@ export const useEditorStore = create(
         if (!trimmed) return false;
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
+        if (node.projectRootPath && node.relativePath) return false;
         if (nameExists(workspace, trimmed) && trimmed !== node.name) return false;
         const updated = updateNodeById(workspace, targetId, (current) => ({
           ...current,
@@ -424,12 +449,71 @@ export const useEditorStore = create(
         return true;
       },
 
+      replaceDiskBackedNode: (targetId, { name, relativePath: newRelativePath, updatedAt }) => {
+        const { workspace, selectedId } = get();
+        const node = findNodeById(workspace, targetId);
+        if (!node?.projectRootPath || !node.relativePath) return false;
+
+        const oldRelativePath = node.relativePath;
+        const updated = updateNodeById(workspace, targetId, (current) => (
+          remapDiskNodeAfterRename(current, oldRelativePath, newRelativePath, name)
+        ));
+
+        const newRootId = `project:${node.projectRootPath}:${node.type}:${newRelativePath}`;
+        let nextSelectedId = selectedId;
+        if (selectedId === targetId) {
+          nextSelectedId = newRootId;
+        } else {
+          const selectedNode = findNodeById(workspace, selectedId);
+          if (selectedNode?.relativePath?.startsWith(`${oldRelativePath}/`)) {
+            const nextRelativePath = `${newRelativePath}${selectedNode.relativePath.slice(oldRelativePath.length)}`;
+            nextSelectedId = findNodeIdByRelativePath(updated, nextRelativePath) ?? nextSelectedId;
+          }
+        }
+
+        const patch = { workspace: updated, selectedId: nextSelectedId };
+        if (updatedAt != null) {
+          const renamedNode = findNodeById(updated, newRootId);
+          if (renamedNode?.type === 'file') {
+            patch.markdown = renamedNode.content ?? get().markdown;
+          }
+        }
+
+        persistWorkspace(updated);
+        set(patch);
+        return true;
+      },
+
       deleteNode: (nodeId) => {
         const { workspace, selectedId } = get();
         const targetId = nodeId ?? selectedId;
         if (targetId === 'root') return false;
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
+        if (node.projectRootPath && node.relativePath) return false;
+
+        const result = removeNodeById(workspace, targetId);
+        if (!result.removed) return false;
+
+        const nextWorkspace = result.node;
+        const nextFileId = findFirstFileId(nextWorkspace);
+        const nextNode = findNodeById(nextWorkspace, nextFileId ?? nextWorkspace.id);
+        persistWorkspace(nextWorkspace);
+        set({
+          workspace: nextWorkspace,
+          selectedId: nextFileId ?? nextWorkspace.id,
+          markdown: nextNode?.type === 'file' ? (nextNode.content ?? '') : '',
+          surface: nextNode?.type === 'folder' ? 'folder' : 'paper',
+        });
+        return true;
+      },
+
+      removeDiskBackedNode: (nodeId) => {
+        const { workspace, selectedId } = get();
+        const targetId = nodeId ?? selectedId;
+        if (targetId === 'root') return false;
+        const node = findNodeById(workspace, targetId);
+        if (!node?.projectRootPath || !node.relativePath) return false;
 
         const result = removeNodeById(workspace, targetId);
         if (!result.removed) return false;
@@ -478,6 +562,23 @@ export const useEditorStore = create(
           selectedId: initialId,
           markdown: selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '',
           surface: selectedNode?.type === 'folder' ? 'folder' : 'paper',
+          activeBlockId: null,
+          activeBlockDraft: '',
+        });
+        return true;
+      },
+
+      insertLocalProjectNode: (parentFolderId, node) => {
+        if (!node || !parentFolderId) return false;
+
+        const { workspace } = get();
+        const nextWorkspace = addChildNode(workspace, parentFolderId, node);
+        persistWorkspace(nextWorkspace);
+        set({
+          workspace: nextWorkspace,
+          selectedId: node.id,
+          markdown: node.type === 'file' ? (node.content ?? '') : '',
+          surface: node.type === 'folder' ? 'folder' : 'paper',
           activeBlockId: null,
           activeBlockDraft: '',
         });

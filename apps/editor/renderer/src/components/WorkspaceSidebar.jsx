@@ -46,6 +46,12 @@ const TreeNode = ({
   onAddFolder,
   onRename,
   onDelete,
+  renamingNodeId,
+  renameDraft,
+  onRenameDraftChange,
+  onStartRename,
+  onCommitRename,
+  onCancelRename,
 }) => {
   const isFolder = node.type === 'folder';
   const isActive = node.id === selectedId;
@@ -53,11 +59,13 @@ const TreeNode = ({
   const isLocalProjectNode = Boolean(node.projectRootPath);
   const isLocalProjectRoot = Boolean(node.localProjectRoot);
   const channelLabel = getFolderChannelLabel(node);
-  const showStructureActions = allowStructureActions && !isLocalProjectNode;
+  const showStructureActions = allowStructureActions && !isLocalProjectRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const [menuOpen, setMenuOpen] = useState(false);
   const [folderOpen, setFolderOpen] = useState(true);
   const menuRef = useRef(null);
+  const renameInputRef = useRef(null);
+  const isRenaming = renamingNodeId === node.id;
 
   const indentStyle = { paddingLeft: `${depth * 16 + 8}px` };
   const nodeClass = `tree-node ${isFolder ? 'folder' : 'file'}${isActive ? ' active' : ''}`;
@@ -72,6 +80,12 @@ const TreeNode = ({
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!isRenaming || !renameInputRef.current) return;
+    renameInputRef.current.focus();
+    renameInputRef.current.select();
+  }, [isRenaming]);
 
   const handleMenuClick = (e) => {
     e.stopPropagation();
@@ -104,7 +118,30 @@ const TreeNode = ({
                   : <Folder size={16} strokeWidth={1.5} />)
               : <File size={16} strokeWidth={1.5} />}
           </span>
-          <span className="tree-node-text">{node.name}</span>
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="tree-node-rename-input"
+              value={renameDraft}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => onRenameDraftChange(e.target.value)}
+              onBlur={() => onCommitRename()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onCommitRename();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  onCancelRename();
+                }
+              }}
+              aria-label="重命名"
+            />
+          ) : (
+            <span className="tree-node-text">{node.name}</span>
+          )}
           {channelLabel && (
             <span className="tree-node-channel-tag" title={`来源：${channelLabel}`}>
               {channelLabel}
@@ -118,7 +155,7 @@ const TreeNode = ({
                 <button
                   type="button"
                   className="tree-node-action-icon"
-                  onClick={(e) => { e.stopPropagation(); onRename(node.id); }}
+                  onClick={(e) => { e.stopPropagation(); onStartRename(node.id, node.name); }}
                   disabled={isRoot}
                   title="重命名"
                   aria-label="重命名"
@@ -185,6 +222,12 @@ const TreeNode = ({
               onAddFolder={onAddFolder}
               onRename={onRename}
               onDelete={onDelete}
+              renamingNodeId={renamingNodeId}
+              renameDraft={renameDraft}
+              onRenameDraftChange={onRenameDraftChange}
+              onStartRename={onStartRename}
+              onCommitRename={onCommitRename}
+              onCancelRename={onCancelRename}
             />
           ))}
         </div>
@@ -234,9 +277,43 @@ const WorkspaceSidebar = ({
   const [activeTag, setActiveTag] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [resizing, setResizing] = useState(false);
+  const [renamingNodeId, setRenamingNodeId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const isSearching = Boolean(searchKeyword.trim());
   const allowStructureActions = true;
+
+  const handleStartRename = (nodeId, currentName) => {
+    setRenamingNodeId(nodeId);
+    setRenameDraft(currentName);
+  };
+
+  const handleCancelRename = () => {
+    setRenamingNodeId(null);
+    setRenameDraft('');
+  };
+
+  const handleCommitRename = async () => {
+    if (!renamingNodeId) return;
+    const trimmed = renameDraft.trim();
+    if (!trimmed) {
+      handleCancelRename();
+      return;
+    }
+    const ok = await onRename(renamingNodeId, trimmed);
+    if (ok) {
+      handleCancelRename();
+    }
+  };
+
+  const renameHandlers = {
+    renamingNodeId,
+    renameDraft,
+    onRenameDraftChange: setRenameDraft,
+    onStartRename: handleStartRename,
+    onCommitRename: handleCommitRename,
+    onCancelRename: handleCancelRename,
+  };
 
   // 视图优先级：搜索 > 标签筛选 > 正常
   const filteredWorkspace = isSearching
@@ -488,6 +565,7 @@ const WorkspaceSidebar = ({
                   onDelete,
                   allowStructureActions,
                   onRemoveLocalProject,
+                  ...renameHandlers,
                 })
               : (
                 <div className="workspace-tree-empty" data-testid="search-empty">

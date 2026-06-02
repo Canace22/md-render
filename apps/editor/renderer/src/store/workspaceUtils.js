@@ -202,6 +202,171 @@ export function buildUniqueName(workspace, baseName, extension = '') {
   return candidate;
 }
 
+export function buildUniqueNameInFolder(folder, baseName, extension = '') {
+  const siblings = folder?.type === 'folder' ? (folder.children ?? []) : [];
+  let candidate = `${baseName}${extension}`;
+  let index = 1;
+  const existsAmongSiblings = (name) => siblings.some((child) => child.name === name);
+  while (existsAmongSiblings(candidate)) {
+    candidate = `${baseName} ${index}${extension}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+export function nameExistsAmongSiblings(parent, name, excludeId = null) {
+  const siblings = parent?.type === 'folder' ? (parent.children ?? []) : [];
+  return siblings.some((child) => child.id !== excludeId && child.name === name);
+}
+
+export function replaceRelativePathBasename(relativePath, nextBaseName) {
+  const parts = String(relativePath ?? '').split('/').filter(Boolean);
+  if (parts.length === 0) return nextBaseName;
+  parts[parts.length - 1] = nextBaseName;
+  return parts.join('/');
+}
+
+export function ensureRenameFileName(inputName, oldFileName) {
+  const trimmed = String(inputName ?? '').trim();
+  if (!trimmed) return trimmed;
+  const extMatch = String(oldFileName ?? '').match(/(\.[^./\\]+)$/);
+  const ext = extMatch?.[1] ?? '';
+  if (ext && !trimmed.toLowerCase().endsWith(ext.toLowerCase())) {
+    return `${trimmed}${ext}`;
+  }
+  return trimmed;
+}
+
+export function remapDiskNodeAfterRename(node, oldRelativePath, newRelativePath, newName) {
+  if (!node?.projectRootPath || !node.relativePath) return node;
+
+  const nextRelativePath = node.relativePath === oldRelativePath
+    ? newRelativePath
+    : node.relativePath.startsWith(`${oldRelativePath}/`)
+      ? `${newRelativePath}${node.relativePath.slice(oldRelativePath.length)}`
+      : node.relativePath;
+
+  const nextName = node.relativePath === oldRelativePath ? newName : node.name;
+  const next = {
+    ...node,
+    name: nextName,
+    relativePath: nextRelativePath,
+    id: `project:${node.projectRootPath}:${node.type}:${nextRelativePath}`,
+  };
+
+  if (node.type === 'folder' && Array.isArray(node.children)) {
+    next.children = node.children.map((child) => (
+      remapDiskNodeAfterRename(child, oldRelativePath, newRelativePath, newName)
+    ));
+  }
+
+  return next;
+}
+
+export function findNodeIdByRelativePath(node, relativePath) {
+  if (!node) return null;
+  if (node.relativePath === relativePath) return node.id;
+  if (node.type === 'folder' && Array.isArray(node.children)) {
+    for (const child of node.children) {
+      const found = findNodeIdByRelativePath(child, relativePath);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+const joinRelativePath = (parentRelativePath, name) => {
+  if (!parentRelativePath) return name;
+  return `${parentRelativePath}/${name}`;
+};
+
+export function findLocalProjectRoot(workspace) {
+  if (!workspace) return null;
+  if (workspace.localProjectRoot) return workspace;
+  if (workspace.type !== 'folder' || !Array.isArray(workspace.children)) return null;
+  for (const child of workspace.children) {
+    const found = findLocalProjectRoot(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function findProjectsFolder(localProjectRoot) {
+  if (!localProjectRoot || localProjectRoot.type !== 'folder') return null;
+  return (localProjectRoot.children ?? []).find(
+    (child) => child.type === 'folder' && (child.relativePath === 'Projects' || child.name === 'Projects'),
+  ) ?? null;
+}
+
+export function stripLocalProjectMounts(workspace) {
+  if (!workspace?.children) return workspace;
+  return {
+    ...workspace,
+    children: workspace.children.filter((child) => !child.localProjectRoot),
+  };
+}
+
+export function mergeProjectsChildren(workspace, projectsChildren) {
+  if (!Array.isArray(projectsChildren) || projectsChildren.length === 0) return workspace;
+  const existingIds = new Set((workspace.children ?? []).map((child) => child.id));
+  const toAdd = projectsChildren.filter((child) => !existingIds.has(child.id));
+  if (toAdd.length === 0) return workspace;
+  return {
+    ...workspace,
+    children: [...(workspace.children ?? []), ...toAdd],
+  };
+}
+
+/**
+ * 解析磁盘新建目标：默认落在 MdRender/Projects，选中用户目录则在其下创建。
+ */
+export function resolveLocalProjectCreateTarget(workspace, contextNodeId, projectRootPath) {
+  if (!projectRootPath || !workspace) return null;
+
+  const folderId = resolveTargetFolderId(workspace, contextNodeId);
+  const folder = findNodeById(workspace, folderId);
+
+  if (folder?.projectRootPath === projectRootPath && folder.type === 'folder' && folder.id !== 'root') {
+    return {
+      parentFolderId: folder.id,
+      projectRootPath,
+      parentRelativePath: folder.relativePath ?? 'Projects',
+      parentFolder: folder,
+    };
+  }
+
+  const root = findNodeById(workspace, workspace.id) ?? workspace;
+  return {
+    parentFolderId: root.id,
+    projectRootPath,
+    parentRelativePath: 'Projects',
+    parentFolder: root,
+  };
+}
+
+export function createLocalProjectFileNode(projectRootPath, relativePath, name, content = '') {
+  return {
+    id: `project:${projectRootPath}:file:${relativePath}`,
+    name,
+    type: 'file',
+    relativePath,
+    projectRootPath,
+    content,
+    updatedAt: Date.now(),
+  };
+}
+
+export function createLocalProjectFolderNode(projectRootPath, relativePath, name) {
+  return {
+    id: `project:${projectRootPath}:folder:${relativePath}`,
+    name,
+    type: 'folder',
+    relativePath,
+    projectRootPath,
+    children: [],
+  };
+}
+
 export function addChildNode(node, folderId, childNode) {
   if (!node) return node;
   if (node.id === folderId && node.type === 'folder') {
