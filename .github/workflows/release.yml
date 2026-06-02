@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-mac:
+    name: macOS 发布
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Electron app
+        run: pnpm electron:build
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Check build output
+        run: |
+          release_dir="apps/editor/release"
+          if [ ! -d "$release_dir" ]; then
+            echo "Error: release directory not found"
+            exit 1
+          fi
+          ls -la "$release_dir/"
+          if ! ls "$release_dir"/*.dmg >/dev/null 2>&1; then
+            echo "Error: dmg file not found"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/editor/release/*.dmg
+          generate_release_notes: true
+          body: |
+            ## 下载
+
+            下载下方 **Assets** 中的 `.dmg` 安装 macOS 桌面版。
+
+            ## macOS 安装说明
+
+            CI 构建未做 Apple 代码签名。若系统提示「应用程序已损坏，无法打开」：
+
+            1. 打开 **系统设置 → 隐私与安全性**，点击「仍要打开」；或
+            2. 在终端执行（路径按实际安装位置调整）：
+               ```bash
+               xattr -dr com.apple.quarantine "/Applications/MD Render.app"
+               ```
+
+            网页版见仓库 **Deployments → github-pages** 或 README 中的 Pages 链接。
