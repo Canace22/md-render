@@ -86,3 +86,4 @@ flowchart TD
 | `md-render-store` | 改全局状态（zustand）的规范 |
 | `md-render-wechat` | 微信公众号格式化的规范 |
 | `skill-harvest` | 判断并生成新 skill（本进化机制的执行器） |
+| `pre-commit-secrets` | 提交/push 前扫描 API key、.env、私钥等敏感信息 |
