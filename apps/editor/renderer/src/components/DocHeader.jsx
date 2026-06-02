@@ -1,11 +1,8 @@
-import { Cloud } from 'lucide-react';
 import { countWords } from '../utils/wordCount.js';
 import TagBar from './TagBar.jsx';
 
 export default function DocHeader({
   selectedFile,
-  onOpenNotion,
-  notionLinked,
   onTagsChange,
   titleEditable = true,
   isTitleEditing,
@@ -74,20 +71,6 @@ export default function DocHeader({
           <span className="right-area-doc-wordcount" data-testid="doc-wordcount">
             {wordCount} 字
           </span>
-        )}
-      </div>
-      <div className="right-area-actions">
-        {onOpenNotion && (
-          <button
-            type="button"
-            className={`doc-header-notion-btn ${notionLinked ? 'is-linked' : ''}`}
-            data-testid="open-notion-from-header"
-            onClick={onOpenNotion}
-            title="Notion 同步"
-          >
-            <Cloud size={16} strokeWidth={1.6} />
-            <span>Notion</span>
-          </button>
         )}
       </div>
     </div>

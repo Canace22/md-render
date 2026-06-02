@@ -375,7 +375,7 @@ const WorkspaceSidebar = ({
           </button>
 
           {/* 最近编辑 */}
-          {recentFiles.length > 0 && (
+          {/* {recentFiles.length > 0 && (
             <div className="notebook-recent" data-testid="recent-section">
               <span className="sidebar-section-title notebook-recent-title">最近</span>
               <div className="notebook-recent-list">
@@ -393,7 +393,7 @@ const WorkspaceSidebar = ({
                 ))}
               </div>
             </div>
-          )}
+          )} */}
 
           {/* 标签筛选 */}
           {!isSearching && allTags.length > 0 && (

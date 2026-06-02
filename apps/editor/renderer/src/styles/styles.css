@@ -339,7 +339,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-xs);
-    padding: 0 var(--space-l, 24px) var(--space-s);
+    padding: var(--space-s) var(--space-l, 24px);
 }
 
 .tag-bar-icon {
