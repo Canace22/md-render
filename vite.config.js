@@ -1,31 +1,43 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import electron from 'vite-plugin-electron/simple';
 
-// Infer base path for GitHub Pages project sites, e.g. /<repo>/
-// If GITHUB_REPOSITORY exists (on Actions), extract repo name; locally stays '/'
-const inferBaseFromRepo = () => {
+// 是否以 Electron 模式运行（pnpm electron:dev / electron:build）
+const isElectron = !!process.env.ELECTRON;
+
+// GitHub Pages 部署时推断 base 路径
+const inferBase = () => {
+  if (isElectron) return './';
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) return '/';
-  const parts = repo.split('/');
-  const repoName = parts[1] || '';
+  const repoName = repo.split('/')[1] || '';
   return repoName ? `/${repoName}/` : '/';
 };
 
 export default defineConfig({
-  base: inferBaseFromRepo(),
-  plugins: [react()],
+  base: inferBase(),
+  plugins: [
+    react(),
+    // 仅在 Electron 模式下启用插件
+    isElectron && electron({
+      main: {
+        entry: 'electron/main.js',
+      },
+      preload: {
+        input: 'electron/preload.js',
+      },
+    }),
+  ].filter(Boolean),
   server: {
     port: 3000,
-    open: true,
+    // Electron 模式下不自动打开浏览器
+    open: !isElectron,
     proxy: {
-      // 将 /notion-api/* 代理到 https://api.notion.com/*，解决浏览器 CORS 限制
-      // 仅在本地开发（npm run dev）时生效；生产部署（GitHub Pages）不支持 Notion 同步
       '/notion-api': {
         target: 'https://api.notion.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/notion-api/, ''),
       },
     },
-  }
+  },
 });
-

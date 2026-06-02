@@ -1,0 +1,171 @@
+import { app, BrowserWindow, Menu, Tray, nativeImage, shell } from 'electron';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+let store = null;
+let mainWindow = null;
+let tray = null;
+
+// ---- 窗口状态记忆（延迟初始化） ----
+async function getStore() {
+  if (store) return store;
+  const { default: Store } = await import('electron-store');
+  store = new Store({
+    defaults: {
+      windowBounds: { width: 1200, height: 800 },
+      windowPosition: null,
+      windowMaximized: false,
+    },
+  });
+  return store;
+}
+
+async function createWindow() {
+  const s = await getStore();
+  const { width, height } = s.get('windowBounds');
+  const position = s.get('windowPosition');
+  const maximized = s.get('windowMaximized');
+
+  mainWindow = new BrowserWindow({
+    width,
+    height,
+    ...(position ? { x: position.x, y: position.y } : {}),
+    title: 'MD Render',
+    titleBarStyle: 'hiddenInset',
+    webPreferences: {
+      preload: path.join(__dirname, '../dist-electron/preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  if (maximized) mainWindow.maximize();
+
+  // vite-plugin-electron 在 dev 时自动注入 VITE_DEV_SERVER_URL
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  const saveWindowState = () => {
+    if (!mainWindow) return;
+    s.set('windowMaximized', mainWindow.isMaximized());
+    if (!mainWindow.isMaximized()) {
+      s.set('windowBounds', mainWindow.getBounds());
+      const [x, y] = mainWindow.getPosition();
+      s.set('windowPosition', { x, y });
+    }
+  };
+
+  mainWindow.on('resize', saveWindowState);
+  mainWindow.on('move', saveWindowState);
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
+
+// ---- 托盘图标 ----
+function createTray() {
+  const size = 16;
+  const canvas = Buffer.alloc(size * size * 4, 0);
+  for (let i = 0; i < size * size; i++) {
+    canvas[i * 4 + 3] = 180;
+  }
+  const icon = nativeImage.createFromBuffer(canvas, { width: size, height: size });
+  icon.setTemplateImage(true);
+
+  tray = new Tray(icon);
+  tray.setToolTip('MD Render');
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+    } else {
+      createWindow();
+    }
+  });
+}
+
+// ---- 应用菜单 ----
+function createMenu() {
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { label: '文件', submenu: [{ role: 'close' }] },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' }, { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize' }, { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// ---- preload 热重载 ----
+process.on('message', (msg) => {
+  if (msg === 'electron-vite&type=hot-reload') {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.reload();
+    }
+  }
+});
+
+// ---- 生命周期 ----
+app.whenReady().then(async () => {
+  console.log('[electron] app ready');
+  createMenu();
+  createTray();
+  await createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+}).catch(err => {
+  console.error('[electron] startup error:', err);
+  app.quit();
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
