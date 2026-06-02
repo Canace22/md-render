@@ -9,7 +9,6 @@ import {
   Github,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   FileText,
   Settings,
   Cloud,
@@ -104,13 +103,6 @@ const TreeNode = ({
               : <File size={16} strokeWidth={1.5} />}
           </span>
           <span className="tree-node-text">{node.name}</span>
-          {isFolder && (
-            <ChevronDown
-              size={12}
-              strokeWidth={1.5}
-              className={`tree-node-chevron ${folderOpen ? 'open' : ''}`}
-            />
-          )}
         </button>
         {(showStructureActions || showRemoveProject) && (
           <div className="tree-node-actions" ref={menuRef}>

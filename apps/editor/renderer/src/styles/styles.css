@@ -1100,18 +1100,6 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     font-weight: 600;
 }
 
-.tree-node-chevron {
-    margin-left: auto;
-    flex-shrink: 0;
-    opacity: 0.5;
-    transition: transform 0.18s ease;
-    transform: rotate(-90deg);
-}
-
-.tree-node-chevron.open {
-    transform: rotate(0deg);
-}
-
 .tree-node-children {
     border-left: 1px solid var(--color-border);
     margin-left: var(--space-md);
