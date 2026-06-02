@@ -24,6 +24,7 @@ const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
 const SURFACE_STORAGE_KEY = 'md-renderer-surface';
 const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
 const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
+const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
 
 const safeParseJSON = (value, fallback) => {
   if (!value) return fallback;
@@ -47,6 +48,7 @@ const editorStorage = {
       const notionToken = window.localStorage.getItem(NOTION_TOKEN_STORAGE_KEY) ?? '';
       const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
       const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
+      const notionDatabaseId = window.localStorage.getItem(NOTION_DATABASE_ID_STORAGE_KEY) ?? '';
 
       const parsedWorkspace = safeParseJSON(workspaceRaw, null);
       // 给老文件补 updatedAt，让「最近」区立即有内容（一次性迁移）
@@ -73,6 +75,7 @@ const editorStorage = {
               : 'paper',
           notionToken: typeof notionToken === 'string' ? notionToken : '',
           notionFilePages: notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
+          notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
         },
         version: 0,
       };
@@ -108,6 +111,9 @@ const editorStorage = {
           JSON.stringify(state.notionFilePages),
         );
       }
+      if (state.notionDatabaseId != null) {
+        window.localStorage.setItem(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -126,6 +132,7 @@ const persistConfig = {
     surface: state.surface,
     notionToken: state.notionToken,
     notionFilePages: state.notionFilePages,
+    notionDatabaseId: state.notionDatabaseId,
   }),
 };
 
@@ -150,10 +157,12 @@ export const useEditorStore = create(
       surface: 'paper',
       notionToken: '',
       notionFilePages: {},
+      notionDatabaseId: '',
       activeBlockId: null,
       activeBlockDraft: '',
 
       setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
+      setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),
       setFileNotionPageId: (fileId, pageId) =>
         set((state) => {
           const next = { ...(state.notionFilePages ?? {}) };
@@ -164,6 +173,11 @@ export const useEditorStore = create(
           }
           return { notionFilePages: next };
         }),
+      /** 批量合并 notionFilePages 映射（用于批量同步后注册新映射） */
+      mergeNotionFilePages: (newMappings) =>
+        set((state) => ({
+          notionFilePages: { ...(state.notionFilePages ?? {}), ...newMappings },
+        })),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -299,6 +313,26 @@ export const useEditorStore = create(
           activeBlockId: null,
           activeBlockDraft: '',
         });
+      },
+
+      insertWorkspaceNode: (node) => {
+        if (!node) return false;
+
+        const { workspace } = get();
+        const nextWorkspace = addChildNode(workspace, workspace.id, node);
+        const initialId = findFirstFileId(node) ?? node.id;
+        const selectedNode = findNodeById(nextWorkspace, initialId);
+
+        persistWorkspace(nextWorkspace);
+        set({
+          workspace: nextWorkspace,
+          selectedId: initialId,
+          markdown: selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '',
+          surface: selectedNode?.type === 'folder' ? 'folder' : 'paper',
+          activeBlockId: null,
+          activeBlockDraft: '',
+        });
+        return true;
       },
 
       startEditingBlock: (token) => {

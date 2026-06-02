@@ -127,6 +127,110 @@ export async function updatePageBlocks(pageId, notionBlocks, token) {
 }
 
 /**
+ * 查询数据库中的所有页面（处理分页）
+ * 返回页面对象数组，每个包含 id、properties 等
+ */
+export async function queryDatabase(databaseId, token) {
+  const id = cleanPageId(databaseId);
+  if (!id) throw new Error('无效的数据库 ID');
+
+  const pages = [];
+  let startCursor = undefined;
+
+  do {
+    const body = { page_size: 100 };
+    if (startCursor) body.start_cursor = startCursor;
+
+    const res = await fetch(`${NOTION_PROXY_BASE}/databases/${id}/query`, {
+      method: 'POST',
+      headers: makeHeaders(token),
+      body: JSON.stringify(body),
+    });
+    const data = await handleResponse(res);
+    pages.push(...(data.results ?? []));
+    startCursor = data.has_more ? data.next_cursor : null;
+  } while (startCursor);
+
+  return pages;
+}
+
+/**
+ * 获取数据库标题属性名。不同 Notion 数据库可能不叫 Name。
+ */
+export async function fetchDatabaseTitlePropertyName(databaseId, token) {
+  const id = cleanPageId(databaseId);
+  if (!id) throw new Error('无效的数据库 ID');
+
+  const dbRes = await fetch(`${NOTION_PROXY_BASE}/databases/${id}`, {
+    headers: makeHeaders(token),
+  });
+  const dbInfo = await handleResponse(dbRes);
+
+  for (const [name, prop] of Object.entries(dbInfo.properties ?? {})) {
+    if (prop.type === 'title') {
+      return name;
+    }
+  }
+
+  throw new Error('数据库缺少标题属性');
+}
+
+/**
+ * 在数据库中创建新页面
+ * @param {string} databaseId - 数据库 ID
+ * @param {string} title - 页面标题
+ * @param {Array} children - Notion blocks 数组（最多 100 个）
+ * @param {string} token
+ * @param {string} titlePropName - 数据库标题属性名
+ */
+export async function createDatabasePage(databaseId, title, children, token, titlePropName) {
+  const id = cleanPageId(databaseId);
+  if (!id) throw new Error('无效的数据库 ID');
+  const resolvedTitlePropName = titlePropName || (await fetchDatabaseTitlePropertyName(id, token));
+
+  const CHUNK_SIZE = 100;
+  const firstChunk = children.slice(0, CHUNK_SIZE);
+
+  const res = await fetch(`${NOTION_PROXY_BASE}/pages`, {
+    method: 'POST',
+    headers: makeHeaders(token),
+    body: JSON.stringify({
+      parent: { database_id: id },
+      properties: {
+        [resolvedTitlePropName]: {
+          title: [{ type: 'text', text: { content: title } }],
+        },
+      },
+      children: firstChunk,
+    }),
+  });
+  const page = await handleResponse(res);
+
+  // 追加剩余块
+  for (let i = CHUNK_SIZE; i < children.length; i += CHUNK_SIZE) {
+    const chunk = children.slice(i, i + CHUNK_SIZE);
+    const appendRes = await fetch(`${NOTION_PROXY_BASE}/blocks/${page.id}/children`, {
+      method: 'PATCH',
+      headers: makeHeaders(token),
+      body: JSON.stringify({ children: chunk }),
+    });
+    await handleResponse(appendRes);
+  }
+
+  return page;
+}
+
+/**
+ * 获取页面的子页面列表（通过 block children 中的 child_page 类型）
+ */
+export async function fetchChildPages(pageId, token) {
+  const blocks = await fetchBlocks(pageId, token);
+  return blocks
+    .filter((b) => b.type === 'child_page')
+    .map((b) => ({ id: b.id, title: b.child_page?.title ?? '无标题' }));
+}
+
+/**
  * 判断当前是否处于本地开发模式（Notion 代理仅在 localhost 可用）
  */
 export function isLocalDevMode() {

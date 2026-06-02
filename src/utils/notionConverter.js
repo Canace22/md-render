@@ -173,6 +173,61 @@ function blockToLines(block, depth, numberedCounters) {
     case 'column':
       return []; // 由 column_list 统一处理
 
+    case 'child_page': {
+      const title = block.child_page?.title ?? '无标题';
+      const lines = [`${indent}- 📄 ${title}`];
+      if (children.length) {
+        lines.push(blocksToMarkdown(children, depth + 1, {}));
+      }
+      return lines;
+    }
+
+    case 'child_database': {
+      const title = block.child_database?.title ?? '无标题数据库';
+      return [`${indent}- 📊 ${title}`];
+    }
+
+    case 'link_to_page': {
+      const ref = block.link_to_page;
+      const id = ref?.page_id ?? ref?.database_id ?? '';
+      return id ? [`${indent}[链接页面](https://notion.so/${id.replace(/-/g, '')})`] : [];
+    }
+
+    case 'synced_block': {
+      // 同步块：渲染其子内容
+      if (children.length) {
+        return [blocksToMarkdown(children, depth, {})];
+      }
+      return [];
+    }
+
+    case 'equation': {
+      const expr = block.equation?.expression ?? '';
+      return expr ? [`$$${expr}$$`] : [];
+    }
+
+    case 'embed': {
+      const url = block.embed?.url ?? '';
+      return url ? [`[嵌入](${url})`] : [];
+    }
+
+    case 'file': {
+      const url = block.file?.file?.url ?? block.file?.external?.url ?? '';
+      const caption = richTextToMd(block.file?.caption ?? []);
+      return url ? [`[${caption || '文件'}](${url})`] : [];
+    }
+
+    case 'pdf': {
+      const url = block.pdf?.file?.url ?? block.pdf?.external?.url ?? '';
+      return url ? [`[PDF](${url})`] : [];
+    }
+
+    case 'table_of_contents':
+      return [`${indent}[TOC]`];
+
+    case 'breadcrumb':
+      return []; // 面包屑无实际文本内容
+
     default:
       return [];
   }

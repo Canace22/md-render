@@ -27,6 +27,7 @@ import { copyToWeChat } from '../utils/wechatCopy';
 import { getTemplateById } from '../utils/wechatTemplates';
 import { blocksToMarkdown, markdownToBlocks } from '../utils/notionConverter.js';
 import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../utils/notionService.js';
+import { batchPull, batchPush } from '../utils/notionBatchSync.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
@@ -87,6 +88,17 @@ const BLOCKNOTE_OPTIONS = {
   },
 };
 
+const formatBatchFailures = (failed, fallbackName = '项目') => {
+  const items = failed ?? [];
+  if (!items.length) return '';
+  const preview = items
+    .slice(0, 3)
+    .map((item) => item.fileName || item.title || fallbackName)
+    .join('、');
+  const suffix = items.length > 3 ? ' 等' : '';
+  return `${items.length} 项失败：${preview}${suffix}`;
+};
+
 function MarkdownEditor() {
   const {
     workspace,
@@ -98,12 +110,15 @@ function MarkdownEditor() {
     surface,
     notionToken,
     notionFilePages,
+    notionDatabaseId,
     setTheme,
     setCopyStyle,
     setSurface,
     setNotionToken,
+    setNotionDatabaseId,
     setFileNotionPageId,
     setFileTags,
+    mergeNotionFilePages,
     toggleSidebarCollapsed,
     updateSelectedFileContent,
     selectNode,
@@ -112,6 +127,7 @@ function MarkdownEditor() {
     applyRename,
     deleteNode,
     importWorkspace,
+    insertWorkspaceNode,
     syncMarkdownFromSelectedFile,
     syncSelectedIdFromWorkspace,
   } = useEditorStore();
@@ -145,6 +161,9 @@ function MarkdownEditor() {
   const [notionError, setNotionError] = useState('');
   const [notionPullLoading, setNotionPullLoading] = useState(false);
   const [notionPushLoading, setNotionPushLoading] = useState(false);
+  const [batchPullLoading, setBatchPullLoading] = useState(false);
+  const [batchPushLoading, setBatchPushLoading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(null);
 
   const initialContent = useMemo(() => {
     const sourceMarkdown = normalizeMarkdown(markdown);
@@ -337,6 +356,68 @@ function MarkdownEditor() {
     }
   }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, markdown, updateSelectedFileContent]);
 
+  const handleBatchPull = useCallback(async () => {
+    if (!notionLocalDev || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
+    setNotionError('');
+    setNotionMessage('');
+    setBatchPullLoading(true);
+    setBatchProgress(null);
+    try {
+      const result = await batchPull(notionDatabaseId, notionToken, (current, total, title) => {
+        setBatchProgress({ current, total, title });
+      });
+      const { workspace: ws } = useEditorStore.getState();
+      const folder = {
+        ...result.folder,
+        name: buildUniqueName(ws, result.folder.name),
+      };
+      insertWorkspaceNode(folder);
+      mergeNotionFilePages(result.mappings);
+      const pulledCount = Object.keys(result.mappings).length;
+      setNotionMessage(`已从数据库拉取 ${pulledCount} 个页面到「${folder.name}」。`);
+      const failureText = formatBatchFailures(result.failed, '页面');
+      if (failureText) {
+        setNotionError(failureText);
+      }
+    } catch (e) {
+      setNotionError(e?.message || '批量拉取失败');
+    } finally {
+      setBatchPullLoading(false);
+      setBatchProgress(null);
+    }
+  }, [notionLocalDev, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
+
+  const handleBatchPush = useCallback(async () => {
+    if (!notionLocalDev || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
+    // 推送当前选中的文件夹，若没选文件夹则推送整个工作区
+    const pushTarget = selectedFolder ?? workspace;
+    setNotionError('');
+    setNotionMessage('');
+    setBatchPushLoading(true);
+    setBatchProgress(null);
+    try {
+      const { newMappings, updated, created, failed } = await batchPush(
+        notionDatabaseId, pushTarget, notionFilePages, notionToken,
+        (current, total, title) => {
+          setBatchProgress({ current, total, title });
+        },
+      );
+      if (Object.keys(newMappings).length > 0) {
+        mergeNotionFilePages(newMappings);
+      }
+      setNotionMessage(`已推送到数据库：更新 ${updated} 个，新建 ${created} 个。`);
+      const failureText = formatBatchFailures(failed, '文件');
+      if (failureText) {
+        setNotionError(failureText);
+      }
+    } catch (e) {
+      setNotionError(e?.message || '批量推送失败');
+    } finally {
+      setBatchPushLoading(false);
+      setBatchProgress(null);
+    }
+  }, [notionLocalDev, notionToken, notionDatabaseId, selectedFolder, workspace, notionFilePages, mergeNotionFilePages]);
+
   useEffect(() => {
     applyThemeToBody(theme);
   }, [theme]);
@@ -408,14 +489,21 @@ function MarkdownEditor() {
             canSync={Boolean(selectedFile)}
             token={notionToken}
             pageId={linkedNotionPageId}
+            databaseId={notionDatabaseId}
             onTokenChange={setNotionToken}
             onPageIdChange={(v) => {
               if (selectedFile) setFileNotionPageId(selectedFile.id, v);
             }}
+            onDatabaseIdChange={setNotionDatabaseId}
             onPull={handleNotionPull}
             onPush={handleNotionPush}
+            onBatchPull={handleBatchPull}
+            onBatchPush={handleBatchPush}
             pullLoading={notionPullLoading}
             pushLoading={notionPushLoading}
+            batchPullLoading={batchPullLoading}
+            batchPushLoading={batchPushLoading}
+            batchProgress={batchProgress}
             message={notionMessage}
             error={notionError}
             onClose={() => setSurface(contentSurface)}
