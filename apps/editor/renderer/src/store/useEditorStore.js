@@ -159,6 +159,49 @@ const persistWorkspace = (workspace) => {
   }
 };
 
+const createLocalProjectNodeId = (projectRootPath, suffix = '') => {
+  return `project:${projectRootPath}${suffix}`;
+};
+
+const markLocalProjectNode = (node, projectRootPath, isRoot = false) => {
+  if (!node) return null;
+  const relativePath = isRoot ? '' : (node.relativePath ?? '');
+  const suffix = isRoot ? '' : `:${node.type}:${relativePath || node.name}`;
+  const children = Array.isArray(node.children)
+    ? node.children.map((child) => markLocalProjectNode(child, projectRootPath, false)).filter(Boolean)
+    : undefined;
+
+  return {
+    ...node,
+    id: createLocalProjectNodeId(projectRootPath, suffix),
+    projectRootPath,
+    localProjectRoot: isRoot,
+    ...(children ? { children } : {}),
+  };
+};
+
+const removeLocalProjectByPath = (workspace, projectRootPath) => {
+  if (!workspace?.children || !projectRootPath) return workspace;
+  return {
+    ...workspace,
+    children: workspace.children.filter((child) => (
+      !(child.localProjectRoot && child.projectRootPath === projectRootPath)
+    )),
+  };
+};
+
+const ensureLocalWorkspaceRoot = (workspace, legacyProjectRootPath) => {
+  if (legacyProjectRootPath && workspace?.id === 'root' && workspace?.type === 'folder') {
+    return {
+      ...createDefaultWorkspace(),
+      children: [markLocalProjectNode(workspace, legacyProjectRootPath, true)].filter(Boolean),
+    };
+  }
+  return workspace?.id === 'root' && workspace?.type === 'folder'
+    ? workspace
+    : createDefaultWorkspace();
+};
+
 export const useEditorStore = create(
   persist(
     (set, get) => ({
@@ -258,16 +301,24 @@ export const useEditorStore = create(
       setMarkdown: (markdown) => set({ markdown }),
 
       openLocalProjectWorkspace: (workspace, projectRootPath) => {
-        const firstFileId = findFirstFileId(workspace);
-        const initialId = firstFileId ?? workspace?.id ?? 'root';
-        const node = findNodeById(workspace, initialId);
-        persistWorkspace(workspace);
+        const rootPath = projectRootPath ?? '';
+        const projectNode = markLocalProjectNode(workspace, rootPath, true);
+        if (!projectNode) return;
+
+        const current = get();
+        const baseWorkspace = ensureLocalWorkspaceRoot(current.workspace, current.projectRootPath);
+        const withoutDuplicate = removeLocalProjectByPath(baseWorkspace, rootPath);
+        const nextWorkspace = addChildNode(withoutDuplicate, withoutDuplicate.id, projectNode);
+        const initialId = findFirstFileId(projectNode) ?? projectNode.id;
+        const node = findNodeById(nextWorkspace, initialId);
+
+        persistWorkspace(nextWorkspace);
         set({
-          workspace,
+          workspace: nextWorkspace,
           selectedId: initialId,
           markdown: node?.type === 'file' ? (node.content ?? '') : '',
-          storageMode: 'project',
-          projectRootPath: projectRootPath ?? '',
+          storageMode: 'local',
+          projectRootPath: '',
           surface: node?.type === 'folder' ? 'folder' : 'paper',
           activeBlockId: null,
           activeBlockDraft: '',
@@ -280,9 +331,12 @@ export const useEditorStore = create(
         const name = buildUniqueName(workspace, '未命名', '.md');
         const newFile = { id: fileId, type: 'file', name, content: '' };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+        if (targetFolder?.projectRootPath) return false;
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFile);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: fileId, markdown: '', surface: 'paper' });
+        return true;
       },
 
       addFolder: (contextNodeId) => {
@@ -291,9 +345,12 @@ export const useEditorStore = create(
         const folderName = buildUniqueName(workspace, '新建文件夹');
         const newFolder = { id: folderId, type: 'folder', name: folderName, children: [] };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+        if (targetFolder?.projectRootPath) return false;
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFolder);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: folderId, surface: 'folder' });
+        return true;
       },
 
       applyRename: (targetId, newName) => {
@@ -324,11 +381,13 @@ export const useEditorStore = create(
 
         const nextWorkspace = result.node;
         const nextFileId = findFirstFileId(nextWorkspace);
+        const nextNode = findNodeById(nextWorkspace, nextFileId ?? nextWorkspace.id);
         persistWorkspace(nextWorkspace);
         set({
           workspace: nextWorkspace,
           selectedId: nextFileId ?? nextWorkspace.id,
-          surface: 'paper',
+          markdown: nextNode?.type === 'file' ? (nextNode.content ?? '') : '',
+          surface: nextNode?.type === 'folder' ? 'folder' : 'paper',
         });
         return true;
       },

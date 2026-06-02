@@ -41,6 +41,7 @@ const TreeNode = ({
   onSelect,
   depth,
   allowStructureActions,
+  onRemoveLocalProject,
   onAddFile,
   onAddFolder,
   onRename,
@@ -49,6 +50,10 @@ const TreeNode = ({
   const isFolder = node.type === 'folder';
   const isActive = node.id === selectedId;
   const isRoot = node.id === 'root';
+  const isLocalProjectNode = Boolean(node.projectRootPath);
+  const isLocalProjectRoot = Boolean(node.localProjectRoot);
+  const showStructureActions = allowStructureActions && !isLocalProjectNode;
+  const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const [menuOpen, setMenuOpen] = useState(false);
   const [folderOpen, setFolderOpen] = useState(true);
   const menuRef = useRef(null);
@@ -107,46 +112,61 @@ const TreeNode = ({
             />
           )}
         </button>
-        {allowStructureActions && (
+        {(showStructureActions || showRemoveProject) && (
           <div className="tree-node-actions" ref={menuRef}>
-            <button
-              type="button"
-              className="tree-node-action-icon"
-              onClick={(e) => { e.stopPropagation(); onRename(node.id); }}
-              disabled={isRoot}
-              title="重命名"
-              aria-label="重命名"
-            >
-              <Pencil size={16} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="tree-node-action-icon danger"
-              onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-              disabled={isRoot}
-              title="删除"
-              aria-label="删除"
-            >
-              <Trash2 size={16} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="tree-node-more-btn"
-              onClick={handleMenuClick}
-              title="更多操作"
-              aria-label="更多操作"
-            >
-              <MoreVertical size={16} strokeWidth={1.5} />
-            </button>
-            {menuOpen && (
-              <div className="tree-node-menu">
-                <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
-                  <File size={14} strokeWidth={1.5} /> 新建文件
+            {showStructureActions && (
+              <>
+                <button
+                  type="button"
+                  className="tree-node-action-icon"
+                  onClick={(e) => { e.stopPropagation(); onRename(node.id); }}
+                  disabled={isRoot}
+                  title="重命名"
+                  aria-label="重命名"
+                >
+                  <Pencil size={16} strokeWidth={1.5} />
                 </button>
-                <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
-                  <Folder size={14} strokeWidth={1.5} /> 新建文件夹
+                <button
+                  type="button"
+                  className="tree-node-action-icon danger"
+                  onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+                  disabled={isRoot}
+                  title="删除"
+                  aria-label="删除"
+                >
+                  <Trash2 size={16} strokeWidth={1.5} />
                 </button>
-              </div>
+                <button
+                  type="button"
+                  className="tree-node-more-btn"
+                  onClick={handleMenuClick}
+                  title="更多操作"
+                  aria-label="更多操作"
+                >
+                  <MoreVertical size={16} strokeWidth={1.5} />
+                </button>
+                {menuOpen && (
+                  <div className="tree-node-menu">
+                    <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
+                      <File size={14} strokeWidth={1.5} /> 新建文件
+                    </button>
+                    <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
+                      <Folder size={14} strokeWidth={1.5} /> 新建文件夹
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {showRemoveProject && (
+              <button
+                type="button"
+                className="tree-node-action-icon danger"
+                onClick={(e) => { e.stopPropagation(); onRemoveLocalProject(node.id); }}
+                title="移除项目"
+                aria-label={`移除项目 ${node.name}`}
+              >
+                <Trash2 size={16} strokeWidth={1.5} />
+              </button>
             )}
           </div>
         )}
@@ -161,6 +181,7 @@ const TreeNode = ({
               onSelect={onSelect}
               depth={depth + 1}
               allowStructureActions={allowStructureActions}
+              onRemoveLocalProject={onRemoveLocalProject}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
               onRename={onRename}
@@ -173,7 +194,7 @@ const TreeNode = ({
   );
 };
 
-/** 不显示根节点「工作区」，直接渲染其子节点 */
+/** 隐藏工作区根节点，直接渲染一级目录和文档 */
 const renderTree = (workspace, selectedId, onSelect, handlers) => {
   const children = workspace?.type === 'folder' && Array.isArray(workspace.children)
     ? workspace.children
@@ -195,6 +216,7 @@ const WorkspaceSidebar = ({
   selectedId,
   onSelect,
   onOpenLocalProject,
+  onRemoveLocalProject,
   onAddFile,
   onAddFolder,
   onRename,
@@ -208,7 +230,6 @@ const WorkspaceSidebar = ({
   settingsActive,
   notionActive,
   localProjectSupported = false,
-  projectMode = false,
 }) => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [activeTag, setActiveTag] = useState(null);
@@ -216,7 +237,7 @@ const WorkspaceSidebar = ({
   const [resizing, setResizing] = useState(false);
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const isSearching = Boolean(searchKeyword.trim());
-  const allowStructureActions = !projectMode;
+  const allowStructureActions = true;
 
   // 视图优先级：搜索 > 标签筛选 > 正常
   const filteredWorkspace = isSearching
@@ -358,7 +379,7 @@ const WorkspaceSidebar = ({
             data-testid="sidebar-open-local-project"
           >
             <Upload size={16} strokeWidth={1.5} />
-            <span>{projectMode ? '重新打开本地项目' : '打开本地项目'}</span>
+            <span>打开本地项目</span>
           </button>
 
           {/* 最近编辑 */}
@@ -467,6 +488,7 @@ const WorkspaceSidebar = ({
                   onRename,
                   onDelete,
                   allowStructureActions,
+                  onRemoveLocalProject,
                 })
               : (
                 <div className="workspace-tree-empty" data-testid="search-empty">

@@ -13,19 +13,25 @@ let tray = null;
 ipcMain.handle('open-local-project', async () => {
   const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
     title: '打开本地项目',
-    properties: ['openDirectory'],
+    properties: ['openDirectory', 'multiSelections'],
   });
 
-  if (result.canceled || !result.filePaths?.[0]) {
+  const projectRootPaths = result.filePaths ?? [];
+  if (result.canceled || projectRootPaths.length === 0) {
     return { canceled: true };
   }
 
-  const projectRootPath = result.filePaths[0];
-  const workspace = await readLocalProjectWorkspace(projectRootPath);
+  const projects = await Promise.all(projectRootPaths.map(async (projectRootPath) => ({
+    projectRootPath,
+    workspace: await readLocalProjectWorkspace(projectRootPath),
+  })));
+  const firstProject = projects[0];
+
   return {
     canceled: false,
-    projectRootPath,
-    workspace,
+    projectRootPath: firstProject.projectRootPath,
+    workspace: firstProject.workspace,
+    projects,
   };
 });
 

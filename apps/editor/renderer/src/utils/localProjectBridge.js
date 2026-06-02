@@ -16,10 +16,17 @@ const joinProjectPath = (rootPath, relativePath) => {
   return `${base}/${rel}`;
 };
 
+const getPathBasename = (targetPath) => {
+  const normalized = String(targetPath ?? '').replace(/[\\/]+$/, '');
+  const segments = normalized.split(/[\\/]+/).filter(Boolean);
+  return segments.at(-1) ?? '';
+};
+
 const normalizeLegacyNode = async (node, rootPath) => {
   if (!node) return null;
 
   if (node.type === 'folder') {
+    const isRoot = node.id === 'root';
     const children = [];
     for (const child of node.children ?? []) {
       const normalizedChild = await normalizeLegacyNode(child, rootPath);
@@ -29,10 +36,10 @@ const normalizeLegacyNode = async (node, rootPath) => {
     }
 
     return {
-      id: node.id === 'root' ? 'root' : `folder:${node.id}`,
-      name: node.name,
+      id: isRoot ? 'root' : `folder:${node.id}`,
+      name: isRoot ? (getPathBasename(rootPath) || node.name || '项目') : node.name,
       type: 'folder',
-      relativePath: node.id === 'root' ? '' : node.id,
+      relativePath: isRoot ? '' : node.id,
       children,
     };
   }
