@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 提交前敏感信息扫描（md-render 项目）
-# 用法: bash .claude/skills/pre-commit-secrets/scripts/scan-secrets.sh [--staged|--all]
+# 用法: bash .agents/skills/pre-commit-secrets/scripts/scan-secrets.sh [--staged|--all]
 set -euo pipefail
 
 MODE="${1:---staged}"
@@ -85,7 +85,7 @@ scan_content() {
   if [ "$scope" = "staged" ]; then
     content="$(git diff --cached -U0 -- . ":(exclude)pnpm-lock.yaml" ":(exclude)dist/**" ":(exclude)dist-electron/**" ":(exclude)node_modules/**" 2>/dev/null || true)"
   else
-    content="$(git grep -n -E "$(IFS='|'; echo "${PATTERNS[*]}")" -- . ":(exclude)pnpm-lock.yaml" ":(exclude)dist/**" ":(exclude)dist-electron/**" ":(exclude)node_modules/**" ":(exclude).claude/skills/pre-commit-secrets/**" 2>/dev/null || true)"
+    content="$(git grep -n -E "$(IFS='|'; echo "${PATTERNS[*]}")" -- . ":(exclude)pnpm-lock.yaml" ":(exclude)dist/**" ":(exclude)dist-electron/**" ":(exclude)node_modules/**" ":(exclude).agents/skills/pre-commit-secrets/**" 2>/dev/null || true)"
   fi
   if [ -n "$content" ]; then
     echo "$content" | while IFS= read -r line; do
@@ -133,7 +133,7 @@ fi
 
 section "4. 项目特有风险（md-render）"
 # Notion token 只应存在 localStorage，不应进源码
-if git grep -n 'md-renderer-notion-token' -- . ':!.claude/skills/pre-commit-secrets/**' 2>/dev/null | grep -Ev 'STORAGE_KEY|localStorage\.(get|set)Item' >/dev/null 2>&1; then
+if git grep -n 'md-renderer-notion-token' -- . ':!.agents/skills/pre-commit-secrets/**' 2>/dev/null | grep -Ev 'STORAGE_KEY|localStorage\.(get|set)Item' >/dev/null 2>&1; then
   warn "Notion token 存储 key 出现在非预期位置"
 else
   ok "Notion token 未硬编码进源码"

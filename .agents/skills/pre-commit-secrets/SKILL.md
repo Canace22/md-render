@@ -32,9 +32,9 @@ flowchart TD
 
 | 场景 | 命令 |
 |------|------|
-| 即将 commit（默认） | `bash .claude/skills/pre-commit-secrets/scripts/scan-secrets.sh --staged` |
-| 工作区全部变更 | `bash .claude/skills/pre-commit-secrets/scripts/scan-secrets.sh --working` |
-| 全仓库审计 | `bash .claude/skills/pre-commit-secrets/scripts/scan-secrets.sh --all` |
+| 即将 commit（默认） | `bash .agents/skills/pre-commit-secrets/scripts/scan-secrets.sh --staged` |
+| 工作区全部变更 | `bash .agents/skills/pre-commit-secrets/scripts/scan-secrets.sh --working` |
+| 全仓库审计 | `bash .agents/skills/pre-commit-secrets/scripts/scan-secrets.sh --all` |
 
 ### 2. 执行脚本并解读结果
 

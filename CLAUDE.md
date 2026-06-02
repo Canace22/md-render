@@ -58,7 +58,7 @@ pnpm test:e2e     # E2E 测试（playwright）
 flowchart TD
     A["完成一个任务"] --> B{命中触发条件?}
     B -->|否| Z["不动作"]
-    B -->|是| C["查 .claude/skills 是否已覆盖"]
+    B -->|是| C["查 .agents/skills 是否已覆盖"]
     C --> D{已有相关 skill?}
     D -->|有且需补充| E["更新那个 skill"]
     D -->|没有| F["按 skill-harvest 规范新建"]
@@ -67,8 +67,8 @@ flowchart TD
 ```
 
 1. 命中触发条件 → 调用 `skill-harvest` skill。
-2. **先查重**：扫 `.claude/skills/`，已有相关 skill 就**更新**它，不新建重复的。
-3. 没有就**新建** `.claude/skills/<name>/SKILL.md`，frontmatter 和正文按 `skill-harvest` 规范写。
+2. **先查重**：扫 `.agents/skills/`，已有相关 skill 就**更新**它，不新建重复的。
+3. 没有就**新建** `.agents/skills/<name>/SKILL.md`，frontmatter 和正文按 `skill-harvest` 规范写。
 4. 沉淀后用**一句话**告知用户：沉淀/更新了哪个 skill、为什么值得沉淀。不打断当前工作流，不长篇大论。
 
 ### 边界（避免噪音）
@@ -77,7 +77,7 @@ flowchart TD
 - 拿不准是否值得沉淀时，**先问用户一句**再决定，宁可少沉淀也不要制造一堆低价值 skill。
 - 沉淀本身遵循"最小化"：能更新就不新建，能复用片段就不重写。
 
-### 现有 skill 清单（`.claude/skills/`）
+### 现有 skill 清单（`.agents/skills/`，唯一维护位置）
 
 | skill | 作用 |
 |-------|------|

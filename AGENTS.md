@@ -18,7 +18,7 @@
 - **JavaScript（JSX）** - 项目无 TypeScript，所有文件均为 `.js` / `.jsx`
 - **Zustand 5.x** - 全局状态管理（`apps/editor/renderer/src/store/useEditorStore.js`）
 - **@blocknote/react 0.47.x** - 富文本块编辑器（Novel 模式）
-- **Ant Design 5.x** - 部分 UI 组件
+- **Ant Design 5.x** - UI 组件
 - **shiki 3.x** - 代码语法高亮
 - **lucide-react** - 图标库
 
