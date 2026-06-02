@@ -975,9 +975,23 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .tree-node-text {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.tree-node-channel-tag {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
 }
 
 .tree-node-actions {

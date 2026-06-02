@@ -22,6 +22,7 @@ import {
   collectRecentFiles,
   collectTags,
   filterWorkspaceByTag,
+  getFolderChannelLabel,
 } from '../store/workspaceUtils.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
@@ -51,6 +52,7 @@ const TreeNode = ({
   const isRoot = node.id === 'root';
   const isLocalProjectNode = Boolean(node.projectRootPath);
   const isLocalProjectRoot = Boolean(node.localProjectRoot);
+  const channelLabel = getFolderChannelLabel(node);
   const showStructureActions = allowStructureActions && !isLocalProjectNode;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -103,6 +105,11 @@ const TreeNode = ({
               : <File size={16} strokeWidth={1.5} />}
           </span>
           <span className="tree-node-text">{node.name}</span>
+          {channelLabel && (
+            <span className="tree-node-channel-tag" title={`来源：${channelLabel}`}>
+              {channelLabel}
+            </span>
+          )}
         </button>
         {(showStructureActions || showRemoveProject) && (
           <div className="tree-node-actions" ref={menuRef}>

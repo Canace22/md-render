@@ -172,7 +172,13 @@ export async function batchPull(databaseId, token, onProgress) {
 
   const folderId = createId('folder');
   return {
-    folder: { id: folderId, type: 'folder', name: 'Notion 同步', children },
+    folder: {
+      id: folderId,
+      type: 'folder',
+      name: 'Notion 同步',
+      children,
+      notionSyncRoot: true,
+    },
     mappings: allMappings,
     databaseId: dbId,
     failed,

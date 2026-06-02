@@ -370,3 +370,14 @@ export function resolveTargetFolderId(workspace, selectedId) {
   const parentId = findParentId(workspace, selectedId);
   return parentId ?? workspace.id;
 }
+
+/**
+ * 外部渠道根目录的来源标签（纯函数）。
+ * 仅标注从本地项目、Notion 等外部渠道挂载的顶层文件夹；本系统新建的目录返回 null。
+ */
+export function getFolderChannelLabel(node) {
+  if (!node || node.type !== 'folder') return null;
+  if (node.localProjectRoot) return '本地';
+  if (node.notionSyncRoot) return 'Notion';
+  return null;
+}
