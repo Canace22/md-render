@@ -7,6 +7,7 @@ export default function DocHeader({
   onOpenNotion,
   notionLinked,
   onTagsChange,
+  titleEditable = true,
   isTitleEditing,
   titleDraft,
   titleInputWidth,
@@ -31,7 +32,7 @@ export default function DocHeader({
         >
           {displayName}
         </span>
-        {isTitleEditing ? (
+        {titleEditable && isTitleEditing ? (
           <input
             ref={titleInputRef}
             className="right-area-doc-title-input"
@@ -51,7 +52,7 @@ export default function DocHeader({
             }}
             aria-label="编辑文件标题"
           />
-        ) : (
+        ) : titleEditable ? (
           <span
             className="right-area-doc-title-clickable"
             onClick={startTitleEditing}
@@ -66,6 +67,8 @@ export default function DocHeader({
           >
             {selectedFile?.name ?? '未命名'}
           </span>
+        ) : (
+          <span>{selectedFile?.name ?? '未命名'}</span>
         )}
         {selectedFile && (
           <span className="right-area-doc-wordcount" data-testid="doc-wordcount">

@@ -22,6 +22,8 @@ const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
 const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
 const SURFACE_STORAGE_KEY = 'md-renderer-surface';
+const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
+const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
 const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
@@ -45,6 +47,8 @@ const editorStorage = {
       const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
       const copyStyle = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
       const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
+      const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
+      const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
       const notionToken = window.localStorage.getItem(NOTION_TOKEN_STORAGE_KEY) ?? '';
       const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
       const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
@@ -69,6 +73,8 @@ const editorStorage = {
           theme: theme === 'light' || theme === 'dark' ? theme : 'light',
           copyStyle:
             copyStyle && TEMPLATES.some((t) => t.id === copyStyle) ? copyStyle : 'default',
+          storageMode: storageMode === 'project' ? 'project' : 'local',
+          projectRootPath,
           surface:
             surface === 'settings' || surface === 'notion' || surface === 'folder'
               ? surface
@@ -98,6 +104,12 @@ const editorStorage = {
       }
       if (state.copyStyle) {
         window.localStorage.setItem(COPY_STYLE_STORAGE_KEY, state.copyStyle);
+      }
+      if (state.storageMode) {
+        window.localStorage.setItem(STORAGE_MODE_STORAGE_KEY, state.storageMode);
+      }
+      if (state.projectRootPath != null) {
+        window.localStorage.setItem(PROJECT_ROOT_STORAGE_KEY, state.projectRootPath);
       }
       if (state.surface) {
         window.localStorage.setItem(SURFACE_STORAGE_KEY, state.surface);
@@ -129,6 +141,8 @@ const persistConfig = {
     selectedId: state.selectedId,
     theme: state.theme,
     copyStyle: state.copyStyle,
+    storageMode: state.storageMode,
+    projectRootPath: state.projectRootPath,
     surface: state.surface,
     notionToken: state.notionToken,
     notionFilePages: state.notionFilePages,
@@ -154,6 +168,8 @@ export const useEditorStore = create(
       sidebarCollapsed: false,
       theme: 'light',
       copyStyle: 'default',
+      storageMode: 'local',
+      projectRootPath: '',
       surface: 'paper',
       notionToken: '',
       notionFilePages: {},
@@ -241,6 +257,23 @@ export const useEditorStore = create(
       setSelectedId: (selectedId) => set({ selectedId }),
       setMarkdown: (markdown) => set({ markdown }),
 
+      openLocalProjectWorkspace: (workspace, projectRootPath) => {
+        const firstFileId = findFirstFileId(workspace);
+        const initialId = firstFileId ?? workspace?.id ?? 'root';
+        const node = findNodeById(workspace, initialId);
+        persistWorkspace(workspace);
+        set({
+          workspace,
+          selectedId: initialId,
+          markdown: node?.type === 'file' ? (node.content ?? '') : '',
+          storageMode: 'project',
+          projectRootPath: projectRootPath ?? '',
+          surface: node?.type === 'folder' ? 'folder' : 'paper',
+          activeBlockId: null,
+          activeBlockDraft: '',
+        });
+      },
+
       addFile: (contextNodeId) => {
         const { workspace, selectedId } = get();
         const fileId = createId('file');
@@ -309,6 +342,8 @@ export const useEditorStore = create(
           workspace: imported,
           selectedId: initialId,
           markdown: node?.type === 'file' ? (node.content ?? '') : '',
+          storageMode: 'local',
+          projectRootPath: '',
           surface: 'paper',
           activeBlockId: null,
           activeBlockDraft: '',

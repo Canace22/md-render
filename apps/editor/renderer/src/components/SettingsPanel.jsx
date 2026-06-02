@@ -6,8 +6,12 @@ export default function SettingsPanel({
   selectedFileName,
   theme,
   copyStyle,
+  storageMode,
+  projectRootPath,
+  localProjectSupported = false,
   onThemeChange,
   onCopyStyleChange,
+  onOpenLocalProject,
   onImport,
   onExport,
   onOpenNotion,
@@ -24,6 +28,11 @@ export default function SettingsPanel({
           <p className="settings-kicker">SETTINGS</p>
           <h2>编辑器设置</h2>
           <p>当前文档：{selectedFileName ?? '未命名'}</p>
+          <p className="settings-panel-meta">
+            {storageMode === 'project'
+              ? `当前项目：${projectRootPath || '未命名项目'}`
+              : '当前模式：临时工作区'}
+          </p>
         </div>
       </div>
 
@@ -68,6 +77,16 @@ export default function SettingsPanel({
       <div className="settings-group">
         <div className="settings-group-title">工作区</div>
         <div className="settings-action-list">
+          <button
+            type="button"
+            className="settings-action-btn"
+            onClick={onOpenLocalProject}
+            disabled={!localProjectSupported}
+            title={localProjectSupported ? '打开本地项目文件夹' : '仅桌面版应用支持'}
+          >
+            <Upload size={16} strokeWidth={1.6} />
+            <span>{localProjectSupported ? '打开本地项目文件夹' : '打开本地项目文件夹（仅桌面版）'}</span>
+          </button>
           <button type="button" className="settings-action-btn" onClick={onImport}>
             <Upload size={16} strokeWidth={1.6} />
             <span>导入工作区 JSON</span>

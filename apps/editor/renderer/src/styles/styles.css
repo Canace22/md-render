@@ -169,6 +169,32 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     color: var(--color-text-primary);
 }
 
+.sidebar-project-entry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-m);
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
+}
+
+.sidebar-project-entry:hover:not(:disabled) {
+    border-color: var(--color-text-muted);
+    background: var(--color-bg-page);
+    box-shadow: var(--shadow-soft);
+}
+
+.sidebar-project-entry:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 /* 我的文档 + 新建 */
 /* 侧边栏搜索框（笔记本） */
 .notebook-search {
@@ -2929,6 +2955,10 @@ body.theme-light #markdown-output code {
     font-size: 15px;
 }
 
+.settings-panel-meta {
+    word-break: break-all;
+}
+
 .settings-group {
     width: min(760px, 100%);
     margin: 0 auto 20px;
@@ -2971,7 +3001,7 @@ body.theme-light #markdown-output code {
 
 .settings-option-card:hover,
 .settings-template-item:hover,
-.settings-action-btn:hover {
+.settings-action-btn:hover:not(:disabled) {
     transform: translateY(-1px);
     box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
 }
@@ -2993,6 +3023,13 @@ body.theme-light #markdown-output code {
 .settings-template-item,
 .settings-action-btn {
     justify-content: flex-start;
+}
+
+.settings-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .settings-template-item {

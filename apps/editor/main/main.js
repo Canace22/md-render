@@ -1,6 +1,7 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readLocalProjectWorkspace, saveLocalProjectFile } from './localProject.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8,6 +9,31 @@ const __dirname = path.dirname(__filename);
 let store = null;
 let mainWindow = null;
 let tray = null;
+
+ipcMain.handle('open-local-project', async () => {
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+    title: '打开本地项目',
+    properties: ['openDirectory'],
+  });
+
+  if (result.canceled || !result.filePaths?.[0]) {
+    return { canceled: true };
+  }
+
+  const projectRootPath = result.filePaths[0];
+  const workspace = await readLocalProjectWorkspace(projectRootPath);
+  return {
+    canceled: false,
+    projectRootPath,
+    workspace,
+  };
+});
+
+ipcMain.handle('save-local-project-file', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath, content } = payload;
+  await saveLocalProjectFile(projectRootPath, relativePath, content);
+  return { ok: true };
+});
 
 // ---- 窗口状态记忆（延迟初始化） ----
 async function getStore() {
@@ -36,7 +62,7 @@ async function createWindow() {
     title: 'MD Render',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: path.join(__dirname, '../dist-electron/preload.mjs'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

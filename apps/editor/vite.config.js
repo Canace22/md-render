@@ -32,9 +32,28 @@ export default defineConfig({
     isElectron && electron({
       main: {
         entry: path.join(__dirname, 'main/main.js'),
+        vite: {
+          root: __dirname,
+          build: {
+            outDir: 'dist-electron',
+          },
+        },
       },
       preload: {
         input: path.join(__dirname, 'main/preload.js'),
+        vite: {
+          root: __dirname,
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              output: {
+                // type:module 时插件默认产出 preload.mjs（CJS 内容），Electron 按 ESM 加载会导致 require 失败
+                entryFileNames: 'preload.cjs',
+                chunkFileNames: '[name].cjs',
+              },
+            },
+          },
+        },
       },
     }),
   ].filter(Boolean),

@@ -5,6 +5,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // 平台信息
   platform: process.platform,
+  openLocalProject: () => ipcRenderer.invoke('open-local-project'),
+  saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
 
   // 通用 IPC：渲染进程 → 主进程
   invoke: (channel, ...args) => {

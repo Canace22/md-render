@@ -34,6 +34,11 @@ import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
 import { buildUniqueName, collectFiles, findNodeById } from '../store/workspaceUtils.js';
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
+import {
+  isLocalProjectSupported,
+  openLocalProject,
+  saveLocalProjectFile,
+} from '../utils/localProjectBridge.js';
 import '../styles/styles.css';
 
 const CODE_BLOCK_LANGUAGES = {
@@ -107,6 +112,8 @@ function MarkdownEditor() {
     sidebarCollapsed,
     theme,
     copyStyle,
+    storageMode,
+    projectRootPath,
     surface,
     notionToken,
     notionFilePages,
@@ -122,6 +129,7 @@ function MarkdownEditor() {
     toggleSidebarCollapsed,
     updateSelectedFileContent,
     selectNode,
+    openLocalProjectWorkspace,
     addFile,
     addFolder,
     applyRename,
@@ -144,6 +152,7 @@ function MarkdownEditor() {
   const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
   const markdownImportInputRef = useRef(null);
+  const projectSaveTimersRef = useRef(new Map());
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
@@ -164,6 +173,10 @@ function MarkdownEditor() {
   const [batchPullLoading, setBatchPullLoading] = useState(false);
   const [batchPushLoading, setBatchPushLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
+  const localProjectSupported = isLocalProjectSupported();
+  const isProjectMode = storageMode === 'project' && localProjectSupported;
+  const visibleStorageMode = isProjectMode ? 'project' : 'local';
+  const visibleProjectRootPath = isProjectMode ? projectRootPath : '';
 
   const initialContent = useMemo(() => {
     const sourceMarkdown = normalizeMarkdown(markdown);
@@ -279,6 +292,27 @@ function MarkdownEditor() {
     if (nextMarkdown === lastSyncedMarkdownRef.current) return;
     lastSyncedMarkdownRef.current = nextMarkdown;
     updateSelectedFileContent(nextMarkdown);
+    if (isProjectMode && selectedFile?.relativePath && projectRootPath) {
+      const existingTimer = projectSaveTimersRef.current.get(selectedFile.id);
+      if (existingTimer) {
+        window.clearTimeout(existingTimer);
+      }
+      const timerId = window.setTimeout(async () => {
+        try {
+          await saveLocalProjectFile({
+            projectRootPath,
+            relativePath: selectedFile.relativePath,
+            content: nextMarkdown,
+          });
+        } catch (error) {
+          console.error('保存本地项目文件失败:', error);
+          alert(error?.message || '保存本地项目文件失败');
+        } finally {
+          projectSaveTimersRef.current.delete(selectedFile.id);
+        }
+      }, 400);
+      projectSaveTimersRef.current.set(selectedFile.id, timerId);
+    }
   };
 
   const handleCopyToWeChat = async () => {
@@ -320,6 +354,22 @@ function MarkdownEditor() {
     event.target.value = '';
   }, []);
 
+  const handleOpenLocalProject = useCallback(async () => {
+    if (!localProjectSupported) {
+      alert('打开本地项目仅支持桌面版应用。');
+      return;
+    }
+    try {
+      const result = await openLocalProject();
+      if (!result || result.canceled || !result.workspace) return;
+      openLocalProjectWorkspace(result.workspace, result.projectRootPath);
+      setContentResetKey((k) => k + 1);
+    } catch (error) {
+      console.error('打开本地项目失败:', error);
+      alert(error?.message || '打开本地项目失败');
+    }
+  }, [localProjectSupported, openLocalProjectWorkspace]);
+
   const handleNotionPull = useCallback(async () => {
     if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
     setNotionError('');
@@ -330,6 +380,13 @@ function MarkdownEditor() {
       const blocks = await fetchBlocks(id, notionToken);
       const md = normalizeMarkdown(blocksToMarkdown(blocks));
       updateSelectedFileContent(md);
+      if (isProjectMode && selectedFile?.relativePath && projectRootPath) {
+        await saveLocalProjectFile({
+          projectRootPath,
+          relativePath: selectedFile.relativePath,
+          content: md,
+        });
+      }
       setContentResetKey((k) => k + 1);
       setNotionMessage('已从 Notion 拉取并覆盖当前文档。');
     } catch (e) {
@@ -337,7 +394,15 @@ function MarkdownEditor() {
     } finally {
       setNotionPullLoading(false);
     }
-  }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, updateSelectedFileContent]);
+  }, [
+    isProjectMode,
+    notionLocalDev,
+    projectRootPath,
+    selectedFile,
+    notionToken,
+    linkedNotionPageId,
+    updateSelectedFileContent,
+  ]);
 
   const handleNotionPush = useCallback(async () => {
     if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
@@ -430,6 +495,15 @@ function MarkdownEditor() {
   }, [surface]);
 
   useEffect(() => {
+    return () => {
+      for (const timerId of projectSaveTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+      projectSaveTimersRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     syncMarkdownFromSelectedFile();
     syncSelectedIdFromWorkspace();
   }, [selectedFile, workspace, markdown, syncMarkdownFromSelectedFile, syncSelectedIdFromWorkspace]);
@@ -457,11 +531,12 @@ function MarkdownEditor() {
         workspace={workspace}
         selectedId={selectedId}
         onSelect={selectNode}
+        onOpenLocalProject={handleOpenLocalProject}
         onAddFile={addFile}
         onAddFolder={addFolder}
         onRename={handleRename}
         onDelete={handleDelete}
-        onImportMarkdown={() => markdownImportInputRef.current?.click()}
+        onImportMarkdown={isProjectMode ? null : () => markdownImportInputRef.current?.click()}
         onExportMarkdown={handleExportMarkdown}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
@@ -469,6 +544,8 @@ function MarkdownEditor() {
         onOpenNotion={() => setSurface(surface === 'notion' ? contentSurface : 'notion')}
         settingsActive={surface === 'settings'}
         notionActive={surface === 'notion'}
+        localProjectSupported={localProjectSupported}
+        projectMode={isProjectMode}
       />
       <div className="right-area immersive-main">
         {surface === 'settings' ? (
@@ -476,8 +553,12 @@ function MarkdownEditor() {
             selectedFileName={selectedFile?.name}
             theme={theme}
             copyStyle={copyStyle}
+            storageMode={visibleStorageMode}
+            projectRootPath={visibleProjectRootPath}
+            localProjectSupported={localProjectSupported}
             onThemeChange={setTheme}
             onCopyStyleChange={setCopyStyle}
+            onOpenLocalProject={handleOpenLocalProject}
             onImport={() => importInputRef.current?.click()}
             onExport={handleExport}
             onOpenNotion={() => setSurface('notion')}
@@ -521,6 +602,7 @@ function MarkdownEditor() {
               onOpenNotion={() => setSurface('notion')}
               notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
+              titleEditable={!isProjectMode}
               {...titleEditing}
             />
             <EditorQuickToolbar

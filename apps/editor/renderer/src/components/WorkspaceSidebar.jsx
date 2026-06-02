@@ -40,6 +40,7 @@ const TreeNode = ({
   selectedId,
   onSelect,
   depth,
+  allowStructureActions,
   onAddFile,
   onAddFolder,
   onRename,
@@ -106,47 +107,49 @@ const TreeNode = ({
             />
           )}
         </button>
-        <div className="tree-node-actions" ref={menuRef}>
-          <button
-            type="button"
-            className="tree-node-action-icon"
-            onClick={(e) => { e.stopPropagation(); onRename(node.id); }}
-            disabled={isRoot}
-            title="重命名"
-            aria-label="重命名"
-          >
-            <Pencil size={16} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            className="tree-node-action-icon danger"
-            onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-            disabled={isRoot}
-            title="删除"
-            aria-label="删除"
-          >
-            <Trash2 size={16} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            className="tree-node-more-btn"
-            onClick={handleMenuClick}
-            title="更多操作"
-            aria-label="更多操作"
-          >
-            <MoreVertical size={16} strokeWidth={1.5} />
-          </button>
-          {menuOpen && (
-            <div className="tree-node-menu">
-              <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
-                <File size={14} strokeWidth={1.5} /> 新建文件
-              </button>
-              <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
-                <Folder size={14} strokeWidth={1.5} /> 新建文件夹
-              </button>
-            </div>
-          )}
-        </div>
+        {allowStructureActions && (
+          <div className="tree-node-actions" ref={menuRef}>
+            <button
+              type="button"
+              className="tree-node-action-icon"
+              onClick={(e) => { e.stopPropagation(); onRename(node.id); }}
+              disabled={isRoot}
+              title="重命名"
+              aria-label="重命名"
+            >
+              <Pencil size={16} strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              className="tree-node-action-icon danger"
+              onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+              disabled={isRoot}
+              title="删除"
+              aria-label="删除"
+            >
+              <Trash2 size={16} strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              className="tree-node-more-btn"
+              onClick={handleMenuClick}
+              title="更多操作"
+              aria-label="更多操作"
+            >
+              <MoreVertical size={16} strokeWidth={1.5} />
+            </button>
+            {menuOpen && (
+              <div className="tree-node-menu">
+                <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
+                  <File size={14} strokeWidth={1.5} /> 新建文件
+                </button>
+                <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
+                  <Folder size={14} strokeWidth={1.5} /> 新建文件夹
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {isFolder && folderOpen && Array.isArray(node.children) && node.children.length > 0 && (
         <div className="tree-node-children">
@@ -157,6 +160,7 @@ const TreeNode = ({
               selectedId={selectedId}
               onSelect={onSelect}
               depth={depth + 1}
+              allowStructureActions={allowStructureActions}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
               onRename={onRename}
@@ -190,6 +194,7 @@ const WorkspaceSidebar = ({
   workspace,
   selectedId,
   onSelect,
+  onOpenLocalProject,
   onAddFile,
   onAddFolder,
   onRename,
@@ -202,6 +207,8 @@ const WorkspaceSidebar = ({
   onOpenNotion,
   settingsActive,
   notionActive,
+  localProjectSupported = false,
+  projectMode = false,
 }) => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [activeTag, setActiveTag] = useState(null);
@@ -209,6 +216,7 @@ const WorkspaceSidebar = ({
   const [resizing, setResizing] = useState(false);
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const isSearching = Boolean(searchKeyword.trim());
+  const allowStructureActions = !projectMode;
 
   // 视图优先级：搜索 > 标签筛选 > 正常
   const filteredWorkspace = isSearching
@@ -341,6 +349,18 @@ const WorkspaceSidebar = ({
             />
           </div>
 
+          <button
+            type="button"
+            className="sidebar-project-entry"
+            onClick={onOpenLocalProject}
+            disabled={!localProjectSupported}
+            title={localProjectSupported ? '打开本地项目文件夹' : '仅桌面版应用支持'}
+            data-testid="sidebar-open-local-project"
+          >
+            <Upload size={16} strokeWidth={1.5} />
+            <span>{projectMode ? '重新打开本地项目' : '打开本地项目'}</span>
+          </button>
+
           {/* 最近编辑 */}
           {recentFiles.length > 0 && (
             <div className="notebook-recent" data-testid="recent-section">
@@ -389,25 +409,29 @@ const WorkspaceSidebar = ({
           <div className="sidebar-docs-header">
             <span className="sidebar-section-title">笔记</span>
             <div className="sidebar-add-icons">
-              <button
-                type="button"
-                className="sidebar-add-icon"
-                onClick={onAddFile}
-                title="新建文件"
-                aria-label="新建文件"
-              >
-                <File size={18} strokeWidth={1.5} />
-              </button>
-              <button
-                type="button"
-                className="sidebar-add-icon"
-                onClick={onAddFolder}
-                title="新建文件夹"
-                aria-label="新建文件夹"
-              >
-                <Folder size={18} strokeWidth={1.5} />
-              </button>
-              {onImportMarkdown && (
+              {allowStructureActions && (
+                <button
+                  type="button"
+                  className="sidebar-add-icon"
+                  onClick={onAddFile}
+                  title="新建文件"
+                  aria-label="新建文件"
+                >
+                  <File size={18} strokeWidth={1.5} />
+                </button>
+              )}
+              {allowStructureActions && (
+                <button
+                  type="button"
+                  className="sidebar-add-icon"
+                  onClick={onAddFolder}
+                  title="新建文件夹"
+                  aria-label="新建文件夹"
+                >
+                  <Folder size={18} strokeWidth={1.5} />
+                </button>
+              )}
+              {allowStructureActions && onImportMarkdown && (
                 <button
                   type="button"
                   className="sidebar-add-icon"
@@ -442,6 +466,7 @@ const WorkspaceSidebar = ({
                   onAddFolder,
                   onRename,
                   onDelete,
+                  allowStructureActions,
                 })
               : (
                 <div className="workspace-tree-empty" data-testid="search-empty">
