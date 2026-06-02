@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectTags, filterWorkspaceByTag } from '../src/store/workspaceUtils.js';
+import { collectTags, filterWorkspaceByTag } from '../renderer/src/store/workspaceUtils.js';
 
 const ws = {
   id: 'root', type: 'folder', name: 'r', children: [

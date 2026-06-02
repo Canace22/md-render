@@ -38,7 +38,7 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant U as 用户
-    participant HTML as apps/editor/index.html
+    participant HTML as apps/editor/renderer/index.html
     participant React as React 应用
     participant Editor as MarkdownEditor
     participant Parser as packages/markdown-core/parser.js
@@ -85,7 +85,7 @@ flowchart LR
         EDITOR["src/components/MarkdownEditor.jsx"]
         STORE["src/store/useEditorStore.js"]
         NOVEL["src/core/novel/"]
-        ELECTRON["electron/main.js + preload.js"]
+        ELECTRON["main/main.js + preload.js"]
     end
 
     subgraph COREGRAPH["shared markdown core"]
@@ -357,6 +357,6 @@ MarkdownEditor
   - 考虑使用 `useMemo` 缓存解析结果（如果依赖项不变）
   - 可以考虑虚拟滚动（Virtual Scrolling）处理超大文档
 - 代码语法高亮已集成 highlight.js，如需自定义可以：
-  - 更换主题：修改 `apps/editor/index.html` 中的 CSS 链接
+  - 更换主题：修改 `apps/editor/renderer/index.html` 中的 CSS 链接
   - 限制语言支持：引入特定语言的子集以减少体积
   - 使用 CDN 或本地文件：当前使用 CDN，离线环境需要下载到本地

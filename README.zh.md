@@ -56,7 +56,7 @@ pnpm run dev
 - 图片链接会自动转换为 HTTPS（如果原本是 HTTP）
 - 所有自定义的 class 属性和 data-* 属性会被移除，以确保兼容性
 - 版式预设符合公众号要求：全部文本固定字号 `16px`、段后间距 `8px`、行高 `1.6`
-- 提供通用工具 `apps/editor/src/utils/wechatCopy.js`，可在其他模块复用转换与复制逻辑
+- 提供通用工具 `apps/editor/renderer/src/utils/wechatCopy.js`，可在其他模块复用转换与复制逻辑
 
 ### 目录与本地保存
 
@@ -120,10 +120,9 @@ md-render/
 ├── apps/
 │   └── editor/
 │       ├── package.json         # 编辑器应用包
-│       ├── index.html           # 应用入口 HTML
 │       ├── vite.config.js       # Vite 构建配置
-│       ├── electron/            # Electron main / preload
-│       ├── src/                 # React 编辑器源码
+│       ├── main/                # Electron 主进程
+│       ├── renderer/            # 渲染进程（index.html + React src）
 │       └── tests/               # Vitest / Playwright 测试
 ├── packages/
 │   └── markdown-core/

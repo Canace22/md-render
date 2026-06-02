@@ -33,13 +33,14 @@ flowchart TD
 
 | 需求 | 看这里 |
 |------|--------|
-| 编辑器主逻辑 | `src/components/MarkdownEditor.jsx` |
-| 全局状态 | `src/store/useEditorStore.js` |
-| 解析/渲染 | `src/core/parser.js` + `src/core/renderer.js` |
-| 微信格式化 | `src/utils/wechatCopy.js` + `src/utils/wechatTemplates.js` |
-| Notion 集成 | `src/utils/notionService.js` + `src/utils/notionConverter.js` |
-| 小说辅助 | `src/core/novel/` |
-| CSS 变量 | `src/styles/design-tokens.css` |
+| 编辑器主逻辑 | `apps/editor/renderer/src/components/MarkdownEditor.jsx` |
+| 全局状态 | `apps/editor/renderer/src/store/useEditorStore.js` |
+| Electron 主进程 | `apps/editor/main/main.js` + `preload.js` |
+| 解析/渲染 | `packages/markdown-core/src/parser.js` + `renderer.js` |
+| 微信格式化 | `apps/editor/renderer/src/utils/wechatCopy.js` + `wechatTemplates.js` |
+| Notion 集成 | `apps/editor/renderer/src/utils/notionService.js` + `notionConverter.js` |
+| 小说辅助 | `apps/editor/renderer/src/core/novel/` |
+| CSS 变量 | `apps/editor/renderer/src/styles/design-tokens.css` |
 
 ### 2. 看懂现有结构再动手
 

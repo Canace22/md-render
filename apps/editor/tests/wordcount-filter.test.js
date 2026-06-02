@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { countWords } from '../src/utils/wordCount.js';
-import { filterWorkspace } from '../src/store/workspaceUtils.js';
+import { countWords } from '../renderer/src/utils/wordCount.js';
+import { filterWorkspace } from '../renderer/src/store/workspaceUtils.js';
 
 describe('countWords', () => {
   it('counts CJK characters one by one', () => {

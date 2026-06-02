@@ -35,13 +35,13 @@ flowchart TD
 
 | 需求 | 看这里 |
 |------|--------|
-| 编辑器主逻辑 | `apps/editor/src/components/MarkdownEditor.jsx` |
-| 全局状态 | `apps/editor/src/store/useEditorStore.js` |
+| 编辑器主逻辑 | `apps/editor/renderer/src/components/MarkdownEditor.jsx` |
+| 全局状态 | `apps/editor/renderer/src/store/useEditorStore.js` |
 | 解析/渲染 | `packages/markdown-core/src/parser.js` + `packages/markdown-core/src/renderer.js` |
-| 微信格式化 | `apps/editor/src/utils/wechatCopy.js` + `apps/editor/src/utils/wechatTemplates.js` |
-| Notion 集成 | `apps/editor/src/utils/notionService.js` + `apps/editor/src/utils/notionConverter.js` |
-| 小说辅助 | `apps/editor/src/core/novel/` |
-| CSS 变量 | `apps/editor/src/styles/design-tokens.css` |
+| 微信格式化 | `apps/editor/renderer/src/utils/wechatCopy.js` + `apps/editor/renderer/src/utils/wechatTemplates.js` |
+| Notion 集成 | `apps/editor/renderer/src/utils/notionService.js` + `apps/editor/renderer/src/utils/notionConverter.js` |
+| 小说辅助 | `apps/editor/renderer/src/core/novel/` |
+| CSS 变量 | `apps/editor/renderer/src/styles/design-tokens.css` |
 
 ### 2. 看懂现有结构再动手
 

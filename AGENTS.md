@@ -16,7 +16,7 @@
 - **Vite 5.x** - 构建工具，开发服务器
 - **React 18** - 函数式组件 + Hooks
 - **JavaScript（JSX）** - 项目无 TypeScript，所有文件均为 `.js` / `.jsx`
-- **Zustand 5.x** - 全局状态管理（`apps/editor/src/store/useEditorStore.js`）
+- **Zustand 5.x** - 全局状态管理（`apps/editor/renderer/src/store/useEditorStore.js`）
 - **@blocknote/react 0.47.x** - 富文本块编辑器（Novel 模式）
 - **Ant Design 5.x** - 部分 UI 组件
 - **shiki 3.x** - 代码语法高亮
@@ -28,23 +28,25 @@
 - 禁止使用 class 组件
 - 禁止直接操作 `localStorage`（统一通过 zustand `persist` 中间件或已有的常量 key 访问）
 - 禁止在 JSX 中写复杂的业务逻辑，抽到 hooks 或 utils
-- 禁止直接 `fetch`（封装到 `apps/editor/src/utils/` 下对应模块，如 `notionService.js`）
+- 禁止直接 `fetch`（封装到 `apps/editor/renderer/src/utils/` 下对应模块，如 `notionService.js`）
 
 ## 项目结构
 
 ```
 apps/
 └── editor/
-    ├── src/
-    │   ├── components/          # React 组件
-    │   ├── core/novel/          # 小说辅助（实体抽取、场景分析等）
-    │   ├── hooks/
-    │   ├── store/
-    │   │   ├── useEditorStore.js  # 全局状态（zustand + persist）
-    │   │   └── workspaceUtils.js  # 工作区纯函数工具
-    │   ├── utils/
-    │   └── styles/
-    ├── electron/                # Electron 入口
+    ├── main/                    # Electron 主进程（main.js、preload.js）
+    ├── renderer/                # 渲染进程（Vite + React）
+    │   ├── index.html
+    │   └── src/
+    │       ├── components/      # React 组件
+    │       ├── core/novel/      # 小说辅助（实体抽取、场景分析等）
+    │       ├── hooks/
+    │       ├── store/
+    │       │   ├── useEditorStore.js  # 全局状态（zustand + persist）
+    │       │   └── workspaceUtils.js  # 工作区纯函数工具
+    │       ├── utils/
+    │       └── styles/
     └── tests/                   # app 相关测试
 packages/
 └── markdown-core/
@@ -55,7 +57,7 @@ packages/
 
 ## 状态管理
 
-项目使用 **Zustand** 管理全局状态，所有编辑器状态集中在 `apps/editor/src/store/useEditorStore.js`。
+项目使用 **Zustand** 管理全局状态，所有编辑器状态集中在 `apps/editor/renderer/src/store/useEditorStore.js`。
 
 ```javascript
 // ✅ 组件中读取状态
@@ -117,7 +119,7 @@ export default MyComponent;
 
 ## 样式规范
 
-- 样式写在 `apps/editor/src/styles/styles.css`，CSS 变量定义在 `design-tokens.css`
+- 样式写在 `apps/editor/renderer/src/styles/styles.css`，CSS 变量定义在 `design-tokens.css`
 - 优先使用 CSS class，不写大段内联 style
 - 简单动态样式可用内联 `style={{ color: active ? 'var(--accent)' : 'var(--text-muted)' }}`
 - 主题颜色通过 CSS 变量控制，不要硬编码颜色值

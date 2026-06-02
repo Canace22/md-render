@@ -1,6 +1,6 @@
 ---
 name: md-render-wechat
-description: 在本项目修改微信公众号格式化功能时的规范——模板定义在 apps/editor/src/utils/wechatTemplates.js，转换/复制逻辑在 apps/editor/src/utils/wechatCopy.js。涉及"微信公众号""公众号样式""加个排版模板""复制到公众号格式不对""微信预览"时触发。关键约束：微信不支持外部 CSS，所有样式必须内联。
+description: 在本项目修改微信公众号格式化功能时的规范——模板定义在 apps/editor/renderer/src/utils/wechatTemplates.js，转换/复制逻辑在 apps/editor/renderer/src/utils/wechatCopy.js。涉及"微信公众号""公众号样式""加个排版模板""复制到公众号格式不对""微信预览"时触发。关键约束：微信不支持外部 CSS，所有样式必须内联。
 ---
 
 # 微信公众号格式化规范

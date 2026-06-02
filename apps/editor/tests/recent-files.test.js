@@ -3,7 +3,7 @@ import {
   collectFiles,
   collectRecentFiles,
   ensureFileTimestamps,
-} from '../src/store/workspaceUtils.js';
+} from '../renderer/src/store/workspaceUtils.js';
 
 const ws = {
   id: 'root', type: 'folder', name: '工作区',

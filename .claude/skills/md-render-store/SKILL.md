@@ -1,6 +1,6 @@
 ---
 name: md-render-store
-description: 在本项目新增或修改全局状态时的规范——所有全局状态走 src/store/useEditorStore.js（zustand），持久化 key 用 md-renderer-* 常量，纯函数工具放 workspaceUtils.js。涉及"加个全局状态""存一下用户选择""持久化""新建 store""状态管理""改 useEditorStore"时触发。不要新建其他全局 store。
+description: 在本项目新增或修改全局状态时的规范——所有全局状态走 apps/editor/renderer/src/store/useEditorStore.js（zustand），持久化 key 用 md-renderer-* 常量，纯函数工具放 workspaceUtils.js。涉及"加个全局状态""存一下用户选择""持久化""新建 store""状态管理""改 useEditorStore"时触发。不要新建其他全局 store。
 ---
 
 # 全局状态改动规范
@@ -21,7 +21,7 @@ flowchart TD
     G --> H
 ```
 
-1. **唯一全局 store**：`src/store/useEditorStore.js`（zustand `create` + `persist`）。**绝不新建第二个全局 store**。
+1. **唯一全局 store**：`apps/editor/renderer/src/store/useEditorStore.js`（zustand `create` + `persist`）。**绝不新建第二个全局 store**。
 2. **临时状态用 `useState`**：只在单个组件内用的状态，留在组件里，不要污染全局 store。
 3. **持久化 key 用常量**：所有 storage key 在 store 文件顶部定义为 `UPPER_SNAKE_CASE` 常量，命名前缀统一是 `md-renderer-`，例如 `const FOO_STORAGE_KEY = 'md-renderer-foo';`。不要散写字符串字面量。
 4. **不直接碰 localStorage**：持久化统一走 store 现有的 persist 机制（项目用的是兼容多 key 的自定义 storage）。组件里不要出现 `localStorage.getItem/setItem`。

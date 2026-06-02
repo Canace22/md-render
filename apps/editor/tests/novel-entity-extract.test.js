@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractEntities } from '../src/core/novel/extractEntities.js';
+import { extractEntities } from '../renderer/src/core/novel/extractEntities.js';
 
 function getEntityNames(markdown) {
   return extractEntities(markdown, { fileId: 'test-file' }).map((entity) => entity.name);

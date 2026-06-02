@@ -1,6 +1,11 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rendererRoot = path.join(__dirname, 'renderer');
 
 // 是否以 Electron 模式运行（pnpm electron:dev / electron:build）
 const isElectron = !!process.env.ELECTRON;
@@ -15,16 +20,21 @@ const inferBase = () => {
 };
 
 export default defineConfig({
+  root: rendererRoot,
   base: inferBase(),
+  build: {
+    outDir: path.join(__dirname, 'dist'),
+    emptyOutDir: true,
+  },
   plugins: [
     react(),
     // 仅在 Electron 模式下启用插件
     isElectron && electron({
       main: {
-        entry: 'electron/main.js',
+        entry: path.join(__dirname, 'main/main.js'),
       },
       preload: {
-        input: 'electron/preload.js',
+        input: path.join(__dirname, 'main/preload.js'),
       },
     }),
   ].filter(Boolean),
@@ -36,7 +46,7 @@ export default defineConfig({
       '/notion-api': {
         target: 'https://api.notion.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/notion-api/, ''),
+        rewrite: (p) => p.replace(/^\/notion-api/, ''),
       },
     },
   },

@@ -58,7 +58,7 @@ pnpm run dev
 - Image links will be automatically converted to HTTPS (if originally HTTP)
 - All custom class attributes and data-* attributes will be removed to ensure compatibility
 - Layout preset matches WeChat requirements: all text fixed at `16px`, paragraph spacing `8px`, and line height `1.6`
-- Reusable helper `apps/editor/src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
+- Reusable helper `apps/editor/renderer/src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
 
 ### Workspace & Local Storage
 
@@ -131,10 +131,9 @@ md-render/
 ├── apps/
 │   └── editor/
 │       ├── package.json         # Editor app package
-│       ├── index.html           # App entry HTML
 │       ├── vite.config.js       # App Vite config
-│       ├── electron/            # Electron main/preload
-│       ├── src/                 # Editor source code
+│       ├── main/                # Electron main process
+│       ├── renderer/            # Renderer (index.html + React src)
 │       └── tests/               # Vitest + Playwright tests
 ├── packages/
 │   └── markdown-core/
