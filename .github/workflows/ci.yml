@@ -7,8 +7,9 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  electron-pack:
+    name: Electron 打包
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,18 +28,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build project
-        run: pnpm build
+      - name: Build Electron app
+        run: pnpm electron:build
+        env:
+          # CI 无签名证书，跳过 macOS 代码签名
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Check build output
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Error: dist directory not found"
+          release_dir="apps/editor/release"
+          if [ ! -d "$release_dir" ]; then
+            echo "Error: release directory not found"
             exit 1
           fi
-          if [ ! -f "dist/index.html" ]; then
-            echo "Error: dist/index.html not found"
+          echo "Release files:"
+          ls -la "$release_dir/"
+          if ! ls "$release_dir"/mac-*/MD\ Render.app >/dev/null 2>&1; then
+            echo "Error: MD Render.app not found"
             exit 1
           fi
-          echo "Build successful! Output files:"
-          ls -la dist/
+          if ! ls "$release_dir"/*.dmg >/dev/null 2>&1; then
+            echo "Error: dmg file not found"
+            exit 1
+          fi
+
+      - name: Upload Electron artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-mac
+          path: |
+            apps/editor/release/*.dmg
+            apps/editor/release/*.blockmap
+          retention-days: 7

@@ -1,6 +1,6 @@
 ---
 name: md-render-parser-renderer
-description: 在本项目修改 Markdown 解析/渲染核心逻辑（src/core/parser.js、src/core/renderer.js）时的标准流程——新增语法、改 token 结构、调整 HTML 输出都要走。涉及"加个 Markdown 语法""支持某种标记""解析不对""渲染出来不对""改 parser/renderer"时触发。这是项目最核心也最易出错的模块，改动务必遵循这里的约定。
+description: 在本项目修改 Markdown 解析/渲染核心逻辑（packages/markdown-core/src/parser.js、packages/markdown-core/src/renderer.js）时的标准流程——新增语法、改 token 结构、调整 HTML 输出都要走。涉及"加个 Markdown 语法""支持某种标记""解析不对""渲染出来不对""改 parser/renderer"时触发。这是项目最核心也最易出错的模块，改动务必遵循这里的约定。
 ---
 
 # 解析 / 渲染改动规范
@@ -72,7 +72,7 @@ flowchart TD
 
 默认不要主动跑测试。用户明确要求时，再跑 `pnpm test:unit` 或用户指定命令。
 
-如果需要补测试，优先补 vitest 单测文件 `tests/<feature>.test.js`。注意：`*.test.js` 是 vitest 单测，`*.spec.js` 是 playwright E2E；默认不要新增或执行 E2E，除非用户明确要求。
+如果需要补测试，优先补 vitest 单测文件 `apps/editor/tests/<feature>.test.js`。注意：`*.test.js` 是 vitest 单测，`*.spec.js` 是 playwright E2E；默认不要新增或执行 E2E，除非用户明确要求。
 
 ## 完成标准
 

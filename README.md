@@ -2,7 +2,7 @@
 
 [中文版说明](./README.zh.md)
 
-A simple, lightweight Markdown renderer built with **React + Vite**, supporting CommonMark and GFM. The core parser and renderer are pure JavaScript with no runtime dependencies.
+A simple, lightweight Markdown renderer workspace built with **React + Vite**, supporting CommonMark and GFM. The repo now uses a small pnpm monorepo: the editor app lives in `apps/editor`, and the reusable parser/render pipeline lives in `packages/markdown-core`.
 
 ## Features
 
@@ -58,7 +58,7 @@ pnpm run dev
 - Image links will be automatically converted to HTTPS (if originally HTTP)
 - All custom class attributes and data-* attributes will be removed to ensure compatibility
 - Layout preset matches WeChat requirements: all text fixed at `16px`, paragraph spacing `8px`, and line height `1.6`
-- Reusable helper `src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
+- Reusable helper `apps/editor/src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
 
 ### Workspace & Local Storage
 
@@ -74,7 +74,7 @@ pnpm run dev
 pnpm run build
 ```
 
-The build output will be generated in the `dist/` directory.
+The web build output will be generated in `apps/editor/dist/`.
 
 ### Preview Production Build
 
@@ -126,25 +126,22 @@ graph TD
 
 ```
 md-render/
-├── index.html              # Application entry HTML
-├── package.json            # Project configuration and dependencies
-├── vite.config.js          # Vite build configuration
-├── src/                    # Source code directory
-│   ├── main.jsx            # React application entry
-│   ├── components/         # React components
-│   │   ├── MarkdownEditor.jsx   # Main editor shell
-│   │   └── WorkspaceSidebar.jsx # Directory sidebar component
-│   ├── core/               # Core functionality modules
-│   │   ├── index.js        # Parser and renderer exports
-│   │   ├── parser.js       # Markdown parser (text → tokens)
-│   │   └── renderer.js     # HTML renderer (tokens → HTML)
-│   ├── utils/              # Utility modules
-│   │   ├── wechatCopy.js   # WeChat Official Account copy logic
-│   │   └── wechatTemplates.js  # WeChat format templates
-│   └── styles/             # Style files
-│       ├── styles.css      # Main styles
-│       └── design-tokens.css    # Design tokens (colors, spacing)
-├── tests/                  # Playwright E2E tests
+├── package.json            # Workspace scripts
+├── pnpm-workspace.yaml     # Workspace package discovery
+├── apps/
+│   └── editor/
+│       ├── package.json         # Editor app package
+│       ├── index.html           # App entry HTML
+│       ├── vite.config.js       # App Vite config
+│       ├── electron/            # Electron main/preload
+│       ├── src/                 # Editor source code
+│       └── tests/               # Vitest + Playwright tests
+├── packages/
+│   └── markdown-core/
+│       └── src/
+│           ├── parser.js        # Markdown parser (text → tokens)
+│           ├── renderer.js      # HTML renderer (tokens → HTML)
+│           └── index.js         # Reusable exports
 ├── README.md               # Project documentation
 └── ARCHITECTURE.md         # Architecture documentation
 ```
@@ -189,7 +186,7 @@ md-render/
 ## Technical Implementation
 
 - **React 18 + Vite** for the UI and build pipeline
-- **Self-built parser and renderer** (`core/`) — pure JavaScript, no runtime dependencies
+- **Self-built parser and renderer** (`packages/markdown-core/`) — pure JavaScript, no runtime dependencies
 - **highlight.js** (CDN) for code syntax highlighting
 - **lucide-react** for icons
 - **Mermaid** (CDN) for diagram rendering
@@ -245,7 +242,7 @@ For detailed implementation principles, architecture design, and execution flow,
 
 ## Deploy to GitHub Pages
 
-This project is a pure static site (`index.html` + JS/CSS) and can be automatically deployed to GitHub Pages via GitHub Actions.
+The workspace ships a web build from `apps/editor` and can still deploy that web bundle to GitHub Pages via GitHub Actions.
 
 ### One-time Configuration
 
@@ -271,5 +268,4 @@ This project is a pure static site (`index.html` + JS/CSS) and can be automatica
 - If your static files are not in the repository root, modify the `path` in the workflow's `actions/upload-pages-artifact@v3`.
 - The workflow has been configured with necessary permissions: `pages: write` and `id-token: write`.
 - If your repository's default branch is not `main`, please update the workflow trigger branch accordingly.
-- If assets 404 on Pages, ensure the `vite.config.js` `base` points to `/<repo>/` for project pages. This repo auto-inferrs base during CI via `GITHUB_REPOSITORY`.
-
+- If assets 404 on Pages, ensure `apps/editor/vite.config.js` sets `base` to `/<repo>/` for project pages. This repo auto-inferrs base during CI via `GITHUB_REPOSITORY`.

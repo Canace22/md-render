@@ -1,6 +1,6 @@
 # Markdown 渲染器
 
-一个简单、轻量级的 Markdown 渲染器，使用原生 JavaScript 实现，支持 CommonMark 规范，无需任何依赖。
+一个简单、轻量级的 Markdown 内容创作工具工作区，支持 CommonMark 规范。仓库现在改成了小型 pnpm monorepo：编辑器应用放在 `apps/editor`，可复用的 Markdown 解析/渲染核心放在 `packages/markdown-core`。
 
 ## 功能特性
 
@@ -56,7 +56,7 @@ pnpm run dev
 - 图片链接会自动转换为 HTTPS（如果原本是 HTTP）
 - 所有自定义的 class 属性和 data-* 属性会被移除，以确保兼容性
 - 版式预设符合公众号要求：全部文本固定字号 `16px`、段后间距 `8px`、行高 `1.6`
-- 提供通用工具 `src/utils/wechatCopy.js`，可在其他模块复用转换与复制逻辑
+- 提供通用工具 `apps/editor/src/utils/wechatCopy.js`，可在其他模块复用转换与复制逻辑
 
 ### 目录与本地保存
 
@@ -72,7 +72,7 @@ pnpm run dev
 pnpm run build
 ```
 
-构建产物将输出到 `dist/` 目录。
+Web 构建产物将输出到 `apps/editor/dist/` 目录。
 
 ### 端到端测试（Playwright）
 
@@ -115,22 +115,25 @@ graph TD
 
 ```
 md-render/
-├── index.html              # 应用入口 HTML
-├── package.json            # 项目配置和依赖
-├── vite.config.js          # Vite 构建配置
-├── src/                    # 源代码目录
-│   ├── main.jsx            # React 应用入口
-│   ├── components/         # React 组件
-│   │   ├── MarkdownEditor.jsx   # 编辑器主壳层
-│   │   └── WorkspaceSidebar.jsx # 目录侧栏组件
-│   ├── core/               # 核心功能模块
-│   │   ├── parser.js       # Markdown 解析器
-│   │   └── renderer.js     # HTML 渲染器
-│   └── styles/             # 样式文件
-│       └── styles.css      # 主样式文件
-├── README.md               # 项目说明
-├── ARCHITECTURE.md         # 架构文档
-└── REACT_MIGRATION.md      # React 迁移分析报告
+├── package.json            # workspace 脚本入口
+├── pnpm-workspace.yaml     # workspace 包发现
+├── apps/
+│   └── editor/
+│       ├── package.json         # 编辑器应用包
+│       ├── index.html           # 应用入口 HTML
+│       ├── vite.config.js       # Vite 构建配置
+│       ├── electron/            # Electron main / preload
+│       ├── src/                 # React 编辑器源码
+│       └── tests/               # Vitest / Playwright 测试
+├── packages/
+│   └── markdown-core/
+│       └── src/
+│           ├── parser.js        # Markdown 解析器
+│           ├── renderer.js      # HTML 渲染器
+│           └── index.js         # 可复用导出
+├── README.md               # 英文说明
+├── README.zh.md            # 中文说明
+└── ARCHITECTURE.md         # 架构文档
 ```
 
 ## 支持的 Markdown 语法
@@ -228,7 +231,7 @@ md-render/
 
 ## 部署到 GitHub Pages
 
-本项目为纯静态站点（`index.html` + JS/CSS），可通过 GitHub Actions 自动部署到 GitHub Pages。
+这个 workspace 仍然可以通过 GitHub Actions 把 `apps/editor` 的 Web 构建产物部署到 GitHub Pages。
 
 ### 一次性配置
 
@@ -254,4 +257,4 @@ md-render/
 - 若你的静态文件不在仓库根目录，请修改工作流中的 `actions/upload-pages-artifact@v3` 的 `path`。
 - 工作流已设置必要权限：`pages: write` 与 `id-token: write`。
 - 若仓库默认分支不是 `main`，请同步修改工作流触发分支。
-- 如果 Pages 上出现静态资源 404，请确认 `vite.config.js` 的 `base` 指向 `/<repo>/`（本仓库在 CI 中会通过 `GITHUB_REPOSITORY` 自动推断）。
+- 如果 Pages 上出现静态资源 404，请确认 `apps/editor/vite.config.js` 的 `base` 指向 `/<repo>/`（本仓库在 CI 中会通过 `GITHUB_REPOSITORY` 自动推断）。

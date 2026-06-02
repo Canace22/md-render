@@ -22,21 +22,21 @@ pnpm test:e2e     # E2E 测试（playwright）
 ## 关键约定（必须遵守）
 
 1. **不引入 TypeScript**，所有文件保持 `.js` / `.jsx`
-2. **全局状态**统一走 `src/store/useEditorStore.js`（zustand），不要新建其他全局 store
+2. **全局状态**统一走 `apps/editor/src/store/useEditorStore.js`（zustand），不要新建其他全局 store
 3. **样式**用 CSS class + CSS 变量，颜色值从 `design-tokens.css` 取，不硬编码
-4. **核心逻辑**（解析/渲染）保持无副作用纯函数，改 `parser.js` / `renderer.js` 前先看懂现有结构
+4. **核心逻辑**（解析/渲染）保持无副作用纯函数，改 `packages/markdown-core/src/parser.js` / `packages/markdown-core/src/renderer.js` 前先看懂现有结构
 
 ## 常见入口
 
 | 需求 | 看这里 |
 |------|--------|
-| 编辑器主逻辑 | `src/components/MarkdownEditor.jsx` |
-| 全局状态 | `src/store/useEditorStore.js` |
-| Markdown 解析/渲染 | `src/core/parser.js` + `src/core/renderer.js` |
-| 微信格式化 | `src/utils/wechatCopy.js` + `src/utils/wechatTemplates.js` |
-| Notion 集成 | `src/utils/notionService.js` + `src/utils/notionConverter.js` |
-| 小说辅助 | `src/core/novel/` |
-| CSS 变量 | `src/styles/design-tokens.css` |
+| 编辑器主逻辑 | `apps/editor/src/components/MarkdownEditor.jsx` |
+| 全局状态 | `apps/editor/src/store/useEditorStore.js` |
+| Markdown 解析/渲染 | `packages/markdown-core/src/parser.js` + `packages/markdown-core/src/renderer.js` |
+| 微信格式化 | `apps/editor/src/utils/wechatCopy.js` + `apps/editor/src/utils/wechatTemplates.js` |
+| Notion 集成 | `apps/editor/src/utils/notionService.js` + `apps/editor/src/utils/notionConverter.js` |
+| 小说辅助 | `apps/editor/src/core/novel/` |
+| CSS 变量 | `apps/editor/src/styles/design-tokens.css` |
 
 ## Skill 自主进化（自动沉淀，无需用户提醒）
 

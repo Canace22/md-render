@@ -449,15 +449,15 @@ interface INovelEntity {
 
 当前代码中的核心落点：
 
-- 模式状态与持久化：`src/store/useEditorStore.js`
-- 小说识别层：`src/core/novel/`
-- 编辑器集成：`src/components/MarkdownEditor.jsx`
-- 顶部常用块工具栏：`src/components/EditorQuickToolbar.jsx`
-- 小说助手栏：`src/components/NovelAssistantPanel.jsx`
-- 正文实体预览卡片：`src/components/NovelEntityPreviewModal.jsx`
-- `@` 分类菜单：`src/components/NovelMentionMenu.jsx`
-- 实体统一标记：`src/components/NovelEntityMark.jsx`
-- 视觉样式：`src/styles/styles.css`
+- 模式状态与持久化：`apps/editor/src/store/useEditorStore.js`
+- 小说识别层：`apps/editor/src/core/novel/`
+- 编辑器集成：`apps/editor/src/components/MarkdownEditor.jsx`
+- 顶部常用块工具栏：`apps/editor/src/components/EditorQuickToolbar.jsx`
+- 小说助手栏：`apps/editor/src/components/NovelAssistantPanel.jsx`
+- 正文实体预览卡片：`apps/editor/src/components/NovelEntityPreviewModal.jsx`
+- `@` 分类菜单：`apps/editor/src/components/NovelMentionMenu.jsx`
+- 实体统一标记：`apps/editor/src/components/NovelEntityMark.jsx`
+- 视觉样式：`apps/editor/src/styles/styles.css`
 
 ---
 

@@ -16,7 +16,7 @@
 - **Vite 5.x** - 构建工具，开发服务器
 - **React 18** - 函数式组件 + Hooks
 - **JavaScript（JSX）** - 项目无 TypeScript，所有文件均为 `.js` / `.jsx`
-- **Zustand 5.x** - 全局状态管理（`src/store/useEditorStore.js`）
+- **Zustand 5.x** - 全局状态管理（`apps/editor/src/store/useEditorStore.js`）
 - **@blocknote/react 0.47.x** - 富文本块编辑器（Novel 模式）
 - **Ant Design 5.x** - 部分 UI 组件
 - **shiki 3.x** - 代码语法高亮
@@ -28,47 +28,34 @@
 - 禁止使用 class 组件
 - 禁止直接操作 `localStorage`（统一通过 zustand `persist` 中间件或已有的常量 key 访问）
 - 禁止在 JSX 中写复杂的业务逻辑，抽到 hooks 或 utils
-- 禁止直接 `fetch`（封装到 `src/utils/` 下对应模块，如 `notionService.js`）
+- 禁止直接 `fetch`（封装到 `apps/editor/src/utils/` 下对应模块，如 `notionService.js`）
 
 ## 项目结构
 
 ```
-src/
-├── components/          # React 组件
-│   ├── MarkdownEditor.jsx     # 主编辑器（Markdown 编辑 + 预览）
-│   ├── WorkspaceSidebar.jsx   # 左侧工作区文件树
-│   ├── SettingsPanel.jsx      # 设置面板
-│   ├── NotionPanel.jsx        # Notion 导出面板
-│   ├── NovelAssistantPanel.jsx# 小说写作助手面板
-│   ├── DocHeader.jsx          # 顶部标题栏
-│   └── ...
-├── core/                # 核心解析/渲染逻辑
-│   ├── parser.js        # Markdown 解析器 → token 数组
-│   ├── renderer.js      # token 数组 → HTML 字符串
-│   └── novel/           # 小说辅助（实体抽取、场景分析等）
-├── hooks/               # 自定义 Hooks
-│   ├── useTitleEditing.js
-│   └── useWorkspaceActions.js
-├── store/
-│   ├── useEditorStore.js  # 全局状态（zustand + persist）
-│   └── workspaceUtils.js  # 工作区纯函数工具
-├── utils/               # 工具函数
-│   ├── markdownIO.js      # Markdown 文件导入导出
-│   ├── markdownUtils.js
-│   ├── notionService.js   # Notion API 调用
-│   ├── notionConverter.js # 内容格式转换
-│   ├── themeUtils.js      # 主题工具
-│   ├── wechatCopy.js      # 微信格式复制
-│   ├── wechatTemplates.js # 微信模板
-│   └── workspaceIO.js     # 工作区导入导出
-└── styles/
-    ├── styles.css         # 主样式（暗黑主题）
-    └── design-tokens.css  # CSS 变量（颜色、间距等）
+apps/
+└── editor/
+    ├── src/
+    │   ├── components/          # React 组件
+    │   ├── core/novel/          # 小说辅助（实体抽取、场景分析等）
+    │   ├── hooks/
+    │   ├── store/
+    │   │   ├── useEditorStore.js  # 全局状态（zustand + persist）
+    │   │   └── workspaceUtils.js  # 工作区纯函数工具
+    │   ├── utils/
+    │   └── styles/
+    ├── electron/                # Electron 入口
+    └── tests/                   # app 相关测试
+packages/
+└── markdown-core/
+    └── src/
+        ├── parser.js            # Markdown 解析器 → token 数组
+        └── renderer.js          # token 数组 → HTML 字符串
 ```
 
 ## 状态管理
 
-项目使用 **Zustand** 管理全局状态，所有编辑器状态集中在 `src/store/useEditorStore.js`。
+项目使用 **Zustand** 管理全局状态，所有编辑器状态集中在 `apps/editor/src/store/useEditorStore.js`。
 
 ```javascript
 // ✅ 组件中读取状态
@@ -130,7 +117,7 @@ export default MyComponent;
 
 ## 样式规范
 
-- 样式写在 `src/styles/styles.css`，CSS 变量定义在 `design-tokens.css`
+- 样式写在 `apps/editor/src/styles/styles.css`，CSS 变量定义在 `design-tokens.css`
 - 优先使用 CSS class，不写大段内联 style
 - 简单动态样式可用内联 `style={{ color: active ? 'var(--accent)' : 'var(--text-muted)' }}`
 - 主题颜色通过 CSS 变量控制，不要硬编码颜色值
@@ -139,8 +126,8 @@ export default MyComponent;
 
 ### parser.js / renderer.js
 
-- `parser.js` 只负责文本 → token，无副作用
-- `renderer.js` 只负责 token → HTML 字符串，无副作用
+- `packages/markdown-core/src/parser.js` 只负责文本 → token，无副作用
+- `packages/markdown-core/src/renderer.js` 只负责 token → HTML 字符串，无副作用
 - 新增语法支持：先在 parser 中加 token 类型，再在 renderer 中加对应渲染方法
 
 ### notionService.js

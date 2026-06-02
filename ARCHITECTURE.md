@@ -1,6 +1,6 @@
 # 实现原理
 
-Markdown 渲染器采用两步流程：**解析 → 渲染**。解析器将 Markdown 文本转换为结构化的 token 数组，渲染器将 token 数组转换为最终的 HTML。本项目基于 **React + Vite** 构建，使用函数式组件和 Hooks 实现响应式渲染。
+Markdown 渲染器采用两步流程：**解析 → 渲染**。解析器将 Markdown 文本转换为结构化的 token 数组，渲染器将 token 数组转换为最终的 HTML。当前仓库已经拆成 pnpm monorepo：`apps/editor` 负责 React + Electron 应用壳，`packages/markdown-core` 负责可复用的解析/渲染核心。
 
 ## 工作流程图
 
@@ -38,11 +38,11 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant U as 用户
-    participant HTML as index.html
+    participant HTML as apps/editor/index.html
     participant React as React 应用
     participant Editor as MarkdownEditor
-    participant Parser as parser.js
-    participant Renderer as renderer.js
+    participant Parser as packages/markdown-core/parser.js
+    participant Renderer as packages/markdown-core/renderer.js
     participant Hljs as highlight.js
     
     U->>HTML: 打开页面
@@ -74,41 +74,40 @@ sequenceDiagram
 ## 架构概览图
 
 ```mermaid
-graph TB
-    subgraph "前端技术栈"
-        HTML[index.html<br/>入口 HTML]
-        REACT[React 18 + Vite]
-        STYLES[styles.css<br/>暗黑主题样式]
+%%{init: {'theme':'dark'}}%%
+flowchart LR
+    ROOT["md-render workspace"] --> APP["apps/editor"]
+    ROOT --> CORE["packages/markdown-core"]
+
+    subgraph APPGRAPH["editor app"]
+        HTML["index.html"]
+        MAIN["src/main.jsx"]
+        EDITOR["src/components/MarkdownEditor.jsx"]
+        STORE["src/store/useEditorStore.js"]
+        NOVEL["src/core/novel/"]
+        ELECTRON["electron/main.js + preload.js"]
     end
-    
-    subgraph "React 应用层"
-        MAIN[main.jsx<br/>应用入口]
-        EDITOR[MarkdownEditor<br/>主编辑器组件]
-        HOOKS[React Hooks<br/>状态管理]
+
+    subgraph COREGRAPH["shared markdown core"]
+        PARSER["parser.js"]
+        RENDERER["renderer.js"]
     end
-    
-    subgraph "核心业务层"
-        PARSER[MarkdownParser<br/>解析器]
-        RENDERER[MarkdownRenderer<br/>渲染器]
-    end
-    
-    subgraph "外部依赖"
-        HLJS[highlight.js<br/>语法高亮]
-    end
-    
+
     HTML --> MAIN
     MAIN --> EDITOR
-    EDITOR --> HOOKS
-    HOOKS --> PARSER
-    HOOKS --> RENDERER
-    RENDERER --> HLJS
-    EDITOR --> STYLES
-    
-    style REACT fill:#61dafb
-    style EDITOR fill:#4ec9b0
-    style PARSER fill:#d7ba7d
-    style RENDERER fill:#d7ba7d
-    style HLJS fill:#f7df1e
+    EDITOR --> STORE
+    EDITOR --> NOVEL
+    EDITOR --> PARSER
+    EDITOR --> RENDERER
+    ELECTRON --> HTML
+    CORE --> PARSER
+    CORE --> RENDERER
+
+    style APP fill:#2563eb,stroke:#60a5fa,color:#fff
+    style CORE fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style EDITOR fill:#0f766e,stroke:#5eead4,color:#fff
+    style PARSER fill:#92400e,stroke:#fbbf24,color:#fff
+    style RENDERER fill:#92400e,stroke:#fbbf24,color:#fff
 ```
 
 ## 核心模块说明
@@ -358,7 +357,6 @@ MarkdownEditor
   - 考虑使用 `useMemo` 缓存解析结果（如果依赖项不变）
   - 可以考虑虚拟滚动（Virtual Scrolling）处理超大文档
 - 代码语法高亮已集成 highlight.js，如需自定义可以：
-  - 更换主题：修改 `index.html` 中的 CSS 链接
+  - 更换主题：修改 `apps/editor/index.html` 中的 CSS 链接
   - 限制语言支持：引入特定语言的子集以减少体积
   - 使用 CDN 或本地文件：当前使用 CDN，离线环境需要下载到本地
-

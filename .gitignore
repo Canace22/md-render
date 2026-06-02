@@ -1,11 +1,15 @@
 # Dependencies
 node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
 
 # Build output
 dist/
+apps/*/dist/
 
 # Test output
 test-results/
+apps/*/test-results/
 
 # Environment variables
 .env
@@ -29,3 +33,6 @@ npm-debug.log*
 dist-electron/
 release/
 build/
+apps/*/dist-electron/
+apps/*/release/
+apps/*/build/

@@ -1,0 +1,10 @@
+{
+  "name": "@md-render/markdown-core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable markdown parser and renderer for md-render",
+  "exports": {
+    ".": "./src/index.js"
+  }
+}
