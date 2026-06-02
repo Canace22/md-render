@@ -266,6 +266,28 @@ export function filterWorkspace(node, keyword) {
 }
 
 /**
+ * 取文件夹的直接子节点（不递归），用于目录页展示。
+ */
+export function getFolderDirectChildren(folder) {
+  if (!folder || folder.type !== 'folder') return [];
+  return Array.isArray(folder.children) ? [...folder.children] : [];
+}
+
+/**
+ * 目录页摘要文案（纯函数）：只统计直接子级。
+ */
+export function buildFolderChildSummary(children) {
+  const list = Array.isArray(children) ? children : [];
+  const folderCount = list.filter((item) => item.type === 'folder').length;
+  const fileCount = list.filter((item) => item.type === 'file').length;
+  const parts = [];
+  if (folderCount > 0) parts.push(`${folderCount} 个文件夹`);
+  if (fileCount > 0) parts.push(`${fileCount} 个文档`);
+  if (parts.length === 0) return '空目录';
+  return parts.join('，');
+}
+
+/**
  * 收集工作区里所有文件（纯函数），扁平成数组。
  */
 export function collectFiles(node, acc = []) {

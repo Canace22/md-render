@@ -32,7 +32,7 @@ import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
-import { buildUniqueName, collectFiles, findNodeById } from '../store/workspaceUtils.js';
+import { buildUniqueName, collectFiles, findNodeById, getFolderDirectChildren } from '../store/workspaceUtils.js';
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import {
   isLocalProjectSupported,
@@ -152,8 +152,8 @@ function MarkdownEditor() {
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
   const selectedInLocalProject = Boolean(selectedNode?.projectRootPath);
   const hasLocalProjectWorkspace = useMemo(() => hasLocalProjectNode(workspace), [workspace]);
-  const folderFiles = useMemo(
-    () => (selectedFolder ? collectFiles(selectedFolder) : []),
+  const folderChildren = useMemo(
+    () => (selectedFolder ? getFolderDirectChildren(selectedFolder) : []),
     [selectedFolder],
   );
   const contentSurface = selectedFolder ? 'folder' : 'paper';
@@ -628,8 +628,8 @@ function MarkdownEditor() {
         ) : surface === 'folder' && selectedFolder ? (
           <FolderFileList
             folder={selectedFolder}
-            files={folderFiles}
-            onOpenFile={selectNode}
+            children={folderChildren}
+            onSelectItem={selectNode}
           />
         ) : (
           <>

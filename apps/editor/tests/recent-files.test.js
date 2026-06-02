@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildFolderChildSummary,
   collectFiles,
   collectRecentFiles,
   ensureFileTimestamps,
+  getFolderDirectChildren,
 } from '../renderer/src/store/workspaceUtils.js';
 
 const ws = {
@@ -19,6 +21,23 @@ const ws = {
     },
   ],
 };
+
+describe('getFolderDirectChildren', () => {
+  it('returns only direct children without flattening files', () => {
+    const folder = ws.children.find((c) => c.id === 'd');
+    expect(getFolderDirectChildren(folder).map((n) => n.id).sort()).toEqual(['b', 'c', 'e']);
+    expect(getFolderDirectChildren(ws).map((n) => n.id)).toEqual(['a', 'd']);
+  });
+});
+
+describe('buildFolderChildSummary', () => {
+  it('counts folders and files at current level only', () => {
+    expect(buildFolderChildSummary(getFolderDirectChildren(ws))).toBe('1 个文件夹，1 个文档');
+    const folder = ws.children.find((c) => c.id === 'd');
+    expect(buildFolderChildSummary(getFolderDirectChildren(folder))).toBe('3 个文档');
+    expect(buildFolderChildSummary([])).toBe('空目录');
+  });
+});
 
 describe('collectFiles', () => {
   it('flattens all files recursively', () => {
