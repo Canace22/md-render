@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
-import { SuggestionMenuController } from '@blocknote/react';
 import { BlockNoteEditor, BlockNoteSchema, createCodeBlockSpec, defaultBlockSpecs } from '@blocknote/core';
-import { SuggestionMenu as SuggestionMenuExtension, filterSuggestionItems } from '@blocknote/core/extensions';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
 import '@blocknote/core/fonts/inter.css';
@@ -10,19 +8,10 @@ import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
-import NovelAssistantPanel from './NovelAssistantPanel.jsx';
 import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
-import NovelEntityMark from './NovelEntityMark.jsx';
-import NovelEntityPreviewModal from './NovelEntityPreviewModal.jsx';
-import NovelMentionMenu from './NovelMentionMenu.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
-import {
-  applyNovelEntityHighlights,
-  clearNovelEntityHighlights,
-  findClickedNovelEntity,
-} from '../utils/novelEntityHighlight';
 import {
   createEmptyDocument,
   extractCodeBlockFromClipboardHtml,
@@ -98,28 +87,15 @@ const BLOCKNOTE_OPTIONS = {
   },
 };
 
-const ENTITY_MENTION_META = {
-  character: { label: '角色' },
-  location: { label: '地点' },
-  faction: { label: '势力' },
-  item: { label: '物件' },
-  mission: { label: '任务' },
-};
-
 function MarkdownEditor() {
   const {
     workspace,
     selectedId,
     markdown,
-    mode,
     sidebarCollapsed,
     theme,
     copyStyle,
     surface,
-    novelPanelOpen,
-    novelMemory,
-    novelFindings,
-    novelAgentSuggestions,
     notionToken,
     notionFilePages,
     setTheme,
@@ -128,8 +104,6 @@ function MarkdownEditor() {
     setNotionToken,
     setFileNotionPageId,
     setFileTags,
-    toggleMode,
-    toggleNovelPanel,
     toggleSidebarCollapsed,
     updateSelectedFileContent,
     selectNode,
@@ -138,11 +112,6 @@ function MarkdownEditor() {
     applyRename,
     deleteNode,
     importWorkspace,
-    analyzeNovelFile,
-    updateNovelEntity,
-    resolveNovelFinding,
-    queueNovelAgentSuggestion,
-    markNovelAgentSuggestion,
     syncMarkdownFromSelectedFile,
     syncSelectedIdFromWorkspace,
   } = useEditorStore();
@@ -162,9 +131,6 @@ function MarkdownEditor() {
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
-  const highlightRootRef = useRef(null);
-  const novelHighlightMatchesRef = useRef([]);
-  const [activeNovelEntityId, setActiveNovelEntityId] = useState(null);
   const titleEditing = useTitleEditing(selectedFile, applyRename);
   const { handleRename, handleDelete, handleExport, handleImport } = useWorkspaceActions({
     workspace,
@@ -173,7 +139,6 @@ function MarkdownEditor() {
     deleteNode,
     importWorkspace,
   });
-  const [novelEntityPreviewOpen, setNovelEntityPreviewOpen] = useState(false);
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
   const [notionMessage, setNotionMessage] = useState('');
@@ -259,24 +224,6 @@ function MarkdownEditor() {
   }, [markdown]);
 
   const resolvedTheme = theme === 'dark' ? 'dark' : 'light';
-
-  const currentScene = useMemo(() => {
-    const currentSceneId = novelMemory?.currentSceneByFile?.[selectedId];
-    const scenes = novelMemory?.scenesByFile?.[selectedId] ?? [];
-    return scenes.find((scene) => scene.id === currentSceneId) ?? scenes.at(-1) ?? null;
-  }, [novelMemory, selectedId]);
-
-  const visibleNovelEntities = useMemo(() => {
-    const entities = novelMemory?.entities ?? [];
-    if (!selectedFile) return entities;
-    return entities.filter((entity) => {
-      const mentionCount = entity.mentionsByFile?.[selectedFile.id] ?? 0;
-      return mentionCount > 0 || entity.status === 'pending' || entity.status === 'confirmed';
-    });
-  }, [novelMemory, selectedFile]);
-  const activeNovelEntity = useMemo(() => {
-    return visibleNovelEntities.find((entity) => entity.id === activeNovelEntityId) ?? null;
-  }, [visibleNovelEntities, activeNovelEntityId]);
 
   const tryConvertTypedMarkdownCodeFence = useCallback(() => {
     const cursorPosition = editor.getTextCursorPosition();
@@ -390,71 +337,6 @@ function MarkdownEditor() {
     }
   }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, markdown, updateSelectedFileContent]);
 
-  const handleInsertNovelEntity = useCallback(
-    (entity) => {
-      if (!entity?.name || !selectedFile) return;
-      editor.focus();
-      editor.insertInlineContent(entity.name);
-      const nextMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
-      lastSyncedMarkdownRef.current = nextMarkdown;
-      updateSelectedFileContent(nextMarkdown);
-      setActiveNovelEntityId(entity.id);
-    },
-    [editor, selectedFile, updateSelectedFileContent],
-  );
-
-  const handleOpenNovelEntityPreview = (entityId) => {
-    if (!entityId) return;
-    setActiveNovelEntityId(entityId);
-    setNovelEntityPreviewOpen(true);
-  };
-
-  const handleCloseNovelEntityPreview = () => {
-    setNovelEntityPreviewOpen(false);
-  };
-
-  const handleOpenEntityInPanel = (entity) => {
-    if (!entity?.id) return;
-    setActiveNovelEntityId(entity.id);
-    setNovelEntityPreviewOpen(false);
-    if (!novelPanelOpen) {
-      toggleNovelPanel();
-    }
-  };
-
-  const handleOpenEntityMentionMenu = () => {
-    if (mode !== 'novel') return;
-    const suggestionMenu = editor.getExtension(SuggestionMenuExtension);
-    suggestionMenu?.openSuggestionMenu('@', { ignoreQueryLength: true });
-  };
-
-  const mentionMenuItems = useMemo(() => {
-    if (mode !== 'novel') return [];
-
-    return visibleNovelEntities.map((entity) => {
-      const meta = ENTITY_MENTION_META[entity.type] ?? {
-        label: '实体',
-      };
-
-      return {
-        title: entity.name,
-        subtext: entity.summary || `插入${meta.label}到正文`,
-        aliases: [entity.name, ...(entity.aliases ?? []), meta.label],
-        group: '小说实体',
-        badge: meta.label,
-        icon: <NovelEntityMark type={entity.type} />,
-        entityId: entity.id,
-        entityType: entity.type,
-        onItemClick: () => {
-          handleInsertNovelEntity(entity);
-        },
-      };
-    });
-  }, [editor, mode, visibleNovelEntities, handleInsertNovelEntity]);
-  const getMentionMenuItems = useMemo(() => {
-    return async (query) => filterSuggestionItems(mentionMenuItems, query);
-  }, [mentionMenuItems]);
-
   useEffect(() => {
     applyThemeToBody(theme);
   }, [theme]);
@@ -470,64 +352,6 @@ function MarkdownEditor() {
     syncMarkdownFromSelectedFile();
     syncSelectedIdFromWorkspace();
   }, [selectedFile, workspace, markdown, syncMarkdownFromSelectedFile, syncSelectedIdFromWorkspace]);
-
-  useEffect(() => {
-    if (activeNovelEntityId && !visibleNovelEntities.some((entity) => entity.id === activeNovelEntityId)) {
-      setActiveNovelEntityId(null);
-      setNovelEntityPreviewOpen(false);
-    }
-  }, [visibleNovelEntities, activeNovelEntityId]);
-
-  useEffect(() => {
-    if (mode === 'novel') return;
-    setNovelEntityPreviewOpen(false);
-  }, [mode]);
-
-  useEffect(() => {
-    setNovelEntityPreviewOpen(false);
-  }, [selectedId]);
-
-  useEffect(() => {
-    const root = highlightRootRef.current ?? editor?.domElement;
-    if (!root) return undefined;
-
-    if (mode !== 'novel') {
-      novelHighlightMatchesRef.current = [];
-      clearNovelEntityHighlights();
-      return undefined;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      novelHighlightMatchesRef.current = applyNovelEntityHighlights(
-        root,
-        visibleNovelEntities,
-        activeNovelEntityId,
-      );
-    });
-
-    const handleClick = (event) => {
-      const entityId = findClickedNovelEntity(event, root, novelHighlightMatchesRef.current);
-      if (!entityId) return;
-      handleOpenNovelEntityPreview(entityId);
-    };
-
-    root.addEventListener('click', handleClick);
-    return () => {
-      window.cancelAnimationFrame(rafId);
-      root.removeEventListener('click', handleClick);
-      clearNovelEntityHighlights();
-    };
-  }, [mode, visibleNovelEntities, activeNovelEntityId, editor, markdown]);
-
-  useEffect(() => {
-    if (mode !== 'novel' || !selectedFile) return undefined;
-
-    const timer = window.setTimeout(() => {
-      analyzeNovelFile(selectedFile.id, markdown);
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [mode, selectedFile, markdown, analyzeNovelFile]);
 
   return (
     <div className="container immersive-shell">
@@ -606,10 +430,6 @@ function MarkdownEditor() {
           <>
             <DocHeader
               selectedFile={selectedFile}
-              mode={mode}
-              toggleMode={toggleMode}
-              novelPanelOpen={novelPanelOpen}
-              toggleNovelPanel={toggleNovelPanel}
               onOpenNotion={() => setSurface('notion')}
               notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
@@ -618,18 +438,15 @@ function MarkdownEditor() {
             <EditorQuickToolbar
               editor={editor}
               disabled={!selectedFile}
-              isNovelMode={mode === 'novel'}
-              onOpenEntityMention={handleOpenEntityMentionMenu}
               onPreviewWeChat={() => setWechatPreviewOpen(true)}
               onCopyWeChat={handleCopyToWeChat}
               copyStyleName={getTemplateById(copyStyle).name}
             />
-            <div className={`novel-layout ${mode === 'novel' ? 'is-novel' : ''}`}>
+            <div className="editor-layout">
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
-
                   <div id="markdown-output" className="paper-content">
-                    <div ref={highlightRootRef} className="blocknote-paper">
+                    <div className="blocknote-paper">
                       <BlockNoteView
                         editor={editor}
                         className="blocknote-editor"
@@ -644,70 +461,11 @@ function MarkdownEditor() {
                         tableHandles
                         emojiPicker={false}
                         onChange={handleEditorChange}
-                      >
-                        {mode === 'novel' && (
-                          <SuggestionMenuController
-                            triggerCharacter="@"
-                            getItems={getMentionMenuItems}
-                            minQueryLength={0}
-                            suggestionMenuComponent={NovelMentionMenu}
-                            shouldOpen={(state) =>
-                              !state.selection.$from.parent.type.isInGroup('tableContent')
-                            }
-                          />
-                        )}
-                      </BlockNoteView>
+                      />
                     </div>
                   </div>
                 </div>
               </div>
-
-              {mode === 'novel' && (
-                <NovelEntityPreviewModal
-                  open={novelEntityPreviewOpen}
-                  entity={activeNovelEntity}
-                  currentFileId={selectedFile?.id}
-                  currentFileName={selectedFile?.name}
-                  onClose={handleCloseNovelEntityPreview}
-                  onEntityUpdate={(entityId, patch) => updateNovelEntity(entityId, patch)}
-                />
-              )}
-
-              {mode === 'novel' && (
-                <NovelAssistantPanel
-                  open={novelPanelOpen}
-                  currentScene={currentScene}
-                  entities={visibleNovelEntities}
-                  currentFileId={selectedFile?.id}
-                  findings={novelFindings}
-                  agentSuggestions={novelAgentSuggestions}
-                  activeEntityId={activeNovelEntity?.id ?? null}
-                  onClose={toggleNovelPanel}
-                  onEntityUpdate={(entityId, patch) => updateNovelEntity(entityId, patch)}
-                  onAcceptFinding={(suggestionId) => resolveNovelFinding(suggestionId, 'accept')}
-                  onDismissFinding={(suggestionId) => resolveNovelFinding(suggestionId, 'dismiss')}
-                  onAcknowledgeAgentSuggestion={(suggestionId) =>
-                    markNovelAgentSuggestion(suggestionId, 'accepted')
-                  }
-                  onDismissAgentSuggestion={(suggestionId) =>
-                    markNovelAgentSuggestion(suggestionId, 'dismissed')
-                  }
-                  onSelectEntity={setActiveNovelEntityId}
-                  onRequestAgentScene={(scene) =>
-                    queueNovelAgentSuggestion('scene-completion', {
-                      targetId: scene?.id ?? selectedFile?.id,
-                      fileId: selectedFile?.id,
-                    })
-                  }
-                  onRequestAgentEntity={(entity) =>
-                    queueNovelAgentSuggestion('entity-completion', {
-                      targetId: entity?.id,
-                      fileId: selectedFile?.id,
-                    })
-                  }
-                  onInsertEntity={handleInsertNovelEntity}
-                />
-              )}
             </div>
           </>
         )}

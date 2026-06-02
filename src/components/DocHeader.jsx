@@ -4,10 +4,6 @@ import TagBar from './TagBar.jsx';
 
 export default function DocHeader({
   selectedFile,
-  mode,
-  toggleMode,
-  novelPanelOpen,
-  toggleNovelPanel,
   onOpenNotion,
   notionLinked,
   onTagsChange,
@@ -88,24 +84,6 @@ export default function DocHeader({
           >
             <Cloud size={16} strokeWidth={1.6} />
             <span>Notion</span>
-          </button>
-        )}
-        <button
-          type="button"
-          className={`novel-mode-toggle ${mode === 'novel' ? 'active' : ''}`}
-          data-testid="toggle-novel-mode"
-          onClick={toggleMode}
-        >
-          {mode === 'novel' ? '退出小说模式' : '小说模式'}
-        </button>
-        {mode === 'novel' && (
-          <button
-            type="button"
-            className="novel-panel-toggle"
-            data-testid="toggle-novel-panel"
-            onClick={toggleNovelPanel}
-          >
-            {novelPanelOpen ? '收起助手' : '展开助手'}
           </button>
         )}
       </div>

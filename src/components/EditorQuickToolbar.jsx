@@ -6,7 +6,6 @@ import {
   List,
   ListOrdered,
   Minus,
-  AtSign,
   Quote,
   Eye,
   Copy,
@@ -49,12 +48,6 @@ const TOOL_ITEMS = [
     icon: <Minus size={15} strokeWidth={1.9} />,
     block: { type: 'divider' },
     behavior: 'insert-divider',
-  },
-  {
-    key: 'entity-mention',
-    label: '实体引用',
-    icon: <AtSign size={15} strokeWidth={1.9} />,
-    behavior: 'insert-entity-mention',
   },
 ];
 
@@ -101,8 +94,6 @@ function insertDivider(editor) {
 export default function EditorQuickToolbar({
   editor,
   disabled,
-  isNovelMode,
-  onOpenEntityMention,
   onPreviewWeChat,
   onCopyWeChat,
   copyStyleName,
@@ -126,17 +117,13 @@ export default function EditorQuickToolbar({
       insertDivider(editor);
       return;
     }
-    if (item.behavior === 'insert-entity-mention') {
-      onOpenEntityMention?.();
-      return;
-    }
     applyBlock(editor, item.block);
   };
 
   return (
     <div className="editor-quick-toolbar-shell" data-testid="editor-quick-toolbar">
       <div className="editor-quick-toolbar-scroller">
-        {TOOL_ITEMS.filter((item) => isNovelMode || item.behavior !== 'insert-entity-mention').map((item) => (
+        {TOOL_ITEMS.map((item) => (
           <Button
             key={item.key}
             className="editor-quick-toolbar-btn"
