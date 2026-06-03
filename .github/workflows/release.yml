@@ -54,7 +54,7 @@ jobs:
           body: |
             ## 下载
 
-            下载下方 **Assets** 中的 `.dmg` 安装 macOS 桌面版。
+            下载下方 **Assets** 中的 `.dmg` 安装 macOS 桌面版（Universal，支持 Intel 与 Apple Silicon）。
 
             ## macOS 安装说明
 

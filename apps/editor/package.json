@@ -53,6 +53,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": ["dmg"],
+      "arch": ["universal"],
       "icon": "build/icon.icns"
     },
     "dmg": {
