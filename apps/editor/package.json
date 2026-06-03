@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "MD Render editor app",
+  "author": "canace22 <annalovelife39@gmail.com>",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -52,8 +53,13 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg"],
-      "arch": ["universal"],
+      "defaultArch": "universal",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
+      ],
       "icon": "build/icon.icns"
     },
     "dmg": {
