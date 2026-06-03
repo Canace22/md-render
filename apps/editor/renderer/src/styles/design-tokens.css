@@ -34,6 +34,9 @@
   --color-inline-code: #DC2626;
   --color-border: var(--color-border-subtle);
 
+  /* macOS Electron hiddenInset 标题栏交通灯预留（仅顶部） */
+  --mac-titlebar-height: 28px;
+
   /* === 2. 间距 (Spacing) === */
   --space-xs: 4px;
   --space-s: 8px;

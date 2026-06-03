@@ -126,6 +126,24 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     flex-shrink: 0;
 }
 
+/* macOS 非全屏：顶部为交通灯留空，左侧仍贴边 */
+.container.mac-windowed .workspace-panel {
+    padding-top: var(--mac-titlebar-height);
+}
+
+.container.mac-windowed .workspace-panel.collapsed {
+    padding-top: var(--mac-titlebar-height);
+}
+
+.container.mac-windowed .sidebar-header {
+    -webkit-app-region: drag;
+}
+
+.container.mac-windowed .sidebar-header-brand,
+.container.mac-windowed .sidebar-collapse-btn {
+    -webkit-app-region: no-drag;
+}
+
 .sidebar-header-brand {
     display: flex;
     align-items: center;

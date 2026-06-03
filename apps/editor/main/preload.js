@@ -5,6 +5,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // 平台信息
   platform: process.platform,
+  isFullScreen: () => ipcRenderer.invoke('window-is-fullscreen'),
+  onFullScreenChange: (callback) => {
+    const sub = (_event, isFullScreen) => callback(isFullScreen);
+    ipcRenderer.on('window-fullscreen-changed', sub);
+    return () => ipcRenderer.removeListener('window-fullscreen-changed', sub);
+  },
   openLocalProject: () => ipcRenderer.invoke('open-local-project'),
   saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
   ensureMdRenderWorkspace: () => ipcRenderer.invoke('ensure-md-render-workspace'),

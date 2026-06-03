@@ -72,6 +72,8 @@ ipcMain.handle('delete-local-project-entry', async (_event, payload = {}) => {
   return { ok: true };
 });
 
+ipcMain.handle('window-is-fullscreen', () => mainWindow?.isFullScreen() ?? false);
+
 // ---- 窗口状态记忆（延迟初始化） ----
 async function getStore() {
   if (store) return store;
@@ -131,9 +133,17 @@ async function createWindow() {
     }
   };
 
+  const notifyFullScreenChange = () => {
+    mainWindow?.webContents.send('window-fullscreen-changed', mainWindow.isFullScreen());
+  };
+
+  mainWindow.on('enter-full-screen', notifyFullScreenChange);
+  mainWindow.on('leave-full-screen', notifyFullScreenChange);
   mainWindow.on('resize', saveWindowState);
   mainWindow.on('move', saveWindowState);
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  mainWindow.webContents.on('did-finish-load', notifyFullScreenChange);
 }
 
 // ---- 托盘图标 ----

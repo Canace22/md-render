@@ -29,6 +29,7 @@ import { blocksToMarkdown, markdownToBlocks } from '../utils/notionConverter.js'
 import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../utils/notionService.js';
 import { batchPull, batchPush } from '../utils/notionBatchSync.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
+import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
@@ -130,6 +131,7 @@ const hasLocalProjectNode = (node) => {
 };
 
 function MarkdownEditor() {
+  const macWindowed = useMacTitlebarInset();
   const {
     workspace,
     selectedId,
@@ -804,7 +806,7 @@ function MarkdownEditor() {
   }, [selectedFile, workspace, markdown, syncMarkdownFromSelectedFile, syncSelectedIdFromWorkspace]);
 
   return (
-    <div className="container immersive-shell">
+    <div className={`container immersive-shell${macWindowed ? ' mac-windowed' : ''}`}>
       <input
         ref={importInputRef}
         type="file"
