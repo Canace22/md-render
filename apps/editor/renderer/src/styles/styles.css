@@ -3808,3 +3808,135 @@ body.theme-dark .wechat-preview-phone {
 body.theme-dark .wechat-preview-footer {
     border-top-color: #2d333b;
 }
+
+/* =====================================================
+   本地项目磁盘冲突 Modal
+   ===================================================== */
+
+.local-project-conflict-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1001;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+
+.local-project-conflict-modal {
+    background: var(--color-bg-surface);
+    border-radius: 14px;
+    width: 440px;
+    max-width: 100%;
+    padding: 20px 22px 18px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--color-border);
+}
+
+.local-project-conflict-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.local-project-conflict-icon {
+    color: #d97706;
+    flex-shrink: 0;
+}
+
+.local-project-conflict-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    line-height: 1.35;
+}
+
+.local-project-conflict-desc {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--color-text-secondary);
+}
+
+.local-project-conflict-list {
+    margin: 0 0 18px;
+    padding: 10px 12px;
+    list-style: none;
+    border-radius: 8px;
+    background: var(--color-bg-page);
+    border: 1px solid var(--color-border);
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.local-project-conflict-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+}
+
+.local-project-conflict-item + .local-project-conflict-item {
+    border-top: 1px solid var(--color-border);
+}
+
+.local-project-conflict-filename {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.local-project-conflict-hint {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.local-project-conflict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.local-project-conflict-btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.local-project-conflict-btn:hover {
+    background: var(--color-bg-page);
+}
+
+.local-project-conflict-btn.primary {
+    border-color: var(--color-primary);
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+}
+
+.local-project-conflict-btn.danger {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+body.theme-dark .local-project-conflict-icon {
+    color: #fbbf24;
+}
+
+body.theme-dark .local-project-conflict-btn.danger {
+    border-color: #7f1d1d;
+    background: #450a0a;
+    color: #fca5a5;
+}

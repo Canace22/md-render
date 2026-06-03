@@ -317,6 +317,61 @@ export function mergeProjectsChildren(workspace, projectsChildren) {
   };
 }
 
+/** 将磁盘扫描结果合并进工作区（更新内容、增删节点） */
+export function syncProjectsChildrenFromDisk(workspace, projectRootPath, projectsChildren) {
+  if (!workspace || !projectRootPath || !Array.isArray(projectsChildren)) return workspace;
+
+  const freshById = new Map(projectsChildren.map((child) => [child.id, child]));
+  const freshIds = new Set(freshById.keys());
+  const children = workspace.children ?? [];
+
+  const merged = children
+    .filter((child) => child.projectRootPath !== projectRootPath || freshIds.has(child.id))
+    .map((child) => {
+      if (child.projectRootPath !== projectRootPath) return child;
+      return freshById.get(child.id) ?? child;
+    });
+
+  const mergedIds = new Set(merged.map((child) => child.id));
+  const added = projectsChildren.filter((child) => !mergedIds.has(child.id));
+
+  return {
+    ...workspace,
+    children: [...merged, ...added],
+  };
+}
+
+export function replaceLocalProjectMount(workspace, projectRootPath, freshRootNode) {
+  if (!workspace?.children || !projectRootPath || !freshRootNode) return workspace;
+  let changed = false;
+  const children = workspace.children.map((child) => {
+    if (child.localProjectRoot && child.projectRootPath === projectRootPath) {
+      changed = true;
+      return freshRootNode;
+    }
+    return child;
+  });
+  return changed ? { ...workspace, children } : workspace;
+}
+
+/** 收集当前工作区中需要监听的本地项目根路径 */
+export function collectLocalProjectRootPaths(workspace, mdRenderRootPath = '') {
+  const paths = new Set();
+  if (mdRenderRootPath) paths.add(mdRenderRootPath);
+
+  const visit = (node) => {
+    if (!node) return;
+    if (node.localProjectRoot && node.projectRootPath) {
+      paths.add(node.projectRootPath);
+    }
+    if (node.type === 'folder' && Array.isArray(node.children)) {
+      node.children.forEach(visit);
+    }
+  };
+  visit(workspace);
+  return [...paths];
+}
+
 /**
  * 解析磁盘新建目标：默认落在 MdRender/Projects，选中用户目录则在其下创建。
  */

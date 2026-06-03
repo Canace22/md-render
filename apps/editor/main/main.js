@@ -9,7 +9,14 @@ import {
   createLocalProjectFolder,
   renameLocalProjectEntry,
   deleteLocalProjectEntry,
+  readProjectsChildren,
+  resolveProjectFilePath,
 } from './localProject.js';
+import {
+  watchLocalProjectRoot,
+  markLocalProjectWriteIgnored,
+  unwatchAllLocalProjects,
+} from './localProjectWatcher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +24,24 @@ const __dirname = path.dirname(__filename);
 let store = null;
 let mainWindow = null;
 let tray = null;
+
+const notifyLocalProjectDiskChanged = (payload) => {
+  mainWindow?.webContents?.send('local-project-disk-changed', payload);
+};
+
+const startWatchingLocalProject = (projectRootPath) => {
+  if (!projectRootPath) return;
+  watchLocalProjectRoot(projectRootPath, notifyLocalProjectDiskChanged);
+};
+
+const markSavedLocalFileIgnored = (projectRootPath, relativePath) => {
+  try {
+    const filePath = resolveProjectFilePath(projectRootPath, relativePath);
+    markLocalProjectWriteIgnored(filePath);
+  } catch {
+    // ignore invalid paths
+  }
+};
 
 ipcMain.handle('open-local-project', async () => {
   const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
@@ -34,6 +59,9 @@ ipcMain.handle('open-local-project', async () => {
     workspace: await readLocalProjectWorkspace(projectRootPath),
   })));
   const firstProject = projects[0];
+  for (const project of projects) {
+    startWatchingLocalProject(project.projectRootPath);
+  }
 
   return {
     canceled: false,
@@ -43,17 +71,41 @@ ipcMain.handle('open-local-project', async () => {
   };
 });
 
-ipcMain.handle('save-local-project-file', async (_event, payload = {}) => {
-  const { projectRootPath, relativePath, content } = payload;
-  await saveLocalProjectFile(projectRootPath, relativePath, content);
+ipcMain.handle('register-local-project-watch', async (_event, payload = {}) => {
+  const { projectRootPath } = payload;
+  startWatchingLocalProject(projectRootPath);
   return { ok: true };
 });
 
-ipcMain.handle('ensure-md-render-workspace', async () => ensureMdRenderWorkspaceData());
+ipcMain.handle('read-local-project-disk', async (_event, payload = {}) => {
+  const { projectRootPath, mode } = payload;
+  if (!projectRootPath) return { ok: false };
+  if (mode === 'tree') {
+    const workspace = await readLocalProjectWorkspace(projectRootPath);
+    return { ok: true, workspace };
+  }
+  const projectsChildren = await readProjectsChildren(projectRootPath);
+  return { ok: true, projectsChildren };
+});
+
+ipcMain.handle('save-local-project-file', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath, content } = payload;
+  await saveLocalProjectFile(projectRootPath, relativePath, content);
+  markSavedLocalFileIgnored(projectRootPath, relativePath);
+  return { ok: true };
+});
+
+ipcMain.handle('ensure-md-render-workspace', async () => {
+  const result = await ensureMdRenderWorkspaceData();
+  startWatchingLocalProject(result.projectRootPath);
+  return result;
+});
 
 ipcMain.handle('create-local-project-file', async (_event, payload = {}) => {
   const { projectRootPath, relativePath, content } = payload;
-  return createLocalProjectFile(projectRootPath, relativePath, content);
+  const result = await createLocalProjectFile(projectRootPath, relativePath, content);
+  markSavedLocalFileIgnored(projectRootPath, result.relativePath ?? relativePath);
+  return result;
 });
 
 ipcMain.handle('create-local-project-folder', async (_event, payload = {}) => {
@@ -63,12 +115,19 @@ ipcMain.handle('create-local-project-folder', async (_event, payload = {}) => {
 
 ipcMain.handle('rename-local-project-entry', async (_event, payload = {}) => {
   const { projectRootPath, relativePath, newRelativePath } = payload;
-  return renameLocalProjectEntry(projectRootPath, relativePath, newRelativePath);
+  const result = await renameLocalProjectEntry(projectRootPath, relativePath, newRelativePath);
+  markSavedLocalFileIgnored(projectRootPath, result.relativePath ?? newRelativePath);
+  return result;
 });
 
 ipcMain.handle('delete-local-project-entry', async (_event, payload = {}) => {
   const { projectRootPath, relativePath } = payload;
   await deleteLocalProjectEntry(projectRootPath, relativePath);
+  try {
+    markLocalProjectWriteIgnored(resolveProjectFilePath(projectRootPath, relativePath));
+  } catch {
+    // ignore
+  }
   return { ok: true };
 });
 
@@ -240,5 +299,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  unwatchAllLocalProjects();
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  unwatchAllLocalProjects();
 });

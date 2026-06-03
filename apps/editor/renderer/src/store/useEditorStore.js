@@ -20,10 +20,14 @@ import {
   createLocalProjectFolderNode,
   stripLocalProjectMounts,
   mergeProjectsChildren,
+  syncProjectsChildrenFromDisk,
+  replaceLocalProjectMount,
+  findLocalProjectRoot,
   remapDiskNodeAfterRename,
   findNodeIdByRelativePath,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
+import { normalizeMarkdown } from '../utils/markdownUtils.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
@@ -276,6 +280,15 @@ export const useEditorStore = create(
       copyStyle: 'default',
       storageMode: 'local',
       projectRootPath: '',
+      /** 正在等待 debounce 写入磁盘的文件 id */
+      diskSavePendingFileIds: {},
+      /** 磁盘外部变更触发编辑器重载（递增） */
+      editorReloadToken: 0,
+      /** 本地项目磁盘冲突待用户选择 */
+      localProjectConflict: null,
+      /** 通知渲染进程取消待写入磁盘的定时器 */
+      diskSaveCancelSeq: 0,
+      diskSaveCancelFileIds: [],
       surface: 'paper',
       notionToken: '',
       notionFilePages: {},
@@ -363,6 +376,52 @@ export const useEditorStore = create(
       setSelectedId: (selectedId) => set({ selectedId }),
       setMarkdown: (markdown) => set({ markdown }),
 
+      setDiskSavePending: (fileId, pending) => {
+        if (!fileId) return;
+        const next = { ...get().diskSavePendingFileIds };
+        if (pending) {
+          next[fileId] = true;
+        } else {
+          delete next[fileId];
+        }
+        set({ diskSavePendingFileIds: next });
+      },
+
+      requestCancelDiskSave: (fileIds) => {
+        const ids = (fileIds ?? []).filter(Boolean);
+        if (ids.length === 0) return;
+        const nextPending = { ...get().diskSavePendingFileIds };
+        ids.forEach((id) => { delete nextPending[id]; });
+        set({
+          diskSavePendingFileIds: nextPending,
+          diskSaveCancelSeq: get().diskSaveCancelSeq + 1,
+          diskSaveCancelFileIds: ids,
+        });
+      },
+
+      setLocalProjectConflict: (payload) => set({ localProjectConflict: payload }),
+
+      dismissLocalProjectConflict: () => set({ localProjectConflict: null }),
+
+      resolveLocalProjectConflict: (resolution) => {
+        const conflict = get().localProjectConflict;
+        if (!conflict) return;
+
+        const conflictFileIds = conflict.conflicts.map((c) => c.fileId);
+        if (resolution === 'use-disk') {
+          get().requestCancelDiskSave(conflictFileIds);
+        }
+
+        get().refreshDiskBackedProject({
+          projectRootPath: conflict.projectRootPath,
+          workspace: conflict.diskPayload.workspace,
+          projectsChildren: conflict.diskPayload.projectsChildren,
+          conflictResolution: resolution,
+          conflictFileIds,
+        });
+        set({ localProjectConflict: null });
+      },
+
       openLocalProjectWorkspace: (workspace, projectRootPath) => {
         const rootPath = projectRootPath ?? '';
         const projectNode = markLocalProjectNode(workspace, rootPath, true);
@@ -402,6 +461,95 @@ export const useEditorStore = create(
           projectRootPath,
           storageMode: 'local',
         });
+      },
+
+      /** 磁盘变更后刷新本地项目树；冲突时由 conflictResolution 决定保留本地或使用磁盘 */
+      refreshDiskBackedProject: ({
+        projectRootPath,
+        workspace: diskTree,
+        projectsChildren,
+        conflictResolution = 'auto',
+        conflictFileIds = [],
+      }) => {
+        if (!projectRootPath) return;
+
+        const state = get();
+        const conflictIdSet = new Set(conflictFileIds);
+        const useDiskFor = (fileId) => (
+          conflictResolution === 'use-disk' && conflictIdSet.has(fileId)
+        );
+        const keepLocalFor = (fileId) => (
+          conflictResolution === 'keep-local' && conflictIdSet.has(fileId)
+        );
+        const shouldPreserveFile = (fileId) => {
+          if (useDiskFor(fileId)) return false;
+          if (keepLocalFor(fileId)) return true;
+          if (conflictResolution !== 'auto') return false;
+          return Boolean(state.diskSavePendingFileIds[fileId]);
+        };
+
+        const preserveDirtyInTree = (node) => {
+          if (!node) return node;
+          if (node.type === 'file' && shouldPreserveFile(node.id)) {
+            const localContent = node.id === state.selectedId
+              ? state.markdown
+              : (findNodeById(state.workspace, node.id)?.content ?? node.content ?? '');
+            return { ...node, content: localContent };
+          }
+          if (node.type === 'folder' && Array.isArray(node.children)) {
+            return {
+              ...node,
+              children: node.children.map(preserveDirtyInTree),
+            };
+          }
+          return node;
+        };
+
+        const mountedRoot = findLocalProjectRoot(state.workspace);
+        const isTreeMount = mountedRoot?.localProjectRoot
+          && mountedRoot.projectRootPath === projectRootPath;
+
+        let nextWorkspace = state.workspace;
+        if (isTreeMount && diskTree) {
+          const freshRoot = markLocalProjectNode(preserveDirtyInTree(diskTree), projectRootPath, true);
+          if (freshRoot) {
+            nextWorkspace = replaceLocalProjectMount(state.workspace, projectRootPath, freshRoot);
+          }
+        } else if (Array.isArray(projectsChildren)) {
+          const children = projectsChildren.map((child) => {
+            if (child.type !== 'file' || !shouldPreserveFile(child.id)) return child;
+            const localContent = child.id === state.selectedId
+              ? state.markdown
+              : (findNodeById(state.workspace, child.id)?.content ?? child.content ?? '');
+            return { ...child, content: localContent };
+          });
+          nextWorkspace = syncProjectsChildrenFromDisk(
+            state.workspace,
+            projectRootPath,
+            children,
+          );
+        } else {
+          return;
+        }
+
+        const selectedFile = findNodeById(nextWorkspace, state.selectedId);
+        const patch = { workspace: nextWorkspace };
+        if (selectedFile?.type === 'file' && !shouldPreserveFile(state.selectedId)) {
+          patch.markdown = selectedFile.content ?? '';
+          patch.editorReloadToken = state.editorReloadToken + 1;
+        }
+        if (!findNodeById(nextWorkspace, state.selectedId)) {
+          const nextFileId = findFirstFileId(nextWorkspace);
+          if (nextFileId) {
+            const nextNode = findNodeById(nextWorkspace, nextFileId);
+            patch.selectedId = nextFileId;
+            patch.markdown = nextNode?.type === 'file' ? (nextNode.content ?? '') : state.markdown;
+            patch.surface = nextNode?.type === 'folder' ? 'folder' : 'paper';
+          }
+        }
+
+        persistWorkspace(nextWorkspace);
+        set(patch);
       },
 
       addFile: (contextNodeId) => {
@@ -606,11 +754,12 @@ export const useEditorStore = create(
       },
 
       syncMarkdownFromSelectedFile: () => {
-        const { workspace, selectedId, markdown } = get();
+        const { workspace, selectedId, markdown, diskSavePendingFileIds } = get();
         const selectedFile = findNodeById(workspace, selectedId);
-        if (selectedFile?.type === 'file' && selectedFile.content !== markdown) {
-          set({ markdown: selectedFile.content ?? '' });
-        }
+        if (selectedFile?.type !== 'file') return;
+        if (diskSavePendingFileIds[selectedId]) return;
+        if (normalizeMarkdown(selectedFile.content) === normalizeMarkdown(markdown)) return;
+        set({ markdown: selectedFile.content ?? '' });
       },
 
       syncSelectedIdFromWorkspace: () => {

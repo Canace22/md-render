@@ -11,6 +11,7 @@ import FolderFileList from './FolderFileList.jsx';
 import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
+import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import {
   createEmptyDocument,
@@ -30,6 +31,7 @@ import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../u
 import { batchPull, batchPush } from '../utils/notionBatchSync.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
+import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
@@ -132,6 +134,7 @@ const hasLocalProjectNode = (node) => {
 
 function MarkdownEditor() {
   const macWindowed = useMacTitlebarInset();
+  useLocalProjectWatcher();
   const {
     workspace,
     selectedId,
@@ -168,6 +171,12 @@ function MarkdownEditor() {
     hydrateProjectsWorkspace,
     syncMarkdownFromSelectedFile,
     syncSelectedIdFromWorkspace,
+    setDiskSavePending,
+    localProjectConflict,
+    resolveLocalProjectConflict,
+    dismissLocalProjectConflict,
+    diskSaveCancelSeq,
+    diskSaveCancelFileIds,
   } = useEditorStore();
 
   const selectedFile = useSelectedFile();
@@ -294,6 +303,7 @@ function MarkdownEditor() {
   }, [workspace, selectedId, localProjectSupported, deleteNode, removeDiskBackedNode]);
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
+  const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const [notionMessage, setNotionMessage] = useState('');
   const [notionError, setNotionError] = useState('');
   const [notionPullLoading, setNotionPullLoading] = useState(false);
@@ -317,7 +327,7 @@ function MarkdownEditor() {
     const parserEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
     const parsedBlocks = parserEditor.tryParseMarkdownToBlocks(sourceMarkdown);
     return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
-  }, [selectedId, contentResetKey]);
+  }, [selectedId, contentResetKey, editorReloadToken]);
 
   const editor = useCreateBlockNote(
     {
@@ -375,7 +385,7 @@ function MarkdownEditor() {
         });
       },
     },
-    [selectedId, contentResetKey],
+    [selectedId, contentResetKey, editorReloadToken],
   );
 
   const wechatSourceHtml = useMemo(() => {
@@ -425,6 +435,7 @@ function MarkdownEditor() {
       if (existingTimer) {
         window.clearTimeout(existingTimer);
       }
+      setDiskSavePending(selectedFile.id, true);
       const timerId = window.setTimeout(async () => {
         try {
           await saveLocalProjectFile({
@@ -437,6 +448,7 @@ function MarkdownEditor() {
           alert(error?.message || '保存本地项目文件失败');
         } finally {
           projectSaveTimersRef.current.delete(selectedFile.id);
+          setDiskSavePending(selectedFile.id, false);
         }
       }, 400);
       projectSaveTimersRef.current.set(selectedFile.id, timerId);
@@ -782,6 +794,18 @@ function MarkdownEditor() {
   }, []);
 
   useEffect(() => {
+    if (!diskSaveCancelFileIds?.length) return;
+    diskSaveCancelFileIds.forEach((fileId) => {
+      const timerId = projectSaveTimersRef.current.get(fileId);
+      if (timerId) {
+        window.clearTimeout(timerId);
+        projectSaveTimersRef.current.delete(fileId);
+      }
+      setDiskSavePending(fileId, false);
+    });
+  }, [diskSaveCancelSeq, diskSaveCancelFileIds, setDiskSavePending]);
+
+  useEffect(() => {
     if (!localProjectSupported) return undefined;
     let cancelled = false;
 
@@ -946,6 +970,14 @@ function MarkdownEditor() {
         sourceHtml={wechatSourceHtml}
         initialTemplateId={copyStyle}
         onTemplateChange={setCopyStyle}
+      />
+
+      <LocalProjectConflictModal
+        open={Boolean(localProjectConflict?.conflicts?.length)}
+        conflicts={localProjectConflict?.conflicts ?? []}
+        onKeepLocal={() => resolveLocalProjectConflict('keep-local')}
+        onUseDisk={() => resolveLocalProjectConflict('use-disk')}
+        onDismiss={dismissLocalProjectConflict}
       />
     </div>
   );

@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createLocalProjectFolder: (payload) => ipcRenderer.invoke('create-local-project-folder', payload),
   renameLocalProjectEntry: (payload) => ipcRenderer.invoke('rename-local-project-entry', payload),
   deleteLocalProjectEntry: (payload) => ipcRenderer.invoke('delete-local-project-entry', payload),
+  registerLocalProjectWatch: (payload) => ipcRenderer.invoke('register-local-project-watch', payload),
+  readLocalProjectDisk: (payload) => ipcRenderer.invoke('read-local-project-disk', payload),
+  onLocalProjectDiskChanged: (callback) => {
+    const sub = (_event, payload) => callback(payload);
+    ipcRenderer.on('local-project-disk-changed', sub);
+    return () => ipcRenderer.removeListener('local-project-disk-changed', sub);
+  },
 
   // 通用 IPC：渲染进程 → 主进程
   invoke: (channel, ...args) => {

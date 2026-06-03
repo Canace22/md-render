@@ -136,3 +136,24 @@ export async function deleteLocalProjectEntryOnDisk(payload) {
   }
   throw new Error('本地删除仅支持桌面版应用');
 }
+
+export async function registerLocalProjectWatch(projectRootPath) {
+  if (hasDirectBridge() && typeof window.electronAPI.registerLocalProjectWatch === 'function') {
+    return window.electronAPI.registerLocalProjectWatch({ projectRootPath });
+  }
+  return null;
+}
+
+export async function readLocalProjectDisk(projectRootPath, mode) {
+  if (hasDirectBridge() && typeof window.electronAPI.readLocalProjectDisk === 'function') {
+    return window.electronAPI.readLocalProjectDisk({ projectRootPath, mode });
+  }
+  return null;
+}
+
+export function onLocalProjectDiskChanged(callback) {
+  if (hasDirectBridge() && typeof window.electronAPI.onLocalProjectDiskChanged === 'function') {
+    return window.electronAPI.onLocalProjectDiskChanged(callback);
+  }
+  return () => {};
+}
