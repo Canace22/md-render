@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, FileText, Folder, Network, Search, Sparkles, Tag } from 'lucide-react';
 import {
   collectFiles,
@@ -6,6 +6,7 @@ import {
   getFileKnowledgeSearchText,
   getKnowledgeNodeTypeLabel,
 } from '../store/workspaceUtils.js';
+import GraphView from './GraphView.jsx';
 
 const GRAPH_NODE_LAYOUTS = [
   { top: '10%', left: '18%' },
@@ -73,6 +74,20 @@ const getSearchPreview = (file, query) => {
   return getSearchSnippet(file?.content, query);
 };
 
+const hasElectronDb = () =>
+  typeof window !== 'undefined' && typeof window.electronAPI?.db?.search === 'function';
+
+// Escape HTML but restore <mark> tags for FTS highlighting
+const sanitizeExcerpt = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&lt;mark&gt;/g, '<mark>')
+    .replace(/&lt;\/mark&gt;/g, '</mark>');
+};
+
 export default function KnowledgeBasePanel({
   mode = 'overview',
   workspace,
@@ -99,11 +114,66 @@ export default function KnowledgeBasePanel({
 
   const filesById = useMemo(() => new Map(files.map((file) => [file.id, file])), [files]);
 
-  const searchResults = useMemo(() => {
+  // FTS search via SQLite (Electron only), with 300ms debounce
+  const [ftsResults, setFtsResults] = useState(null); // null = not yet searched; [] = no results
+  const ftsTimerRef = useRef(null);
+
+  useEffect(() => {
+    const query = String(searchQuery ?? '').trim();
+    if (!query || !hasElectronDb()) {
+      setFtsResults(null);
+      return;
+    }
+    clearTimeout(ftsTimerRef.current);
+    ftsTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await window.electronAPI.db.search(query);
+        setFtsResults(res?.results ?? []);
+      } catch {
+        setFtsResults(null);
+      }
+    }, 300);
+    return () => clearTimeout(ftsTimerRef.current);
+  }, [searchQuery]);
+
+  // Memory fallback (web or before FTS resolves)
+  const memoryResults = useMemo(() => {
     const query = String(searchQuery ?? '').trim().toLowerCase();
     if (!query) return [];
     return files.filter((file) => getFileKnowledgeSearchText(file).includes(query));
   }, [files, searchQuery]);
+
+  // Use FTS results in Electron, memory results in web
+  const searchResults = ftsResults ?? memoryResults;
+  const searchResultCount = searchResults.length;
+
+  // Graph data: loaded from SQLite (Electron) or derived from workspace (web)
+  const [graphData, setGraphData] = useState(null);
+
+  useEffect(() => {
+    if (mode !== 'graph') return;
+
+    if (hasElectronDb()) {
+      window.electronAPI.db.getGraph()
+        .then((res) => setGraphData(res?.data ?? { nodes: [], edges: [] }))
+        .catch(() => setGraphData({ nodes: [], edges: [] }));
+    } else {
+      // Build from workspace relatedIds as edges fallback
+      const allFiles = files;
+      const nodes = allFiles.map((f) => ({
+        id: f.id,
+        name: f.name,
+        node_type: f.nodeType ?? 'document',
+      }));
+      const edges = [];
+      for (const f of allFiles) {
+        for (const targetId of (f.relatedIds ?? [])) {
+          edges.push({ source_id: f.id, target_id: targetId });
+        }
+      }
+      setGraphData({ nodes, edges });
+    }
+  }, [mode, files]);
 
   const graphNodes = useMemo(() => {
     if (selectedFile?.relatedIds?.length) {
@@ -353,22 +423,31 @@ export default function KnowledgeBasePanel({
           {searchQuery.trim() ? (
             <div className="knowledge-search-results">
               <div className="knowledge-search-meta">
-                找到 <strong>{searchResults.length}</strong> 篇相关文档
+                找到 <strong>{searchResultCount}</strong> 篇相关文档
+                {ftsResults !== null && <span className="knowledge-fts-badge">FTS</span>}
               </div>
-              {searchResults.length > 0 ? searchResults.map((file) => (
-                <button
-                  key={file.id}
-                  type="button"
-                  className="knowledge-search-result"
-                  onClick={() => onOpenFile(file.id)}
-                >
-                  <div className="knowledge-search-result-head">
-                    <strong>{file.name}</strong>
-                    <span>{formatDate(file.updatedAt)}</span>
-                  </div>
-                  <p>{getSearchPreview(file, searchQuery)}</p>
-                </button>
-              )) : (
+              {searchResultCount > 0 ? searchResults.map((item) => {
+                const file = filesById.get(item.id) ?? item;
+                const isFts = item.excerpt !== undefined;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="knowledge-search-result"
+                    onClick={() => onOpenFile(item.id)}
+                  >
+                    <div className="knowledge-search-result-head">
+                      <strong>{item.name ?? file.name}</strong>
+                      <span>{formatDate(file.updatedAt)}</span>
+                    </div>
+                    {isFts ? (
+                      <p dangerouslySetInnerHTML={{ __html: sanitizeExcerpt(item.excerpt) }} />
+                    ) : (
+                      <p>{getSearchPreview(file, searchQuery)}</p>
+                    )}
+                  </button>
+                );
+              }) : (
                 <div className="knowledge-empty-block">
                   <Sparkles size={18} strokeWidth={1.7} />
                   <span>没有匹配结果，试试换个关键词或先补标签。</span>
@@ -388,35 +467,45 @@ export default function KnowledgeBasePanel({
         <div className="knowledge-section">
           <div className="knowledge-section-head">
             <div>
-              <span className="knowledge-card-kicker">轻图谱</span>
-              <h2>知识关系预览</h2>
+              <span className="knowledge-card-kicker">{mode === 'graph' ? '图谱视图' : '轻图谱'}</span>
+              <h2>{mode === 'graph' ? '知识关联图' : '知识关系预览'}</h2>
             </div>
           </div>
-          <div className="knowledge-graph-canvas">
-            <div className="knowledge-graph-core">
-              <span>知识库</span>
-              <small>{searchQuery.trim() || selectedFile?.name?.replace(/\.md$/i, '') || '内容中心'}</small>
+
+          {mode === 'graph' ? (
+            <GraphView
+              nodes={graphData?.nodes ?? []}
+              edges={graphData?.edges ?? []}
+              selectedId={selectedFile?.id}
+              onOpenFile={onOpenFile}
+            />
+          ) : (
+            <div className="knowledge-graph-canvas">
+              <div className="knowledge-graph-core">
+                <span>知识库</span>
+                <small>{searchQuery.trim() || selectedFile?.name?.replace(/\.md$/i, '') || '内容中心'}</small>
+              </div>
+              {graphNodes.map((node, index) => (
+                <button
+                  key={node.key}
+                  type="button"
+                  className={`knowledge-graph-node knowledge-graph-node--${node.kind}`}
+                  style={GRAPH_NODE_LAYOUTS[index]}
+                  onClick={() => {
+                    if (node.fileId) {
+                      onOpenFile(node.fileId);
+                      return;
+                    }
+                    onSearchQueryChange(node.label);
+                    onOpenSurface('search');
+                  }}
+                >
+                  <strong>{node.label}</strong>
+                  <span>{node.meta}</span>
+                </button>
+              ))}
             </div>
-            {graphNodes.map((node, index) => (
-              <button
-                key={node.key}
-                type="button"
-                className={`knowledge-graph-node knowledge-graph-node--${node.kind}`}
-                style={GRAPH_NODE_LAYOUTS[index]}
-                onClick={() => {
-                  if (node.fileId) {
-                    onOpenFile(node.fileId);
-                    return;
-                  }
-                  onSearchQueryChange(node.label);
-                  onOpenSurface('search');
-                }}
-              >
-                <strong>{node.label}</strong>
-                <span>{node.meta}</span>
-              </button>
-            ))}
-          </div>
+          )}
         </div>
       )}
     </div>

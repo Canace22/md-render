@@ -957,6 +957,8 @@ function MarkdownEditor() {
               notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
               onKnowledgeMetaChange={setFileKnowledgeMeta}
+              onOpenFile={selectNode}
+              onRestoreVersion={updateSelectedFileContent}
               titleEditable={!selectedInLocalProject}
               {...titleEditing}
             />

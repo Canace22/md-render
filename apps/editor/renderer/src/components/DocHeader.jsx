@@ -7,6 +7,8 @@ export default function DocHeader({
   allFiles,
   onTagsChange,
   onKnowledgeMetaChange,
+  onOpenFile,
+  onRestoreVersion,
   titleEditable = true,
   isTitleEditing,
   titleDraft,
@@ -87,6 +89,8 @@ export default function DocHeader({
             selectedFile={selectedFile}
             allFiles={allFiles}
             onKnowledgeMetaChange={onKnowledgeMetaChange}
+            onOpenFile={onOpenFile}
+            onRestoreVersion={onRestoreVersion}
           />
         </>
       )}

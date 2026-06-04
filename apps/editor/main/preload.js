@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     load: () => ipcRenderer.invoke('db:load'),
     save: (stateMap, workspaceJson) => ipcRenderer.invoke('db:save', { stateMap, workspaceJson }),
     search: (query) => ipcRenderer.invoke('db:search', { query }),
+    getGraph: () => ipcRenderer.invoke('db:get-graph'),
+    getBacklinks: (docId) => ipcRenderer.invoke('db:get-backlinks', { docId }),
+    getVersions: (docId) => ipcRenderer.invoke('db:get-versions', { docId }),
+    getVersionContent: (versionId) => ipcRenderer.invoke('db:get-version-content', { versionId }),
   },
 
   // 通用 IPC：渲染进程 → 主进程

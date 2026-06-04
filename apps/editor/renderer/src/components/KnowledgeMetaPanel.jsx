@@ -1,24 +1,75 @@
 import { useEffect, useMemo, useState } from 'react';
-import { GitBranch, Plus, Shapes, Sparkles, Tag, X } from 'lucide-react';
+import { ArrowLeft, Clock, FileText, GitBranch, Link, Plus, Shapes, Sparkles, Tag, X } from 'lucide-react';
 import {
   getKnowledgeNodeTypeLabel,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
 } from '../store/workspaceUtils.js';
 
+const hasElectronDb = () =>
+  typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
+
+const formatVersionDate = (ts) => {
+  if (!ts) return '';
+  try {
+    return new Date(ts).toLocaleString('zh-CN', {
+      month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return ''; }
+};
+
 export default function KnowledgeMetaPanel({
   selectedFile,
   allFiles,
   onKnowledgeMetaChange,
+  onOpenFile,
+  onRestoreVersion,
 }) {
   const [summaryDraft, setSummaryDraft] = useState('');
   const [aliasDraft, setAliasDraft] = useState('');
   const [relatedDraft, setRelatedDraft] = useState('');
+  const [backlinks, setBacklinks] = useState([]);
+  const [versions, setVersions] = useState([]);
+  const [restoringVersionId, setRestoringVersionId] = useState(null);
 
   useEffect(() => {
     setSummaryDraft(selectedFile?.summary ?? '');
     setAliasDraft('');
     setRelatedDraft('');
   }, [selectedFile]);
+
+  useEffect(() => {
+    if (!selectedFile?.id || !hasElectronDb()) {
+      setBacklinks([]);
+      return;
+    }
+    window.electronAPI.db.getBacklinks(selectedFile.id)
+      .then((res) => setBacklinks(res?.backlinks ?? []))
+      .catch(() => setBacklinks([]));
+  }, [selectedFile?.id]);
+
+  useEffect(() => {
+    if (!selectedFile?.id || !hasElectronDb()) {
+      setVersions([]);
+      return;
+    }
+    window.electronAPI.db.getVersions(selectedFile.id)
+      .then((res) => setVersions(res?.versions ?? []))
+      .catch(() => setVersions([]));
+  }, [selectedFile?.id]);
+
+  const handleRestoreVersion = async (versionId) => {
+    if (!hasElectronDb() || !onRestoreVersion) return;
+    setRestoringVersionId(versionId);
+    try {
+      const res = await window.electronAPI.db.getVersionContent(versionId);
+      if (res?.ok && res.version?.content != null) {
+        onRestoreVersion(res.version.content);
+      }
+    } finally {
+      setRestoringVersionId(null);
+    }
+  };
 
   const filesById = useMemo(() => {
     return new Map((allFiles ?? []).map((file) => [file.id, file]));
@@ -181,6 +232,65 @@ export default function KnowledgeMetaPanel({
             </div>
           )}
         </div>
+
+        {hasElectronDb() && (
+          <div className="knowledge-meta-field">
+            <span className="knowledge-meta-label">
+              <Link size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              反向链接
+            </span>
+            {backlinks.length > 0 ? (
+              <div className="knowledge-chip-list">
+                {backlinks.map((bl) => (
+                  <button
+                    key={bl.id}
+                    type="button"
+                    className="knowledge-chip knowledge-chip--backlink"
+                    onClick={() => onOpenFile?.(bl.id)}
+                    title={`打开 ${bl.name}`}
+                  >
+                    <FileText size={12} strokeWidth={1.8} />
+                    <span>{bl.name.replace(/\.md$/i, '')}</span>
+                    <ArrowLeft size={11} strokeWidth={2} />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="knowledge-empty-hint">
+                <span>暂无其他文档通过 [[]] 链接到这里。</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {hasElectronDb() && versions.length > 0 && (
+          <div className="knowledge-meta-field">
+            <span className="knowledge-meta-label">
+              <Clock size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              版本历史
+            </span>
+            <div className="knowledge-versions-list">
+              {versions.map((ver) => (
+                <div key={ver.id} className="knowledge-version-row">
+                  <div className="knowledge-version-info">
+                    <span className="knowledge-version-date">{formatVersionDate(ver.created_at)}</span>
+                    <span className="knowledge-version-size">{ver.char_count} 字</span>
+                  </div>
+                  {onRestoreVersion && (
+                    <button
+                      type="button"
+                      className="knowledge-version-restore"
+                      disabled={restoringVersionId === ver.id}
+                      onClick={() => handleRestoreVersion(ver.id)}
+                    >
+                      {restoringVersionId === ver.id ? '恢复中…' : '恢复'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

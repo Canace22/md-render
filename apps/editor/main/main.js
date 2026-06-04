@@ -24,9 +24,17 @@ import {
   isMigratedFromLocalStorage,
   markMigratedFromLocalStorage,
   syncDocuments,
+  syncAllLinks,
+  getBacklinks,
+  saveVersions,
+  getVersions,
+  getVersionById,
   searchDocuments,
+  updateDocumentDiskPaths,
+  getGraphData,
   closeDatabase,
 } from './database.js';
+import { writeBuiltInDocsToDisk } from './mdSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -150,15 +158,22 @@ ipcMain.handle('db:is-migrated', () => isMigratedFromLocalStorage());
 ipcMain.handle('db:migrate', (_event, payload = {}) => {
   try {
     const { stateMap } = payload;
+    let workspace = null;
     if (stateMap && typeof stateMap === 'object') {
       saveEditorState(stateMap);
       if (stateMap.workspace_json) {
         try {
-          syncDocuments(JSON.parse(stateMap.workspace_json));
+          workspace = JSON.parse(stateMap.workspace_json);
+          syncDocuments(workspace);
         } catch { /* ignore parse errors */ }
       }
     }
     markMigratedFromLocalStorage();
+    if (workspace) {
+      writeBuiltInDocsToDisk(workspace).then((diskPaths) => {
+        if (Object.keys(diskPaths).length > 0) updateDocumentDiskPaths(diskPaths);
+      }).catch((err) => console.error('[db] migrate disk-write failed:', err));
+    }
     return { ok: true };
   } catch (err) {
     console.error('[db] migrate error:', err);
@@ -181,15 +196,61 @@ ipcMain.handle('db:save', (_event, payload = {}) => {
     if (stateMap && typeof stateMap === 'object') {
       saveEditorState(stateMap);
     }
+    let workspace = null;
     if (workspaceJson) {
       try {
-        syncDocuments(JSON.parse(workspaceJson));
+        workspace = JSON.parse(workspaceJson);
+        syncDocuments(workspace);
+        syncAllLinks(workspace);
+        saveVersions(workspace);
       } catch { /* ignore parse errors */ }
+    }
+    if (workspace) {
+      writeBuiltInDocsToDisk(workspace).then((diskPaths) => {
+        if (Object.keys(diskPaths).length > 0) updateDocumentDiskPaths(diskPaths);
+      }).catch((err) => console.error('[db] disk-write failed:', err));
     }
     return { ok: true };
   } catch (err) {
     console.error('[db] save error:', err);
     return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('db:get-graph', () => {
+  try {
+    return { ok: true, data: getGraphData() };
+  } catch (err) {
+    console.error('[db] get-graph error:', err);
+    return { ok: false, data: { nodes: [], edges: [] } };
+  }
+});
+
+ipcMain.handle('db:get-backlinks', (_event, payload = {}) => {
+  try {
+    return { ok: true, backlinks: getBacklinks(payload.docId) };
+  } catch (err) {
+    console.error('[db] get-backlinks error:', err);
+    return { ok: false, backlinks: [] };
+  }
+});
+
+ipcMain.handle('db:get-versions', (_event, payload = {}) => {
+  try {
+    return { ok: true, versions: getVersions(payload.docId) };
+  } catch (err) {
+    console.error('[db] get-versions error:', err);
+    return { ok: false, versions: [] };
+  }
+});
+
+ipcMain.handle('db:get-version-content', (_event, payload = {}) => {
+  try {
+    const ver = getVersionById(payload.versionId);
+    return { ok: !!ver, version: ver ?? null };
+  } catch (err) {
+    console.error('[db] get-version-content error:', err);
+    return { ok: false, version: null };
   }
 });
 

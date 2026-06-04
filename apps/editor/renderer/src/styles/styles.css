@@ -632,6 +632,99 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     font-size: 12px;
 }
 
+/* ── backlink chip ──────────────────────────────────────────────────────────── */
+.knowledge-chip--backlink {
+    background: none;
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.knowledge-chip--backlink:hover {
+    background: var(--color-surface-hover);
+}
+
+/* ── version history ─────────────────────────────────────────────────────────  */
+.knowledge-versions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.knowledge-version-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--color-surface-subtle, rgba(0,0,0,.03));
+    font-size: 12px;
+}
+
+.knowledge-version-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+
+.knowledge-version-date {
+    color: var(--color-text-primary);
+    font-size: 12px;
+}
+
+.knowledge-version-size {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.knowledge-version-restore {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.knowledge-version-restore:hover:not(:disabled) {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.knowledge-version-restore:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── FTS badge in search results ────────────────────────────────────────────── */
+.knowledge-fts-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--color-primary-dim, rgba(74,158,255,.15));
+    color: var(--color-primary);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    vertical-align: middle;
+}
+
+.knowledge-search-result mark {
+    background: var(--color-primary-dim, rgba(74,158,255,.2));
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
 .workspace-tree-empty {
     padding: var(--space-m);
     color: var(--color-text-secondary);
@@ -3205,6 +3298,74 @@ body.theme-light #markdown-output code {
     color: var(--color-text-secondary);
 }
 
+/* ── d3 force graph ──────────────────────────────────────────────────────────── */
+.graph-view-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+}
+
+.graph-view-canvas {
+    width: 100%;
+    height: 560px;
+    background:
+        radial-gradient(circle at 30% 40%, rgba(96, 165, 250, 0.08), transparent 40%),
+        radial-gradient(circle at 70% 65%, rgba(162, 155, 254, 0.08), transparent 35%),
+        var(--color-surface-subtle, rgba(248, 250, 252, 0.9));
+    border-radius: 16px 16px 0 0;
+    cursor: grab;
+}
+
+.graph-view-canvas:active {
+    cursor: grabbing;
+}
+
+.graph-view-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    padding: 10px 16px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+}
+
+.graph-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.graph-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+
+.graph-legend-hint {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--color-text-tertiary, var(--color-text-secondary));
+    opacity: 0.7;
+}
+
+.graph-empty-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+/* ── static graph canvas (overview mode) ─────────────────────────────────────── */
 .knowledge-graph-canvas {
     position: relative;
     min-height: 520px;
@@ -3783,7 +3944,30 @@ body.theme-dark .knowledge-tag-pill,
 body.theme-dark .knowledge-graph-node,
 body.theme-dark .knowledge-meta-field select,
 body.theme-dark .knowledge-meta-field textarea,
-body.theme-dark .knowledge-chip-input {
+body.theme-dark .knowledge-chip-input,
+body.theme-dark .knowledge-version-row {
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(71, 85, 105, 0.42);
+}
+
+body.theme-dark .knowledge-chip--backlink,
+body.theme-dark .knowledge-version-restore {
+    border-color: rgba(71, 85, 105, 0.42);
+    color: var(--color-text-secondary);
+}
+
+body.theme-dark .knowledge-fts-badge {
+    background: rgba(74, 158, 255, 0.2);
+}
+
+body.theme-dark .graph-view-canvas {
+    background:
+        radial-gradient(circle at 30% 40%, rgba(59, 130, 246, 0.1), transparent 40%),
+        radial-gradient(circle at 70% 65%, rgba(139, 92, 246, 0.1), transparent 35%),
+        rgba(15, 23, 42, 0.92);
+}
+
+body.theme-dark .graph-view-legend {
     background: rgba(15, 23, 42, 0.82);
     border-color: rgba(71, 85, 105, 0.42);
 }

@@ -22,7 +22,8 @@ const SCHEMA = `
     tags        TEXT,
     related_ids TEXT,
     created_at  INTEGER,
-    updated_at  INTEGER
+    updated_at  INTEGER,
+    disk_path   TEXT
   );
 
   CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
@@ -72,6 +73,8 @@ export function initDatabase() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  // Migration: add disk_path column if it doesn't exist (for DBs created before P0.2)
+  try { db.exec('ALTER TABLE documents ADD COLUMN disk_path TEXT'); } catch { /* already exists */ }
   console.log('[db] initialized at', dbPath);
   return db;
 }
@@ -142,6 +145,9 @@ function flattenWorkspace(node, parentId = null, result = []) {
   if (!node) return result;
   const id = node.id;
   if (id && id !== 'root') {
+    const diskPath = (node.projectRootPath && node.relativePath)
+      ? path.join(node.projectRootPath, node.relativePath)
+      : null;
     result.push({
       id,
       parent_id: parentId === 'root' ? null : parentId,
@@ -155,6 +161,7 @@ function flattenWorkspace(node, parentId = null, result = []) {
       related_ids: node.relatedIds?.length ? JSON.stringify(node.relatedIds) : null,
       created_at: node.createdAt ?? null,
       updated_at: node.updatedAt ?? null,
+      disk_path: diskPath,
     });
   }
   if (Array.isArray(node.children)) {
@@ -169,14 +176,129 @@ export function syncDocuments(workspace) {
 
   const upsert = getDb().prepare(`
     INSERT OR REPLACE INTO documents
-      (id, parent_id, type, name, content, node_type, summary, aliases, tags, related_ids, created_at, updated_at)
+      (id, parent_id, type, name, content, node_type, summary, aliases, tags, related_ids, created_at, updated_at, disk_path)
     VALUES
-      (@id, @parent_id, @type, @name, @content, @node_type, @summary, @aliases, @tags, @related_ids, @created_at, @updated_at)
+      (@id, @parent_id, @type, @name, @content, @node_type, @summary, @aliases, @tags, @related_ids, @created_at, @updated_at, @disk_path)
   `);
   const syncAll = getDb().transaction((rows) => {
     for (const row of rows) upsert.run(row);
   });
   syncAll(docs);
+}
+
+export function updateDocumentDiskPaths(diskPaths) {
+  const update = getDb().prepare('UPDATE documents SET disk_path = ? WHERE id = ?');
+  const updateAll = getDb().transaction((entries) => {
+    for (const [id, diskPath] of entries) update.run(diskPath, id);
+  });
+  updateAll(Object.entries(diskPaths));
+}
+
+// ── wikilink / bidirectional links ───────────────────────────────────────────
+
+const WIKILINK_RE = /\[\[([^\]|]{1,200})(?:\|[^\]]{0,200})?\]\]/g;
+
+function extractWikilinks(content) {
+  if (!content) return [];
+  const names = new Set();
+  WIKILINK_RE.lastIndex = 0;
+  let match;
+  while ((match = WIKILINK_RE.exec(content)) !== null) {
+    const name = match[1].trim();
+    if (name) names.add(name);
+  }
+  return [...names];
+}
+
+export function syncAllLinks(workspace) {
+  const docs = flattenWorkspace(workspace);
+  const nameToId = new Map();
+  for (const d of docs) {
+    nameToId.set(d.name, d.id);
+    if (d.name.endsWith('.md')) nameToId.set(d.name.slice(0, -3), d.id);
+  }
+
+  const deleteLinks = getDb().prepare('DELETE FROM links WHERE source_id = ?');
+  const insertLink = getDb().prepare(
+    'INSERT OR IGNORE INTO links (source_id, target_id) VALUES (?, ?)',
+  );
+
+  const syncAll = getDb().transaction(() => {
+    for (const doc of docs) {
+      if (doc.type !== 'file' || !doc.content) continue;
+      deleteLinks.run(doc.id);
+      const names = extractWikilinks(doc.content);
+      for (const name of names) {
+        const targetId = nameToId.get(name) ?? nameToId.get(`${name}.md`);
+        if (targetId && targetId !== doc.id) insertLink.run(doc.id, targetId);
+      }
+    }
+  });
+  syncAll();
+}
+
+export function getBacklinks(docId) {
+  if (!docId) return [];
+  return getDb().prepare(`
+    SELECT d.id, d.name, d.type
+    FROM links l
+    JOIN documents d ON d.id = l.source_id
+    WHERE l.target_id = ?
+    ORDER BY d.name
+  `).all(docId);
+}
+
+// ── version history ───────────────────────────────────────────────────────────
+
+const FIVE_MIN_MS = 5 * 60 * 1000;
+const MIN_DIFF_CHARS = 50;
+
+export function saveVersions(workspace) {
+  const docs = flattenWorkspace(workspace);
+  const now = Date.now();
+
+  const lastVer = getDb().prepare(
+    'SELECT content, created_at FROM versions WHERE document_id = ? ORDER BY created_at DESC LIMIT 1',
+  );
+  const insert = getDb().prepare(
+    'INSERT INTO versions (document_id, content, created_at) VALUES (?, ?, ?)',
+  );
+
+  const saveAll = getDb().transaction(() => {
+    for (const doc of docs) {
+      if (doc.type !== 'file' || !doc.content) continue;
+      const last = lastVer.get(doc.id);
+      if (!last) {
+        insert.run(doc.id, doc.content, now);
+        continue;
+      }
+      if (last.content === doc.content) continue;
+      const elapsed = now - (last.created_at ?? 0);
+      const diffLen = Math.abs(doc.content.length - (last.content?.length ?? 0));
+      if (elapsed >= FIVE_MIN_MS && diffLen >= MIN_DIFF_CHARS) {
+        insert.run(doc.id, doc.content, now);
+      }
+    }
+  });
+  saveAll();
+}
+
+export function getVersions(docId) {
+  if (!docId) return [];
+  return getDb().prepare(`
+    SELECT id, created_at, length(content) AS char_count
+    FROM versions
+    WHERE document_id = ?
+    ORDER BY created_at DESC
+    LIMIT 30
+  `).all(docId);
+}
+
+export function getVersionById(versionId) {
+  if (!versionId) return null;
+  return getDb().prepare(
+    'SELECT id, content, created_at FROM versions WHERE id = ?',
+  ).get(versionId);
 }
 
 // ── full-text search ──────────────────────────────────────────────────────────
@@ -198,6 +320,16 @@ export function searchDocuments(query) {
     console.error('[db] search error:', err);
     return [];
   }
+}
+
+// ── graph data ────────────────────────────────────────────────────────────────
+
+export function getGraphData() {
+  const nodes = getDb().prepare(
+    "SELECT id, name, type, node_type FROM documents WHERE type = 'file' LIMIT 1000",
+  ).all();
+  const edges = getDb().prepare('SELECT source_id, target_id FROM links').all();
+  return { nodes, edges };
 }
 
 export function closeDatabase() {
