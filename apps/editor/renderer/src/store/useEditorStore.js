@@ -10,9 +10,11 @@ import {
   removeNodeById,
   addChildNode,
   ensureFileTimestamps,
+  ensureKnowledgeFields,
   findFirstFileId,
   nameExists,
   buildUniqueName,
+  createDefaultKnowledgeFields,
   resolveTargetFolderId,
   resolveLocalProjectCreateTarget,
   buildUniqueNameInFolder,
@@ -25,6 +27,8 @@ import {
   findLocalProjectRoot,
   remapDiskNodeAfterRename,
   findNodeIdByRelativePath,
+  normalizeNodeType,
+  sanitizeStringList,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
@@ -34,6 +38,7 @@ const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
 const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
 const SURFACE_STORAGE_KEY = 'md-renderer-surface';
+const KNOWLEDGE_HOME_MIGRATION_KEY = 'md-renderer-knowledge-home-v1';
 const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
 const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
@@ -47,6 +52,20 @@ const safeParseJSON = (value, fallback) => {
   } catch (error) {
     return fallback;
   }
+};
+
+const VALID_SURFACES = new Set([
+  'overview',
+  'search',
+  'graph',
+  'paper',
+  'folder',
+  'settings',
+  'notion',
+]);
+
+const normalizeSurface = (surface, fallback = 'overview') => {
+  return VALID_SURFACES.has(surface) ? surface : fallback;
 };
 
 /** 避免启动时用空 Notion 配置覆盖 localStorage 中已有值 */
@@ -111,12 +130,14 @@ const editorStorage = {
       const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
       const copyStyle = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
       const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
+      const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
       const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
       const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
 
       const parsedWorkspace = safeParseJSON(workspaceRaw, null);
+      const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
       // 给老文件补 updatedAt，让「最近」区立即有内容（一次性迁移）
-      const ws = ensureFileTimestamps(parsedWorkspace ?? createDefaultWorkspace());
+      const ws = ensureFileTimestamps(normalizedWorkspace);
       // 补过时间戳就落盘一次，避免下次加载顺序重算
       if (ws !== parsedWorkspace) {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
@@ -125,6 +146,13 @@ const editorStorage = {
       const selectedNode = findNodeById(ws, selId);
       const markdown =
         selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
+      const normalizedSurface = normalizeSurface(surface, 'overview');
+      const migratedSurface = !knowledgeHomeMigrated && normalizedSurface === 'paper'
+        ? 'overview'
+        : normalizedSurface;
+      if (!knowledgeHomeMigrated) {
+        window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
+      }
       return {
         state: {
           workspace: ws,
@@ -135,10 +163,7 @@ const editorStorage = {
             copyStyle && TEMPLATES.some((t) => t.id === copyStyle) ? copyStyle : 'default',
           storageMode: storageMode === 'project' ? 'project' : 'local',
           projectRootPath,
-          surface:
-            surface === 'settings' || surface === 'notion' || surface === 'folder'
-              ? surface
-              : 'paper',
+          surface: migratedSurface,
           ...notionSnapshot,
         },
         version: 0,
@@ -154,7 +179,7 @@ const editorStorage = {
           copyStyle: 'default',
           storageMode: 'local',
           projectRootPath: '',
-          surface: 'paper',
+          surface: 'overview',
           ...notionSnapshot,
         },
         version: 0,
@@ -289,7 +314,7 @@ export const useEditorStore = create(
       /** 通知渲染进程取消待写入磁盘的定时器 */
       diskSaveCancelSeq: 0,
       diskSaveCancelFileIds: [],
-      surface: 'paper',
+      surface: 'overview',
       notionToken: '',
       notionFilePages: {},
       notionDatabaseId: '',
@@ -328,7 +353,7 @@ export const useEditorStore = create(
           /* ignore */
         }
       },
-      setSurface: (surface) => set({ surface }),
+      setSurface: (surface) => set({ surface: normalizeSurface(surface, 'overview') }),
 
       setActiveBlockId: (id) => set({ activeBlockId: id }),
       setActiveBlockDraft: (draft) => set({ activeBlockDraft: draft }),
@@ -367,6 +392,29 @@ export const useEditorStore = create(
         const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           return { ...node, tags: cleaned };
+        });
+        persistWorkspace(updated);
+        set({ workspace: updated });
+      },
+
+      setFileKnowledgeMeta: (fileId, patch) => {
+        const { workspace } = get();
+        const updated = updateNodeById(workspace, fileId, (node) => {
+          if (node.type !== 'file') return node;
+          const nextPatch = {};
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'nodeType')) {
+            nextPatch.nodeType = normalizeNodeType(patch.nodeType);
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'summary')) {
+            nextPatch.summary = String(patch.summary ?? '').trim();
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'aliases')) {
+            nextPatch.aliases = sanitizeStringList(patch.aliases);
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'relatedIds')) {
+            nextPatch.relatedIds = sanitizeStringList(patch.relatedIds);
+          }
+          return { ...node, ...createDefaultKnowledgeFields(node), ...nextPatch };
         });
         persistWorkspace(updated);
         set({ workspace: updated });
@@ -556,7 +604,13 @@ export const useEditorStore = create(
         const { workspace, selectedId } = get();
         const fileId = createId('file');
         const name = buildUniqueName(workspace, '未命名', '.md');
-        const newFile = { id: fileId, type: 'file', name, content: '' };
+        const newFile = {
+          id: fileId,
+          type: 'file',
+          name,
+          content: '',
+          ...createDefaultKnowledgeFields(),
+        };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
         if (targetFolder?.projectRootPath) return false;
@@ -680,12 +734,13 @@ export const useEditorStore = create(
       },
 
       importWorkspace: (imported) => {
-        const firstFileId = findFirstFileId(imported);
-        const initialId = firstFileId ?? imported?.id ?? 'root';
-        const node = findNodeById(imported, initialId);
-        persistWorkspace(imported);
+        const normalized = ensureKnowledgeFields(imported);
+        const firstFileId = findFirstFileId(normalized);
+        const initialId = firstFileId ?? normalized?.id ?? 'root';
+        const node = findNodeById(normalized, initialId);
+        persistWorkspace(normalized);
         set({
-          workspace: imported,
+          workspace: normalized,
           selectedId: initialId,
           markdown: node?.type === 'file' ? (node.content ?? '') : '',
           storageMode: 'local',
@@ -700,8 +755,9 @@ export const useEditorStore = create(
         if (!node) return false;
 
         const { workspace } = get();
-        const nextWorkspace = addChildNode(workspace, workspace.id, node);
-        const initialId = findFirstFileId(node) ?? node.id;
+        const normalizedNode = ensureKnowledgeFields(node);
+        const nextWorkspace = addChildNode(workspace, workspace.id, normalizedNode);
+        const initialId = findFirstFileId(normalizedNode) ?? normalizedNode.id;
         const selectedNode = findNodeById(nextWorkspace, initialId);
 
         persistWorkspace(nextWorkspace);

@@ -4,6 +4,8 @@ import {
   File,
   Folder,
   FolderOpen,
+  LayoutGrid,
+  Network,
   Pencil,
   Trash2,
   Github,
@@ -267,19 +269,26 @@ const WorkspaceSidebar = ({
   onExportMarkdown,
   collapsed,
   onToggleCollapse,
+  surface,
+  onOpenOverview,
+  onOpenSearch,
+  onOpenGraph,
+  onOpenCurrentContent,
+  searchQuery,
+  onSearchQueryChange,
   onOpenSettings,
   onOpenNotion,
   settingsActive,
   notionActive,
   localProjectSupported = false,
 }) => {
-  const [searchKeyword, setSearchKeyword] = useState('');
   const [activeTag, setActiveTag] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [resizing, setResizing] = useState(false);
   const [renamingNodeId, setRenamingNodeId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
+  const searchKeyword = searchQuery ?? '';
   const isSearching = Boolean(searchKeyword.trim());
   const allowStructureActions = true;
 
@@ -327,13 +336,16 @@ const WorkspaceSidebar = ({
   const allTags = collectTags(workspace);
 
   const handleSearchChange = (value) => {
-    setSearchKeyword(value);
+    onSearchQueryChange?.(value);
     if (value.trim()) setActiveTag(null); // 搜索时清除标签筛选
+    if (value.trim()) {
+      onOpenSearch?.();
+    }
   };
 
   const toggleTag = (tag) => {
     setActiveTag((prev) => (prev === tag ? null : tag));
-    setSearchKeyword(''); // 选标签时清除搜索
+    onSearchQueryChange?.(''); // 选标签时清除搜索
   };
 
   useEffect(() => {
@@ -414,9 +426,9 @@ const WorkspaceSidebar = ({
         <div className="sidebar-header">
           <div className="sidebar-header-brand">
             <span className="sidebar-header-logo" aria-hidden>
-              <FileText size={18} strokeWidth={1.5} />
+              <LayoutGrid size={18} strokeWidth={1.5} />
             </span>
-            <span className="sidebar-header-title">简记</span>
+            <span className="sidebar-header-title">知识库</span>
           </div>
           <button
             type="button"
@@ -438,12 +450,50 @@ const WorkspaceSidebar = ({
             <input
               type="text"
               className="notebook-search-input"
-              placeholder="搜索笔记…"
+              placeholder="搜索知识库…"
               value={searchKeyword}
               onChange={(e) => handleSearchChange(e.target.value)}
               data-testid="sidebar-search-input"
-              aria-label="搜索笔记"
+              aria-label="搜索知识库"
             />
+          </div>
+
+          <div className="sidebar-nav-section">
+            <span className="sidebar-section-title">知识库视图</span>
+            <div className="sidebar-nav-list">
+              <button
+                type="button"
+                className={`sidebar-nav-item ${surface === 'overview' ? 'active' : ''}`}
+                onClick={onOpenOverview}
+              >
+                <LayoutGrid size={16} strokeWidth={1.6} />
+                <span>概览</span>
+              </button>
+              <button
+                type="button"
+                className={`sidebar-nav-item ${surface === 'search' ? 'active' : ''}`}
+                onClick={onOpenSearch}
+              >
+                <Search size={16} strokeWidth={1.6} />
+                <span>全局搜索</span>
+              </button>
+              <button
+                type="button"
+                className={`sidebar-nav-item ${surface === 'graph' ? 'active' : ''}`}
+                onClick={onOpenGraph}
+              >
+                <Network size={16} strokeWidth={1.6} />
+                <span>图谱视图</span>
+              </button>
+              <button
+                type="button"
+                className={`sidebar-nav-item ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
+                onClick={onOpenCurrentContent}
+              >
+                <FileText size={16} strokeWidth={1.6} />
+                <span>当前内容</span>
+              </button>
+            </div>
           </div>
 
           <button
@@ -451,11 +501,11 @@ const WorkspaceSidebar = ({
             className="sidebar-project-entry"
             onClick={onOpenLocalProject}
             disabled={!localProjectSupported}
-            title={localProjectSupported ? '打开本地项目文件夹' : '仅桌面版应用支持'}
+            title={localProjectSupported ? '导入本地知识目录' : '仅桌面版应用支持'}
             data-testid="sidebar-open-local-project"
           >
             <Upload size={16} strokeWidth={1.5} />
-            <span>打开本地项目</span>
+            <span>导入本地目录</span>
           </button>
 
           {/* 最近编辑 */}
@@ -504,7 +554,7 @@ const WorkspaceSidebar = ({
 
           {/* 笔记 + 新建文件/文件夹 */}
           <div className="sidebar-docs-header">
-            <span className="sidebar-section-title">笔记</span>
+            <span className="sidebar-section-title">文档目录</span>
             <div className="sidebar-add-icons">
               {allowStructureActions && (
                 <button

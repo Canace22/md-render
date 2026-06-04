@@ -3,9 +3,58 @@
  */
 
 const DEFAULT_FILE_ID = 'file-default';
+const DEFAULT_NODE_TYPE = 'document';
+
+export const KNOWLEDGE_NODE_TYPE_OPTIONS = [
+  { value: 'concept', label: '概念' },
+  { value: 'method', label: '方法' },
+  { value: 'tech', label: '技术' },
+  { value: 'component', label: '组件' },
+  { value: 'document', label: '文档' },
+];
 
 export const createId = (prefix) => {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`;
+};
+
+export const sanitizeStringList = (values) => {
+  return Array.from(
+    new Set((values ?? []).map((item) => String(item ?? '').trim()).filter(Boolean)),
+  );
+};
+
+export const normalizeNodeType = (nodeType) => {
+  return KNOWLEDGE_NODE_TYPE_OPTIONS.some((item) => item.value === nodeType)
+    ? nodeType
+    : DEFAULT_NODE_TYPE;
+};
+
+export const createDefaultKnowledgeFields = (overrides = {}) => {
+  return {
+    nodeType: normalizeNodeType(overrides.nodeType),
+    summary: String(overrides.summary ?? '').trim(),
+    aliases: sanitizeStringList(overrides.aliases),
+    relatedIds: sanitizeStringList(overrides.relatedIds),
+  };
+};
+
+export const getKnowledgeNodeTypeLabel = (nodeType) => {
+  return KNOWLEDGE_NODE_TYPE_OPTIONS.find((item) => item.value === normalizeNodeType(nodeType))?.label ?? '文档';
+};
+
+export const getFileKnowledgeSearchText = (file) => {
+  if (!file || file.type !== 'file') return '';
+  return [
+    file.name,
+    file.content,
+    file.summary,
+    ...(file.aliases ?? []),
+    ...(file.tags ?? []),
+    getKnowledgeNodeTypeLabel(file.nodeType),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 };
 
 export const createDefaultWorkspace = () => ({
@@ -18,6 +67,10 @@ export const createDefaultWorkspace = () => ({
       type: 'file',
       name: '示例文档.md',
       content: getDefaultMarkdown(),
+      ...createDefaultKnowledgeFields({
+        summary: '示例文档，用来演示知识库里的 Markdown 内容结构。',
+        aliases: ['示例'],
+      }),
     },
   ],
 });
@@ -90,6 +143,31 @@ function hello() {
 }
 
 export { DEFAULT_FILE_ID };
+
+export function ensureKnowledgeFields(node) {
+  if (!node) return node;
+
+  if (node.type === 'file') {
+    const nextKnowledge = createDefaultKnowledgeFields(node);
+    const changed = node.nodeType !== nextKnowledge.nodeType
+      || (node.summary ?? '') !== nextKnowledge.summary
+      || JSON.stringify(node.aliases ?? []) !== JSON.stringify(nextKnowledge.aliases)
+      || JSON.stringify(node.relatedIds ?? []) !== JSON.stringify(nextKnowledge.relatedIds);
+    return changed ? { ...node, ...nextKnowledge } : node;
+  }
+
+  if (node.type === 'folder' && Array.isArray(node.children)) {
+    let changed = false;
+    const nextChildren = node.children.map((child) => {
+      const next = ensureKnowledgeFields(child);
+      if (next !== child) changed = true;
+      return next;
+    });
+    return changed ? { ...node, children: nextChildren } : node;
+  }
+
+  return node;
+}
 
 export function findNodeById(node, targetId) {
   if (!node) return null;
@@ -408,6 +486,7 @@ export function createLocalProjectFileNode(projectRootPath, relativePath, name, 
     projectRootPath,
     content,
     updatedAt: Date.now(),
+    ...createDefaultKnowledgeFields(),
   };
 }
 
@@ -464,7 +543,7 @@ export function filterWorkspace(node, keyword) {
     const name = (target.name ?? '').toLowerCase();
     if (name.includes(query)) return true;
     if (target.type === 'file') {
-      return (target.content ?? '').toLowerCase().includes(query);
+      return getFileKnowledgeSearchText(target).includes(query);
     }
     return false;
   };

@@ -8,6 +8,7 @@ import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
+import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
@@ -154,6 +155,7 @@ function MarkdownEditor() {
     setNotionDatabaseId,
     setFileNotionPageId,
     setFileTags,
+    setFileKnowledgeMeta,
     mergeNotionFilePages,
     toggleSidebarCollapsed,
     updateSelectedFileContent,
@@ -189,16 +191,18 @@ function MarkdownEditor() {
     () => (selectedFolder ? getFolderDirectChildren(selectedFolder) : []),
     [selectedFolder],
   );
-  const contentSurface = selectedFolder ? 'folder' : 'paper';
+  const allFiles = useMemo(() => collectFiles(workspace), [workspace]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
   const markdownImportInputRef = useRef(null);
   const projectSaveTimersRef = useRef(new Map());
+  const lastContentSurfaceRef = useRef(surface);
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
+  const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
   const performRename = useCallback(async (targetId, rawName) => {
     const trimmed = String(rawName ?? '').trim();
     if (!trimmed) return false;
@@ -394,6 +398,13 @@ function MarkdownEditor() {
   }, [markdown]);
 
   const resolvedTheme = theme === 'dark' ? 'dark' : 'light';
+  const selectedContentSurface = selectedFolder ? 'folder' : selectedFile ? 'paper' : 'overview';
+
+  useEffect(() => {
+    if (surface !== 'settings' && surface !== 'notion') {
+      lastContentSurfaceRef.current = surface;
+    }
+  }, [surface]);
 
   const tryConvertTypedMarkdownCodeFence = useCallback(() => {
     const cursorPosition = editor.getTextCursorPosition();
@@ -864,8 +875,15 @@ function MarkdownEditor() {
         onExportMarkdown={handleExportMarkdown}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
-        onOpenSettings={() => setSurface(surface === 'settings' ? contentSurface : 'settings')}
-        onOpenNotion={() => setSurface(surface === 'notion' ? contentSurface : 'notion')}
+        surface={surface}
+        onOpenOverview={() => setSurface('overview')}
+        onOpenSearch={() => setSurface('search')}
+        onOpenGraph={() => setSurface('graph')}
+        onOpenCurrentContent={() => setSurface(selectedContentSurface)}
+        searchQuery={knowledgeSearchQuery}
+        onSearchQueryChange={setKnowledgeSearchQuery}
+        onOpenSettings={() => setSurface(surface === 'settings' ? lastContentSurfaceRef.current : 'settings')}
+        onOpenNotion={() => setSurface(surface === 'notion' ? lastContentSurfaceRef.current : 'notion')}
         settingsActive={surface === 'settings'}
         notionActive={surface === 'notion'}
         localProjectSupported={localProjectSupported}
@@ -885,7 +903,7 @@ function MarkdownEditor() {
             onImport={() => importInputRef.current?.click()}
             onExport={handleExport}
             onOpenNotion={() => setSurface('notion')}
-            onClose={() => setSurface(contentSurface)}
+            onClose={() => setSurface(lastContentSurfaceRef.current)}
           />
         ) : surface === 'notion' ? (
           <NotionPanel
@@ -910,7 +928,7 @@ function MarkdownEditor() {
             batchProgress={batchProgress}
             message={notionMessage}
             error={notionError}
-            onClose={() => setSurface(contentSurface)}
+            onClose={() => setSurface(lastContentSurfaceRef.current)}
           />
         ) : surface === 'folder' && selectedFolder ? (
           <FolderFileList
@@ -918,13 +936,27 @@ function MarkdownEditor() {
             children={folderChildren}
             onSelectItem={selectNode}
           />
+        ) : surface === 'overview' || surface === 'search' || surface === 'graph' ? (
+          <KnowledgeBasePanel
+            mode={surface}
+            workspace={workspace}
+            selectedFile={selectedFile}
+            selectedFolder={selectedFolder}
+            searchQuery={knowledgeSearchQuery}
+            onSearchQueryChange={setKnowledgeSearchQuery}
+            onOpenFile={selectNode}
+            onOpenFolder={selectNode}
+            onOpenSurface={setSurface}
+          />
         ) : (
           <>
             <DocHeader
               selectedFile={selectedFile}
+              allFiles={allFiles}
               onOpenNotion={() => setSurface('notion')}
               notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
+              onKnowledgeMetaChange={setFileKnowledgeMeta}
               titleEditable={!selectedInLocalProject}
               {...titleEditing}
             />
