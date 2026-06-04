@@ -45,6 +45,10 @@ const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
 const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
 
+/** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
+const hasElectronDb = () =>
+  typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
+
 const safeParseJSON = (value, fallback) => {
   if (!value) return fallback;
   try {
@@ -119,57 +123,133 @@ const persistNotionSnapshot = (state) => {
   persistNotionStringField(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
 };
 
-/** 兼容现有 localStorage 多 key 的持久化存储 */
-const editorStorage = {
-  getItem: () => {
-    if (typeof window === 'undefined') return null;
-    const notionSnapshot = readNotionPersistSnapshot();
-    try {
-      const workspaceRaw = window.localStorage.getItem(STORAGE_KEY);
-      const selectedId = window.localStorage.getItem(SELECTED_ID_STORAGE_KEY);
-      const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
-      const copyStyle = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
-      const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
-      const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
-      const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
-      const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
+/** 从 localStorage 构建标准 state 对象（在非 Electron 或 Electron 迁移时使用） */
+const buildStateFromLocalStorage = () => {
+  const notionSnapshot = readNotionPersistSnapshot();
+  const workspaceRaw = window.localStorage.getItem(STORAGE_KEY);
+  const selectedId = window.localStorage.getItem(SELECTED_ID_STORAGE_KEY);
+  const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const copyStyle = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
+  const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
+  const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
+  const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
+  const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
 
-      const parsedWorkspace = safeParseJSON(workspaceRaw, null);
-      const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-      // 给老文件补 updatedAt，让「最近」区立即有内容（一次性迁移）
-      const ws = ensureFileTimestamps(normalizedWorkspace);
-      // 补过时间戳就落盘一次，避免下次加载顺序重算
-      if (ws !== parsedWorkspace) {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
+  const parsedWorkspace = safeParseJSON(workspaceRaw, null);
+  const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
+  const ws = ensureFileTimestamps(normalizedWorkspace);
+  if (ws !== parsedWorkspace) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
+  }
+  const selId = selectedId || DEFAULT_FILE_ID;
+  const selectedNode = findNodeById(ws, selId);
+  const markdown = selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
+  const normalizedSurface = normalizeSurface(surface, 'overview');
+  const migratedSurface = !knowledgeHomeMigrated && normalizedSurface === 'paper'
+    ? 'overview'
+    : normalizedSurface;
+  if (!knowledgeHomeMigrated) {
+    window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
+  }
+  return {
+    state: {
+      workspace: ws,
+      selectedId: selId,
+      markdown,
+      theme: theme === 'light' || theme === 'dark' ? theme : 'light',
+      copyStyle: copyStyle && TEMPLATES.some((t) => t.id === copyStyle) ? copyStyle : 'default',
+      storageMode: storageMode === 'project' ? 'project' : 'local',
+      projectRootPath,
+      surface: migratedSurface,
+      ...notionSnapshot,
+    },
+    version: 0,
+  };
+};
+
+/** 将 SQLite raw state map 解析为 zustand persist 格式 */
+const buildStateFromDb = (raw) => {
+  const workspaceRaw = raw.workspace_json ?? null;
+  const parsedWorkspace = safeParseJSON(workspaceRaw, null);
+  const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
+  const ws = ensureFileTimestamps(normalizedWorkspace);
+  const selId = raw.selected_id || DEFAULT_FILE_ID;
+  const selectedNode = findNodeById(ws, selId);
+  const markdown = selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
+  const notionFilePages = safeParseJSON(raw.notion_file_pages, {});
+  return {
+    state: {
+      workspace: ws,
+      selectedId: selId,
+      markdown,
+      theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : 'light',
+      copyStyle:
+        raw.copy_style && TEMPLATES.some((t) => t.id === raw.copy_style)
+          ? raw.copy_style
+          : 'default',
+      storageMode: raw.storage_mode === 'project' ? 'project' : 'local',
+      projectRootPath: raw.project_root_path ?? '',
+      surface: normalizeSurface(raw.surface, 'overview'),
+      notionToken: typeof raw.notion_token === 'string' ? raw.notion_token : '',
+      notionFilePages:
+        notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
+      notionDatabaseId:
+        typeof raw.notion_database_id === 'string' ? raw.notion_database_id : '',
+    },
+    version: 0,
+  };
+};
+
+/** 将 state 对象序列化为 SQLite app_state 键值对 */
+const buildStateMap = (state) => {
+  const map = {};
+  if (state.workspace) map.workspace_json = JSON.stringify(state.workspace);
+  if (state.selectedId) map.selected_id = state.selectedId;
+  if (state.theme) map.theme = state.theme;
+  if (state.copyStyle) map.copy_style = state.copyStyle;
+  if (state.surface) map.surface = state.surface;
+  if (state.storageMode) map.storage_mode = state.storageMode;
+  if (state.projectRootPath != null) map.project_root_path = state.projectRootPath;
+  if (state.notionToken != null) map.notion_token = state.notionToken;
+  if (state.notionFilePages != null) map.notion_file_pages = JSON.stringify(state.notionFilePages);
+  if (state.notionDatabaseId != null) map.notion_database_id = state.notionDatabaseId;
+  return map;
+};
+
+/** 兼容现有 localStorage 多 key 的持久化存储，Electron 环境下切换到 SQLite */
+const editorStorage = {
+  getItem: async () => {
+    if (typeof window === 'undefined') return null;
+
+    if (hasElectronDb()) {
+      try {
+        const migrated = await window.electronAPI.db.isMigrated();
+        if (!migrated) {
+          // 首次启动：从 localStorage 迁移数据到 SQLite
+          const localState = buildStateFromLocalStorage();
+          const stateMap = buildStateMap(localState.state);
+          await window.electronAPI.db.migrate(stateMap);
+          return localState;
+        }
+        // 已迁移：从 SQLite 加载
+        const res = await window.electronAPI.db.load();
+        if (res.ok && res.state && res.state.workspace_json) {
+          return buildStateFromDb(res.state);
+        }
+        // SQLite 无数据时回退到 localStorage
+        return buildStateFromLocalStorage();
+      } catch (e) {
+        console.error('[store] SQLite 加载失败，回退到 localStorage:', e);
+        return buildStateFromLocalStorage();
       }
-      const selId = selectedId || DEFAULT_FILE_ID;
-      const selectedNode = findNodeById(ws, selId);
-      const markdown =
-        selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
-      const normalizedSurface = normalizeSurface(surface, 'overview');
-      const migratedSurface = !knowledgeHomeMigrated && normalizedSurface === 'paper'
-        ? 'overview'
-        : normalizedSurface;
-      if (!knowledgeHomeMigrated) {
-        window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
-      }
-      return {
-        state: {
-          workspace: ws,
-          selectedId: selId,
-          markdown,
-          theme: theme === 'light' || theme === 'dark' ? theme : 'light',
-          copyStyle:
-            copyStyle && TEMPLATES.some((t) => t.id === copyStyle) ? copyStyle : 'default',
-          storageMode: storageMode === 'project' ? 'project' : 'local',
-          projectRootPath,
-          surface: migratedSurface,
-          ...notionSnapshot,
-        },
-        version: 0,
-      };
+    }
+
+    // Web 环境：原有 localStorage 逻辑
+    try {
+      return buildStateFromLocalStorage();
     } catch (e) {
       console.error('加载编辑器状态失败:', e);
+      const notionSnapshot = readNotionPersistSnapshot();
       return {
         state: {
           workspace: createDefaultWorkspace(),
@@ -186,11 +266,33 @@ const editorStorage = {
       };
     }
   },
-  setItem: (_, value) => {
+  setItem: async (_, value) => {
     if (typeof window === 'undefined') return;
+    const state = value?.state ?? value;
+
+    if (hasElectronDb()) {
+      try {
+        const stateMap = buildStateMap(state);
+        const workspaceJson = stateMap.workspace_json ?? null;
+        // fire-and-forget：不阻塞 UI
+        window.electronAPI.db.save(stateMap, workspaceJson).catch((e) => {
+          console.error('[store] SQLite 保存失败:', e);
+        });
+      } catch (e) {
+        console.error('[store] SQLite 保存异常:', e);
+      }
+      // 同时写 localStorage 作为快速回退（数据量小的字段）
+      try {
+        persistNotionSnapshot(state);
+        if (state.theme) window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+        if (state.copyStyle) window.localStorage.setItem(COPY_STYLE_STORAGE_KEY, state.copyStyle);
+        if (state.surface) window.localStorage.setItem(SURFACE_STORAGE_KEY, state.surface);
+      } catch { /* ignore */ }
+      return;
+    }
+
+    // Web 环境：原有 localStorage 逻辑
     try {
-      const state = value?.state ?? value;
-      // Notion 配置体积小，先写入，避免工作区过大占满配额后 Token 丢失
       persistNotionSnapshot(state);
       if (state.workspace) {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.workspace));
@@ -244,6 +346,13 @@ const persistConfig = {
 
 const persistWorkspace = (workspace) => {
   if (typeof window === 'undefined') return;
+  if (hasElectronDb()) {
+    const workspaceJson = JSON.stringify(workspace);
+    window.electronAPI.db.save({ workspace_json: workspaceJson }, workspaceJson).catch((e) => {
+      console.error('[store] 工作区保存失败:', e);
+    });
+    return;
+  }
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
   } catch (err) {

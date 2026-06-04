@@ -17,6 +17,16 @@ import {
   markLocalProjectWriteIgnored,
   unwatchAllLocalProjects,
 } from './localProjectWatcher.js';
+import {
+  initDatabase,
+  loadEditorState,
+  saveEditorState,
+  isMigratedFromLocalStorage,
+  markMigratedFromLocalStorage,
+  syncDocuments,
+  searchDocuments,
+  closeDatabase,
+} from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,6 +142,66 @@ ipcMain.handle('delete-local-project-entry', async (_event, payload = {}) => {
 });
 
 ipcMain.handle('window-is-fullscreen', () => mainWindow?.isFullScreen() ?? false);
+
+// ── SQLite IPC handlers ───────────────────────────────────────────────────────
+
+ipcMain.handle('db:is-migrated', () => isMigratedFromLocalStorage());
+
+ipcMain.handle('db:migrate', (_event, payload = {}) => {
+  try {
+    const { stateMap } = payload;
+    if (stateMap && typeof stateMap === 'object') {
+      saveEditorState(stateMap);
+      if (stateMap.workspace_json) {
+        try {
+          syncDocuments(JSON.parse(stateMap.workspace_json));
+        } catch { /* ignore parse errors */ }
+      }
+    }
+    markMigratedFromLocalStorage();
+    return { ok: true };
+  } catch (err) {
+    console.error('[db] migrate error:', err);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('db:load', () => {
+  try {
+    return { ok: true, state: loadEditorState() };
+  } catch (err) {
+    console.error('[db] load error:', err);
+    return { ok: false, state: {} };
+  }
+});
+
+ipcMain.handle('db:save', (_event, payload = {}) => {
+  try {
+    const { stateMap, workspaceJson } = payload;
+    if (stateMap && typeof stateMap === 'object') {
+      saveEditorState(stateMap);
+    }
+    if (workspaceJson) {
+      try {
+        syncDocuments(JSON.parse(workspaceJson));
+      } catch { /* ignore parse errors */ }
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error('[db] save error:', err);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('db:search', (_event, payload = {}) => {
+  try {
+    const { query } = payload;
+    return { ok: true, results: searchDocuments(query) };
+  } catch (err) {
+    console.error('[db] search error:', err);
+    return { ok: false, results: [] };
+  }
+});
 
 // ---- 窗口状态记忆（延迟初始化） ----
 async function getStore() {
@@ -286,6 +356,7 @@ process.on('message', (msg) => {
 // ---- 生命周期 ----
 app.whenReady().then(async () => {
   console.log('[electron] app ready');
+  initDatabase();
   createMenu();
   createTray();
   await createWindow();
@@ -305,4 +376,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   unwatchAllLocalProjects();
+  closeDatabase();
 });

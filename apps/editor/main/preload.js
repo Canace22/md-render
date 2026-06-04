@@ -26,6 +26,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('local-project-disk-changed', sub);
   },
 
+  // SQLite 数据库 IPC
+  db: {
+    isMigrated: () => ipcRenderer.invoke('db:is-migrated'),
+    migrate: (stateMap) => ipcRenderer.invoke('db:migrate', { stateMap }),
+    load: () => ipcRenderer.invoke('db:load'),
+    save: (stateMap, workspaceJson) => ipcRenderer.invoke('db:save', { stateMap, workspaceJson }),
+    search: (query) => ipcRenderer.invoke('db:search', { query }),
+  },
+
   // 通用 IPC：渲染进程 → 主进程
   invoke: (channel, ...args) => {
     const allowedChannels = ['get-app-version'];
