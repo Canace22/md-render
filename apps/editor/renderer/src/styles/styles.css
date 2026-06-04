@@ -893,6 +893,41 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     gap: var(--space-m);
 }
 
+.doc-meta-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.doc-meta-toggle:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-secondary);
+    background: var(--color-bg-active);
+}
+
+.doc-meta-toggle.is-open {
+    color: var(--color-text-active);
+    border-color: var(--color-text-active);
+    background: rgba(79, 70, 229, 0.08);
+}
+
+.doc-meta-toggle-icon {
+    transition: transform 0.2s;
+}
+
+.doc-meta-toggle.is-open .doc-meta-toggle-icon {
+    transform: rotate(180deg);
+}
+
 
 .editor-quick-toolbar-shell {
     flex-shrink: 0;

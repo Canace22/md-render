@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { countWords } from '../utils/wordCount.js';
 import KnowledgeMetaPanel from './KnowledgeMetaPanel.jsx';
 import TagBar from './TagBar.jsx';
@@ -20,6 +22,7 @@ export default function DocHeader({
   cancelTitleEditing,
   setTitleDraft,
 }) {
+  const [metaOpen, setMetaOpen] = useState(false);
   const displayName = titleDraft || selectedFile?.name || '未命名';
   const wordCount = selectedFile ? countWords(selectedFile.content) : 0;
 
@@ -78,8 +81,19 @@ export default function DocHeader({
             </span>
           )}
         </div>
+        {selectedFile && (
+          <button
+            type="button"
+            className={`doc-meta-toggle${metaOpen ? ' is-open' : ''}`}
+            onClick={() => setMetaOpen((o) => !o)}
+            title={metaOpen ? '收起元数据' : '展开元数据'}
+          >
+            <ChevronDown size={13} strokeWidth={2} className="doc-meta-toggle-icon" />
+            <span>元数据</span>
+          </button>
+        )}
       </div>
-      {selectedFile && (
+      {selectedFile && metaOpen && (
         <>
           <TagBar
             tags={selectedFile.tags ?? []}
