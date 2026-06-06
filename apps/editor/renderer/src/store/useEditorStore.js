@@ -31,6 +31,8 @@ import {
   findNodeIdByRelativePath,
   normalizeNodeType,
   sanitizeStringList,
+  moveNodeInParent,
+  togglePinNode,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
@@ -412,6 +414,7 @@ export const useEditorStore = create(
       selectedId: DEFAULT_FILE_ID,
       markdown: getDefaultMarkdown(),
       sidebarCollapsed: false,
+      tocCollapsed: true,
       theme: 'light',
       copyStyle: 'default',
       storageMode: 'local',
@@ -456,6 +459,8 @@ export const useEditorStore = create(
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+
+      toggleTocCollapsed: () => set((s) => ({ tocCollapsed: !s.tocCollapsed })),
 
       setTheme: (theme) => set({ theme }),
       setCopyStyle: (copyStyle) => {
@@ -839,7 +844,7 @@ export const useEditorStore = create(
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
         if (targetFolder?.projectRootPath) return false;
-        const nextWorkspace = addChildNode(workspace, targetFolderId, newFile);
+        const nextWorkspace = addChildNode(workspace, targetFolderId, newFile, true);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: fileId, markdown: '', surface: 'paper' });
         return true;
@@ -853,10 +858,26 @@ export const useEditorStore = create(
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
         if (targetFolder?.projectRootPath) return false;
-        const nextWorkspace = addChildNode(workspace, targetFolderId, newFolder);
+        const nextWorkspace = addChildNode(workspace, targetFolderId, newFolder, true);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: folderId, surface: 'folder' });
         return true;
+      },
+
+      moveNode: (fromId, toId) => {
+        const { workspace } = get();
+        const nextWorkspace = moveNodeInParent(workspace, fromId, toId);
+        if (nextWorkspace === workspace) return;
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+      },
+
+      pinNode: (targetId) => {
+        const { workspace } = get();
+        const nextWorkspace = togglePinNode(workspace, targetId);
+        if (nextWorkspace === workspace) return;
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
       },
 
       applyRename: (targetId, newName) => {

@@ -48,7 +48,7 @@ export class MarkdownRenderer {
             case 'hr':
                 return '<hr>';
             case 'empty':
-                return '<br>';
+                return '';
             default:
                 return '';
         }

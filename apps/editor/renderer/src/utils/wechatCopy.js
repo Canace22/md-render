@@ -282,6 +282,41 @@ const applyTemplateStyles = (tempDiv, template) => {
   }
 };
 
+/**
+ * 将 HTML 提取为纯文本，块级元素之间保留换行，避免内容堆在一起
+ * @param {string} htmlString
+ * @returns {string}
+ */
+export const htmlToPlainText = (htmlString) => {
+  const div = document.createElement('div');
+  div.innerHTML = htmlString;
+
+  const BLOCK_TAGS = new Set([
+    'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+    'LI', 'BLOCKQUOTE', 'PRE', 'TR', 'TABLE', 'HR', 'FIGURE',
+  ]);
+
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = node.tagName;
+    const children = Array.from(node.childNodes).map(walk).join('');
+
+    if (BLOCK_TAGS.has(tag)) {
+      return children.trim() ? `${children.trim()}\n\n` : '';
+    }
+    if (tag === 'BR') return '\n';
+    return children;
+  };
+
+  return Array.from(div.childNodes)
+    .map(walk)
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')  // 最多保留一个空行
+    .trim();
+};
+
 const stripDataAndClass = (tempDiv) => {
   tempDiv.querySelectorAll('*').forEach((el) => {
     Array.from(el.attributes).forEach((attr) => {
@@ -432,11 +467,7 @@ const copyToWeChat = async (html, options = {}) => {
   };
 
   const wechatHTML = convertToWeChatHTML(html, templateId);
-  const plainText = (() => {
-    const div = document.createElement('div');
-    div.innerHTML = wechatHTML;
-    return div.textContent || div.innerText || '';
-  })();
+  const plainText = htmlToPlainText(wechatHTML);
 
   /**
    * 优先使用 Clipboard API 写入原始 HTML，保证所选模板样式完整进入剪贴板。

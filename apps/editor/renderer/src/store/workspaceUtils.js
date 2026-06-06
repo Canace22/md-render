@@ -526,20 +526,20 @@ export function createLocalProjectFolderNode(projectRootPath, relativePath, name
   };
 }
 
-export function addChildNode(node, folderId, childNode) {
+export function addChildNode(node, folderId, childNode, prepend = false) {
   if (!node) return node;
   if (node.id === folderId && node.type === 'folder') {
     const children = Array.isArray(node.children) ? node.children : [];
     return {
       ...node,
-      children: [...children, childNode],
+      children: prepend ? [childNode, ...children] : [...children, childNode],
     };
   }
 
   if (node.type === 'folder' && Array.isArray(node.children)) {
     let changed = false;
     const nextChildren = node.children.map((child) => {
-      const updatedChild = addChildNode(child, folderId, childNode);
+      const updatedChild = addChildNode(child, folderId, childNode, prepend);
       if (updatedChild !== child) {
         changed = true;
       }
@@ -551,6 +551,76 @@ export function addChildNode(node, folderId, childNode) {
   }
 
   return node;
+}
+
+/**
+ * 将同一父文件夹内的 fromId 节点移动到 toId 节点的位置（同级重排）。
+ * 置顶节点（pinned）始终保持在最前，拖拽排序在置顶区和非置顶区内各自生效。
+ * 返回新的根节点（纯函数）。
+ */
+export function moveNodeInParent(root, fromId, toId) {
+  if (!root || fromId === toId) return root;
+
+  if (root.type === 'folder' && Array.isArray(root.children)) {
+    const children = root.children;
+    const fromIdx = children.findIndex((c) => c.id === fromId);
+    const toIdx = children.findIndex((c) => c.id === toId);
+
+    // 在当前层找到了 from 和 to，执行同级重排
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const next = [...children];
+      const [moved] = next.splice(fromIdx, 1);
+      const insertAt = next.findIndex((c) => c.id === toId);
+      next.splice(insertAt, 0, moved);
+      return { ...root, children: next };
+    }
+
+    // 否则递归找子文件夹
+    let changed = false;
+    const nextChildren = children.map((child) => {
+      const updated = moveNodeInParent(child, fromId, toId);
+      if (updated !== child) changed = true;
+      return updated;
+    });
+    if (changed) return { ...root, children: nextChildren };
+  }
+
+  return root;
+}
+
+/**
+ * 切换节点的置顶状态（pinned 字段）。
+ * 置顶节点会移到所在文件夹 children 的最前面；取消置顶时保持当前位置不变。
+ */
+export function togglePinNode(root, targetId) {
+  if (!root) return root;
+
+  if (root.type === 'folder' && Array.isArray(root.children)) {
+    const idx = root.children.findIndex((c) => c.id === targetId);
+    if (idx !== -1) {
+      const target = root.children[idx];
+      const nextPinned = !target.pinned;
+      const updated = { ...target, pinned: nextPinned };
+      let next = [...root.children];
+      next[idx] = updated;
+      // 置顶时把节点移到最前
+      if (nextPinned) {
+        next.splice(idx, 1);
+        next.unshift(updated);
+      }
+      return { ...root, children: next };
+    }
+
+    let changed = false;
+    const nextChildren = root.children.map((child) => {
+      const updated = togglePinNode(child, targetId);
+      if (updated !== child) changed = true;
+      return updated;
+    });
+    if (changed) return { ...root, children: nextChildren };
+  }
+
+  return root;
 }
 
 /**

@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  MoreVertical,
   File,
   Folder,
   FolderOpen,
@@ -10,7 +9,6 @@ import {
   Trash2,
   Github,
   ChevronLeft,
-  ChevronRight,
   FileText,
   Settings,
   Cloud,
@@ -18,6 +16,8 @@ import {
   FileOutput,
   Search,
   Tag,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -48,40 +48,58 @@ const TreeNode = ({
   onAddFolder,
   onRename,
   onDelete,
+  onMoveNode,
+  onPinNode,
   renamingNodeId,
   renameDraft,
   onRenameDraftChange,
   onStartRename,
   onCommitRename,
   onCancelRename,
+  contextMenu,
+  onContextMenu,
+  onCloseContextMenu,
+  forceOpen,
 }) => {
   const isFolder = node.type === 'folder';
   const isActive = node.id === selectedId;
   const isRoot = node.id === 'root';
-  const isLocalProjectNode = Boolean(node.projectRootPath);
   const isLocalProjectRoot = Boolean(node.localProjectRoot);
   const channelLabel = getFolderChannelLabel(node);
   const showStructureActions = allowStructureActions && !isLocalProjectRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
-  const [menuOpen, setMenuOpen] = useState(false);
   const [folderOpen, setFolderOpen] = useState(true);
+
+  // 外部全量展开/收起时同步本地状态
+  useEffect(() => {
+    if (isFolder && forceOpen !== undefined) {
+      setFolderOpen(forceOpen);
+    }
+  }, [forceOpen, isFolder]);
+  const [dragOver, setDragOver] = useState(false);
   const menuRef = useRef(null);
   const renameInputRef = useRef(null);
   const isRenaming = renamingNodeId === node.id;
+  const isMenuTarget = contextMenu?.nodeId === node.id;
 
   const indentStyle = { paddingLeft: `${depth * 16 + 8}px` };
-  const nodeClass = `tree-node ${isFolder ? 'folder' : 'file'}${isActive ? ' active' : ''}`;
+  const nodeClass = [
+    'tree-node',
+    isFolder ? 'folder' : 'file',
+    isActive ? 'active' : '',
+    dragOver ? 'drag-over' : '',
+  ].filter(Boolean).join(' ');
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!isMenuTarget) return;
     const close = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
+        onCloseContextMenu();
       }
     };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
-  }, [menuOpen]);
+  }, [isMenuTarget, onCloseContextMenu]);
 
   useEffect(() => {
     if (!isRenaming || !renameInputRef.current) return;
@@ -89,22 +107,63 @@ const TreeNode = ({
     renameInputRef.current.select();
   }, [isRenaming]);
 
-  const handleMenuClick = (e) => {
+  const handleContextMenu = (e) => {
+    if (!showStructureActions && !showRemoveProject) return;
+    e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
-    setMenuOpen((v) => !v);
+    onContextMenu(node.id, e.clientX, e.clientY);
   };
 
-  const runAndClose = (fn) => {
-    return () => {
-      fn();
-      setMenuOpen(false);
-    };
+  const runAndClose = (fn) => () => {
+    fn();
+    onCloseContextMenu();
   };
+
+  // 拖拽排序
+  const handleDragStart = (e) => {
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', node.id);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const fromId = e.dataTransfer.getData('text/plain');
+    if (fromId && fromId !== node.id) {
+      onMoveNode?.(fromId, node.id);
+    }
+  };
+
+  const sharedProps = allowStructureActions && !isRoot ? {
+    draggable: true,
+    onDragStart: handleDragStart,
+    onDragOver: handleDragOver,
+    onDragLeave: handleDragLeave,
+    onDrop: handleDrop,
+  } : {};
 
   return (
-    <div key={node.id} className={nodeClass}>
-      <div className="tree-node-row" style={indentStyle}>
+    <div key={node.id} className={nodeClass} {...sharedProps}>
+      <div
+        className="tree-node-row"
+        style={indentStyle}
+        onContextMenu={handleContextMenu}
+      >
         <button
           type="button"
           className="tree-node-button"
@@ -144,71 +203,62 @@ const TreeNode = ({
           ) : (
             <span className="tree-node-text">{node.name}</span>
           )}
+          {node.pinned && (
+            <span className="tree-node-pin-icon" title="已置顶">
+              <Pin size={11} strokeWidth={2} />
+            </span>
+          )}
           {channelLabel && (
             <span className="tree-node-channel-tag" title={`来源：${channelLabel}`}>
               {channelLabel}
             </span>
           )}
         </button>
-        {(showStructureActions || showRemoveProject) && (
-          <div className="tree-node-actions" ref={menuRef}>
-            {showStructureActions && (
-              <>
-                <button
-                  type="button"
-                  className="tree-node-action-icon"
-                  onClick={(e) => { e.stopPropagation(); onStartRename(node.id, node.name); }}
-                  disabled={isRoot}
-                  title="重命名"
-                  aria-label="重命名"
-                >
-                  <Pencil size={16} strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  className="tree-node-action-icon danger"
-                  onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-                  disabled={isRoot}
-                  title="删除"
-                  aria-label="删除"
-                >
-                  <Trash2 size={16} strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  className="tree-node-more-btn"
-                  onClick={handleMenuClick}
-                  title="更多操作"
-                  aria-label="更多操作"
-                >
-                  <MoreVertical size={16} strokeWidth={1.5} />
-                </button>
-                {menuOpen && (
-                  <div className="tree-node-menu">
-                    <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
-                      <File size={14} strokeWidth={1.5} /> 新建文件
-                    </button>
-                    <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
-                      <Folder size={14} strokeWidth={1.5} /> 新建文件夹
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-            {showRemoveProject && (
-              <button
-                type="button"
-                className="tree-node-action-icon danger"
-                onClick={(e) => { e.stopPropagation(); onRemoveLocalProject(node.id); }}
-                title="移除项目"
-                aria-label={`移除项目 ${node.name}`}
-              >
-                <Trash2 size={16} strokeWidth={1.5} />
-              </button>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* 右键上下文菜单 */}
+      {isMenuTarget && (
+        <div
+          ref={menuRef}
+          className="tree-node-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          data-testid="tree-context-menu"
+        >
+          {showStructureActions && isFolder && (
+            <>
+              <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
+                <File size={14} strokeWidth={1.5} /> 新建文件
+              </button>
+              <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
+                <Folder size={14} strokeWidth={1.5} /> 新建文件夹
+              </button>
+              <div className="tree-context-menu-divider" />
+            </>
+          )}
+          {showStructureActions && !isRoot && (
+            <>
+              <button type="button" onClick={runAndClose(() => onPinNode?.(node.id))}>
+                {node.pinned
+                  ? <><PinOff size={14} strokeWidth={1.5} /> 取消置顶</>
+                  : <><Pin size={14} strokeWidth={1.5} /> 置顶</>}
+              </button>
+              <div className="tree-context-menu-divider" />
+              <button type="button" onClick={runAndClose(() => onStartRename(node.id, node.name))}>
+                <Pencil size={14} strokeWidth={1.5} /> 重命名
+              </button>
+              <button type="button" className="danger" onClick={runAndClose(() => onDelete(node.id))}>
+                <Trash2 size={14} strokeWidth={1.5} /> 删除
+              </button>
+            </>
+          )}
+          {showRemoveProject && (
+            <button type="button" className="danger" onClick={runAndClose(() => onRemoveLocalProject(node.id))}>
+              <Trash2 size={14} strokeWidth={1.5} /> 移除项目
+            </button>
+          )}
+        </div>
+      )}
+
       {isFolder && folderOpen && Array.isArray(node.children) && node.children.length > 0 && (
         <div className="tree-node-children">
           {node.children.map((child) => (
@@ -224,12 +274,18 @@ const TreeNode = ({
               onAddFolder={onAddFolder}
               onRename={onRename}
               onDelete={onDelete}
+              onMoveNode={onMoveNode}
+              onPinNode={onPinNode}
               renamingNodeId={renamingNodeId}
               renameDraft={renameDraft}
               onRenameDraftChange={onRenameDraftChange}
               onStartRename={onStartRename}
               onCommitRename={onCommitRename}
               onCancelRename={onCancelRename}
+              contextMenu={contextMenu}
+              onContextMenu={onContextMenu}
+              onCloseContextMenu={onCloseContextMenu}
+              forceOpen={forceOpen}
             />
           ))}
         </div>
@@ -239,11 +295,13 @@ const TreeNode = ({
 };
 
 /** 隐藏工作区根节点，直接渲染一级目录和文档 */
-const renderTree = (workspace, selectedId, onSelect, handlers) => {
+const renderTree = (workspace, selectedId, onSelect, handlers, contextMenu, onContextMenu, onCloseContextMenu, forceOpen) => {
   const children = workspace?.type === 'folder' && Array.isArray(workspace.children)
     ? workspace.children
     : [];
-  return children.map((child) => (
+  // 置顶节点排在最前（渲染层兜底，store 层已处理，这里保险起见）
+  const sorted = [...children.filter((c) => c.pinned), ...children.filter((c) => !c.pinned)];
+  return sorted.map((child) => (
     <TreeNode
       key={child.id}
       node={child}
@@ -251,6 +309,10 @@ const renderTree = (workspace, selectedId, onSelect, handlers) => {
       onSelect={onSelect}
       depth={0}
       {...handlers}
+      contextMenu={contextMenu}
+      onContextMenu={onContextMenu}
+      onCloseContextMenu={onCloseContextMenu}
+      forceOpen={forceOpen}
     />
   ));
 };
@@ -265,6 +327,8 @@ const WorkspaceSidebar = ({
   onAddFolder,
   onRename,
   onDelete,
+  onMoveNode,
+  onPinNode,
   onImportMarkdown,
   onExportMarkdown,
   collapsed,
@@ -287,6 +351,13 @@ const WorkspaceSidebar = ({
   const [resizing, setResizing] = useState(false);
   const [renamingNodeId, setRenamingNodeId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [contextMenu, setContextMenu] = useState(null); // { nodeId, x, y }
+  // undefined = 不强制（用户自由展开/收起），true = 全部展开，false = 全部收起
+  const [forceOpen, setForceOpen] = useState(undefined);
+
+  const handleToggleAllFolders = useCallback(() => {
+    setForceOpen((prev) => (prev === false ? true : false));
+  }, []);
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const searchKeyword = searchQuery ?? '';
   const isSearching = Boolean(searchKeyword.trim());
@@ -572,6 +643,17 @@ const WorkspaceSidebar = ({
           <div className="sidebar-docs-header">
             <span className="sidebar-section-title">文档目录</span>
             <div className="sidebar-add-icons">
+              <button
+                type="button"
+                className="sidebar-add-icon"
+                onClick={handleToggleAllFolders}
+                title={forceOpen === false ? '展开全部文件夹' : '收起全部文件夹'}
+                aria-label={forceOpen === false ? '展开全部文件夹' : '收起全部文件夹'}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <rect x="2" y="7.25" width="12" height="1.5" rx="0.75" fill="currentColor"/>
+                </svg>
+              </button>
               {allowStructureActions && (
                 <button
                   type="button"
@@ -629,10 +711,17 @@ const WorkspaceSidebar = ({
                   onAddFolder,
                   onRename,
                   onDelete,
+                  onMoveNode,
+                  onPinNode,
                   allowStructureActions,
                   onRemoveLocalProject,
                   ...renameHandlers,
-                })
+                },
+                contextMenu,
+                (nodeId, x, y) => setContextMenu({ nodeId, x, y }),
+                () => setContextMenu(null),
+                forceOpen,
+              )
               : (
                 <div className="workspace-tree-empty" data-testid="search-empty">
                   {isSearching

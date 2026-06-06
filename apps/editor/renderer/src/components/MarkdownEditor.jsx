@@ -16,6 +16,7 @@ import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
+import TocPanel from './TocPanel.jsx';
 import TabBar from './TabBar.jsx';
 import Breadcrumb from './Breadcrumb.jsx';
 import StatusBar from './StatusBar.jsx';
@@ -30,7 +31,7 @@ import {
   normalizeMarkdown,
 } from '../utils/markdownUtils';
 import { applyThemeToBody } from '../utils/themeUtils';
-import { copyToWeChat } from '../utils/wechatCopy';
+import { copyToWeChat, htmlToPlainText } from '../utils/wechatCopy';
 import { getTemplateById } from '../utils/wechatTemplates';
 import { blocksToMarkdown, markdownToBlocks } from '../utils/notionConverter.js';
 import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../utils/notionService.js';
@@ -146,6 +147,7 @@ function MarkdownEditor() {
     selectedId,
     markdown,
     sidebarCollapsed,
+    tocCollapsed,
     theme,
     copyStyle,
     storageMode,
@@ -163,11 +165,14 @@ function MarkdownEditor() {
     setFileKnowledgeMeta,
     mergeNotionFilePages,
     toggleSidebarCollapsed,
+    toggleTocCollapsed,
     updateSelectedFileContent,
     selectNode,
     openLocalProjectWorkspace,
     addFile,
     addFolder,
+    moveNode,
+    pinNode,
     applyRename,
     deleteNode,
     replaceDiskBackedNode,
@@ -486,11 +491,7 @@ function MarkdownEditor() {
       alert('没有可复制的内容');
       return;
     }
-    const plainText = (() => {
-      const div = document.createElement('div');
-      div.innerHTML = html;
-      return div.textContent || div.innerText || '';
-    })();
+    const plainText = htmlToPlainText(html);
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
@@ -916,6 +917,8 @@ function MarkdownEditor() {
         onRemoveLocalProject={handleRemoveLocalProject}
         onAddFile={handleAddFile}
         onAddFolder={handleAddFolder}
+        onMoveNode={moveNode}
+        onPinNode={pinNode}
         onRename={handleRename}
         onDelete={handleDelete}
         onImportMarkdown={localProjectSupported || !selectedInLocalProject
@@ -1084,6 +1087,11 @@ function MarkdownEditor() {
                       )}
                     </div>
                   </div>
+                  <TocPanel
+                    markdown={markdown}
+                    collapsed={tocCollapsed}
+                    onToggle={toggleTocCollapsed}
+                  />
                 </div>
               </>
             )}
