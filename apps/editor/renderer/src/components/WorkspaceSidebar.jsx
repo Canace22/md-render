@@ -40,6 +40,7 @@ const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
+const DEFAULT_EXPANDED_FOLDER_DEPTH = 1;
 
 const clampSidebarWidth = (width) => {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
@@ -105,7 +106,9 @@ const TreeNode = ({
   const channelLabel = getFolderChannelLabel(node);
   const showStructureActions = allowStructureActions && !isLocalProjectRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
-  const [folderOpen, setFolderOpen] = useState(true);
+  const [folderOpen, setFolderOpen] = useState(() => {
+    return isFolder && depth < DEFAULT_EXPANDED_FOLDER_DEPTH;
+  });
 
   // 外部全量展开/收起时同步本地状态
   useEffect(() => {
