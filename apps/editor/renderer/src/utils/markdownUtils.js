@@ -2,8 +2,9 @@
  * Markdown 文本处理工具
  */
 
-export const normalizeMarkdown = (value = '') => {
-  return value.replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ').trimEnd();
+export const normalizeMarkdown = (value) => {
+  const str = value ?? '';
+  return str.replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ').trimEnd();
 };
 
 const CODE_FENCE_OPEN_REGEX = /^```([\w-]+)?\s*$/;

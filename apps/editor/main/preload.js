@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteLocalProjectEntry: (payload) => ipcRenderer.invoke('delete-local-project-entry', payload),
   registerLocalProjectWatch: (payload) => ipcRenderer.invoke('register-local-project-watch', payload),
   readLocalProjectDisk: (payload) => ipcRenderer.invoke('read-local-project-disk', payload),
+  readLocalProjectFileContent: (payload) => ipcRenderer.invoke('read-local-project-file-content', payload),
+  exportSaveFile: (payload) => ipcRenderer.invoke('export-save-file', payload),
+  exportToPdf: (payload) => ipcRenderer.invoke('export-to-pdf', payload),
   onLocalProjectDiskChanged: (callback) => {
     const sub = (_event, payload) => callback(payload);
     ipcRenderer.on('local-project-disk-changed', sub);

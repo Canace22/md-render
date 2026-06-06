@@ -151,6 +151,17 @@ export async function readLocalProjectDisk(projectRootPath, mode) {
   return null;
 }
 
+export async function readLocalProjectFileContent(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.readLocalProjectFileContent === 'function') {
+    const result = await window.electronAPI.readLocalProjectFileContent(payload);
+    if (result?.ok === false) {
+      throw new Error(result.error || '读取本地文件失败');
+    }
+    return result;
+  }
+  throw new Error('本地文件读取仅支持桌面版应用');
+}
+
 export function onLocalProjectDiskChanged(callback) {
   if (hasDirectBridge() && typeof window.electronAPI.onLocalProjectDiskChanged === 'function') {
     return window.electronAPI.onLocalProjectDiskChanged(callback);

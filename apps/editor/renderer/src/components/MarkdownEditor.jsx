@@ -16,6 +16,7 @@ import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
+import FilePreviewPanel from './FilePreviewPanel.jsx';
 import TocPanel from './TocPanel.jsx';
 import TabBar from './TabBar.jsx';
 import Breadcrumb from './Breadcrumb.jsx';
@@ -57,6 +58,8 @@ import {
   resolveLocalProjectCreateTarget,
 } from '../store/workspaceUtils.js';
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
+import { convertToMarkdown, IMPORT_ACCEPT, needsConversion } from '../utils/fileConverters.js';
+import { exportDocument } from '../utils/exportService.js';
 import {
   createLocalProjectFileOnDisk,
   createLocalProjectFolderOnDisk,
@@ -64,6 +67,7 @@ import {
   ensureMdRenderWorkspace,
   isLocalProjectSupported,
   openLocalProject,
+  readLocalProjectFileContent,
   renameLocalProjectEntryOnDisk,
   saveLocalProjectFile,
 } from '../utils/localProjectBridge.js';
@@ -194,6 +198,9 @@ function MarkdownEditor() {
     editorMode,
     openTab,
     closeTab,
+    closeAllTabs,
+    closeOtherTabs,
+    closeTabsToTheRight,
     updateTabTitle,
     toggleEditorMode,
   } = useEditorStore();
@@ -334,8 +341,15 @@ function MarkdownEditor() {
   const [batchPullLoading, setBatchPullLoading] = useState(false);
   const [batchPushLoading, setBatchPushLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
+  const selectedNeedsConversion = Boolean(
+    selectedFile?.needsConversion
+      || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
+  );
+  const [previewData, setPreviewData] = useState({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
+  const [previewLoading, setPreviewLoading] = useState(false);
   const canSaveLocalProjectFile = localProjectSupported
-    && Boolean(selectedProjectRootPath && selectedFile?.relativePath);
+    && Boolean(selectedProjectRootPath && selectedFile?.relativePath)
+    && !selectedNeedsConversion;
   const visibleStorageMode = hasLocalProjectWorkspace ? 'project' : storageMode;
   const visibleProjectRootPath = hasLocalProjectWorkspace ? '已导入本地目录' : '';
 
@@ -536,6 +550,21 @@ function MarkdownEditor() {
     downloadMarkdownFile(normalizeMarkdown(state.markdown), filename);
   }, []);
 
+  const handleExportAs = useCallback(async (format) => {
+    const state = useEditorStore.getState();
+    const node = findNodeById(state.workspace, state.selectedId);
+    if (node?.type !== 'file') {
+      alert('请先选中一个文档后再导出。');
+      return;
+    }
+    const md = normalizeMarkdown(state.markdown);
+    const title = node.name.replace(/\.[^.]+$/, '');
+    const filename = title || '导出文档';
+    const tokens = parserRef.current.parse(md);
+    const html = rendererRef.current.render(tokens);
+    await exportDocument(format, { markdown: md, html, title, filename });
+  }, []);
+
   const ensureLocalMdRenderWorkspace = useCallback(async () => {
     if (!localProjectSupported) return null;
     const state = useEditorStore.getState();
@@ -551,13 +580,17 @@ function MarkdownEditor() {
   const handleImportMarkdown = useCallback((event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const text = normalizeMarkdown(String(reader.result ?? ''));
-      const stem = file.name.replace(/\.(md|markdown|txt)$/i, '').trim() || '导入';
 
-      if (localProjectSupported) {
-        try {
+    const isDocx = /\.docx$/i.test(file.name);
+    const reader = new FileReader();
+
+    reader.onload = async () => {
+      try {
+        const raw = reader.result;
+        const markdownText = normalizeMarkdown(await convertToMarkdown(file.name, raw));
+        const stem = file.name.replace(/\.[^.]+$/, '').trim() || '导入';
+
+        if (localProjectSupported) {
           const projectRootPath = await ensureLocalMdRenderWorkspace();
           if (!projectRootPath) {
             alert('无法初始化本地 Projects 目录，请稍后重试。');
@@ -574,31 +607,37 @@ function MarkdownEditor() {
           const result = await createLocalProjectFileOnDisk({
             projectRootPath: target.projectRootPath,
             relativePath,
-            content: text,
+            content: markdownText,
           });
-          const node = createLocalProjectFileNode(target.projectRootPath, result.relativePath, name, text);
+          const node = createLocalProjectFileNode(target.projectRootPath, result.relativePath, name, markdownText);
           node.updatedAt = result.updatedAt;
           insertLocalProjectNode(target.parentFolderId, node);
           setContentResetKey((k) => k + 1);
-        } catch (error) {
-          console.error('导入 Markdown 到本地项目失败:', error);
-          alert(error?.message || '导入 Markdown 到本地项目失败');
+          return;
         }
-        return;
-      }
 
-      const { selectedId, addFile } = useEditorStore.getState();
-      if (!addFile(selectedId)) {
-        alert('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
-        return;
+        const { selectedId, addFile } = useEditorStore.getState();
+        if (!addFile(selectedId)) {
+          alert('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
+          return;
+        }
+        const after = useEditorStore.getState();
+        after.updateSelectedFileContent(markdownText);
+        const uniqueName = buildUniqueName(after.workspace, stem, '.md');
+        after.applyRename(after.selectedId, uniqueName);
+        setContentResetKey((k) => k + 1);
+      } catch (error) {
+        console.error('导入文件失败:', error);
+        alert(error?.message || '导入文件失败，格式可能不受支持。');
       }
-      const after = useEditorStore.getState();
-      after.updateSelectedFileContent(text);
-      const uniqueName = buildUniqueName(after.workspace, stem, '.md');
-      after.applyRename(after.selectedId, uniqueName);
-      setContentResetKey((k) => k + 1);
     };
-    reader.readAsText(file, 'UTF-8');
+
+    // DOCX 需要以 ArrayBuffer 读取，其余以文本读取
+    if (isDocx) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file, 'UTF-8');
+    }
     event.target.value = '';
   }, [localProjectSupported, insertLocalProjectNode, ensureLocalMdRenderWorkspace]);
 
@@ -885,6 +924,115 @@ function MarkdownEditor() {
     };
   }, [localProjectSupported]);
 
+  // 非 MD 文件：加载原始内容用于预览（不自动转为 Markdown）
+  useEffect(() => {
+    if (!localProjectSupported || !selectedNeedsConversion) {
+      setPreviewData({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
+      return undefined;
+    }
+    if (!selectedFile?.projectRootPath || !selectedFile?.relativePath) return undefined;
+
+    let cancelled = false;
+    setPreviewLoading(true);
+
+    (async () => {
+      try {
+        const result = await readLocalProjectFileContent({
+          projectRootPath: selectedFile.projectRootPath,
+          relativePath: selectedFile.relativePath,
+        });
+        if (cancelled) return;
+
+        const data = { rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null };
+        const fileExt = (selectedFile.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+
+        if (result?.encoding === 'fileUrl') {
+          // 媒体文件 — 直接用 file URL
+          data.fileUrl = result.data;
+        } else if (result?.encoding === 'base64' && (fileExt === '.xlsx' || fileExt === '.xls')) {
+          // Excel 文件 — 用 SheetJS 解析为 sheet 数据
+          try {
+            const XLSX = await import('xlsx');
+            const binary = atob(result.data);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const workbook = XLSX.read(bytes, { type: 'array' });
+            data.excelSheets = workbook.SheetNames.map((name) => ({
+              name,
+              rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: '' }),
+            }));
+          } catch {
+            data.rawContent = '（无法预览此 Excel 文件）';
+          }
+        } else if (result?.encoding === 'base64') {
+          // DOCX 等二进制 — 转为 HTML 预览
+          try {
+            const mammoth = await import('mammoth');
+            const binary = atob(result.data);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const { value: html } = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
+            data.previewHtml = html;
+            data.rawContent = result.data; // 保留 base64 用于转 Markdown
+          } catch {
+            data.rawContent = '（无法预览此二进制文件）';
+          }
+        } else {
+          // 文本文件
+          data.rawContent = result?.data ?? '';
+        }
+
+        if (!cancelled) setPreviewData(data);
+      } catch (error) {
+        console.error('加载文件预览失败:', error);
+        if (!cancelled) setPreviewData({ rawContent: `加载失败：${error?.message || ''}`, fileUrl: '', previewHtml: '' });
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [localProjectSupported, selectedFile?.id, selectedNeedsConversion]);
+
+  // 「转为 Markdown 编辑」：将预览内容转换后作为新 md 文件
+  const handleConvertPreviewToMarkdown = useCallback(async () => {
+    if (!selectedFile) return;
+    try {
+      const raw = previewData.rawContent || '';
+      const mdText = normalizeMarkdown(await convertToMarkdown(selectedFile.name, raw));
+      const stem = selectedFile.name.replace(/\.[^.]+$/, '').trim() || '转换';
+
+      if (localProjectSupported) {
+        const projectRootPath = await ensureLocalMdRenderWorkspace();
+        if (!projectRootPath) { alert('无法初始化本地 Projects 目录'); return; }
+        const state = useEditorStore.getState();
+        const target = resolveLocalProjectCreateTarget(state.workspace, state.selectedId, projectRootPath);
+        if (!target) { alert('无法定位本地 Projects 目录'); return; }
+        const name = buildUniqueNameInFolder(target.parentFolder, stem, '.md');
+        const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
+        const result = await createLocalProjectFileOnDisk({
+          projectRootPath: target.projectRootPath, relativePath, content: mdText,
+        });
+        const node = createLocalProjectFileNode(target.projectRootPath, result.relativePath, name, mdText);
+        node.updatedAt = result.updatedAt;
+        insertLocalProjectNode(target.parentFolderId, node);
+        setContentResetKey((k) => k + 1);
+        return;
+      }
+
+      const { selectedId: sid, addFile } = useEditorStore.getState();
+      if (!addFile(sid)) { alert('无法新建文件'); return; }
+      const after = useEditorStore.getState();
+      after.updateSelectedFileContent(mdText);
+      const uniqueName = buildUniqueName(after.workspace, stem, '.md');
+      after.applyRename(after.selectedId, uniqueName);
+      setContentResetKey((k) => k + 1);
+    } catch (error) {
+      console.error('转换为 Markdown 失败:', error);
+      alert(error?.message || '转换失败');
+    }
+  }, [selectedFile, previewData, localProjectSupported, insertLocalProjectNode, ensureLocalMdRenderWorkspace]);
+
   useEffect(() => {
     syncMarkdownFromSelectedFile();
     syncSelectedIdFromWorkspace();
@@ -903,7 +1051,7 @@ function MarkdownEditor() {
       <input
         ref={markdownImportInputRef}
         type="file"
-        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        accept={IMPORT_ACCEPT}
         style={{ display: 'none' }}
         onChange={handleImportMarkdown}
         data-testid="import-markdown-input"
@@ -925,6 +1073,7 @@ function MarkdownEditor() {
           ? () => markdownImportInputRef.current?.click()
           : null}
         onExportMarkdown={handleExportMarkdown}
+        onExportAs={handleExportAs}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
         surface={surface}
@@ -947,6 +1096,9 @@ function MarkdownEditor() {
           activeId={selectedId}
           onSelect={selectNode}
           onClose={closeTab}
+          onCloseAll={closeAllTabs}
+          onCloseOthers={closeOtherTabs}
+          onCloseToTheRight={closeTabsToTheRight}
         />
 
         {surface === 'settings' ? (
@@ -1008,6 +1160,16 @@ function MarkdownEditor() {
             onOpenFolder={selectNode}
             onOpenSurface={setSurface}
             onImportBookmarks={() => setBookmarkImportOpen(true)}
+          />
+        ) : selectedNeedsConversion ? (
+          <FilePreviewPanel
+            file={selectedFile}
+            previewHtml={previewData.previewHtml}
+            rawContent={previewData.rawContent}
+            fileUrl={previewData.fileUrl}
+            excelSheets={previewData.excelSheets}
+            loading={previewLoading}
+            onConvertToMarkdown={handleConvertPreviewToMarkdown}
           />
         ) : (
           <>

@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, protocol } from 'electron';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import {
   readLocalProjectWorkspace,
@@ -11,6 +12,7 @@ import {
   deleteLocalProjectEntry,
   readProjectsChildren,
   resolveProjectFilePath,
+  readLocalProjectFileContent,
 } from './localProject.js';
 import {
   watchLocalProjectRoot,
@@ -38,6 +40,15 @@ import { writeBuiltInDocsToDisk } from './mdSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 注册自定义协议（必须在 app.ready 之前调用）
+// 解决 file:// URL 在 dev 模式下被跨域安全策略阻断的问题
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-media',
+    privileges: { secure: true, supportFetchAPI: true, stream: true, standard: true },
+  },
+]);
 
 let store = null;
 let mainWindow = null;
@@ -147,6 +158,59 @@ ipcMain.handle('delete-local-project-entry', async (_event, payload = {}) => {
     // ignore
   }
   return { ok: true };
+});
+
+ipcMain.handle('read-local-project-file-content', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath } = payload;
+  try {
+    const result = await readLocalProjectFileContent(projectRootPath, relativePath);
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('export-save-file', async (_event, payload = {}) => {
+  const { defaultName, filters, content, encoding } = payload;
+  const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+    title: '导出文件',
+    defaultPath: defaultName,
+    filters,
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+
+  const fsModule = fs;
+  if (encoding === 'base64') {
+    await fsModule.writeFile(result.filePath, Buffer.from(content, 'base64'));
+  } else {
+    await fsModule.writeFile(result.filePath, content, 'utf8');
+  }
+  return { canceled: false, filePath: result.filePath };
+});
+
+ipcMain.handle('export-to-pdf', async (_event, payload = {}) => {
+  const { html, defaultName } = payload;
+  const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+    title: '导出 PDF',
+    defaultPath: defaultName || 'export.pdf',
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+
+  // 创建隐藏窗口渲染 HTML 并打印为 PDF
+  const printWin = new BrowserWindow({ show: false, webPreferences: { offscreen: true } });
+  await printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  const pdfBuffer = await printWin.webContents.printToPDF({
+    marginsType: 0,
+    printBackground: true,
+    landscape: false,
+    pageSize: 'A4',
+  });
+  printWin.close();
+
+  const fsModule = fs;
+  await fsModule.writeFile(result.filePath, pdfBuffer);
+  return { canceled: false, filePath: result.filePath };
 });
 
 ipcMain.handle('window-is-fullscreen', () => mainWindow?.isFullScreen() ?? false);
@@ -417,6 +481,31 @@ process.on('message', (msg) => {
 // ---- 生命周期 ----
 app.whenReady().then(async () => {
   console.log('[electron] app ready');
+
+  // 注册 local-media:// 协议处理器，安全地向渲染进程提供本地媒体文件
+  // 直接读取文件返回 Response，避免 net.fetch + file:// 在部分 Electron 版本下 ERR_FILE_NOT_FOUND
+  protocol.handle('local-media', async (request) => {
+    const url = new URL(request.url);
+    const filePath = decodeURIComponent(url.pathname);
+    try {
+      const buffer = await fs.readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeMap = {
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+        '.bmp': 'image/bmp', '.ico': 'image/x-icon',
+        '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.mov': 'video/quicktime',
+        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.aac': 'audio/aac',
+      };
+      return new Response(buffer, {
+        headers: { 'Content-Type': mimeMap[ext] || 'application/octet-stream' },
+      });
+    } catch (err) {
+      console.error('[local-media] failed to read:', filePath, err.message);
+      return new Response('File not found', { status: 404 });
+    }
+  });
+
   initDatabase();
   createMenu();
   createTray();

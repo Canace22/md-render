@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Dropdown } from 'antd';
 import {
   File,
   Folder,
@@ -10,6 +11,12 @@ import {
   Github,
   ChevronLeft,
   FileText,
+  FileCode,
+  FileSpreadsheet,
+  FileType,
+  Image,
+  Video,
+  Music,
   Settings,
   Cloud,
   Upload,
@@ -18,6 +25,7 @@ import {
   Tag,
   Pin,
   PinOff,
+  ChevronDown,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -36,6 +44,35 @@ const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
 const clampSidebarWidth = (width) => {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
 };
+
+/** 根据文件扩展名返回对应图标组件 */
+const getFileIcon = (filename) => {
+  const ext = String(filename ?? '').match(/\.[^.]+$/)?.[0]?.toLowerCase() || '';
+  switch (ext) {
+    case '.html': case '.htm': case '.json': case '.rst': case '.org':
+      return FileCode;
+    case '.csv':
+      return FileSpreadsheet;
+    case '.docx':
+      return FileType;
+    case '.png': case '.jpg': case '.jpeg': case '.gif':
+    case '.svg': case '.webp': case '.bmp': case '.ico':
+      return Image;
+    case '.mp4': case '.webm': case '.ogg': case '.mov':
+      return Video;
+    case '.mp3': case '.wav': case '.flac': case '.aac':
+      return Music;
+    default:
+      return File;
+  }
+};
+
+const EXPORT_OPTIONS = [
+  { key: 'md', label: 'Markdown (.md)' },
+  { key: 'html', label: 'HTML (.html)' },
+  { key: 'pdf', label: 'PDF (.pdf)' },
+  { key: 'docx', label: 'Word (.docx)' },
+];
 
 const TreeNode = ({
   node,
@@ -82,7 +119,8 @@ const TreeNode = ({
   const isRenaming = renamingNodeId === node.id;
   const isMenuTarget = contextMenu?.nodeId === node.id;
 
-  const indentStyle = { paddingLeft: `${depth * 16 + 8}px` };
+  const indentPx = depth * 12 + 8;
+  const indentStyle = { paddingLeft: `${indentPx}px`, '--indent-guide-left': `${(depth - 1) * 12 + 8 + 4}px` };
   const nodeClass = [
     'tree-node',
     isFolder ? 'folder' : 'file',
@@ -177,7 +215,7 @@ const TreeNode = ({
               ? (folderOpen
                   ? <FolderOpen size={16} strokeWidth={1.5} />
                   : <Folder size={16} strokeWidth={1.5} />)
-              : <File size={16} strokeWidth={1.5} />}
+              : (() => { const Icon = getFileIcon(node.name); return <Icon size={16} strokeWidth={1.5} />; })()}
           </span>
           {isRenaming ? (
             <input
@@ -331,6 +369,7 @@ const WorkspaceSidebar = ({
   onPinNode,
   onImportMarkdown,
   onExportMarkdown,
+  onExportAs,
   collapsed,
   onToggleCollapse,
   surface,
@@ -688,7 +727,26 @@ const WorkspaceSidebar = ({
                   <Upload size={18} strokeWidth={1.5} />
                 </button>
               )}
-              {onExportMarkdown && (
+              {onExportAs ? (
+                <Dropdown
+                  trigger={['click']}
+                  menu={{
+                    items: EXPORT_OPTIONS,
+                    onClick: ({ key }) => onExportAs(key),
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="sidebar-add-icon with-caret"
+                    title="导出当前文档"
+                    aria-label="导出当前文档"
+                    data-testid="sidebar-export-dropdown"
+                  >
+                    <FileOutput size={18} strokeWidth={1.5} />
+                    <ChevronDown size={12} strokeWidth={1.8} />
+                  </button>
+                </Dropdown>
+              ) : onExportMarkdown && (
                 <button
                   type="button"
                   className="sidebar-add-icon"

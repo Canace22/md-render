@@ -407,6 +407,32 @@ const ensureLocalWorkspaceRoot = (workspace, legacyProjectRootPath) => {
     : createDefaultWorkspace();
 };
 
+const preserveConvertedPreviewContent = (node, currentWorkspace) => {
+  if (!node) return node;
+
+  if (node.type === 'file') {
+    const existingNode = findNodeById(currentWorkspace, node.id);
+    const shouldReuseConvertedContent = node.needsConversion
+      && node.content == null
+      && existingNode?.type === 'file'
+      && existingNode.content != null
+      && existingNode.updatedAt === node.updatedAt;
+
+    return shouldReuseConvertedContent
+      ? { ...node, content: existingNode.content }
+      : node;
+  }
+
+  if (node.type === 'folder' && Array.isArray(node.children)) {
+    return {
+      ...node,
+      children: node.children.map((child) => preserveConvertedPreviewContent(child, currentWorkspace)),
+    };
+  }
+
+  return node;
+};
+
 export const useEditorStore = create(
   persist(
     (set, get) => ({
@@ -500,6 +526,41 @@ export const useEditorStore = create(
         return {
           openTabs: nextTabs,
           selectedId: nextTab.id,
+          markdown: node?.content ?? '',
+          surface: node?.type === 'folder' ? 'folder' : 'paper',
+        };
+      }),
+
+      /** 关闭所有标签页 */
+      closeAllTabs: () => set({ openTabs: [], surface: 'overview' }),
+
+      /** 关闭其他标签页（保留指定 tab） */
+      closeOtherTabs: (fileId) => set((state) => {
+        const kept = state.openTabs.filter((t) => t.id === fileId);
+        if (kept.length === 0) return { openTabs: [], surface: 'overview' };
+        // 若保留的不是当前激活的，切换过去
+        if (state.selectedId === fileId) return { openTabs: kept };
+        const node = findNodeById(state.workspace, fileId);
+        return {
+          openTabs: kept,
+          selectedId: fileId,
+          markdown: node?.content ?? '',
+          surface: node?.type === 'folder' ? 'folder' : 'paper',
+        };
+      }),
+
+      /** 关闭右侧标签页 */
+      closeTabsToTheRight: (fileId) => set((state) => {
+        const idx = state.openTabs.findIndex((t) => t.id === fileId);
+        if (idx === -1) return {};
+        const kept = state.openTabs.slice(0, idx + 1);
+        const removedIds = new Set(state.openTabs.slice(idx + 1).map((t) => t.id));
+        if (!removedIds.has(state.selectedId)) return { openTabs: kept };
+        // 当前激活的被关了，切到目标 tab
+        const node = findNodeById(state.workspace, fileId);
+        return {
+          openTabs: kept,
+          selectedId: fileId,
           markdown: node?.content ?? '',
           surface: node?.type === 'folder' ? 'folder' : 'paper',
         };
@@ -722,17 +783,19 @@ export const useEditorStore = create(
 
         let nextWorkspace = state.workspace;
         if (isTreeMount && diskTree) {
-          const freshRoot = markLocalProjectNode(preserveDirtyInTree(diskTree), projectRootPath, true);
+          const markedRoot = markLocalProjectNode(preserveDirtyInTree(diskTree), projectRootPath, true);
+          const freshRoot = preserveConvertedPreviewContent(markedRoot, state.workspace);
           if (freshRoot) {
             nextWorkspace = replaceLocalProjectMount(state.workspace, projectRootPath, freshRoot);
           }
         } else if (Array.isArray(projectsChildren)) {
           const children = projectsChildren.map((child) => {
-            if (child.type !== 'file' || !shouldPreserveFile(child.id)) return child;
+            const childWithPreview = preserveConvertedPreviewContent(child, state.workspace);
+            if (child.type !== 'file' || !shouldPreserveFile(child.id)) return childWithPreview;
             const localContent = child.id === state.selectedId
               ? state.markdown
-              : (findNodeById(state.workspace, child.id)?.content ?? child.content ?? '');
-            return { ...child, content: localContent };
+              : (findNodeById(state.workspace, child.id)?.content ?? childWithPreview.content ?? '');
+            return { ...childWithPreview, content: localContent };
           });
           nextWorkspace = syncProjectsChildrenFromDisk(
             state.workspace,
@@ -1059,6 +1122,8 @@ export const useEditorStore = create(
         const { workspace, selectedId, markdown, diskSavePendingFileIds } = get();
         const selectedFile = findNodeById(workspace, selectedId);
         if (selectedFile?.type !== 'file') return;
+        // 非 Markdown 文件（needsConversion）content 为 null，跳过同步
+        if (selectedFile.needsConversion && selectedFile.content == null) return;
         if (diskSavePendingFileIds[selectedId]) return;
         if (normalizeMarkdown(selectedFile.content) === normalizeMarkdown(markdown)) return;
         set({ markdown: selectedFile.content ?? '' });

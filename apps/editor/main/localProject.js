@@ -5,7 +5,23 @@ import path from 'path';
 export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
 
-const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.txt']);
+const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
+const SUPPORTED_FILE_EXTENSIONS = new Set([
+  '.md', '.markdown', '.txt',
+  '.html', '.htm',
+  '.docx',
+  '.xlsx', '.xls',
+  '.csv',
+  '.rst',
+  '.org',
+  '.json',
+  // 图片
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico',
+  // 视频
+  '.mp4', '.webm', '.ogg', '.mov',
+  // 音频
+  '.mp3', '.wav', '.flac', '.aac',
+]);
 const IGNORED_DIRECTORIES = new Set([
   '.git',
   '.idea',
@@ -21,8 +37,13 @@ const toRelativePath = (rootPath, targetPath) => {
   return path.relative(rootPath, targetPath).split(path.sep).join('/');
 };
 
-const isSupportedMarkdownFile = (name) => {
-  return MARKDOWN_EXTENSIONS.has(path.extname(name).toLowerCase());
+const isSupportedFile = (name) => {
+  return SUPPORTED_FILE_EXTENSIONS.has(path.extname(name).toLowerCase());
+};
+
+const isMarkdownFile = (name) => {
+  const ext = path.extname(name).toLowerCase();
+  return MARKDOWN_EXTENSIONS.has(ext) || ext === '.txt';
 };
 
 const shouldIgnoreDirectory = (name) => {
@@ -65,19 +86,32 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
     };
   }
 
-  if (!stat.isFile() || !isSupportedMarkdownFile(name)) {
+  if (!stat.isFile() || !isSupportedFile(name)) {
     return null;
   }
 
-  const content = await fs.readFile(currentPath, 'utf8');
   const relativePath = toRelativePath(rootPath, currentPath);
+
+  // Markdown / 纯文本直接读取内容；其他格式只记录元信息，由 Renderer 按需转换
+  if (isMarkdownFile(name)) {
+    const content = await fs.readFile(currentPath, 'utf8');
+    return {
+      id: `file:${relativePath}`,
+      type: 'file',
+      name,
+      relativePath,
+      content,
+      updatedAt: stat.mtimeMs,
+    };
+  }
 
   return {
     id: `file:${relativePath}`,
     type: 'file',
     name,
     relativePath,
-    content,
+    content: null,
+    needsConversion: true,
     updatedAt: stat.mtimeMs,
   };
 }
@@ -207,6 +241,56 @@ export async function readProjectsChildren(projectRootPath) {
     }
   }
   return children.map((node) => markDiskBackedNode(node, projectRootPath)).filter(Boolean);
+}
+
+/**
+ * 读取单个文件的原始内容（文本或 base64）
+ * 用于 Renderer 按需转换非 Markdown 文件
+ */
+const IMAGE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico',
+]);
+
+const AV_EXTENSIONS = new Set([
+  '.mp4', '.webm', '.ogg', '.mov',
+  '.mp3', '.wav', '.flac', '.aac',
+]);
+
+const MEDIA_EXTENSIONS = new Set([...IMAGE_EXTENSIONS, ...AV_EXTENSIONS]);
+
+const BINARY_EXTENSIONS = new Set(['.docx', '.xlsx', '.xls', ...MEDIA_EXTENSIONS]);
+
+const IMAGE_MIME = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+  '.bmp': 'image/bmp', '.ico': 'image/x-icon',
+};
+
+export async function readLocalProjectFileContent(projectRootPath, relativePath) {
+  const filePath = resolveProjectFilePath(projectRootPath, relativePath);
+  const ext = path.extname(filePath).toLowerCase();
+
+  // 图片文件返回 data URL，避免自定义协议在不同环境下的兼容问题
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    const buffer = await fs.readFile(filePath);
+    const mime = IMAGE_MIME[ext] || 'application/octet-stream';
+    return { encoding: 'fileUrl', data: `data:${mime};base64,${buffer.toString('base64')}` };
+  }
+
+  // 音视频文件返回 local-media:// URL（需要流式加载）
+  if (AV_EXTENSIONS.has(ext)) {
+    return { encoding: 'fileUrl', data: `local-media://${filePath}` };
+  }
+
+  // 二进制格式（如 docx）以 base64 返回
+  if (BINARY_EXTENSIONS.has(ext)) {
+    const buffer = await fs.readFile(filePath);
+    return { encoding: 'base64', data: buffer.toString('base64') };
+  }
+
+  // 文本格式直接返回
+  const content = await fs.readFile(filePath, 'utf8');
+  return { encoding: 'utf8', data: content };
 }
 
 export async function ensureMdRenderWorkspaceData() {
