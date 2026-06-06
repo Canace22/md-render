@@ -41,8 +41,10 @@ jobs:
           fi
           echo "Release files:"
           ls -la "$release_dir/"
-          if ! ls "$release_dir"/mac-*/MD\ Render.app >/dev/null 2>&1; then
+          # universal 构建输出 release/mac/，单架构为 mac-arm64/ 等
+          if ! find "$release_dir" -maxdepth 2 -type d -name "MD Render.app" | grep -q .; then
             echo "Error: MD Render.app not found"
+            find "$release_dir" -maxdepth 2 -type d | head -20
             exit 1
           fi
           if ! ls "$release_dir"/*.dmg >/dev/null 2>&1; then
