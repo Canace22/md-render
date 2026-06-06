@@ -1,259 +1,319 @@
-# Markdown 渲染器
+# MD Render
 
-一个简单、轻量级的 Markdown 内容创作工具工作区，支持 CommonMark 规范。仓库现在改成了小型 pnpm monorepo：编辑器应用放在 `apps/editor`，可复用的 Markdown 解析/渲染核心放在 `packages/markdown-core`。
+[English README](./README.md)
 
-## 功能特性
+**一个本地优先、对中文写作友好的内容创作工作台。**
 
-- ✅ 标题（H1-H6）
-- ✅ 段落
-- ✅ 无序列表和有序列表
-- ✅ 嵌套列表
-- ✅ 代码块（集成 highlight.js 语法高亮，支持一键复制）
-- ✅ 行内代码
-- ✅ 链接（支持 title 属性）
-- ✅ 粗体和斜体文本
-- ✅ 删除线
-- ✅ 图片（支持 alt 和 title 属性）
-- ✅ 引用块（支持多行引用）
-- ✅ 水平分割线
-- ✅ 表格（GFM 扩展）
-- ✅ 实时预览
-- ✅ 复制到微信公众号格式
-- ✅ 目录面板，支持 localStorage 本地保存
-- ✅ Mermaid 流程图/时序图预览（```mermaid 代码块）
-- ✅ Mermaid 图表全屏预览（每个图表右上角全屏按钮）
-- ✅ 现代化三栏布局，支持跟随系统的浅色/深色模式
- - ✅ 主题切换器：在预览区顶部可选择 跟随系统 / 浅色 / 深色
+基于 **React + Vite + Electron** 构建，包含自研 CommonMark / GFM Markdown 解析渲染管线（`packages/markdown-core`）、macOS 桌面应用（`apps/editor`），以及可在浏览器或 GitHub Pages 上运行的 Web 版。
 
-## 使用方法
+| | |
+|---|---|
+| **面向用户** | 公众号 / 博客作者 · 知识型内容创作者 · 长文 / 小说写作者 |
+| **关键词** | 本地优先 · 知识驱动 · 写作优先 · 发布友好 |
+| **当前版本** | `1.0.6` — [发布流程](./docs/release-process.md) |
+| **产品路线** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 
-### 开发模式
+产品目标是打通 **选题 → 收集 → 大纲 → 写作 → 改写 → 定稿 → 发布** 这条主路径。底座与 P0 创作工作流已具备，后续重点在 AI 动作、多平台文案与看板 UI — 详见 [后续规划](#后续规划)。
 
-1. 安装依赖：
+---
+
+## 已具备能力
+
+### 写作与预览
+
+- CommonMark / GFM：标题、列表、引用、表格、删除线、图片、链接
+- 实时预览、编辑 / 预览切换、目录面板
+- 代码块 **Shiki** 语法高亮，支持一键复制
+- Mermaid 图表预览与全屏查看
+- 浅色 / 深色 / 跟随系统主题
+
+### 工作区与知识库
+
+- 侧栏文件树、Obsidian 风格标签页、多视图切换（总览、文稿、知识库、Notion、设置）
+- **Web 版：** `localStorage` 持久化
+- **桌面版：** SQLite + FTS5 全文搜索、版本历史、`.md` 磁盘同步、本地目录挂载
+- 双向链接（`[[文档名]]`）、反向链接、关系图谱
+- 书签导入；非 Markdown 文件预览（Office、PDF 等）
+- 工作区导入 / 导出
+
+### 发布与同步
+
+- 微信公众号格式化，含预览弹窗与多种排版模板 — 核心差异点
+- Notion 推送 / 拉取与批量同步
+- 文档导出为 MD / HTML / PDF / DOCX
+- 通过 GitHub Actions 部署到 GitHub Pages
+
+### 创作工作流（P0 已落地）
+
+- **创作首页** — 展示最近稿件、待办选题、素材收件箱、待发布队列；快捷新建稿件 / 选题、导入素材、跳转发布搜索
+- **稿件元数据** — 六段状态流转（`idea` → `published`）、目标平台（公众号、小红书、知乎等）、摘要、计划发布时间、关联文档与来源素材
+- **选题与素材分类** — 通过元数据（`draftStatus`、`nodeType`、标签）将文档归类为稿件、选题、素材、待发布项
+- **标签与知识元数据** — 标签、节点类型、摘要、别名、关联文档、反向链接；版本历史与恢复（Electron）
+- **书签导入** — 书签作为一等条目，出现在首页素材收件箱与书签卡片视图
+- **文件导入与预览** — 支持 MD / HTML / DOCX / CSV 等导入；Office、PDF、Excel 预览并可转为 Markdown
+- **小说助手** — 实体抽取、提及菜单、BlockNote 富文本编辑
+
+---
+
+## 后续规划
+
+详见 [内容创作工具规划](./docs/content-creation-roadmap.md)。上述底座已具备，剩余缺口：
+
+| 缺口 | 规划方向 |
+|------|----------|
+| 缺少独立项目 / 看板 UI | 独立选题看板、系列视图、发布批次管理（首页已聚合展示；`creation-board` / `publishing` 视图为占位） |
+| 通用写作未接入 AI | 段落级动作（扩写、压缩、改语气、提纲、续写）— 小说助手已有，通用 AI 层尚未接入 |
+| 发布仍以微信 + 导出为主 | 一稿多渠道文案（小红书 / 知乎版）、标题与摘要变体、发布前检查清单 |
+| Inbox 仍为早期形态 | 统一分拣流：粘贴 / Notion 拉取 → 收件箱 → 挂选题或转草稿 |
+| 审稿层偏薄 | 改稿清单、版本 diff 预览、定稿归档 |
+
+**近期优先级：** AI 改写动作 + 多平台文案 + 看板 UI — 优先于插件、云同步或通用 AI 聊天面板。
+
+完整分阶段计划（P0–P2）、模块落点与 4 周 vNext 范围：[docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md)。
+
+## 快速上手
+
+### 安装依赖
+
 ```bash
 pnpm install
 ```
 
-2. 启动开发服务器：
+### Web 开发
+
 ```bash
-pnpm run dev
+pnpm dev
 ```
 
-3. 在浏览器中打开 `http://localhost:3000`
-4. 在左侧输入框中输入 Markdown 文本
-5. 右侧会实时显示渲染结果
+在浏览器打开 `http://localhost:3000`，左侧编辑 Markdown，右侧实时预览。
+
+### 桌面开发（Electron）
+
+```bash
+pnpm electron:dev
+```
+
+依赖变更后，原生模块（`better-sqlite3`）可能需要重新编译：
+
+```bash
+pnpm --filter @md-render/editor electron:rebuild
+```
+
+### 构建
+
+```bash
+# Web 构建产物 → apps/editor/dist/
+pnpm build
+
+# macOS 桌面应用 → apps/editor/release/
+pnpm electron:build
+
+# 本地预览 Web 构建（默认 http://localhost:4173）
+pnpm preview
+```
+
+## 常用工作流
 
 ### 复制到微信公众号
 
-1. 在左侧输入框中输入或编辑 Markdown 文本
-2. 右侧会实时显示渲染结果
-3. 点击预览面板右上角的"复制到微信公众号"按钮
-4. 转换后的 HTML 内容会自动复制到剪贴板
-5. 在微信公众号编辑器中粘贴即可
+1. 在编辑器中编写或粘贴 Markdown。
+2. 在 **设置 → 排版风格** 中选择模板。
+3. 点击预览区顶部的 **复制到微信公众号**（或打开微信预览弹窗）。
+4. 将转换后的 HTML 粘贴到公众号编辑器。
 
-**注意事项：**
-- 代码块会自动转换为微信公众号兼容的 `<pre><code>` 格式
-- 图片链接会自动转换为 HTTPS（如果原本是 HTTP）
-- 所有自定义的 class 属性和 data-* 属性会被移除，以确保兼容性
-- 版式预设符合公众号要求：全部文本固定字号 `16px`、段后间距 `8px`、行高 `1.6`
-- 提供通用工具 `apps/editor/renderer/src/utils/wechatCopy.js`，可在其他模块复用转换与复制逻辑
+注意事项：
 
-### 目录与本地保存
+- 代码块会转换为公众号兼容的 `<pre><code>` 格式。
+- HTTP 图片链接会尽可能升级为 HTTPS。
+- 会移除自定义 `class` 和 `data-*` 属性以确保兼容性。
+- 转换逻辑见 `apps/editor/renderer/src/utils/wechatCopy.js`，模板见 `wechatTemplates.js`。
 
-1. 左侧目录面板可以管理多个 Markdown 文件和文件夹
-2. 点击「新建文件」会在当前文件夹下创建空白文档
-3. 点击「新建文件夹」可对笔记进行分组管理
-4. 使用重命名或删除按钮管理条目（根目录不可删除）
-5. 目录结构与文件内容会自动写入浏览器 `localStorage`，下次打开自动恢复
+### 工作区存储模式
 
-### 生产构建
+| 模式 | 数据存放位置 | 适用场景 |
+|------|--------------|----------|
+| 临时工作区（Web） | 浏览器 `localStorage` | 快速记笔记、在线演示 |
+| 桌面应用 | SQLite + 可选磁盘 `.md` 备份 | 大型文库、知识库 |
+| 本地项目（Electron） | 磁盘上的文件夹 | 已有 Markdown 资料库 |
+
+在 **设置 → 工作区** 中挂载本地目录，或导入 / 导出工作区数据。
+
+### Notion 同步
+
+1. 打开 **设置 → Notion**，填写集成 Token。
+2. 将文档关联到 Notion 页面，然后推送或拉取块内容。
+3. 可在 Notion 面板中进行批量同步。
+
+API 细节见 `apps/editor/renderer/src/utils/notionService.js`。
+
+## 测试
 
 ```bash
-pnpm run build
+# 单元测试（Vitest）
+pnpm test:unit
+
+# 端到端测试（Playwright）— 请先在另一终端启动 dev
+pnpm dev
+pnpm test:e2e
+
+# 交互式 Playwright UI
+pnpm test:e2e:ui
 ```
 
-Web 构建产物将输出到 `apps/editor/dist/` 目录。
+E2E 测试默认假定应用运行在 `http://localhost:3000`。
 
-### 端到端测试（Playwright）
+## Mermaid 图表
 
-```bash
-# 在无头模式下运行全部端到端用例
-pnpm run test:e2e
+使用 `mermaid` 语言标记的围栏代码块：
 
-# 打开交互式 Playwright Test UI
-pnpm run test:e2e:ui
-```
-
-默认情况下，测试会假定应用运行在 `http://localhost:3000`。  
-请先在另一个终端中通过 `pnpm run dev` 启动开发服务，再执行测试命令。
-## Mermaid 图表预览
-
-- 通过 `mermaid` 语言标记的围栏代码块启用。示例：
-
-```markdown
+````markdown
 ```mermaid
 graph TD
   A[开始] --> B{选择}
   B -->|是| C[执行操作]
   B -->|否| D[不执行]
-  C --> E[结束]
-  D --> E
 ```
-```
+````
 
-- 页面通过 CDN 加载 Mermaid，在每次预览更新后自动渲染图表。
-- 主题会自动适配系统深浅色（dark/default）。
-- 安全级别设为 `loose` 以便开发使用，如需更严格可按需调整。
-
-### Mermaid 全屏
-
-- 鼠标悬停图表会显示右上角的“全屏”按钮。
-- 点击后将以遮罩层全屏展示该图表，自动适配宽度。
-- 可通过关闭按钮、点击遮罩空白处或按下 Esc 退出全屏。
+- 通过 CDN 加载 Mermaid，每次预览更新后重新渲染。
+- 主题跟随应用的浅色 / 深色设置。
+- 鼠标悬停图表显示全屏按钮；按 Esc 或点击遮罩关闭。
 
 ## 项目结构
 
 ```
 md-render/
-├── package.json            # workspace 脚本入口
-├── pnpm-workspace.yaml     # workspace 包发现
+├── package.json              # workspace 脚本与版本号
+├── pnpm-workspace.yaml
+├── scripts/
+│   └── release-tag.sh        # 版本 tag 辅助脚本
+├── docs/                     # 产品与架构文档
 ├── apps/
 │   └── editor/
-│       ├── package.json         # 编辑器应用包
-│       ├── vite.config.js       # Vite 构建配置
-│       ├── main/                # Electron 主进程
-│       ├── renderer/            # 渲染进程（index.html + React src）
-│       └── tests/               # Vitest / Playwright 测试
+│       ├── main/             # Electron 主进程（IPC、SQLite、文件系统）
+│       ├── renderer/         # React UI（Vite）
+│       ├── tests/            # Vitest + Playwright
+│       ├── dist/             # Web 构建输出
+│       └── release/          # 桌面应用构建输出
 ├── packages/
 │   └── markdown-core/
 │       └── src/
-│           ├── parser.js        # Markdown 解析器
-│           ├── renderer.js      # HTML 渲染器
-│           └── index.js         # 可复用导出
-├── README.md               # 英文说明
-├── README.zh.md            # 中文说明
-└── ARCHITECTURE.md         # 架构文档
+│           ├── parser.js     # Markdown → tokens
+│           ├── renderer.js   # tokens → HTML
+│           └── index.js
+├── README.md
+├── README.zh.md
+└── ARCHITECTURE.md           # 解析 / 渲染原理
 ```
 
 ## 支持的 Markdown 语法
 
 ### 块级元素
 
-- `# 标题` - 标题（H1-H6，使用 1-6 个 #）
-- `` ```代码块```` - 代码块（支持语言标记进行语法高亮，如 ` ```javascript `）
-- `> 引用` - 引用块（支持多行引用）
-- `- 列表项` - 无序列表
-- `1. 列表项` - 有序列表
-- 嵌套列表：使用缩进（2个或更多空格）创建嵌套列表
-  ```markdown
-  - 一级列表
-    - 二级嵌套列表
-      - 三级嵌套列表
-    1. 二级有序列表
-    2. 另一个有序项
-  ```
-- `---` / `***` / `___` - 水平分割线（至少3个字符）
-- 表格（GFM 扩展）：
-  ```markdown
-  | 列1 | 列2 | 列3 |
-  |-----|-----|-----|
-  | 内容1 | 内容2 | 内容3 |
-  ```
+- `# 标题` — H1–H6
+- `` ```代码块```` — 围栏代码块（语言标记启用高亮）
+- `> 引用` — 引用块（支持多行）
+- `- 列表项` / `1. 列表项` — 无序 / 有序列表（缩进嵌套）
+- `---` / `***` / `___` — 水平分割线
+- GFM 表格
 
 ### 行内元素
 
-- `**粗体**` - 粗体文本
-- `*斜体*` - 斜体文本
-- `***粗斜体***` - 粗体+斜体组合
-- `~~删除线~~` - 删除线文本
-- `` `代码` `` - 行内代码
-- `[链接](url)` - 基本链接
-- `[链接](url "标题")` - 带标题的链接
-- `![图片](url)` - 基本图片
-- `![图片](url "标题")` - 带标题的图片
+- `**粗体**`、`*斜体*`、`***粗斜体***`、`~~删除线~~`
+- `` `代码` ``、`[链接](url)`、`[链接](url "标题")`
+- `![图片](url)`、`![图片](url "标题")`
+- `[[文档名]]` — 双向链接（知识库）
 
-## 技术实现
+## 技术栈
 
-- 纯 JavaScript，核心功能无依赖
-- 集成 highlight.js 提供代码语法高亮（通过 CDN 引入）
-- 模块化设计，易于扩展
-- 暗黑主题，护眼舒适
+| 层级 | 选型 |
+|------|------|
+| UI | React 18、Ant Design 5、lucide-react |
+| 构建 | Vite 5、pnpm workspace |
+| 桌面 | Electron 33、electron-builder |
+| 状态 | Zustand（persist） |
+| Markdown 核心 | 自研 parser / renderer（`packages/markdown-core`） |
+| 代码高亮 | Shiki |
+| 图表 | Mermaid（CDN） |
+| 富文本（小说） | BlockNote |
+| 存储 | localStorage（Web）· SQLite + FTS5（桌面） |
 
-## 实现原理
+解析 / 渲染原理详见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
-详细的实现原理、架构设计和执行流程，请参阅 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+## 文档索引
 
+| 主题 | 文档 |
+|------|------|
+| **内容创作路线图** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
+| 知识库实施进度 | [docs/knowledge-base-progress.md](./docs/knowledge-base-progress.md) |
+| 知识库专项路线 | [docs/knowledge-base-roadmap.md](./docs/knowledge-base-roadmap.md) |
+| 小说模式设计 | [docs/novel-mode-design.md](./docs/novel-mode-design.md) |
+| 版本发布流程 | [docs/release-process.md](./docs/release-process.md) |
+| 解析 / 渲染原理 | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Agent / 开发规范 | [AGENTS.md](./AGENTS.md) |
 
-## 变更记录
+## 版本发布
 
-### v2.1 - 目录与本地存储
+版本号维护在根目录 `package.json`：
 
-- ✅ 新增目录侧栏，支持多级文件夹
-- ✅ 在同一工作区里管理多个 Markdown 文件
-- ✅ 自动保存目录与内容至浏览器 `localStorage`
+```bash
+# 1. 修改 package.json 中的 version 并提交
+# 2. 预览 tag
+pnpm release:tag -- --dry-run
+# 3. 创建 annotated tag 并推送
+pnpm release:tag
+```
 
-### v2.0 - CommonMark 支持
-
-- ✅ 删除线支持（`~~text~~`）
-- ✅ 图片支持（`![alt](url)` 和 `![alt](url "title")`）
-- ✅ 链接 title 属性支持（`[text](url "title")`）
-- ✅ 多行引用支持（连续引用块合并）
-- ✅ 表格支持（GFM 扩展）
-- ✅ 优化行内元素解析顺序
-- ✅ 添加图片和表格样式
-
-### v1.3 - 代码块增强
-
-- ✅ 代码块复制：每个代码块右上角提供复制按钮
-- ✅ 使用 Clipboard API，降级到 `execCommand('copy')`
-- ✅ 成功后显示"已复制"反馈
-- ✅ 代码语法高亮：集成 highlight.js
-- ✅ 使用 github-dark-dimmed 主题，适配暗黑界面
-- ✅ 支持所有 highlight.js 支持的语言
-
-### v1.2 - 嵌套列表支持
-
-- ✅ 支持多层嵌套列表（通过缩进识别层级）
-- ✅ 支持混合有序和无序列表（可在同一文档中混合使用）
-- ✅ 递归解析和渲染，支持任意深度的嵌套
-
-### v1.1 - UI 与间距调整
-
-- ✅ 空行渲染为 `<br>`，提供适当的段落分隔
-- ✅ 段落、列表、代码块、引用块的上下外边距调整为 `0.8em`，提供舒适的阅读间距
-- ✅ 分割线的上下外边距调整为 `1em`
-- ✅ 标题上下边距重新校准，确保层次分明
-- ✅ 代码块新增语言头部（接近 VS Code 预览），结构为 `figure.code-block > .code-header + pre`
-- ✅ 引用块采用浅色背景与浅蓝边框以增强可读性
-- ✅ 预览区域默认全宽显示，如需居中版心可在 `#markdown-output` 添加 `max-width` 与 `margin: 0 auto`
-
+完整检查清单见 [docs/release-process.md](./docs/release-process.md)。
 
 ## 部署到 GitHub Pages
 
-这个 workspace 仍然可以通过 GitHub Actions 把 `apps/editor` 的 Web 构建产物部署到 GitHub Pages。
+`apps/editor` 的 Web 构建产物可通过 GitHub Actions 部署到 GitHub Pages。
 
 ### 一次性配置
 
-1. 在 GitHub 仓库中打开 Settings → Pages。
-2. 将 Source 设置为 "GitHub Actions"。
-3. 确认仓库分支为 `main`（或根据你使用的默认分支调整）。
+1. 在 GitHub 仓库中打开 **Settings → Pages**。
+2. 将 **Source** 设置为 **GitHub Actions**。
+3. 确认默认分支为 `main`（或按实际情况调整工作流）。
 
 ### 自动部署
 
-- 已内置工作流：`.github/workflows/deploy-pages.yml`
-- 当你向 `main` 分支 `push` 时，会自动构建并部署到 GitHub Pages。
-- 也可在 Actions 页签中手动运行（Workflow Dispatch）。
-- 为了适配项目页路径，Vite 的 `base` 会在 Actions 中自动推断为 `/<repo>/`，本地开发仍为 `/`，互不影响。
+- 工作流：`.github/workflows/deploy-pages.yml`
+- 推送到 `main` 时自动构建部署；也可在 Actions 页签手动触发。
+- CI 中 Vite `base` 自动推断为 `/<repo>/`，本地开发仍为 `/`。
 
 ### 访问地址
 
-- 成功部署后，页面将通过环境链接暴露；一般为：
-  - 个人主页：`https://<username>.github.io/`
-  - 项目页：`https://<username>.github.io/<repo>/`
+- 个人站点：`https://<username>.github.io/`
+- 项目页：`https://<username>.github.io/<repo>/`
 
-### 自定义与常见问题
+若 Pages 上出现静态资源 404，请确认 CI 设置了正确的 Vite `base`（本仓库通过 `GITHUB_REPOSITORY` 自动推断）。
 
-- 若你的静态文件不在仓库根目录，请修改工作流中的 `actions/upload-pages-artifact@v3` 的 `path`。
-- 工作流已设置必要权限：`pages: write` 与 `id-token: write`。
-- 若仓库默认分支不是 `main`，请同步修改工作流触发分支。
-- 如果 Pages 上出现静态资源 404，请确认 `apps/editor/vite.config.js` 的 `base` 指向 `/<repo>/`（本仓库在 CI 中会通过 `GITHUB_REPOSITORY` 自动推断）。
+## 变更记录（摘要）
+
+### v1.0.x — 创作工作台底座
+
+已落地 [content-creation-roadmap.md §3.1](./docs/content-creation-roadmap.md) 基础层，以及 P0 早期能力：
+
+- Electron 桌面版：SQLite、FTS5、双向链接、反向链接、图谱、版本历史、本地项目
+- 微信格式化与预览、Notion 同步、书签导入、多格式导出、文件导入 / 预览
+- 创作首页、稿件元数据、选题 / 素材 / 待发布分类
+- 小说助手、Shiki 高亮、标签页 UI
+
+下一步见 [路线图 §7–§8](./docs/content-creation-roadmap.md)：AI 段落动作、多平台文案、独立看板 UI。
+
+### v2.1 — 目录与本地存储
+
+- 目录侧栏与多级文件夹；自动保存至 `localStorage`
+
+### v2.0 — CommonMark / GFM
+
+- 删除线、图片、链接 title、多行引用、表格
+
+### v1.3 — 代码块增强
+
+- 复制按钮、语法高亮、VS Code 风格代码块头部
+
+### v1.2 — 嵌套列表
+
+- 多级嵌套与有序 / 无序混排

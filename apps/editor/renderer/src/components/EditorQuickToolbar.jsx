@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from 'antd';
 import {
+  Sparkles,
   Heading1,
   Heading2,
   List,
@@ -52,6 +53,12 @@ const TOOL_ITEMS = [
   },
 ];
 
+const AI_TOOL_ITEMS = [
+  { key: 'compress', label: '压缩' },
+  { key: 'expand', label: '扩写' },
+  { key: 'title', label: '标题' },
+];
+
 function isInlineBlockContent(editor, block) {
   return editor?.schema?.blockSchema?.[block?.type]?.content === 'inline';
 }
@@ -95,6 +102,7 @@ function insertDivider(editor) {
 export default function EditorQuickToolbar({
   editor,
   disabled,
+  onAIAction,
   onPreviewWeChat,
   onCopyWeChat,
   onCopyRichText,
@@ -152,6 +160,18 @@ export default function EditorQuickToolbar({
 
       <div className="editor-quick-toolbar-actions">
         <div className="editor-quick-toolbar-divider" />
+        {AI_TOOL_ITEMS.map((item) => (
+          <Button
+            key={item.key}
+            className="editor-quick-toolbar-btn"
+            icon={<Sparkles size={15} strokeWidth={1.9} />}
+            disabled={disabled}
+            onClick={() => onAIAction?.(item.key)}
+            title={`AI ${item.label}`}
+          >
+            {item.label}
+          </Button>
+        ))}
         <Button
           className={`editor-quick-toolbar-btn ${richCopied ? 'is-copied' : ''}`}
           icon={<ClipboardCopy size={15} strokeWidth={1.9} />}

@@ -51,9 +51,15 @@ export function detectLocalProjectConflicts(state, diskPayload, projectRootPath,
       : (localNode.content ?? '');
     const diskContent = getDiskFileContent(diskPayload, relativePath, isTreeMount);
     const deletedOnDisk = diskContent === undefined;
+    const diskBaseline = localNode.diskContentSnapshot ?? '';
 
     if (!deletedOnDisk
       && normalizeMarkdown(localContent) === normalizeMarkdown(diskContent)) {
+      continue;
+    }
+
+    if (!deletedOnDisk
+      && normalizeMarkdown(diskBaseline) === normalizeMarkdown(diskContent)) {
       continue;
     }
 

@@ -101,6 +101,7 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
       name,
       relativePath,
       content,
+      diskContentSnapshot: content,
       updatedAt: stat.mtimeMs,
     };
   }
@@ -111,6 +112,7 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
     name,
     relativePath,
     content: null,
+    diskContentSnapshot: null,
     needsConversion: true,
     updatedAt: stat.mtimeMs,
   };

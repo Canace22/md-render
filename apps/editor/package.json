@@ -15,9 +15,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "electron:dev": "ELECTRON=true vite",
-    "electron:build": "ELECTRON=true vite build && electron-builder --mac",
-    "electron:pack": "ELECTRON=true vite build && electron-builder --mac --dir",
-    "electron:rebuild": "electron-rebuild -f -w better-sqlite3"
+    "electron:build": "node ./scripts/package-electron.mjs build",
+    "electron:pack": "node ./scripts/package-electron.mjs pack",
+    "electron:rebuild": "npm_config_devdir=.cache/electron-gyp electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "@blocknote/core": "0.47.1",

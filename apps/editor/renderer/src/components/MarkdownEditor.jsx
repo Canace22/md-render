@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { message } from 'antd';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteEditor, BlockNoteSchema, createCodeBlockSpec, defaultBlockSpecs } from '@blocknote/core';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -6,14 +7,16 @@ import { zh } from '@blocknote/core/locales';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
+import AIActionModal from './AIActionModal.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
+import CreationBoardPanel from './CreationBoardPanel.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import NotionPanel from './NotionPanel.jsx';
+import PublishingQueuePanel from './PublishingQueuePanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
-import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
@@ -40,7 +43,6 @@ import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../u
 import { batchPull, batchPush } from '../utils/notionBatchSync.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
-import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import {
@@ -68,6 +70,11 @@ import {
 } from '../store/workspaceUtils.js';
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import { convertToMarkdown, IMPORT_ACCEPT, needsConversion } from '../utils/fileConverters.js';
+import {
+  buildAIActionContext,
+  buildAIActionPrompt,
+  getAIAction,
+} from '../utils/aiActions.js';
 import { exportDocument } from '../utils/exportService.js';
 import {
   createLocalProjectFileOnDisk,
@@ -76,6 +83,7 @@ import {
   ensureMdRenderWorkspace,
   isLocalProjectSupported,
   openLocalProject,
+  readLocalProjectDisk,
   readLocalProjectFileContent,
   renameLocalProjectEntryOnDisk,
   saveLocalProjectFile,
@@ -167,10 +175,35 @@ const getPrimaryPlatformLabel = (platforms = []) => {
   const primary = Array.isArray(platforms) ? platforms[0] : '';
   return PLATFORM_LABELS.get(primary) ?? primary ?? '待选渠道';
 };
+const getParsedWordCount = (content = '') => {
+  return String(content ?? '')
+    .replace(/\s+/g, '')
+    .trim()
+    .length;
+};
+
+const getSelectedEditorText = () => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return '';
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return '';
+
+  const text = String(selection.toString() ?? '').trim();
+  if (!text) return '';
+
+  const editorRoot = document.querySelector('.blocknote-editor');
+  if (!editorRoot) return '';
+
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer?.nodeType === Node.TEXT_NODE
+    ? range.commonAncestorContainer.parentElement
+    : range.commonAncestorContainer;
+
+  if (!container || !editorRoot.contains(container)) return '';
+  return text;
+};
 
 function MarkdownEditor() {
   const macWindowed = useMacTitlebarInset();
-  useLocalProjectWatcher();
   const {
     workspace,
     selectedId,
@@ -214,9 +247,6 @@ function MarkdownEditor() {
     syncMarkdownFromSelectedFile,
     syncSelectedIdFromWorkspace,
     setDiskSavePending,
-    localProjectConflict,
-    resolveLocalProjectConflict,
-    dismissLocalProjectConflict,
     diskSaveCancelSeq,
     diskSaveCancelFileIds,
     openTabs,
@@ -278,16 +308,57 @@ function MarkdownEditor() {
       capturedAt: file.updatedAt ?? file.createdAt,
     }));
   }, [allFiles]);
-  const readyToPublish = useMemo(() => {
-    return collectPendingPublishDrafts(allFiles, 4).map((file) => ({
+  const publishingQueueItems = useMemo(() => {
+    return collectPendingPublishDrafts(allFiles, allFiles.length).map((file) => ({
       id: file.id,
       title: stripMarkdownExtension(file.name),
       summary: file.summary,
-      checklistNote: truncateInlineText(file.content, 100),
-      channel: getPrimaryPlatformLabel(file.targetPlatforms),
+      excerpt: truncateInlineText(file.content, 120),
+      scheduledPublishAt: file.scheduledPublishAt,
       publishAt: file.scheduledPublishAt,
-      progress: file.scheduledPublishAt ? 78 : 42,
+      targetPlatforms: file.targetPlatforms ?? [],
+      draftStatus: file.draftStatus || 'ready',
+      draftStatusLabel: getStatusLabel(file.draftStatus || 'ready'),
+      wordCount: getParsedWordCount(file.content),
+      progress: file.scheduledPublishAt ? 80 : 48,
+      checklist: [
+        { label: '标题确认', done: Boolean(file.summary) },
+        { label: '渠道确认', done: Boolean(file.targetPlatforms?.length) },
+        { label: '发布时间确认', done: Boolean(file.scheduledPublishAt) },
+      ],
     }));
+  }, [allFiles]);
+  const readyToPublish = useMemo(() => {
+    return publishingQueueItems.slice(0, 4).map((item) => ({
+      ...item,
+      checklistNote: truncateInlineText(item.excerpt || item.summary, 100),
+      channel: getPrimaryPlatformLabel(item.targetPlatforms),
+    }));
+  }, [publishingQueueItems]);
+  const creationBoardItems = useMemo(() => {
+    const byId = new Map(allFiles.map((file) => [file.id, file]));
+    const candidateIds = new Set();
+    collectRecentDrafts(allFiles, allFiles.length).forEach((file) => candidateIds.add(file.id));
+    collectPendingPublishDrafts(allFiles, allFiles.length).forEach((file) => candidateIds.add(file.id));
+    buildActiveTopicSummary(allFiles, allFiles.length).items.forEach((item) => candidateIds.add(item.id));
+    allFiles.forEach((file) => {
+      if (file.draftStatus === 'published' || file.status === 'published') {
+        candidateIds.add(file.id);
+      }
+    });
+    return [...candidateIds]
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((file) => ({
+        id: file.id,
+        title: stripMarkdownExtension(file.name),
+        summary: file.summary || truncateInlineText(file.content, 100),
+        updatedAt: file.updatedAt,
+        createdAt: file.createdAt,
+        draftStatus: file.draftStatus,
+        targetPlatforms: file.targetPlatforms ?? [],
+        wordCount: getParsedWordCount(file.content),
+      }));
   }, [allFiles]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
@@ -413,6 +484,9 @@ function MarkdownEditor() {
   const [batchPullLoading, setBatchPullLoading] = useState(false);
   const [batchPushLoading, setBatchPushLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
+  const [manualSyncLoading, setManualSyncLoading] = useState(false);
+  const [aiActionState, setAIActionState] = useState(null);
+  const [aiResultDraft, setAIResultDraft] = useState('');
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
       || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
@@ -422,6 +496,7 @@ function MarkdownEditor() {
   const canSaveLocalProjectFile = localProjectSupported
     && Boolean(selectedProjectRootPath && selectedFile?.relativePath)
     && !selectedNeedsConversion;
+  const canManualSyncLocalProject = localProjectSupported && Boolean(selectedProjectRootPath);
   const visibleStorageMode = hasLocalProjectWorkspace ? 'project' : storageMode;
   const visibleProjectRootPath = hasLocalProjectWorkspace ? '已导入本地目录' : '';
 
@@ -570,6 +645,69 @@ function MarkdownEditor() {
       projectSaveTimersRef.current.set(selectedFile.id, timerId);
     }
   };
+
+  const handleOpenAIAction = useCallback((actionKey) => {
+    const action = getAIAction(actionKey);
+    if (!action) return;
+    const selectionText = getSelectedEditorText();
+    const documentForAI = {
+      ...selectedFile,
+      title: selectedFile?.name?.replace(/\.md$/i, '') ?? '',
+      summary: selectedFile?.summary ?? '',
+      content: markdown,
+    };
+
+    const context = buildAIActionContext({
+      actionKey,
+      selectionText,
+      document: documentForAI,
+    });
+
+    setAIResultDraft('');
+    setAIActionState({
+      ...action,
+      ...context,
+      generatedPrompt: buildAIActionPrompt({
+        actionKey,
+        selectionText,
+        document: documentForAI,
+      }),
+    });
+  }, [markdown, selectedFile]);
+
+  const handleCopyAIPrompt = useCallback(async () => {
+    const prompt = aiActionState?.generatedPrompt ?? '';
+    if (!prompt.trim()) return;
+    try {
+      await navigator.clipboard.writeText(prompt);
+      message.success('Prompt 已复制');
+    } catch (error) {
+      console.error('复制 AI Prompt 失败:', error);
+      message.error('复制 Prompt 失败');
+    }
+  }, [aiActionState]);
+
+  const handleApplyAIResult = useCallback(() => {
+    const nextText = normalizeMarkdown(aiResultDraft);
+    if (!nextText) return;
+
+    const parsedBlocks = editor.tryParseMarkdownToBlocks(nextText);
+    const blocksToInsert = parsedBlocks.length > 0
+      ? parsedBlocks
+      : [{ type: 'paragraph', content: nextText }];
+    const anchorBlock = editor.getTextCursorPosition()?.block ?? editor.document?.[editor.document.length - 1];
+
+    if (!anchorBlock) {
+      message.warning('当前无法定位插入位置');
+      return;
+    }
+
+    editor.insertBlocks(blocksToInsert, anchorBlock, 'after');
+    editor.focus();
+    setAIActionState(null);
+    setAIResultDraft('');
+    message.success('AI 内容已插入到文档');
+  }, [aiResultDraft, editor]);
 
   const handleCopyRichText = async () => {
     const html = wechatSourceHtml;
@@ -800,8 +938,7 @@ function MarkdownEditor() {
     }
 
     if (actionKey === 'publish') {
-      setSurface('search');
-      setKnowledgeSearchQuery('待发布');
+      setSurface('publishing');
       return;
     }
 
@@ -830,24 +967,77 @@ function MarkdownEditor() {
     if (!localProjectSupported) {
       after.applyRename(nextFileId, buildUniqueName(after.workspace, '新稿件', '.md'));
     }
-  }, [handleAddFile, localProjectSupported, setSurface, setKnowledgeSearchQuery]);
+  }, [handleAddFile, localProjectSupported, setSurface]);
+
+  const handleCreateEntryWithStatus = useCallback(async (nextStatus) => {
+    const beforeSelectedId = useEditorStore.getState().selectedId;
+    await handleAddFile();
+    const after = useEditorStore.getState();
+    const nextFileId = after.selectedId;
+    const nextFile = findNodeById(after.workspace, nextFileId);
+    if (!nextFile || nextFile.type !== 'file' || nextFileId === beforeSelectedId) return;
+
+    const targetPlatforms = nextStatus === 'ready' || nextStatus === 'published' ? ['wechat'] : [];
+    after.setFileKnowledgeMeta(nextFileId, {
+      draftStatus: nextStatus,
+      targetPlatforms,
+    });
+
+    if (!localProjectSupported) {
+      const nameMap = {
+        idea: '新选题',
+        collecting: '新资料单',
+        drafting: '新稿件',
+        revising: '待修改稿',
+        ready: '待发布稿',
+        published: '已发布稿',
+      };
+      after.applyRename(nextFileId, buildUniqueName(after.workspace, nameMap[nextStatus] ?? '新稿件', '.md'));
+    }
+  }, [handleAddFile, localProjectSupported]);
 
   const handleDashboardViewSection = useCallback((sectionKey) => {
     if (sectionKey === 'planner') {
       alert('规划文档已写入 docs/content-creation-roadmap.md');
       return;
     }
+    if (sectionKey === 'topics') {
+      setSurface('creation-board');
+      return;
+    }
+    if (sectionKey === 'publishing') {
+      setSurface('publishing');
+      return;
+    }
     const queryMap = {
       drafts: '稿件',
-      topics: '选题',
       materials: '素材',
-      publishing: '待发布',
     };
     setKnowledgeSearchQuery(queryMap[sectionKey] ?? '');
     setSurface('search');
   }, [setSurface, setKnowledgeSearchQuery]);
 
   const handleDashboardOpenItem = useCallback((_, item) => {
+    if (item?.id) {
+      selectNode(item.id);
+    }
+  }, [selectNode]);
+
+  const handleBoardOpenItem = useCallback((item) => {
+    if (item?.id) selectNode(item.id);
+  }, [selectNode]);
+
+  const handleBoardMoveStatus = useCallback((item, nextStatus) => {
+    if (!item?.id) return;
+    useEditorStore.getState().setFileKnowledgeMeta(item.id, { draftStatus: nextStatus });
+  }, []);
+
+  const handlePublishingOpenSearch = useCallback(() => {
+    setKnowledgeSearchQuery('待发布');
+    setSurface('search');
+  }, [setSurface, setKnowledgeSearchQuery]);
+
+  const handlePublishingSchedule = useCallback((item) => {
     if (item?.id) {
       selectNode(item.id);
     }
@@ -876,6 +1066,54 @@ function MarkdownEditor() {
       alert(error?.message || '打开本地项目失败');
     }
   }, [localProjectSupported, openLocalProjectWorkspace]);
+
+  const handleManualSyncLocalProject = useCallback(async () => {
+    if (!canManualSyncLocalProject) return;
+
+    setManualSyncLoading(true);
+    try {
+      allFiles
+        .filter((file) => file.projectRootPath === selectedProjectRootPath)
+        .forEach((file) => {
+          const timerId = projectSaveTimersRef.current.get(file.id);
+          if (timerId) {
+            window.clearTimeout(timerId);
+            projectSaveTimersRef.current.delete(file.id);
+          }
+          setDiskSavePending(file.id, false);
+        });
+
+      const isTreeMount = (workspace.children ?? []).some(
+        (child) => child.localProjectRoot && child.projectRootPath === selectedProjectRootPath,
+      );
+      const result = await readLocalProjectDisk(
+        selectedProjectRootPath,
+        isTreeMount ? 'tree' : 'projects',
+      );
+      if (!result?.ok) {
+        throw new Error(result?.error || '从磁盘同步失败');
+      }
+
+      useEditorStore.getState().refreshDiskBackedProject({
+        projectRootPath: selectedProjectRootPath,
+        workspace: result.workspace,
+        projectsChildren: result.projectsChildren,
+        conflictResolution: 'use-disk',
+      });
+      message.success('已从磁盘同步');
+    } catch (error) {
+      console.error('手动同步本地项目失败:', error);
+      message.error(error?.message || '手动同步失败');
+    } finally {
+      setManualSyncLoading(false);
+    }
+  }, [
+    allFiles,
+    canManualSyncLocalProject,
+    selectedProjectRootPath,
+    setDiskSavePending,
+    workspace,
+  ]);
 
   const handleRemoveLocalProject = useCallback((nodeId) => {
     const node = findNodeById(workspace, nodeId);
@@ -1290,6 +1528,22 @@ function MarkdownEditor() {
             onOpenItem={handleDashboardOpenItem}
             onViewSection={handleDashboardViewSection}
           />
+        ) : surface === 'creation-board' ? (
+          <CreationBoardPanel
+            items={creationBoardItems}
+            statusOptions={CREATION_STATUS_OPTIONS}
+            onOpenItem={handleBoardOpenItem}
+            onMoveStatus={handleBoardMoveStatus}
+            onCreate={handleCreateEntryWithStatus}
+          />
+        ) : surface === 'publishing' ? (
+          <PublishingQueuePanel
+            items={publishingQueueItems}
+            onOpenItem={handleBoardOpenItem}
+            onSchedule={handlePublishingSchedule}
+            onOpenSearch={handlePublishingOpenSearch}
+            onCreate={() => handleCreateEntryWithStatus('ready')}
+          />
         ) : surface === 'search' || surface === 'graph' ? (
           <KnowledgeBasePanel
             mode={surface}
@@ -1338,6 +1592,9 @@ function MarkdownEditor() {
               onKnowledgeMetaChange={setFileKnowledgeMeta}
               onOpenFile={selectNode}
               onRestoreVersion={updateSelectedFileContent}
+              showSyncButton={canManualSyncLocalProject}
+              syncLoading={manualSyncLoading}
+              onSyncFromDisk={handleManualSyncLocalProject}
               titleEditable={!selectedInLocalProject}
               {...titleEditing}
             />
@@ -1354,6 +1611,7 @@ function MarkdownEditor() {
                 <EditorQuickToolbar
                   editor={editor}
                   disabled={!selectedFile}
+                  onAIAction={handleOpenAIAction}
                   onPreviewWeChat={() => setWechatPreviewOpen(true)}
                   onCopyWeChat={handleCopyToWeChat}
                   onCopyRichText={handleCopyRichText}
@@ -1413,12 +1671,20 @@ function MarkdownEditor() {
         onTemplateChange={setCopyStyle}
       />
 
-      <LocalProjectConflictModal
-        open={Boolean(localProjectConflict?.conflicts?.length)}
-        conflicts={localProjectConflict?.conflicts ?? []}
-        onKeepLocal={() => resolveLocalProjectConflict('keep-local')}
-        onUseDisk={() => resolveLocalProjectConflict('use-disk')}
-        onDismiss={dismissLocalProjectConflict}
+      <AIActionModal
+        open={Boolean(aiActionState)}
+        action={aiActionState}
+        sourceText={aiActionState?.sourceText ?? ''}
+        scopeLabel={aiActionState?.scopeLabel ?? ''}
+        generatedPrompt={aiActionState?.generatedPrompt ?? ''}
+        resultDraft={aiResultDraft}
+        onResultDraftChange={setAIResultDraft}
+        onCopyPrompt={handleCopyAIPrompt}
+        onApplyResult={handleApplyAIResult}
+        onClose={() => {
+          setAIActionState(null);
+          setAIResultDraft('');
+        }}
       />
 
       <BookmarkImportModal

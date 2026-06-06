@@ -29,6 +29,10 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Local caches
+.cache/
+apps/*/.cache/
+
 # Electron
 dist-electron/
 release/

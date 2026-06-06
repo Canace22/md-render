@@ -19,24 +19,31 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
     return chain;
   }, [workspace, selectedId]);
 
-  if (!pathChain.length) return null;
+  if (!pathChain.length) {
+    return <div className="breadcrumb-bar breadcrumb-bar-empty" aria-hidden="true" />;
+  }
+
+  const currentNode = pathChain[pathChain.length - 1];
+  const visiblePath = currentNode?.type === 'file'
+    ? pathChain.slice(0, -1)
+    : pathChain;
+
+  if (!visiblePath.length) {
+    return <div className="breadcrumb-bar breadcrumb-bar-empty" aria-hidden="true" />;
+  }
 
   return (
     <nav className="breadcrumb-bar" aria-label="文件路径">
-      {pathChain.map((item, i) => (
+      {visiblePath.map((item, i) => (
         <span key={item.id} className="breadcrumb-segment">
           {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="breadcrumb-sep" aria-hidden />}
-          {i < pathChain.length - 1 ? (
-            <button
-              type="button"
-              className="breadcrumb-link"
-              onClick={() => onNavigate(item.id)}
-            >
-              {item.name}
-            </button>
-          ) : (
-            <span className="breadcrumb-current">{item.name}</span>
-          )}
+          <button
+            type="button"
+            className="breadcrumb-link"
+            onClick={() => onNavigate(item.id)}
+          >
+            {item.name}
+          </button>
         </span>
       ))}
     </nav>

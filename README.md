@@ -1,270 +1,319 @@
-# Markdown Renderer
+# MD Render
 
 [中文版说明](./README.zh.md)
 
-A simple, lightweight Markdown renderer workspace built with **React + Vite**, supporting CommonMark and GFM. The repo now uses a small pnpm monorepo: the editor app lives in `apps/editor`, and the reusable parser/render pipeline lives in `packages/markdown-core`.
+**A local-first, Chinese-writing-friendly content creation workbench.**
 
-## Features
+Built with **React + Vite + Electron**. It ships a self-built CommonMark / GFM Markdown pipeline (`packages/markdown-core`), a desktop app for macOS (`apps/editor`), and a web build for browser or GitHub Pages.
 
-- ✅ Headings (H1-H6)
-- ✅ Paragraphs
-- ✅ Unordered and ordered lists
-- ✅ Nested lists
-- ✅ Code blocks (integrated highlight.js syntax highlighting with one-click copy)
-- ✅ Inline code
-- ✅ Links (with title attribute support)
-- ✅ Bold and italic text
-- ✅ Strikethrough
-- ✅ Images (with alt and title attribute support)
-- ✅ Blockquotes (with multi-line support)
-- ✅ Horizontal rules
-- ✅ Tables (GFM extension)
-- ✅ Real-time preview
-- ✅ Copy to WeChat Official Account format
-- ✅ Workspace directory with localStorage persistence
-- ✅ Mermaid diagram preview (```mermaid fenced code blocks)
-- ✅ Mermaid fullscreen preview (per-diagram fullscreen button)
-- ✅ Modern three-panel layout with light/dark mode following system preference
-- ✅ Theme switcher: choose between system / light / dark modes in the preview header
+| | |
+|---|---|
+| **For** | WeChat / blog authors · knowledge creators · long-form & novel writers |
+| **Keywords** | Local-first · knowledge-driven · writing-first · publish-friendly |
+| **Version** | `1.0.6` — [release process](./docs/release-process.md) |
+| **Roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 
-## Usage
+The product goal is to connect **topic → collect → outline → write → revise → publish** into one workflow. The foundation and P0 creation workflow are in place; next up are AI actions, multi-platform copy, and board UI — see [What's next](#whats-next).
 
-### Development Mode
+---
 
-1. Install dependencies:
+## Available today
+
+### Write & preview
+
+- CommonMark / GFM: headings, lists, blockquotes, tables, strikethrough, images, links
+- Real-time preview, edit / preview toggle, table of contents
+- Code blocks with **Shiki** highlighting and one-click copy
+- Mermaid diagrams with fullscreen view
+- Light / dark / system theme
+
+### Workspace & knowledge base
+
+- Sidebar file tree, Obsidian-style tabs, multi-surface navigation (overview, paper, knowledge base, Notion, settings)
+- **Web:** `localStorage` persistence
+- **Desktop:** SQLite + FTS5 search, version history, `.md` disk sync, local project mounting
+- Wikilinks (`[[Document Name]]`), backlinks, graph view
+- Bookmark import; preview non-Markdown files (Office, PDF, etc.)
+- Import / export workspace
+
+### Publish & sync
+
+- WeChat Official Account formatting with preview modal and multiple layout templates — primary differentiator
+- Notion push / pull and batch sync
+- Export current document as MD / HTML / PDF / DOCX
+- GitHub Pages deployment via GitHub Actions
+
+### Creation workflow (P0 — shipped)
+
+- **Creation dashboard** — homepage with recent drafts, active topics, material inbox, and publish queue; quick actions to create a draft, topic, import material, or jump to publish search
+- **Draft metadata** — six-state lifecycle (`idea` → `published`), target platforms (WeChat, Xiaohongshu, Zhihu, etc.), summary, scheduled publish date, related docs, and source materials
+- **Topic & material classification** — documents are grouped by metadata (`draftStatus`, `nodeType`, tags) into drafts, topics, materials, and ready-to-publish items
+- **Tags & knowledge metadata** — tags, node type, summary, aliases, related docs, backlinks; version history with restore (Electron)
+- **Bookmark import** — bookmarks as first-class entries, shown on the dashboard material inbox and as bookmark cards
+- **File import & preview** — import MD / HTML / DOCX / CSV / etc.; preview Office, PDF, Excel and convert to Markdown
+- **Novel assistant** — entity extraction, mentions, BlockNote-based editing
+
+---
+
+## What's next
+
+Per the [content creation roadmap](./docs/content-creation-roadmap.md), the foundation above is in place. Remaining gaps:
+
+| Gap | Planned direction |
+|-----|-------------------|
+| No dedicated project / board UI | Standalone topic board, series view, publish-batch management (dashboard aggregates today; `creation-board` / `publishing` surfaces are placeholders) |
+| AI not wired into general writing | Paragraph actions (expand, compress, tone, outline, continue) — novel assistant exists, general AI layer does not |
+| Publishing is mostly WeChat + export | One-draft-multi-channel copy (Xiaohongshu / Zhihu variants), title & summary variants, pre-publish checklist |
+| Inbox is early | Unified triage flow: paste / Notion pull → inbox → attach to topic or convert to draft |
+| Review layer is thin | Revision checklist, version diff preview, publish archive |
+
+**Near-term priority:** AI rewrite actions + multi-platform output + board UI — before plugins, cloud sync, or a generic AI chat panel.
+
+Full phased plan (P0–P2), module mapping, and 4-week vNext scope: [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md).
+
+## Quick start
+
+### Install
+
 ```bash
 pnpm install
 ```
 
-2. Start the development server:
+### Web development
+
 ```bash
-pnpm run dev
+pnpm dev
 ```
 
-3. Open `http://localhost:3000` in your browser
-4. Enter Markdown text in the left input area
-5. The right side will display the rendered result in real-time
+Open `http://localhost:3000`. Edit Markdown on the left; preview updates in real time on the right.
+
+### Desktop development (Electron)
+
+```bash
+pnpm electron:dev
+```
+
+Native modules (`better-sqlite3`) may need a rebuild after dependency changes:
+
+```bash
+pnpm --filter @md-render/editor electron:rebuild
+```
+
+### Build
+
+```bash
+# Web bundle → apps/editor/dist/
+pnpm build
+
+# macOS desktop app → apps/editor/release/
+pnpm electron:build
+
+# Preview web build locally (default http://localhost:4173)
+pnpm preview
+```
+
+## Common workflows
 
 ### Copy to WeChat Official Account
 
-1. Enter or edit Markdown text in the left input area
-2. The right side will display the rendered result in real-time
-3. Click the "复制到微信公众号" (Copy to WeChat Official Account) button in the top right corner of the preview panel
-4. The converted HTML content will be automatically copied to the clipboard
-5. Paste it into the WeChat Official Account editor
+1. Write or paste Markdown in the editor.
+2. Choose a layout template in **Settings → 排版风格**.
+3. Click **复制到微信公众号** in the preview header (or open the WeChat preview modal).
+4. Paste the converted HTML into the WeChat editor.
 
-**Notes:**
-- Code blocks will be automatically converted to WeChat-compatible `<pre><code>` format
-- Image links will be automatically converted to HTTPS (if originally HTTP)
-- All custom class attributes and data-* attributes will be removed to ensure compatibility
-- Layout preset matches WeChat requirements: all text fixed at `16px`, paragraph spacing `8px`, and line height `1.6`
-- Reusable helper `apps/editor/renderer/src/utils/wechatCopy.js` exports the WeChat conversion and copy logic for other integrations
+Notes:
 
-### Workspace & Local Storage
+- Code blocks are converted to WeChat-compatible `<pre><code>` markup.
+- HTTP image URLs are upgraded to HTTPS when possible.
+- Custom `class` and `data-*` attributes are stripped for compatibility.
+- Conversion logic lives in `apps/editor/renderer/src/utils/wechatCopy.js`; templates in `wechatTemplates.js`.
 
-1. Use the directory panel on the left to organise Markdown files and folders
-2. Click **New File** to create an empty Markdown document under the current folder
-3. Click **New Folder** to group related notes with nested directories
-4. Rename or delete entries via the action buttons (the root directory cannot be removed)
-5. Workspace structure and file contents are auto-saved to browser `localStorage`, and will be restored next time you open the app
+### Workspace storage modes
 
-### Production Build
+| Mode | Where data lives | Best for |
+|------|------------------|----------|
+| Temporary workspace (web) | Browser `localStorage` | Quick notes, online demo |
+| Desktop app | SQLite + optional `.md` artifacts on disk | Large libraries, knowledge base |
+| Local project (Electron) | Your folder on disk | Existing Markdown vaults |
 
-```bash
-pnpm run build
-```
+Open **Settings → 工作区** to mount a local folder or import / export workspace data.
 
-The web build output will be generated in `apps/editor/dist/`.
+### Notion sync
 
-### Preview Production Build
+1. Open **Settings → Notion** and enter your integration token.
+2. Link a document to a Notion page, then push or pull blocks.
+3. Batch sync is available from the Notion panel.
 
-```bash
-pnpm run preview
-```
+See `apps/editor/renderer/src/utils/notionService.js` for API details.
 
-Serves the built app locally (default: `http://localhost:4173`).
-
-### End-to-End Testing (Playwright)
+## Testing
 
 ```bash
-# run all end-to-end tests in headless mode
-pnpm run test:e2e
+# Unit tests (Vitest)
+pnpm test:unit
 
-# open Playwright Test UI (interactive mode)
-pnpm run test:e2e:ui
+# E2E tests (Playwright) — start dev server first in another terminal
+pnpm dev
+pnpm test:e2e
+
+# Interactive Playwright UI
+pnpm test:e2e:ui
 ```
 
-By default, tests assume the app is available at `http://localhost:3000`.  
-Start the dev server in another terminal with `pnpm run dev` before running the tests.
+E2E tests assume the app is available at `http://localhost:3000`.
 
-## Mermaid Diagram Preview
+## Mermaid diagrams
 
-- Supported by adding a fenced code block with language `mermaid`. Example:
+Use a fenced code block with language `mermaid`:
 
-```markdown
+````markdown
 ```mermaid
 graph TD
   A[Start] --> B{Choice}
   B -->|Yes| C[Do something]
   B -->|No| D[Do nothing]
-  C --> E[End]
-  D --> E
 ```
-```
+````
 
-- The page loads Mermaid via CDN and renders diagrams after each preview update.
-- Theme auto-detects system preference (dark/default).
-- Security level is set to `loose` for convenience; adjust as needed for stricter environments.
+- Mermaid loads via CDN and re-renders after each preview update.
+- Theme follows the app light / dark setting.
+- Hover a diagram to reveal the fullscreen button; close with Esc or by clicking the backdrop.
 
-### Mermaid Fullscreen
-
-- Hover a diagram to reveal the top-right fullscreen button.
-- Click it to open a modal overlay with the diagram scaled to fit the screen.
-- Close via the close button, clicking the backdrop, or pressing Escape.
-
-## Project Structure
+## Project structure
 
 ```
 md-render/
-├── package.json            # Workspace scripts
-├── pnpm-workspace.yaml     # Workspace package discovery
+├── package.json              # Workspace scripts & version
+├── pnpm-workspace.yaml
+├── scripts/
+│   └── release-tag.sh        # Version tagging helper
+├── docs/                     # Product & architecture notes
 ├── apps/
 │   └── editor/
-│       ├── package.json         # Editor app package
-│       ├── vite.config.js       # App Vite config
-│       ├── main/                # Electron main process
-│       ├── renderer/            # Renderer (index.html + React src)
-│       └── tests/               # Vitest + Playwright tests
+│       ├── main/             # Electron main process (IPC, SQLite, fs)
+│       ├── renderer/         # React UI (Vite)
+│       ├── tests/            # Vitest + Playwright
+│       ├── dist/             # Web build output
+│       └── release/          # Desktop build output
 ├── packages/
 │   └── markdown-core/
 │       └── src/
-│           ├── parser.js        # Markdown parser (text → tokens)
-│           ├── renderer.js      # HTML renderer (tokens → HTML)
-│           └── index.js         # Reusable exports
-├── README.md               # Project documentation
-└── ARCHITECTURE.md         # Architecture documentation
+│           ├── parser.js     # Markdown → tokens
+│           ├── renderer.js   # tokens → HTML
+│           └── index.js
+├── README.md
+├── README.zh.md
+└── ARCHITECTURE.md           # Parser / renderer deep dive
 ```
 
-## Supported Markdown Syntax
+## Supported Markdown syntax
 
-### Block Elements
+### Block elements
 
-- `# Heading` - Headings (H1-H6, using 1-6 # characters)
-- `` ```code block```` - Code blocks (supports language tags for syntax highlighting, e.g., ` ```javascript `)
-- `> Quote` - Blockquotes (supports multi-line quotes)
-- `- List item` - Unordered lists
-- `1. List item` - Ordered lists
-- Nested lists: Use indentation (2 or more spaces) to create nested lists
-  ```markdown
-  - First level item
-    - Second level nested item
-      - Third level nested item
-    1. Second level ordered item
-    2. Another ordered item
-  ```
-- `---` / `***` / `___` - Horizontal rules (at least 3 characters)
-- Tables (GFM extension):
-  ```markdown
-  | Column 1 | Column 2 | Column 3 |
-  |----------|----------|----------|
-  | Content 1 | Content 2 | Content 3 |
-  ```
+- `# Heading` — H1–H6
+- `` ```code block```` — fenced code blocks (language tag enables highlighting)
+- `> Quote` — blockquotes (multi-line supported)
+- `- item` / `1. item` — unordered and ordered lists (nested via indentation)
+- `---` / `***` / `___` — horizontal rules
+- GFM tables
 
-### Inline Elements
+### Inline elements
 
-- `**bold**` - Bold text
-- `*italic*` - Italic text
-- `***bold italic***` - Bold + italic combination
-- `~~strikethrough~~` - Strikethrough text
-- `` `code` `` - Inline code
-- `[link](url)` - Basic link
-- `[link](url "title")` - Link with title
-- `![image](url)` - Basic image
-- `![image](url "title")` - Image with title
+- `**bold**`, `*italic*`, `***bold italic***`, `~~strikethrough~~`
+- `` `code` ``, `[link](url)`, `[link](url "title")`
+- `![image](url)`, `![image](url "title")`
+- `[[Document Name]]` — wikilinks (knowledge base)
 
-## Technical Implementation
+## Tech stack
 
-- **React 18 + Vite** for the UI and build pipeline
-- **Self-built parser and renderer** (`packages/markdown-core/`) — pure JavaScript, no runtime dependencies
-- **highlight.js** (CDN) for code syntax highlighting
-- **lucide-react** for icons
-- **Mermaid** (CDN) for diagram rendering
-- Modular design, easy to extend
-- Light/dark theme with system preference support
+| Layer | Choices |
+|-------|---------|
+| UI | React 18, Ant Design 5, lucide-react |
+| Build | Vite 5, pnpm workspace |
+| Desktop | Electron 33, electron-builder |
+| State | Zustand (persist) |
+| Markdown core | Self-built parser / renderer (`packages/markdown-core`) |
+| Highlighting | Shiki |
+| Diagrams | Mermaid (CDN) |
+| Rich text (Novel) | BlockNote |
+| Storage | localStorage (web) · SQLite + FTS5 (desktop) |
 
-## Implementation Principles
+For parser / renderer internals, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-For detailed implementation principles, architecture design, and execution flow, please refer to [ARCHITECTURE.md](./ARCHITECTURE.md).
+## Documentation
 
-## Changelog
+| Topic | Doc |
+|-------|-----|
+| **Content creation roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
+| Knowledge base progress | [docs/knowledge-base-progress.md](./docs/knowledge-base-progress.md) |
+| Knowledge base roadmap | [docs/knowledge-base-roadmap.md](./docs/knowledge-base-roadmap.md) |
+| Novel mode design | [docs/novel-mode-design.md](./docs/novel-mode-design.md) |
+| Release & tagging | [docs/release-process.md](./docs/release-process.md) |
+| Parser / renderer internals | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Agent / dev rules | [AGENTS.md](./AGENTS.md) |
 
-### v2.1 - Workspace & Local Storage
+## Release
 
-- ✅ Added directory sidebar with nested folder support
-- ✅ Manage multiple Markdown files within one workspace
-- ✅ Auto-save workspace structure and content to browser `localStorage`
+Version lives in root `package.json`. To cut a release:
 
-### v2.0 - CommonMark Support
+```bash
+# 1. Bump version in package.json and commit
+# 2. Preview tag
+pnpm release:tag -- --dry-run
+# 3. Create annotated tag and push
+pnpm release:tag
+```
 
-- ✅ Strikethrough support (`~~text~~`)
-- ✅ Image support (`![alt](url)` and `![alt](url "title")`)
-- ✅ Link title attribute support (`[text](url "title")`)
-- ✅ Multi-line blockquote support (consecutive blockquotes are merged)
-- ✅ Table support (GFM extension)
-- ✅ Optimized inline element parsing order
-- ✅ Added image and table styles
-
-### v1.3 - Code Block Enhancements
-
-- ✅ Code block copy: Copy button in the top-right corner of each code block
-- ✅ Uses Clipboard API with fallback to `execCommand('copy')`
-- ✅ Shows "Copied" feedback on success
-- ✅ Code syntax highlighting: Integrated highlight.js
-- ✅ Uses github-dark-dimmed theme, adapted for dark interface
-- ✅ Supports all languages supported by highlight.js
-
-### v1.2 - Nested List Support
-
-- ✅ Supports multi-level nested lists (identified by indentation levels)
-- ✅ Supports mixed ordered and unordered lists (can be mixed in the same document)
-- ✅ Recursive parsing and rendering, supports arbitrary nesting depth
-
-### v1.1 - UI and Spacing Adjustments
-
-- ✅ Empty lines rendered as `<br>`, providing appropriate paragraph separation
-- ✅ Top and bottom margins of paragraphs, lists, code blocks, and blockquotes adjusted to `0.8em` for comfortable reading spacing
-- ✅ Top and bottom margins of horizontal rules adjusted to `1em`
-- ✅ Heading margins recalibrated to ensure clear hierarchy
-- ✅ Code blocks now have language header (similar to VS Code preview), structure: `figure.code-block > .code-header + pre`
-- ✅ Blockquotes use light background with light blue border for enhanced readability
-- ✅ Preview area defaults to full-width display; to center the content, add `max-width` and `margin: 0 auto` to `#markdown-output`
+See [docs/release-process.md](./docs/release-process.md) for the full checklist.
 
 ## Deploy to GitHub Pages
 
-The workspace ships a web build from `apps/editor` and can still deploy that web bundle to GitHub Pages via GitHub Actions.
+The web build from `apps/editor` can deploy to GitHub Pages via GitHub Actions.
 
-### One-time Configuration
+### One-time setup
 
-1. Open Settings → Pages in your GitHub repository.
-2. Set Source to "GitHub Actions".
-3. Confirm the repository branch is `main` (or adjust according to your default branch).
+1. Open **Settings → Pages** in your GitHub repository.
+2. Set **Source** to **GitHub Actions**.
+3. Confirm the default branch is `main` (or adjust the workflow).
 
-### Automatic Deployment
+### Automatic deployment
 
-- Built-in workflow: `.github/workflows/deploy-pages.yml`
-- When you `push` to the `main` branch, it will automatically build and deploy to GitHub Pages.
-- You can also manually run it in the Actions tab (Workflow Dispatch).
-- Vite base path is handled automatically for project pages. During Actions builds, the `base` is inferred as `/<repo>/`; locally it's `/` so development is unaffected.
+- Workflow: `.github/workflows/deploy-pages.yml`
+- Pushes to `main` build and deploy automatically; you can also trigger manually from the Actions tab.
+- Vite `base` is inferred as `/<repo>/` in CI; locally it stays `/`.
 
 ### Access URL
 
-- After successful deployment, the page will be exposed through the environment link; generally:
-  - Personal homepage: `https://<username>.github.io/`
-  - Project page: `https://<username>.github.io/<repo>/`
+- Personal site: `https://<username>.github.io/`
+- Project page: `https://<username>.github.io/<repo>/`
 
-### Customization and Common Issues
+If assets 404 on Pages, ensure CI sets the correct Vite `base` (this repo infers it from `GITHUB_REPOSITORY`).
 
-- If your static files are not in the repository root, modify the `path` in the workflow's `actions/upload-pages-artifact@v3`.
-- The workflow has been configured with necessary permissions: `pages: write` and `id-token: write`.
-- If your repository's default branch is not `main`, please update the workflow trigger branch accordingly.
-- If assets 404 on Pages, ensure `apps/editor/vite.config.js` sets `base` to `/<repo>/` for project pages. This repo auto-inferrs base during CI via `GITHUB_REPOSITORY`.
+## Changelog (highlights)
+
+### v1.0.x — Creation workbench foundation
+
+Shipped the base layer in [content-creation-roadmap.md §3.1](./docs/content-creation-roadmap.md), plus early P0:
+
+- Electron desktop: SQLite, FTS5, wikilinks, backlinks, graph, version history, local project
+- WeChat formatting & preview, Notion sync, bookmark import, multi-format export, file import / preview
+- Creation dashboard, draft metadata, topic / material / publish classification
+- Novel assistant, Shiki highlighting, tab bar UI
+
+Next focus per [§7–§8 of the roadmap](./docs/content-creation-roadmap.md): AI paragraph actions, multi-platform copy, dedicated board UI.
+
+### v2.1 — Workspace & local storage
+
+- Directory sidebar with nested folders; auto-save to `localStorage`
+
+### v2.0 — CommonMark / GFM
+
+- Strikethrough, images, link titles, multi-line blockquotes, tables
+
+### v1.3 — Code blocks
+
+- Copy button, syntax highlighting, VS Code–style code block header
+
+### v1.2 — Nested lists
+
+- Multi-level and mixed ordered / unordered lists

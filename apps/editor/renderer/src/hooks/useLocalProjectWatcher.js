@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import { collectLocalProjectRootPaths, findLocalProjectRoot } from '../store/workspaceUtils.js';
 import {
@@ -13,19 +13,27 @@ export function useLocalProjectWatcher() {
   const workspace = useEditorStore((state) => state.workspace);
   const projectRootPath = useEditorStore((state) => state.projectRootPath);
   const setLocalProjectConflict = useEditorStore((state) => state.setLocalProjectConflict);
+  const watchedRootPathsKey = useMemo(() => {
+    return collectLocalProjectRootPaths(workspace, projectRootPath)
+      .filter(Boolean)
+      .sort()
+      .join('\n');
+  }, [workspace, projectRootPath]);
+  const watchedRootPaths = useMemo(() => {
+    return watchedRootPathsKey ? watchedRootPathsKey.split('\n') : [];
+  }, [watchedRootPathsKey]);
 
   useEffect(() => {
     if (!isLocalProjectSupported()) return undefined;
 
-    const rootPaths = collectLocalProjectRootPaths(workspace, projectRootPath);
-    rootPaths.forEach((rootPath) => {
+    watchedRootPaths.forEach((rootPath) => {
       registerLocalProjectWatch(rootPath).catch((error) => {
         console.error('注册本地项目监听失败:', error);
       });
     });
 
     return undefined;
-  }, [workspace, projectRootPath]);
+  }, [watchedRootPathsKey]);
 
   useEffect(() => {
     if (!isLocalProjectSupported()) return undefined;

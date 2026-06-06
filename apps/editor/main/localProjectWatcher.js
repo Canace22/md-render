@@ -9,10 +9,17 @@ const watchers = new Map();
 
 /** @type {Map<string, number>} */
 const ignoreUntilByPath = new Map();
+/** @type {Map<string, number>} */
+const ignoreUntilByRoot = new Map();
 
 export function markLocalProjectWriteIgnored(absolutePath, ms = WRITE_IGNORE_MS) {
   if (!absolutePath) return;
   ignoreUntilByPath.set(path.resolve(absolutePath), Date.now() + ms);
+}
+
+export function markLocalProjectRootIgnored(projectRootPath, ms = WRITE_IGNORE_MS) {
+  if (!projectRootPath) return;
+  ignoreUntilByRoot.set(path.resolve(projectRootPath), Date.now() + ms);
 }
 
 function shouldIgnorePath(absolutePath) {
@@ -21,6 +28,15 @@ function shouldIgnorePath(absolutePath) {
   if (!until) return false;
   if (Date.now() < until) return true;
   ignoreUntilByPath.delete(key);
+  return false;
+}
+
+function shouldIgnoreRoot(projectRootPath) {
+  const key = path.resolve(projectRootPath);
+  const until = ignoreUntilByRoot.get(key);
+  if (!until) return false;
+  if (Date.now() < until) return true;
+  ignoreUntilByRoot.delete(key);
   return false;
 }
 
@@ -42,6 +58,7 @@ export function watchLocalProjectRoot(projectRootPath, onChanged) {
 
   try {
     const watcher = fs.watch(rootPath, { recursive: true }, (_eventType, filename) => {
+      if (shouldIgnoreRoot(rootPath)) return;
       if (filename) {
         const targetPath = path.join(rootPath, filename);
         if (shouldIgnorePath(targetPath)) return;

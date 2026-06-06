@@ -17,6 +17,7 @@ import {
 import {
   watchLocalProjectRoot,
   markLocalProjectWriteIgnored,
+  markLocalProjectRootIgnored,
   unwatchAllLocalProjects,
 } from './localProjectWatcher.js';
 import {
@@ -64,6 +65,7 @@ const startWatchingLocalProject = (projectRootPath) => {
 };
 
 const markSavedLocalFileIgnored = (projectRootPath, relativePath) => {
+  markLocalProjectRootIgnored(projectRootPath);
   try {
     const filePath = resolveProjectFilePath(projectRootPath, relativePath);
     markLocalProjectWriteIgnored(filePath);
@@ -139,7 +141,9 @@ ipcMain.handle('create-local-project-file', async (_event, payload = {}) => {
 
 ipcMain.handle('create-local-project-folder', async (_event, payload = {}) => {
   const { projectRootPath, relativePath } = payload;
-  return createLocalProjectFolder(projectRootPath, relativePath);
+  const result = await createLocalProjectFolder(projectRootPath, relativePath);
+  markLocalProjectRootIgnored(projectRootPath);
+  return result;
 });
 
 ipcMain.handle('rename-local-project-entry', async (_event, payload = {}) => {
@@ -152,6 +156,7 @@ ipcMain.handle('rename-local-project-entry', async (_event, payload = {}) => {
 ipcMain.handle('delete-local-project-entry', async (_event, payload = {}) => {
   const { projectRootPath, relativePath } = payload;
   await deleteLocalProjectEntry(projectRootPath, relativePath);
+  markLocalProjectRootIgnored(projectRootPath);
   try {
     markLocalProjectWriteIgnored(resolveProjectFilePath(projectRootPath, relativePath));
   } catch {

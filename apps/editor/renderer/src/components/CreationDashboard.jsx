@@ -19,7 +19,7 @@ const DEFAULT_QUICK_ACTIONS = [
 ];
 
 const DASHBOARD_STYLES = `
-.creation-dashboard { display:flex; flex-direction:column; gap:16px; padding:20px; background:var(--app-bg, var(--color-bg-page, #f6f7fb)); color:var(--color-text, #1f2430); }
+.creation-dashboard { display:flex; flex:1; flex-direction:column; gap:16px; min-height:0; overflow-y:auto; padding:20px; background:var(--app-bg, var(--color-bg-page, #f6f7fb)); color:var(--color-text, #1f2430); }
 .creation-dashboard-hero { display:grid; grid-template-columns:minmax(0, 1.8fr) minmax(260px, 1fr); gap:16px; }
 .creation-dashboard-panel { border-radius:16px; border:1px solid var(--color-border, rgba(15, 23, 42, 0.08)); background:var(--color-bg-elevated, rgba(255, 255, 255, 0.92)); box-shadow:0 12px 32px rgba(15, 23, 42, 0.06); }
 .creation-dashboard-hero-copy { display:flex; flex-direction:column; gap:14px; }

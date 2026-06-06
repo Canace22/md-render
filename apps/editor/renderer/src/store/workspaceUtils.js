@@ -526,6 +526,7 @@ export function createLocalProjectFileNode(projectRootPath, relativePath, name, 
     relativePath,
     projectRootPath,
     content,
+    diskContentSnapshot: content,
     updatedAt: Date.now(),
     ...createDefaultKnowledgeFields(),
   };

@@ -48,6 +48,7 @@ const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
 const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
+const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 
 /** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
 const hasElectronDb = () =>
@@ -64,6 +65,8 @@ const safeParseJSON = (value, fallback) => {
 
 const VALID_SURFACES = new Set([
   'overview',
+  'creation-board',
+  'publishing',
   'search',
   'graph',
   'paper',
@@ -220,6 +223,43 @@ const buildStateMap = (state) => {
   return map;
 };
 
+let electronSaveTimer = null;
+let pendingElectronStateMap = null;
+let pendingElectronWorkspaceJson = null;
+
+const flushElectronStateSave = () => {
+  const stateMap = pendingElectronStateMap;
+  const workspaceJson = pendingElectronWorkspaceJson;
+
+  pendingElectronStateMap = null;
+  pendingElectronWorkspaceJson = null;
+
+  if (!stateMap || !hasElectronDb()) return;
+
+  window.electronAPI.db.save(stateMap, workspaceJson).catch((e) => {
+    console.error('[store] SQLite 保存失败:', e);
+  });
+};
+
+const scheduleElectronStateSave = (stateMap, workspaceJson) => {
+  if (!stateMap || typeof stateMap !== 'object' || !hasElectronDb()) return;
+
+  pendingElectronStateMap = {
+    ...(pendingElectronStateMap ?? {}),
+    ...stateMap,
+  };
+  pendingElectronWorkspaceJson = workspaceJson;
+
+  if (electronSaveTimer) {
+    window.clearTimeout(electronSaveTimer);
+  }
+
+  electronSaveTimer = window.setTimeout(() => {
+    electronSaveTimer = null;
+    flushElectronStateSave();
+  }, ELECTRON_DB_SAVE_DEBOUNCE_MS);
+};
+
 /** 兼容现有 localStorage 多 key 的持久化存储，Electron 环境下切换到 SQLite */
 const editorStorage = {
   getItem: async () => {
@@ -278,10 +318,7 @@ const editorStorage = {
       try {
         const stateMap = buildStateMap(state);
         const workspaceJson = stateMap.workspace_json ?? null;
-        // fire-and-forget：不阻塞 UI
-        window.electronAPI.db.save(stateMap, workspaceJson).catch((e) => {
-          console.error('[store] SQLite 保存失败:', e);
-        });
+        scheduleElectronStateSave(stateMap, workspaceJson);
       } catch (e) {
         console.error('[store] SQLite 保存异常:', e);
       }
@@ -352,9 +389,7 @@ const persistWorkspace = (workspace) => {
   if (typeof window === 'undefined') return;
   if (hasElectronDb()) {
     const workspaceJson = JSON.stringify(workspace);
-    window.electronAPI.db.save({ workspace_json: workspaceJson }, workspaceJson).catch((e) => {
-      console.error('[store] 工作区保存失败:', e);
-    });
+    scheduleElectronStateSave({ workspace_json: workspaceJson }, workspaceJson);
     return;
   }
   try {
@@ -601,9 +636,16 @@ export const useEditorStore = create(
         const { workspace, selectedId } = get();
         const updated = updateNodeById(workspace, selectedId, (node) => {
           if (node.type !== 'file') return node;
-          return { ...node, content: nextMarkdown, updatedAt: Date.now() };
+          const patch = {
+            ...node,
+            content: nextMarkdown,
+            updatedAt: Date.now(),
+          };
+          if (node.projectRootPath && node.diskContentSnapshot === undefined) {
+            patch.diskContentSnapshot = node.content ?? '';
+          }
+          return patch;
         });
-        persistWorkspace(updated);
         set({ workspace: updated, markdown: nextMarkdown });
       },
 
