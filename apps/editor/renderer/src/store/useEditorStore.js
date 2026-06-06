@@ -15,6 +15,8 @@ import {
   nameExists,
   buildUniqueName,
   createDefaultKnowledgeFields,
+  createBookmarkNode,
+  BOOKMARK_FOLDER_NAME,
   resolveTargetFolderId,
   resolveLocalProjectCreateTarget,
   buildUniqueNameInFolder,
@@ -424,6 +426,10 @@ export const useEditorStore = create(
       diskSaveCancelSeq: 0,
       diskSaveCancelFileIds: [],
       surface: 'overview',
+      /** Obsidian 风格多标签页：已打开的文件 tab 列表 [{id, title}] */
+      openTabs: [],
+      /** 编辑器模式：'edit' | 'preview' */
+      editorMode: 'edit',
       notionToken: '',
       notionFilePages: {},
       notionDatabaseId: '',
@@ -464,22 +470,65 @@ export const useEditorStore = create(
       },
       setSurface: (surface) => set({ surface: normalizeSurface(surface, 'overview') }),
 
+      /** 切换编辑/预览模式 */
+      setEditorMode: (mode) => set({ editorMode: mode === 'preview' ? 'preview' : 'edit' }),
+      toggleEditorMode: () => set((s) => ({ editorMode: s.editorMode === 'preview' ? 'edit' : 'preview' })),
+
+      /** 打开一个标签页（不重复添加） */
+      openTab: (fileId, title) => set((state) => {
+        const exists = state.openTabs.some((t) => t.id === fileId);
+        if (exists) return {};
+        return { openTabs: [...state.openTabs, { id: fileId, title: title || '未命名' }] };
+      }),
+
+      /** 关闭标签页，若关闭的是当前激活的，切换到相邻标签 */
+      closeTab: (fileId) => set((state) => {
+        const idx = state.openTabs.findIndex((t) => t.id === fileId);
+        if (idx === -1) return {};
+        const nextTabs = state.openTabs.filter((t) => t.id !== fileId);
+        if (state.selectedId !== fileId) return { openTabs: nextTabs };
+        // 关闭的是当前激活的 tab，切换到相邻
+        if (nextTabs.length === 0) return { openTabs: nextTabs, surface: 'overview' };
+        const nextIdx = Math.min(idx, nextTabs.length - 1);
+        const nextTab = nextTabs[nextIdx];
+        const node = findNodeById(state.workspace, nextTab.id);
+        return {
+          openTabs: nextTabs,
+          selectedId: nextTab.id,
+          markdown: node?.content ?? '',
+          surface: node?.type === 'folder' ? 'folder' : 'paper',
+        };
+      }),
+
+      /** 更新标签页标题（重命名时） */
+      updateTabTitle: (fileId, title) => set((state) => ({
+        openTabs: state.openTabs.map((t) => t.id === fileId ? { ...t, title } : t),
+      })),
+
       setActiveBlockId: (id) => set({ activeBlockId: id }),
       setActiveBlockDraft: (draft) => set({ activeBlockDraft: draft }),
       cancelActiveBlock: () => set({ activeBlockId: null, activeBlockDraft: '' }),
 
       selectNode: (nodeId) => {
-        const { workspace } = get();
+        const { workspace, openTabs } = get();
         const node = findNodeById(workspace, nodeId);
         const isFolder = node?.type === 'folder';
         const markdown = isFolder ? get().markdown : (node?.content ?? '');
-        set({
+        const patch = {
           surface: isFolder ? 'folder' : 'paper',
           activeBlockId: null,
           activeBlockDraft: '',
           selectedId: nodeId,
           markdown,
-        });
+        };
+        // 打开文件时自动添加 tab
+        if (!isFolder && node) {
+          const exists = openTabs.some((t) => t.id === nodeId);
+          if (!exists) {
+            patch.openTabs = [...openTabs, { id: nodeId, title: node.name || '未命名' }];
+          }
+        }
+        set(patch);
       },
 
       updateSelectedFileContent: (nextMarkdown) => {
@@ -707,6 +756,73 @@ export const useEditorStore = create(
 
         persistWorkspace(nextWorkspace);
         set(patch);
+      },
+
+      /**
+       * 批量导入书签。自动在工作区根下找到/新建「书签」目录，按 url 去重后建节点入库。
+       * 返回 { added, skipped, folderId }。
+       */
+      importBookmarks: (items) => {
+        const list = (Array.isArray(items) ? items : []).filter((item) => item?.url);
+        if (list.length === 0) return { added: 0, skipped: 0, folderId: null };
+
+        const { workspace } = get();
+        let nextWorkspace = workspace;
+
+        // 找已存在的「书签」目录（用 bookmarkFolder 标记定位，避免与同名手建目录混淆）
+        let folder = (workspace.children ?? []).find(
+          (child) => child.type === 'folder' && child.bookmarkFolder,
+        );
+        let folderId;
+        if (folder) {
+          folderId = folder.id;
+        } else {
+          folderId = createId('folder');
+          const newFolder = {
+            id: folderId,
+            type: 'folder',
+            name: buildUniqueName(workspace, BOOKMARK_FOLDER_NAME),
+            bookmarkFolder: true,
+            children: [],
+          };
+          nextWorkspace = addChildNode(workspace, workspace.id, newFolder);
+        }
+
+        const targetFolder = findNodeById(nextWorkspace, folderId);
+        const existingUrls = new Set(
+          (targetFolder?.children ?? []).map((child) => child.url).filter(Boolean),
+        );
+
+        let added = 0;
+        let skipped = 0;
+        let firstId = null;
+        for (const item of list) {
+          if (existingUrls.has(item.url)) {
+            skipped += 1;
+            continue;
+          }
+          const node = createBookmarkNode(item);
+          existingUrls.add(item.url);
+          nextWorkspace = addChildNode(nextWorkspace, folderId, node);
+          if (!firstId) firstId = node.id;
+          added += 1;
+        }
+
+        if (nextWorkspace === workspace) {
+          return { added: 0, skipped, folderId };
+        }
+
+        persistWorkspace(nextWorkspace);
+        const patch = { workspace: nextWorkspace };
+        if (firstId) {
+          patch.selectedId = firstId;
+          patch.surface = 'paper';
+          patch.markdown = '';
+          patch.activeBlockId = null;
+          patch.activeBlockDraft = '';
+        }
+        set(patch);
+        return { added, skipped, folderId };
       },
 
       addFile: (contextNodeId) => {

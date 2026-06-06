@@ -13,7 +13,12 @@ import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
+import BookmarkImportModal from './BookmarkImportModal.jsx';
+import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
+import TabBar from './TabBar.jsx';
+import Breadcrumb from './Breadcrumb.jsx';
+import StatusBar from './StatusBar.jsx';
 import {
   createEmptyDocument,
   extractCodeBlockFromClipboardHtml,
@@ -168,6 +173,7 @@ function MarkdownEditor() {
     replaceDiskBackedNode,
     removeDiskBackedNode,
     importWorkspace,
+    importBookmarks,
     insertWorkspaceNode,
     insertLocalProjectNode,
     hydrateProjectsWorkspace,
@@ -179,6 +185,12 @@ function MarkdownEditor() {
     dismissLocalProjectConflict,
     diskSaveCancelSeq,
     diskSaveCancelFileIds,
+    openTabs,
+    editorMode,
+    openTab,
+    closeTab,
+    updateTabTitle,
+    toggleEditorMode,
   } = useEditorStore();
 
   const selectedFile = useSelectedFile();
@@ -186,6 +198,7 @@ function MarkdownEditor() {
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
   const selectedInLocalProject = Boolean(selectedNode?.projectRootPath);
+  const selectedIsBookmark = selectedFile?.nodeType === 'bookmark';
   const hasLocalProjectWorkspace = useMemo(() => hasLocalProjectNode(workspace), [workspace]);
   const folderChildren = useMemo(
     () => (selectedFolder ? getFolderDirectChildren(selectedFolder) : []),
@@ -306,6 +319,7 @@ function MarkdownEditor() {
     deleteNode(targetId);
   }, [workspace, selectedId, localProjectSupported, deleteNode, removeDiskBackedNode]);
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
+  const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const [notionMessage, setNotionMessage] = useState('');
@@ -463,6 +477,41 @@ function MarkdownEditor() {
         }
       }, 400);
       projectSaveTimersRef.current.set(selectedFile.id, timerId);
+    }
+  };
+
+  const handleCopyRichText = async () => {
+    const html = wechatSourceHtml;
+    if (!html.trim()) {
+      alert('没有可复制的内容');
+      return;
+    }
+    const plainText = (() => {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      return div.textContent || div.innerText || '';
+    })();
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html;charset=utf-8' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain;charset=utf-8' }),
+        }),
+      ]);
+    } catch {
+      // 降级：execCommand
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      container.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      document.body.appendChild(container);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(container);
+      sel.addRange(range);
+      document.execCommand('copy');
+      document.body.removeChild(container);
+      sel.removeAllRanges();
     }
   };
 
@@ -889,6 +938,14 @@ function MarkdownEditor() {
         localProjectSupported={localProjectSupported}
       />
       <div className="right-area immersive-main">
+        {/* Obsidian 风格标签页栏 */}
+        <TabBar
+          tabs={openTabs}
+          activeId={selectedId}
+          onSelect={selectNode}
+          onClose={closeTab}
+        />
+
         {surface === 'settings' ? (
           <SettingsPanel
             selectedFileName={selectedFile?.name}
@@ -947,9 +1004,24 @@ function MarkdownEditor() {
             onOpenFile={selectNode}
             onOpenFolder={selectNode}
             onOpenSurface={setSurface}
+            onImportBookmarks={() => setBookmarkImportOpen(true)}
           />
         ) : (
           <>
+            {/* 面包屑 + 编辑/预览切换 */}
+            <div className="obsidian-header-bar">
+              <Breadcrumb workspace={workspace} selectedId={selectedId} onNavigate={selectNode} />
+              <button
+                type="button"
+                className={`editor-mode-toggle${editorMode === 'preview' ? ' is-preview' : ''}`}
+                onClick={toggleEditorMode}
+                title={editorMode === 'preview' ? '切换到编辑模式' : '切换到预览模式'}
+                aria-label={editorMode === 'preview' ? '编辑模式' : '预览模式'}
+              >
+                {editorMode === 'preview' ? '预览' : '编辑'}
+              </button>
+            </div>
+
             <DocHeader
               selectedFile={selectedFile}
               allFiles={allFiles}
@@ -962,38 +1034,61 @@ function MarkdownEditor() {
               titleEditable={!selectedInLocalProject}
               {...titleEditing}
             />
-            <EditorQuickToolbar
-              editor={editor}
-              disabled={!selectedFile}
-              onPreviewWeChat={() => setWechatPreviewOpen(true)}
-              onCopyWeChat={handleCopyToWeChat}
-              copyStyleName={getTemplateById(copyStyle).name}
-            />
-            <div className="editor-layout">
-              <div className="paper-stage">
-                <div className="paper-surface" data-testid="paper-surface">
-                  <div id="markdown-output" className="paper-content">
-                    <div className="blocknote-paper">
-                      <BlockNoteView
-                        editor={editor}
-                        className="blocknote-editor"
-                        data-testid="blocknote-editor"
-                        theme={resolvedTheme}
-                        editable={Boolean(selectedFile)}
-                        formattingToolbar
-                        linkToolbar
-                        slashMenu
-                        sideMenu={false}
-                        filePanel={false}
-                        tableHandles
-                        emojiPicker={false}
-                        onChange={handleEditorChange}
-                      />
-                    </div>
+            {selectedIsBookmark ? (
+              <div className="editor-layout">
+                <div className="paper-stage">
+                  <div className="paper-surface" data-testid="paper-surface">
+                    <BookmarkCard file={selectedFile} />
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <EditorQuickToolbar
+                  editor={editor}
+                  disabled={!selectedFile}
+                  onPreviewWeChat={() => setWechatPreviewOpen(true)}
+                  onCopyWeChat={handleCopyToWeChat}
+                  onCopyRichText={handleCopyRichText}
+                  copyStyleName={getTemplateById(copyStyle).name}
+                />
+                <div className="editor-layout">
+                  <div className="paper-stage">
+                    <div className="paper-surface" data-testid="paper-surface">
+                      {editorMode === 'preview' ? (
+                        <div
+                          id="markdown-output"
+                          className="paper-content"
+                          dangerouslySetInnerHTML={{ __html: wechatSourceHtml }}
+                        />
+                      ) : (
+                        <div id="markdown-output" className="paper-content">
+                          <div className="blocknote-paper">
+                            <BlockNoteView
+                              editor={editor}
+                              className="blocknote-editor"
+                              data-testid="blocknote-editor"
+                              theme={resolvedTheme}
+                              editable={Boolean(selectedFile)}
+                              formattingToolbar
+                              linkToolbar
+                              slashMenu
+                              sideMenu={false}
+                              filePanel={false}
+                              tableHandles
+                              emojiPicker={false}
+                              onChange={handleEditorChange}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            {/* 底部状态栏 */}
+            <StatusBar content={markdown} backlinks={0} />
           </>
         )}
       </div>
@@ -1012,6 +1107,12 @@ function MarkdownEditor() {
         onKeepLocal={() => resolveLocalProjectConflict('keep-local')}
         onUseDisk={() => resolveLocalProjectConflict('use-disk')}
         onDismiss={dismissLocalProjectConflict}
+      />
+
+      <BookmarkImportModal
+        open={bookmarkImportOpen}
+        onClose={() => setBookmarkImportOpen(false)}
+        onImport={importBookmarks}
       />
     </div>
   );

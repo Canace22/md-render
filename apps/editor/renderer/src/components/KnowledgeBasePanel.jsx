@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, FileText, Folder, Network, Search, Sparkles, Tag } from 'lucide-react';
+import { ArrowRight, Bookmark, FileText, Folder, Network, Search, Sparkles, Tag } from 'lucide-react';
 import {
   collectFiles,
   collectTags,
@@ -98,6 +98,7 @@ export default function KnowledgeBasePanel({
   onOpenFile,
   onOpenFolder,
   onOpenSurface,
+  onImportBookmarks,
 }) {
   const files = useMemo(() => collectFiles(workspace), [workspace]);
   const tags = useMemo(() => collectTags(workspace), [workspace]);
@@ -372,6 +373,16 @@ export default function KnowledgeBasePanel({
                   <span className="knowledge-card-kicker">接入状态</span>
                   <h2>来源结构</h2>
                 </div>
+                {onImportBookmarks && (
+                  <button
+                    type="button"
+                    className="knowledge-inline-link"
+                    onClick={onImportBookmarks}
+                  >
+                    <Bookmark size={14} strokeWidth={1.8} />
+                    导入书签
+                  </button>
+                )}
               </div>
               <div className="knowledge-source-list">
                 <div className="knowledge-source-row">

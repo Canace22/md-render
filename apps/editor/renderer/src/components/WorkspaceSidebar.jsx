@@ -408,43 +408,130 @@ const WorkspaceSidebar = ({
       className={`workspace-panel ${collapsed ? 'collapsed' : ''}${resizing ? ' resizing' : ''}`}
       style={collapsed ? undefined : { width: `${sidebarWidth}px` }}
     >
-      {/* 收起时只显示展开按钮 */}
-      {collapsed && (
-        <button
-            type="button"
-            className="sidebar-expand-btn"
-            onClick={onToggleCollapse}
-            title="展开侧边栏"
-            aria-label="展开侧边栏"
-          >
-            <ChevronRight size={16} strokeWidth={1.5} />
-          </button>
-      )}
-
-      {/* ProEditor 顶部标题 */}
-      {!collapsed && (
-        <div className="sidebar-header">
-          <div className="sidebar-header-brand">
-            <span className="sidebar-header-logo" aria-hidden>
-              <LayoutGrid size={18} strokeWidth={1.5} />
-            </span>
-            <span className="sidebar-header-title">知识库</span>
-          </div>
+      {/* ===== 左侧 icon rail：视图导航 + 底部工具 ===== */}
+      <div className="sidebar-rail">
+        <div className="sidebar-rail-top">
+          {/* Logo / 展开收起 */}
           <button
             type="button"
-            className="sidebar-collapse-btn"
-            onClick={onToggleCollapse}
-            title="收起侧边栏"
-            aria-label="收起侧边栏"
+            className="sidebar-rail-logo"
+            onClick={collapsed ? onToggleCollapse : undefined}
+            title={collapsed ? '展开侧边栏' : '知识库'}
+            aria-label={collapsed ? '展开侧边栏' : '知识库'}
           >
-            <ChevronLeft size={16} strokeWidth={1.5} />
+            <LayoutGrid size={18} strokeWidth={1.5} />
           </button>
-        </div>
-      )}
 
+          {/* 视图导航 */}
+          <nav className="sidebar-rail-nav" aria-label="知识库视图">
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'overview' ? 'active' : ''}`}
+              onClick={onOpenOverview}
+              title="概览"
+              aria-label="概览"
+            >
+              <LayoutGrid size={18} strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'search' ? 'active' : ''}`}
+              onClick={onOpenSearch}
+              title="全局搜索"
+              aria-label="全局搜索"
+            >
+              <Search size={18} strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'graph' ? 'active' : ''}`}
+              onClick={onOpenGraph}
+              title="图谱视图"
+              aria-label="图谱视图"
+            >
+              <Network size={18} strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
+              onClick={onOpenCurrentContent}
+              title="当前内容"
+              aria-label="当前内容"
+            >
+              <FileText size={18} strokeWidth={1.6} />
+            </button>
+          </nav>
+
+          {!collapsed && (
+            <button
+              type="button"
+              className="sidebar-rail-btn"
+              onClick={onOpenLocalProject}
+              disabled={!localProjectSupported}
+              title={localProjectSupported ? '导入本地知识目录' : '仅桌面版应用支持'}
+              data-testid="sidebar-open-local-project"
+            >
+              <Upload size={18} strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
+
+        <div className="sidebar-rail-bottom">
+          <button
+            type="button"
+            className="sidebar-rail-btn"
+            data-testid="open-settings"
+            data-active={settingsActive ? 'true' : 'false'}
+            onClick={onOpenSettings}
+            title="设置"
+            aria-label="设置"
+          >
+            <Settings size={18} strokeWidth={1.5} />
+          </button>
+
+          {onOpenNotion && (
+            <button
+              type="button"
+              className="sidebar-rail-btn"
+              data-testid="open-notion"
+              data-active={notionActive ? 'true' : 'false'}
+              onClick={onOpenNotion}
+              title="Notion 同步"
+              aria-label="Notion 同步"
+            >
+              <Cloud size={18} strokeWidth={1.5} />
+            </button>
+          )}
+
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sidebar-rail-btn"
+            title="GitHub 项目地址"
+            aria-label="在 GitHub 打开项目"
+          >
+            <Github size={18} strokeWidth={1.5} />
+          </a>
+
+          {!collapsed && (
+            <button
+              type="button"
+              className="sidebar-rail-btn"
+              onClick={onToggleCollapse}
+              title="收起侧边栏"
+              aria-label="收起侧边栏"
+            >
+              <ChevronLeft size={16} strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ===== 右侧主内容区 ===== */}
       {!collapsed && (
-        <>
-          {/* 搜索框：按文件名/正文过滤 */}
+        <div className="sidebar-main">
+          {/* 搜索框 */}
           <div className="notebook-search">
             <Search size={15} strokeWidth={1.5} className="notebook-search-icon" aria-hidden />
             <input
@@ -457,77 +544,6 @@ const WorkspaceSidebar = ({
               aria-label="搜索知识库"
             />
           </div>
-
-          <div className="sidebar-nav-section">
-            <span className="sidebar-section-title">知识库视图</span>
-            <div className="sidebar-nav-list">
-              <button
-                type="button"
-                className={`sidebar-nav-item ${surface === 'overview' ? 'active' : ''}`}
-                onClick={onOpenOverview}
-              >
-                <LayoutGrid size={16} strokeWidth={1.6} />
-                <span>概览</span>
-              </button>
-              <button
-                type="button"
-                className={`sidebar-nav-item ${surface === 'search' ? 'active' : ''}`}
-                onClick={onOpenSearch}
-              >
-                <Search size={16} strokeWidth={1.6} />
-                <span>全局搜索</span>
-              </button>
-              <button
-                type="button"
-                className={`sidebar-nav-item ${surface === 'graph' ? 'active' : ''}`}
-                onClick={onOpenGraph}
-              >
-                <Network size={16} strokeWidth={1.6} />
-                <span>图谱视图</span>
-              </button>
-              <button
-                type="button"
-                className={`sidebar-nav-item ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
-                onClick={onOpenCurrentContent}
-              >
-                <FileText size={16} strokeWidth={1.6} />
-                <span>当前内容</span>
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="sidebar-project-entry"
-            onClick={onOpenLocalProject}
-            disabled={!localProjectSupported}
-            title={localProjectSupported ? '导入本地知识目录' : '仅桌面版应用支持'}
-            data-testid="sidebar-open-local-project"
-          >
-            <Upload size={16} strokeWidth={1.5} />
-            <span>导入本地目录</span>
-          </button>
-
-          {/* 最近编辑 */}
-          {/* {recentFiles.length > 0 && (
-            <div className="notebook-recent" data-testid="recent-section">
-              <span className="sidebar-section-title notebook-recent-title">最近</span>
-              <div className="notebook-recent-list">
-                {recentFiles.map((file) => (
-                  <button
-                    key={file.id}
-                    type="button"
-                    className="notebook-recent-item"
-                    onClick={() => onSelect(file.id)}
-                    title={file.name}
-                  >
-                    <FileText size={14} strokeWidth={1.5} className="notebook-recent-icon" aria-hidden />
-                    <span className="notebook-recent-name">{file.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )} */}
 
           {/* 标签筛选 */}
           {!isSearching && allTags.length > 0 && (
@@ -552,7 +568,7 @@ const WorkspaceSidebar = ({
             </div>
           )}
 
-          {/* 笔记 + 新建文件/文件夹 */}
+          {/* 文档目录 + 新建 */}
           <div className="sidebar-docs-header">
             <span className="sidebar-section-title">文档目录</span>
             <div className="sidebar-add-icons">
@@ -605,7 +621,7 @@ const WorkspaceSidebar = ({
             </div>
           </div>
 
-          {/* 文件树（搜索时渲染过滤后的结果） */}
+          {/* 文件树 */}
           <div className="workspace-tree">
             {filteredWorkspace
               ? renderTree(filteredWorkspace, selectedId, onSelect, {
@@ -625,48 +641,9 @@ const WorkspaceSidebar = ({
                 </div>
               )}
           </div>
-
-          {/* 底部操作栏：设置、主题、GitHub，均匀分布 */}
-          <div className="sidebar-footer">
-            <button
-              type="button"
-              className="sidebar-footer-icon"
-              data-testid="open-settings"
-              data-active={settingsActive ? 'true' : 'false'}
-              onClick={onOpenSettings}
-              title="设置"
-              aria-label="设置"
-            >
-              <Settings size={18} strokeWidth={1.5} />
-            </button>
-
-            {onOpenNotion && (
-              <button
-                type="button"
-                className="sidebar-footer-icon"
-                data-testid="open-notion"
-                data-active={notionActive ? 'true' : 'false'}
-                onClick={onOpenNotion}
-                title="Notion 同步"
-                aria-label="Notion 同步"
-              >
-                <Cloud size={18} strokeWidth={1.5} />
-              </button>
-            )}
-
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="sidebar-footer-icon"
-              title="GitHub 项目地址"
-              aria-label="在 GitHub 打开项目"
-            >
-              <Github size={18} strokeWidth={1.5} />
-            </a>
-          </div>
-        </>
+        </div>
       )}
+
       {!collapsed && (
         <div
           className="workspace-resize-handle"

@@ -11,6 +11,7 @@ export const KNOWLEDGE_NODE_TYPE_OPTIONS = [
   { value: 'tech', label: '技术' },
   { value: 'component', label: '组件' },
   { value: 'document', label: '文档' },
+  { value: 'bookmark', label: '书签' },
 ];
 
 export const createId = (prefix) => {
@@ -42,12 +43,36 @@ export const getKnowledgeNodeTypeLabel = (nodeType) => {
   return KNOWLEDGE_NODE_TYPE_OPTIONS.find((item) => item.value === normalizeNodeType(nodeType))?.label ?? '文档';
 };
 
+export const BOOKMARK_FOLDER_NAME = '书签';
+
+/**
+ * 创建一个书签节点（纯函数）。书签复用 file 节点，nodeType='bookmark' 且带 url 字段，
+ * content 留空（只存链接，不抓正文），title/summary/tags 会进搜索与图谱。
+ */
+export const createBookmarkNode = ({ title, url, tags = [], summary = '', createdAt } = {}) => {
+  const cleanUrl = String(url ?? '').trim();
+  const ts = Number.isFinite(createdAt) ? createdAt : Date.now();
+  const name = String(title ?? '').trim() || cleanUrl || '未命名书签';
+  return {
+    id: createId('bookmark'),
+    type: 'file',
+    name,
+    url: cleanUrl,
+    content: '',
+    createdAt: ts,
+    updatedAt: ts,
+    tags: sanitizeStringList(tags),
+    ...createDefaultKnowledgeFields({ nodeType: 'bookmark', summary }),
+  };
+};
+
 export const getFileKnowledgeSearchText = (file) => {
   if (!file || file.type !== 'file') return '';
   return [
     file.name,
     file.content,
     file.summary,
+    file.url,
     ...(file.aliases ?? []),
     ...(file.tags ?? []),
     getKnowledgeNodeTypeLabel(file.nodeType),

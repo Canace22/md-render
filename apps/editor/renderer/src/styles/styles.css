@@ -42,7 +42,7 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 .workspace-panel {
     width: 320px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     border-right: 1px solid var(--color-border);
     background: var(--color-bg-sidebar);
     flex-shrink: 0;
@@ -55,11 +55,114 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 }
 
 .workspace-panel.collapsed {
-    width: 40px;
-    min-width: 40px;
+    width: 48px;
+    min-width: 48px;
     overflow: visible;
     padding: 0;
     border-right: 1px solid var(--color-border);
+}
+
+/* ===== Icon Rail ===== */
+.sidebar-rail {
+    width: 48px;
+    min-width: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-s) 0;
+    border-right: 1px solid var(--color-border);
+    flex-shrink: 0;
+    overflow-y: auto;
+}
+
+.sidebar-rail-top,
+.sidebar-rail-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.sidebar-rail-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    background: var(--color-brand-primary);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    cursor: default;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.workspace-panel.collapsed .sidebar-rail-logo {
+    cursor: pointer;
+}
+
+.sidebar-rail-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.sidebar-rail-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-m);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--easing),
+                border-color var(--duration-fast) var(--easing),
+                color var(--duration-fast) var(--easing);
+    text-decoration: none;
+}
+
+.sidebar-rail-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--color-text-primary);
+}
+
+.sidebar-rail-btn.active {
+    background: rgba(79, 70, 229, 0.12);
+    border-color: rgba(79, 70, 229, 0.16);
+    color: var(--color-text-active);
+}
+
+.sidebar-rail-btn[data-active="true"] {
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--color-text-primary);
+}
+
+.sidebar-rail-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+a.sidebar-rail-btn {
+    color: var(--color-text-secondary);
+}
+
+a.sidebar-rail-btn:hover {
+    color: var(--color-text-primary);
+}
+
+/* ===== Sidebar Main Content ===== */
+.sidebar-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .workspace-resize-handle {
@@ -141,6 +244,15 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
 
 .container.mac-windowed .sidebar-header-brand,
 .container.mac-windowed .sidebar-collapse-btn {
+    -webkit-app-region: no-drag;
+}
+
+.container.mac-windowed .sidebar-rail {
+    -webkit-app-region: drag;
+}
+
+.container.mac-windowed .sidebar-rail-btn,
+.container.mac-windowed .sidebar-rail-logo {
     -webkit-app-region: no-drag;
 }
 
@@ -2611,6 +2723,10 @@ body.theme-light .workspace-panel {
     border-right-color: #e5e5e5;
 }
 
+body.theme-light .sidebar-rail {
+    border-right-color: #e5e5e5;
+}
+
 body.theme-light .right-area {
     background: #ffffff;
 }
@@ -4029,6 +4145,26 @@ body.theme-dark .sidebar-nav-item.active {
     border-color: rgba(99, 102, 241, 0.32);
 }
 
+body.theme-dark .sidebar-rail {
+    border-right-color: #262626;
+}
+
+body.theme-dark .sidebar-rail-btn:hover {
+    background: rgba(148, 163, 184, 0.12);
+    color: #e5e7eb;
+}
+
+body.theme-dark .sidebar-rail-btn.active {
+    background: rgba(79, 70, 229, 0.24);
+    border-color: rgba(99, 102, 241, 0.32);
+    color: #c7d2fe;
+}
+
+body.theme-dark .sidebar-rail-btn[data-active="true"] {
+    background: rgba(148, 163, 184, 0.12);
+    color: #e5e7eb;
+}
+
 body.theme-dark .paper-content,
 body.theme-dark .settings-group,
 body.theme-dark .settings-back-btn {
@@ -4906,4 +5042,649 @@ body.theme-dark .local-project-conflict-btn.danger {
     border-color: #7f1d1d;
     background: #450a0a;
     color: #fca5a5;
+}
+
+/* ── 书签导入弹窗 ───────────────────────────────────────────── */
+.bookmark-import-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1001;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+
+.bookmark-import-modal {
+    background: var(--color-bg-surface);
+    border-radius: 14px;
+    width: 480px;
+    max-width: 100%;
+    padding: 18px 20px 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--color-border);
+}
+
+.bookmark-import-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.bookmark-import-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--color-text-primary);
+}
+
+.bookmark-import-heading h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.bookmark-import-close {
+    display: inline-flex;
+    padding: 4px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.bookmark-import-close:hover {
+    background: var(--color-bg-page);
+}
+
+.bookmark-import-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.bookmark-import-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-surface);
+    color: var(--color-text-secondary);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.bookmark-import-tab.is-active {
+    border-color: var(--color-primary);
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+}
+
+.bookmark-import-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bookmark-import-dropzone {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 26px 16px;
+    border-radius: 10px;
+    border: 1px dashed var(--color-border);
+    background: var(--color-bg-page);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.bookmark-import-dropzone:hover {
+    border-color: var(--color-primary);
+}
+
+.bookmark-import-dropzone strong {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.bookmark-import-dropzone span {
+    font-size: 12px;
+}
+
+.bookmark-import-textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-page);
+    color: var(--color-text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+    font-family: inherit;
+}
+
+.bookmark-import-preview {
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-page);
+    padding: 10px 12px;
+}
+
+.bookmark-import-preview-meta {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-bottom: 6px;
+}
+
+.bookmark-import-preview-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.bookmark-import-preview-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 5px 0;
+}
+
+.bookmark-import-preview-list li + li {
+    border-top: 1px solid var(--color-border);
+}
+
+.bookmark-import-preview-title {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bookmark-import-preview-url {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bookmark-import-preview-more {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    padding-top: 6px !important;
+}
+
+.bookmark-import-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.bookmark-import-btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.bookmark-import-btn:hover:not(:disabled) {
+    background: var(--color-bg-page);
+}
+
+.bookmark-import-btn.primary {
+    border-color: var(--color-primary);
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+}
+
+.bookmark-import-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── 书签详情卡片 ───────────────────────────────────────────── */
+.bookmark-card {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 40px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.bookmark-card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+}
+
+.bookmark-card-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--color-text-primary);
+    word-break: break-word;
+}
+
+.bookmark-card-url {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-page);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    max-width: 100%;
+}
+
+.bookmark-card-url span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bookmark-card-url:hover {
+    border-color: var(--color-primary);
+    color: var(--color-text-primary);
+}
+
+.bookmark-card-summary {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+}
+
+.bookmark-card-empty {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.bookmark-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.bookmark-card-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--color-bg-page);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+
+.bookmark-card-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 8px;
+    padding: 9px 18px;
+    border-radius: 9px;
+    border: 1px solid var(--color-primary);
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Obsidian 风格组件：标签页栏、面包屑、状态栏、编辑/预览切换
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── TabBar ─────────────────────────────────────────────────────────────── */
+.tab-bar {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    min-height: 36px;
+    background: var(--color-bg-sidebar);
+    border-bottom: 1px solid var(--color-border);
+    overflow: hidden;
+}
+
+.tab-bar-scroller {
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    flex: 1;
+    min-width: 0;
+    scrollbar-width: none;
+}
+
+.tab-bar-scroller::-webkit-scrollbar {
+    display: none;
+}
+
+.tab-bar-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    min-width: 0;
+    max-width: 180px;
+    height: 36px;
+    border-right: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--easing), color var(--duration-fast) var(--easing);
+    user-select: none;
+}
+
+.tab-bar-item:hover {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+}
+
+.tab-bar-item.active {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    border-bottom: 2px solid var(--color-brand-primary, var(--color-primary));
+}
+
+.tab-bar-item-icon {
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
+.tab-bar-item-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.tab-bar-item-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-s);
+    opacity: 0;
+    flex-shrink: 0;
+    transition: opacity var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
+}
+
+.tab-bar-item:hover .tab-bar-item-close {
+    opacity: 0.6;
+}
+
+.tab-bar-item-close:hover {
+    opacity: 1 !important;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+/* macOS 窗口模式：标签栏可拖拽 */
+.container.mac-windowed .tab-bar {
+    -webkit-app-region: drag;
+}
+
+.container.mac-windowed .tab-bar-item,
+.container.mac-windowed .tab-bar-item-close {
+    -webkit-app-region: no-drag;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────────────────────────── */
+.obsidian-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 16px;
+    flex-shrink: 0;
+    min-height: 32px;
+    background: var(--color-bg-surface);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.breadcrumb-bar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.breadcrumb-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.breadcrumb-sep {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    margin: 0 2px;
+}
+
+.breadcrumb-link {
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: var(--radius-s);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
+}
+
+.breadcrumb-link:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-active);
+}
+
+.breadcrumb-current {
+    color: var(--color-text-primary);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── 编辑/预览切换按钮 ───────────────────────────────────────────────────── */
+.editor-mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color var(--duration-fast) var(--easing), border-color var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
+}
+
+.editor-mode-toggle:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-secondary);
+    background: var(--color-bg-active);
+}
+
+.editor-mode-toggle.is-preview {
+    color: var(--color-text-active);
+    border-color: var(--color-text-active);
+    background: rgba(79, 70, 229, 0.08);
+}
+
+/* ── StatusBar ──────────────────────────────────────────────────────────── */
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 4px 16px;
+    flex-shrink: 0;
+    min-height: 28px;
+    background: var(--color-bg-sidebar);
+    border-top: 1px solid var(--color-border);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.status-bar-spacer {
+    flex: 1;
+}
+
+.status-bar-item {
+    white-space: nowrap;
+}
+
+/* ── 暗黑主题适配 ────────────────────────────────────────────────────────── */
+body.theme-dark .tab-bar {
+    background: #161616;
+    border-bottom-color: #262626;
+}
+
+body.theme-dark .tab-bar-item {
+    color: #94a3b8;
+    border-right-color: #262626;
+}
+
+body.theme-dark .tab-bar-item:hover {
+    background: #1e1e1e;
+    color: #e5e7eb;
+}
+
+body.theme-dark .tab-bar-item.active {
+    background: #181818;
+    color: #f9fafb;
+    border-bottom-color: #818cf8;
+}
+
+body.theme-dark .tab-bar-item-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+body.theme-dark .obsidian-header-bar {
+    background: #181818;
+    border-bottom-color: #262626;
+}
+
+body.theme-dark .breadcrumb-link {
+    color: #94a3b8;
+}
+
+body.theme-dark .breadcrumb-link:hover {
+    color: #e5e7eb;
+    background: rgba(37, 99, 235, 0.3);
+}
+
+body.theme-dark .breadcrumb-current {
+    color: #e5e7eb;
+}
+
+body.theme-dark .breadcrumb-sep {
+    color: #475569;
+}
+
+body.theme-dark .editor-mode-toggle {
+    color: #94a3b8;
+    border-color: #334155;
+}
+
+body.theme-dark .editor-mode-toggle:hover {
+    color: #e5e7eb;
+    border-color: #64748b;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+body.theme-dark .editor-mode-toggle.is-preview {
+    color: #818cf8;
+    border-color: #818cf8;
+    background: rgba(129, 140, 248, 0.1);
+}
+
+body.theme-dark .status-bar {
+    background: #161616;
+    border-top-color: #262626;
+    color: #94a3b8;
+}
+
+/* @media prefers-color-scheme dark 适配 */
+@media (prefers-color-scheme: dark) {
+    .tab-bar {
+        background: #161616;
+        border-bottom-color: #262626;
+    }
+
+    .tab-bar-item {
+        color: #94a3b8;
+        border-right-color: #262626;
+    }
+
+    .tab-bar-item:hover {
+        background: #1e1e1e;
+        color: #e5e7eb;
+    }
+
+    .tab-bar-item.active {
+        background: #181818;
+        color: #f9fafb;
+        border-bottom-color: #818cf8;
+    }
+
+    .obsidian-header-bar {
+        background: #181818;
+        border-bottom-color: #262626;
+    }
+
+    .status-bar {
+        background: #161616;
+        border-top-color: #262626;
+        color: #94a3b8;
+    }
 }

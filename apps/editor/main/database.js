@@ -23,7 +23,8 @@ const SCHEMA = `
     related_ids TEXT,
     created_at  INTEGER,
     updated_at  INTEGER,
-    disk_path   TEXT
+    disk_path   TEXT,
+    url         TEXT
   );
 
   CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
@@ -75,6 +76,8 @@ export function initDatabase() {
   db.exec(SCHEMA);
   // Migration: add disk_path column if it doesn't exist (for DBs created before P0.2)
   try { db.exec('ALTER TABLE documents ADD COLUMN disk_path TEXT'); } catch { /* already exists */ }
+  // Migration: add url column for bookmark nodes
+  try { db.exec('ALTER TABLE documents ADD COLUMN url TEXT'); } catch { /* already exists */ }
   console.log('[db] initialized at', dbPath);
   return db;
 }
@@ -162,6 +165,7 @@ function flattenWorkspace(node, parentId = null, result = []) {
       created_at: node.createdAt ?? null,
       updated_at: node.updatedAt ?? null,
       disk_path: diskPath,
+      url: node.url ?? null,
     });
   }
   if (Array.isArray(node.children)) {
@@ -176,9 +180,9 @@ export function syncDocuments(workspace) {
 
   const upsert = getDb().prepare(`
     INSERT OR REPLACE INTO documents
-      (id, parent_id, type, name, content, node_type, summary, aliases, tags, related_ids, created_at, updated_at, disk_path)
+      (id, parent_id, type, name, content, node_type, summary, aliases, tags, related_ids, created_at, updated_at, disk_path, url)
     VALUES
-      (@id, @parent_id, @type, @name, @content, @node_type, @summary, @aliases, @tags, @related_ids, @created_at, @updated_at, @disk_path)
+      (@id, @parent_id, @type, @name, @content, @node_type, @summary, @aliases, @tags, @related_ids, @created_at, @updated_at, @disk_path, @url)
   `);
   const syncAll = getDb().transaction((rows) => {
     for (const row of rows) upsert.run(row);

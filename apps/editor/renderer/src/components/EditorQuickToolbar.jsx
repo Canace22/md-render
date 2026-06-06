@@ -9,6 +9,7 @@ import {
   Quote,
   Eye,
   Copy,
+  ClipboardCopy,
 } from 'lucide-react';
 
 const TOOL_ITEMS = [
@@ -96,9 +97,11 @@ export default function EditorQuickToolbar({
   disabled,
   onPreviewWeChat,
   onCopyWeChat,
+  onCopyRichText,
   copyStyleName,
 }) {
   const [copied, setCopied] = useState(false);
+  const [richCopied, setRichCopied] = useState(false);
 
   const handleCopy = async () => {
     if (!onCopyWeChat) return;
@@ -106,6 +109,17 @@ export default function EditorQuickToolbar({
       await onCopyWeChat();
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // 错误由调用方处理
+    }
+  };
+
+  const handleCopyRichText = async () => {
+    if (!onCopyRichText) return;
+    try {
+      await onCopyRichText();
+      setRichCopied(true);
+      setTimeout(() => setRichCopied(false), 2000);
     } catch {
       // 错误由调用方处理
     }
@@ -138,6 +152,15 @@ export default function EditorQuickToolbar({
 
       <div className="editor-quick-toolbar-actions">
         <div className="editor-quick-toolbar-divider" />
+        <Button
+          className={`editor-quick-toolbar-btn ${richCopied ? 'is-copied' : ''}`}
+          icon={<ClipboardCopy size={15} strokeWidth={1.9} />}
+          disabled={disabled}
+          onClick={handleCopyRichText}
+          title="复制富文本内容（可粘贴到其他平台）"
+        >
+          {richCopied ? '已复制！' : '复制内容'}
+        </Button>
         <Button
           className="editor-quick-toolbar-btn"
           icon={<Eye size={15} strokeWidth={1.9} />}
