@@ -1,10 +1,27 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { X, FileText } from 'lucide-react';
+import { X, FileText, Globe } from 'lucide-react';
+
+const getHostname = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
 
 /**
  * VS Code 风格的多标签页栏，支持右键菜单
  */
-export default function TabBar({ tabs, activeId, onSelect, onClose, onCloseAll, onCloseOthers, onCloseToTheRight }) {
+export default function TabBar({
+  tabs,
+  activeId,
+  onSelect,
+  onClose,
+  onCloseAll,
+  onCloseOthers,
+  onCloseToTheRight,
+  onOpenExternal,
+}) {
   const activeRef = useRef(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, tabId }
 
@@ -39,6 +56,10 @@ export default function TabBar({ tabs, activeId, onSelect, onClose, onCloseAll, 
 
   const ctxTabIdx = contextMenu ? tabs.findIndex((t) => t.id === contextMenu.tabId) : -1;
   const hasRight = ctxTabIdx >= 0 && ctxTabIdx < tabs.length - 1;
+  const contextTab = contextMenu
+    ? tabs.find((tab) => tab.id === contextMenu.tabId) ?? null
+    : null;
+  const contextTabIsBookmark = contextTab?.nodeType === 'bookmark' && Boolean(contextTab.url);
 
   return (
     <div className="tab-bar">
@@ -79,6 +100,21 @@ export default function TabBar({ tabs, activeId, onSelect, onClose, onCloseAll, 
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
+          {contextTabIsBookmark && (
+            <>
+              <div className="tab-context-menu-meta" title={contextTab.url}>
+                <Globe size={13} strokeWidth={1.8} />
+                <span>{getHostname(contextTab.url)}</span>
+              </div>
+              <button onClick={() => menuAction(() => onSelect(contextMenu.tabId))}>
+                当前页签打开
+              </button>
+              <button onClick={() => menuAction(() => onOpenExternal?.(contextTab))}>
+                浏览器打开
+              </button>
+              <div className="tab-context-menu-divider" />
+            </>
+          )}
           <button onClick={() => menuAction(() => onClose(contextMenu.tabId))}>关闭</button>
           <button onClick={() => menuAction(() => onCloseOthers(contextMenu.tabId))} disabled={tabs.length <= 1}>
             关闭其他

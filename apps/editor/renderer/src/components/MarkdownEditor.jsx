@@ -272,6 +272,16 @@ function MarkdownEditor() {
     [selectedFolder],
   );
   const allFiles = useMemo(() => collectFiles(workspace), [workspace]);
+  const displayTabs = useMemo(() => {
+    return openTabs.map((tab) => {
+      const node = findNodeById(workspace, tab.id);
+      return {
+        ...tab,
+        nodeType: node?.type === 'file' ? node.nodeType : undefined,
+        url: node?.type === 'file' ? String(node.url ?? '').trim() : '',
+      };
+    });
+  }, [openTabs, workspace]);
   const recentDrafts = useMemo(() => {
     return collectRecentDrafts(allFiles, 4).map((file) => ({
       id: file.id,
@@ -1243,6 +1253,12 @@ function MarkdownEditor() {
     }
   }, [notionLocalDev, notionToken, notionDatabaseId, selectedFolder, workspace, notionFilePages, mergeNotionFilePages]);
 
+  const handleOpenBookmarkTabExternal = useCallback((tab) => {
+    const url = String(tab?.url ?? '').trim();
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
   useEffect(() => {
     applyThemeToBody(theme);
   }, [theme]);
@@ -1462,13 +1478,14 @@ function MarkdownEditor() {
       <div className="right-area immersive-main">
         {/* Obsidian 风格标签页栏 */}
         <TabBar
-          tabs={openTabs}
+          tabs={displayTabs}
           activeId={selectedId}
           onSelect={selectNode}
           onClose={closeTab}
           onCloseAll={closeAllTabs}
           onCloseOthers={closeOtherTabs}
           onCloseToTheRight={closeTabsToTheRight}
+          onOpenExternal={handleOpenBookmarkTabExternal}
         />
 
         {surface === 'settings' ? (
@@ -1557,6 +1574,8 @@ function MarkdownEditor() {
             onOpenSurface={setSurface}
             onImportBookmarks={() => setBookmarkImportOpen(true)}
           />
+        ) : selectedIsBookmark ? (
+          <BookmarkCard file={selectedFile} />
         ) : selectedNeedsConversion ? (
           <FilePreviewPanel
             file={selectedFile}
@@ -1598,65 +1617,53 @@ function MarkdownEditor() {
               titleEditable={!selectedInLocalProject}
               {...titleEditing}
             />
-            {selectedIsBookmark ? (
-              <div className="editor-layout">
-                <div className="paper-stage">
-                  <div className="paper-surface" data-testid="paper-surface">
-                    <BookmarkCard file={selectedFile} />
-                  </div>
+            <EditorQuickToolbar
+              editor={editor}
+              disabled={!selectedFile}
+              onAIAction={handleOpenAIAction}
+              onPreviewWeChat={() => setWechatPreviewOpen(true)}
+              onCopyWeChat={handleCopyToWeChat}
+              onCopyRichText={handleCopyRichText}
+              copyStyleName={getTemplateById(copyStyle).name}
+            />
+            <div className="editor-layout">
+              <div className="paper-stage">
+                <div className="paper-surface" data-testid="paper-surface">
+                  {editorMode === 'preview' ? (
+                    <div
+                      id="markdown-output"
+                      className="paper-content"
+                      dangerouslySetInnerHTML={{ __html: wechatSourceHtml }}
+                    />
+                  ) : (
+                    <div id="markdown-output" className="paper-content">
+                      <div className="blocknote-paper">
+                        <BlockNoteView
+                          editor={editor}
+                          className="blocknote-editor"
+                          data-testid="blocknote-editor"
+                          theme={resolvedTheme}
+                          editable={Boolean(selectedFile)}
+                          formattingToolbar
+                          linkToolbar
+                          slashMenu
+                          sideMenu={false}
+                          filePanel={false}
+                          tableHandles
+                          emojiPicker={false}
+                          onChange={handleEditorChange}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <>
-                <EditorQuickToolbar
-                  editor={editor}
-                  disabled={!selectedFile}
-                  onAIAction={handleOpenAIAction}
-                  onPreviewWeChat={() => setWechatPreviewOpen(true)}
-                  onCopyWeChat={handleCopyToWeChat}
-                  onCopyRichText={handleCopyRichText}
-                  copyStyleName={getTemplateById(copyStyle).name}
-                />
-                <div className="editor-layout">
-                  <div className="paper-stage">
-                    <div className="paper-surface" data-testid="paper-surface">
-                      {editorMode === 'preview' ? (
-                        <div
-                          id="markdown-output"
-                          className="paper-content"
-                          dangerouslySetInnerHTML={{ __html: wechatSourceHtml }}
-                        />
-                      ) : (
-                        <div id="markdown-output" className="paper-content">
-                          <div className="blocknote-paper">
-                            <BlockNoteView
-                              editor={editor}
-                              className="blocknote-editor"
-                              data-testid="blocknote-editor"
-                              theme={resolvedTheme}
-                              editable={Boolean(selectedFile)}
-                              formattingToolbar
-                              linkToolbar
-                              slashMenu
-                              sideMenu={false}
-                              filePanel={false}
-                              tableHandles
-                              emojiPicker={false}
-                              onChange={handleEditorChange}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <TocPanel
-                    markdown={markdown}
-                    collapsed={tocCollapsed}
-                    onToggle={toggleTocCollapsed}
-                  />
-                </div>
-              </>
-            )}
+              <TocPanel
+                markdown={markdown}
+                collapsed={tocCollapsed}
+                onToggle={toggleTocCollapsed}
+              />
+            </div>
             {/* 底部状态栏 */}
             <StatusBar content={markdown} backlinks={0} />
           </>

@@ -5509,18 +5509,32 @@ body.theme-dark .local-project-conflict-btn.danger {
     cursor: not-allowed;
 }
 
-/* ── 书签详情卡片 ───────────────────────────────────────────── */
-.bookmark-card {
-    max-width: 620px;
-    margin: 0 auto;
-    padding: 40px 32px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 14px;
+/* ── 书签网页视图 ───────────────────────────────────────────── */
+.bookmark-webview {
+    flex: 1;
+    min-height: 0;
+    background: #fff;
 }
 
-.bookmark-card-icon {
+.bookmark-webview-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+}
+
+.bookmark-webview-empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-page);
+}
+
+.bookmark-webview-empty-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -5531,84 +5545,9 @@ body.theme-dark .local-project-conflict-btn.danger {
     color: var(--color-text-active);
 }
 
-.bookmark-card-title {
-    margin: 0;
-    font-size: 22px;
-    font-weight: 600;
-    line-height: 1.35;
-    color: var(--color-text-primary);
-    word-break: break-word;
-}
-
-.bookmark-card-url {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    background: var(--color-bg-page);
-    color: var(--color-text-secondary);
-    font-size: 13px;
-    cursor: pointer;
-    max-width: 100%;
-}
-
-.bookmark-card-url span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.bookmark-card-url:hover {
-    border-color: var(--color-primary);
-    color: var(--color-text-primary);
-}
-
-.bookmark-card-summary {
-    margin: 0;
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--color-text-secondary);
-}
-
-.bookmark-card-empty {
+.bookmark-webview-empty p {
     margin: 0;
     font-size: 13px;
-    color: var(--color-text-secondary);
-}
-
-.bookmark-card-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-
-.bookmark-card-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    background: var(--color-bg-page);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    font-size: 12px;
-}
-
-.bookmark-card-open {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    margin-top: 8px;
-    padding: 9px 18px;
-    border-radius: 9px;
-    border: 1px solid var(--color-primary);
-    background: var(--color-bg-active);
-    color: var(--color-text-active);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -5750,6 +5689,22 @@ body.theme-dark .local-project-conflict-btn.danger {
 .tab-context-menu button:disabled {
     color: var(--color-text-tertiary, #aaa);
     cursor: default;
+}
+
+.tab-context-menu-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px 6px;
+    color: var(--color-text-secondary, #666);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.tab-context-menu-meta span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .tab-context-menu-divider {
@@ -5903,6 +5858,10 @@ body.theme-dark .tab-context-menu {
 
 body.theme-dark .tab-context-menu button {
     color: #d4d4d4;
+}
+
+body.theme-dark .tab-context-menu-meta {
+    color: #9ca3af;
 }
 
 body.theme-dark .tab-context-menu button:hover:not(:disabled) {
