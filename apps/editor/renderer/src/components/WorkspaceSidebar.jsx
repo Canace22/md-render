@@ -15,7 +15,7 @@ import {
   Settings,
   Cloud,
   Upload,
-  Download,
+  FileOutput,
   Search,
   Tag,
 } from 'lucide-react';
@@ -615,7 +615,7 @@ const WorkspaceSidebar = ({
                   aria-label="导出 Markdown"
                   data-testid="sidebar-export-markdown"
                 >
-                  <Download size={18} strokeWidth={1.5} />
+                  <FileOutput size={18} strokeWidth={1.5} />
                 </button>
               )}
             </div>
