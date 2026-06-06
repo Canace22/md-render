@@ -8,6 +8,7 @@ import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
+import CreationDashboard from './CreationDashboard.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import NotionPanel from './NotionPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -42,6 +43,14 @@ import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
+import {
+  buildActiveTopicSummary,
+  collectPendingMaterials,
+  collectPendingPublishDrafts,
+  collectRecentDrafts,
+  CREATION_STATUS_OPTIONS,
+  PLATFORM_OPTIONS,
+} from '../store/creationUtils.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
 import {
   buildUniqueName,
@@ -143,6 +152,22 @@ const hasLocalProjectNode = (node) => {
   return node.children.some((child) => hasLocalProjectNode(child));
 };
 
+const STATUS_LABELS = new Map(CREATION_STATUS_OPTIONS.map((item) => [item.value, item.label]));
+const PLATFORM_LABELS = new Map(PLATFORM_OPTIONS.map((item) => [item.value, item.label]));
+
+const stripMarkdownExtension = (name = '') => String(name).replace(/\.md$/i, '');
+const truncateInlineText = (value, maxLength = 96) => {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+};
+
+const getStatusLabel = (status) => STATUS_LABELS.get(status) ?? status ?? '待整理';
+const getPrimaryPlatformLabel = (platforms = []) => {
+  const primary = Array.isArray(platforms) ? platforms[0] : '';
+  return PLATFORM_LABELS.get(primary) ?? primary ?? '待选渠道';
+};
+
 function MarkdownEditor() {
   const macWindowed = useMacTitlebarInset();
   useLocalProjectWatcher();
@@ -217,6 +242,53 @@ function MarkdownEditor() {
     [selectedFolder],
   );
   const allFiles = useMemo(() => collectFiles(workspace), [workspace]);
+  const recentDrafts = useMemo(() => {
+    return collectRecentDrafts(allFiles, 4).map((file) => ({
+      id: file.id,
+      title: stripMarkdownExtension(file.name),
+      summary: file.summary,
+      excerpt: truncateInlineText(file.content, 120),
+      stage: getStatusLabel(file.draftStatus || 'drafting'),
+      wordCount: String(file.content ?? '').trim().length,
+      updatedAt: file.updatedAt,
+    }));
+  }, [allFiles]);
+  const activeTopicSummary = useMemo(() => buildActiveTopicSummary(allFiles, 4), [allFiles]);
+  const topicQueue = useMemo(() => {
+    return activeTopicSummary.items.map((item) => ({
+      id: item.id,
+      title: stripMarkdownExtension(item.name),
+      summary: item.summary,
+      angle: item.summary,
+      status: getStatusLabel(item.status),
+      dueAt: item.updatedAt,
+      updatedAt: item.updatedAt,
+      priority: item.status === 'idea' ? 'high' : 'medium',
+      priorityLabel: item.status === 'idea' ? '待拆解' : '推进中',
+    }));
+  }, [activeTopicSummary]);
+  const materialInbox = useMemo(() => {
+    return collectPendingMaterials(allFiles, 4).map((file) => ({
+      id: file.id,
+      title: stripMarkdownExtension(file.name),
+      summary: file.summary,
+      note: truncateInlineText(file.content, 110),
+      source: file.nodeType === 'bookmark' ? '书签' : '素材',
+      tags: file.tags ?? [],
+      capturedAt: file.updatedAt ?? file.createdAt,
+    }));
+  }, [allFiles]);
+  const readyToPublish = useMemo(() => {
+    return collectPendingPublishDrafts(allFiles, 4).map((file) => ({
+      id: file.id,
+      title: stripMarkdownExtension(file.name),
+      summary: file.summary,
+      checklistNote: truncateInlineText(file.content, 100),
+      channel: getPrimaryPlatformLabel(file.targetPlatforms),
+      publishAt: file.scheduledPublishAt,
+      progress: file.scheduledPublishAt ? 78 : 42,
+    }));
+  }, [allFiles]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
@@ -721,6 +793,66 @@ function MarkdownEditor() {
     }
   }, [localProjectSupported, ensureLocalMdRenderWorkspace, addFolder, insertLocalProjectNode]);
 
+  const handleCreateDraftFromDashboard = useCallback(async (actionKey) => {
+    if (actionKey === 'material') {
+      setBookmarkImportOpen(true);
+      return;
+    }
+
+    if (actionKey === 'publish') {
+      setSurface('search');
+      setKnowledgeSearchQuery('待发布');
+      return;
+    }
+
+    const beforeSelectedId = useEditorStore.getState().selectedId;
+    await handleAddFile();
+    const after = useEditorStore.getState();
+    const nextFileId = after.selectedId;
+    const nextFile = findNodeById(after.workspace, nextFileId);
+    if (!nextFile || nextFile.type !== 'file' || nextFileId === beforeSelectedId) return;
+
+    if (actionKey === 'topic') {
+      after.setFileKnowledgeMeta(nextFileId, {
+        draftStatus: 'idea',
+        summary: '',
+      });
+      if (!localProjectSupported) {
+        after.applyRename(nextFileId, buildUniqueName(after.workspace, '新选题', '.md'));
+      }
+      return;
+    }
+
+    after.setFileKnowledgeMeta(nextFileId, {
+      draftStatus: 'drafting',
+      targetPlatforms: ['wechat'],
+    });
+    if (!localProjectSupported) {
+      after.applyRename(nextFileId, buildUniqueName(after.workspace, '新稿件', '.md'));
+    }
+  }, [handleAddFile, localProjectSupported, setSurface, setKnowledgeSearchQuery]);
+
+  const handleDashboardViewSection = useCallback((sectionKey) => {
+    if (sectionKey === 'planner') {
+      alert('规划文档已写入 docs/content-creation-roadmap.md');
+      return;
+    }
+    const queryMap = {
+      drafts: '稿件',
+      topics: '选题',
+      materials: '素材',
+      publishing: '待发布',
+    };
+    setKnowledgeSearchQuery(queryMap[sectionKey] ?? '');
+    setSurface('search');
+  }, [setSurface, setKnowledgeSearchQuery]);
+
+  const handleDashboardOpenItem = useCallback((_, item) => {
+    if (item?.id) {
+      selectNode(item.id);
+    }
+  }, [selectNode]);
+
   const handleOpenLocalProject = useCallback(async () => {
     if (!localProjectSupported) {
       alert('打开本地项目仅支持桌面版应用。');
@@ -1148,7 +1280,17 @@ function MarkdownEditor() {
             children={folderChildren}
             onSelectItem={selectNode}
           />
-        ) : surface === 'overview' || surface === 'search' || surface === 'graph' ? (
+        ) : surface === 'overview' ? (
+          <CreationDashboard
+            recentDrafts={recentDrafts}
+            topicQueue={topicQueue}
+            materialInbox={materialInbox}
+            readyToPublish={readyToPublish}
+            onCreate={handleCreateDraftFromDashboard}
+            onOpenItem={handleDashboardOpenItem}
+            onViewSection={handleDashboardViewSection}
+          />
+        ) : surface === 'search' || surface === 'graph' ? (
           <KnowledgeBasePanel
             mode={surface}
             workspace={workspace}

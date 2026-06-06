@@ -638,6 +638,18 @@ export const useEditorStore = create(
           if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'relatedIds')) {
             nextPatch.relatedIds = sanitizeStringList(patch.relatedIds);
           }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'draftStatus')) {
+            nextPatch.draftStatus = String(patch.draftStatus ?? '').trim();
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'targetPlatforms')) {
+            nextPatch.targetPlatforms = sanitizeStringList(patch.targetPlatforms);
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'scheduledPublishAt')) {
+            nextPatch.scheduledPublishAt = String(patch.scheduledPublishAt ?? '').trim();
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'sourceMaterialIds')) {
+            nextPatch.sourceMaterialIds = sanitizeStringList(patch.sourceMaterialIds);
+          }
           return { ...node, ...createDefaultKnowledgeFields(node), ...nextPatch };
         });
         persistWorkspace(updated);

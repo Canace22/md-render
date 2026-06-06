@@ -6,6 +6,7 @@
 > - [knowledge-base-roadmap.md](./knowledge-base-roadmap.md) - 知识库专项路线
 > - [knowledge-base-progress.md](./knowledge-base-progress.md) - 已落地进度
 > - [novel-mode-design.md](./novel-mode-design.md) - 小说模式边界与交互
+> - [release-process.md](./release-process.md) - 版本发布流程
 
 ---
 
@@ -557,3 +558,5 @@
 **先把“项目 + 稿件状态 + AI 改写动作 + 多平台版本输出”做出来，再继续补生态。**
 
 这会比继续给编辑器加零散功能，更像一个真正的内容创作工具。
+
+版本发布见 [release-process.md](./release-process.md)。

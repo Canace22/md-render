@@ -36,6 +36,14 @@ export const createDefaultKnowledgeFields = (overrides = {}) => {
     summary: String(overrides.summary ?? '').trim(),
     aliases: sanitizeStringList(overrides.aliases),
     relatedIds: sanitizeStringList(overrides.relatedIds),
+    draftStatus: String(overrides.draftStatus ?? '').trim(),
+    targetPlatforms: sanitizeStringList(
+      overrides.targetPlatforms ?? overrides.platforms ?? overrides.publishPlatforms,
+    ),
+    scheduledPublishAt: String(overrides.scheduledPublishAt ?? overrides.publishAt ?? '').trim(),
+    sourceMaterialIds: sanitizeStringList(
+      overrides.sourceMaterialIds ?? overrides.sourceMaterials,
+    ),
   };
 };
 
@@ -73,8 +81,12 @@ export const getFileKnowledgeSearchText = (file) => {
     file.content,
     file.summary,
     file.url,
+    file.draftStatus,
+    file.scheduledPublishAt,
     ...(file.aliases ?? []),
     ...(file.tags ?? []),
+    ...(file.targetPlatforms ?? []),
+    ...(file.sourceMaterialIds ?? []),
     getKnowledgeNodeTypeLabel(file.nodeType),
   ]
     .filter(Boolean)
@@ -177,7 +189,11 @@ export function ensureKnowledgeFields(node) {
     const changed = node.nodeType !== nextKnowledge.nodeType
       || (node.summary ?? '') !== nextKnowledge.summary
       || JSON.stringify(node.aliases ?? []) !== JSON.stringify(nextKnowledge.aliases)
-      || JSON.stringify(node.relatedIds ?? []) !== JSON.stringify(nextKnowledge.relatedIds);
+      || JSON.stringify(node.relatedIds ?? []) !== JSON.stringify(nextKnowledge.relatedIds)
+      || (node.draftStatus ?? '') !== nextKnowledge.draftStatus
+      || JSON.stringify(node.targetPlatforms ?? []) !== JSON.stringify(nextKnowledge.targetPlatforms)
+      || (node.scheduledPublishAt ?? '') !== nextKnowledge.scheduledPublishAt
+      || JSON.stringify(node.sourceMaterialIds ?? []) !== JSON.stringify(nextKnowledge.sourceMaterialIds);
     return changed ? { ...node, ...nextKnowledge } : node;
   }
 

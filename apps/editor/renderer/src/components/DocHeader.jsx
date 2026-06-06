@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { countWords } from '../utils/wordCount.js';
+import DraftMetaPanel from './DraftMetaPanel.jsx';
 import KnowledgeMetaPanel from './KnowledgeMetaPanel.jsx';
 import TagBar from './TagBar.jsx';
 
@@ -98,6 +99,12 @@ export default function DocHeader({
           <TagBar
             tags={selectedFile.tags ?? []}
             onChange={(nextTags) => onTagsChange?.(selectedFile.id, nextTags)}
+          />
+          <DraftMetaPanel
+            selectedFile={selectedFile}
+            allFiles={allFiles}
+            onDraftMetaChange={onKnowledgeMetaChange}
+            onOpenFile={onOpenFile}
           />
           <KnowledgeMetaPanel
             selectedFile={selectedFile}

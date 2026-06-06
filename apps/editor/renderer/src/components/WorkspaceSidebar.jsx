@@ -536,13 +536,13 @@ const WorkspaceSidebar = ({
           </button>
 
           {/* 视图导航 */}
-          <nav className="sidebar-rail-nav" aria-label="知识库视图">
+          <nav className="sidebar-rail-nav" aria-label="创作与知识视图">
             <button
               type="button"
               className={`sidebar-rail-btn ${surface === 'overview' ? 'active' : ''}`}
               onClick={onOpenOverview}
-              title="概览"
-              aria-label="概览"
+              title="创作首页"
+              aria-label="创作首页"
             >
               <LayoutGrid size={18} strokeWidth={1.6} />
             </button>
