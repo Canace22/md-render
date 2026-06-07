@@ -58,6 +58,8 @@ export default function BookmarkImportModal({ open, onClose, onImport }) {
       const result = await onImport?.(items);
       handleClose();
       return result;
+    } catch {
+      return null;
     } finally {
       setImporting(false);
     }

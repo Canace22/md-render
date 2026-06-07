@@ -287,10 +287,6 @@ function CreationDashboard({
           )}
         />
       </section>
-
-      <Button type="link" icon={<ArrowRight size={16} strokeWidth={1.8} />} onClick={() => onViewSection?.('planner')}>
-        去看完整创作规划
-      </Button>
     </div>
   );
 }

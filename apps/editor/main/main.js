@@ -9,6 +9,7 @@ import {
   saveLocalProjectFile,
   saveLocalProjectMetadata,
   ensureMdRenderWorkspaceData,
+  fetchBookmarkPageSnapshot,
   createLocalProjectFile,
   createLocalProjectFolder,
   renameLocalProjectEntry,
@@ -291,6 +292,15 @@ ipcMain.handle('read-local-project-file-content', async (_event, payload = {}) =
   const { projectRootPath, relativePath } = payload;
   try {
     const result = await readLocalProjectFileContent(projectRootPath, relativePath);
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fetch-bookmark-page-snapshot', async (_event, payload = {}) => {
+  try {
+    const result = await fetchBookmarkPageSnapshot(payload.url);
     return { ok: true, ...result };
   } catch (err) {
     return { ok: false, error: err.message };

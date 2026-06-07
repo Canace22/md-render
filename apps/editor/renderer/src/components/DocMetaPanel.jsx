@@ -226,6 +226,26 @@ export default function DocMetaPanel({
         />
       </label>
 
+      {selectedFile.url && (
+        <div className="doc-meta-field">
+          <span className="doc-meta-label">
+            <Link size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
+            来源链接
+          </span>
+          <div className="doc-meta-chip-list">
+            <a
+              className="doc-meta-chip doc-meta-chip--external doc-meta-chip-link"
+              href={selectedFile.url}
+              target="_blank"
+              rel="noreferrer"
+              title={selectedFile.url}
+            >
+              <span>{selectedFile.url}</span>
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* ── row 3: aliases ── */}
       <div className="doc-meta-field">
         <span className="doc-meta-label">别名</span>

@@ -432,12 +432,49 @@ export function stripLocalProjectMounts(workspace, projectRootPath) {
 
 export function mergeProjectsChildren(workspace, projectsChildren) {
   if (!Array.isArray(projectsChildren) || projectsChildren.length === 0) return workspace;
-  const existingIds = new Set((workspace.children ?? []).map((child) => child.id));
-  const toAdd = projectsChildren.filter((child) => !existingIds.has(child.id));
-  if (toAdd.length === 0) return workspace;
+  const currentChildren = workspace.children ?? [];
+  const freshById = new Map(projectsChildren.map((child) => [child.id, child]));
+  const freshIds = new Set(freshById.keys());
+  const projectRootPaths = new Set(
+    projectsChildren.map((child) => child.projectRootPath).filter(Boolean),
+  );
+  const hasProjectBookmarkFolder = projectsChildren.some(
+    (child) => child.type === 'folder' && child.name === BOOKMARK_FOLDER_NAME,
+  );
+
+  let changed = false;
+  const merged = currentChildren
+    .filter((child) => {
+      if (
+        hasProjectBookmarkFolder
+        && child.type === 'folder'
+        && child.bookmarkFolder
+        && child.name === BOOKMARK_FOLDER_NAME
+      ) {
+        changed = true;
+        return false;
+      }
+
+      if (projectRootPaths.has(child.projectRootPath)) {
+        const keep = freshIds.has(child.id);
+        if (!keep) changed = true;
+        return keep;
+      }
+      return true;
+    })
+    .map((child) => {
+      if (!projectRootPaths.has(child.projectRootPath)) return child;
+      const fresh = freshById.get(child.id) ?? child;
+      if (fresh !== child) changed = true;
+      return fresh;
+    });
+
+  const mergedIds = new Set(merged.map((child) => child.id));
+  const toAdd = projectsChildren.filter((child) => !mergedIds.has(child.id));
+  if (!changed && toAdd.length === 0) return workspace;
   return {
     ...workspace,
-    children: [...(workspace.children ?? []), ...toAdd],
+    children: [...merged, ...toAdd],
   };
 }
 

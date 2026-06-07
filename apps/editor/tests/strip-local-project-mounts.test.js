@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   stripLocalProjectMounts,
   createDefaultWorkspace,
+  mergeProjectsChildren,
 } from '../renderer/src/store/workspaceUtils.js';
 
 const makeLocalMount = (projectRootPath, name = '项目') => ({
@@ -160,5 +161,67 @@ describe('stripLocalProjectMounts', () => {
     const result = stripLocalProjectMounts(ws, '');
     expect(result.children).toHaveLength(1);
     expect(result.children[0].id).toBe('f1');
+  });
+});
+
+describe('mergeProjectsChildren', () => {
+  it('replaces existing disk-backed folder with fresh children from disk', () => {
+    const projectRootPath = '/Users/test/Documents/MdRender';
+    const staleFolder = {
+      id: `project:${projectRootPath}:folder:Projects/书签`,
+      type: 'folder',
+      name: '书签',
+      relativePath: 'Projects/书签',
+      projectRootPath,
+      children: [],
+    };
+    const freshFile = {
+      id: `project:${projectRootPath}:file:Projects/书签/react.md`,
+      type: 'file',
+      name: 'react.md',
+      relativePath: 'Projects/书签/react.md',
+      projectRootPath,
+      content: '# React',
+    };
+    const freshFolder = {
+      ...staleFolder,
+      children: [freshFile],
+    };
+    const ws = {
+      ...createDefaultWorkspace(),
+      children: [staleFolder],
+    };
+
+    const result = mergeProjectsChildren(ws, [freshFolder]);
+    expect(result.children).toHaveLength(1);
+    expect(result.children[0].children).toHaveLength(1);
+    expect(result.children[0].children[0].name).toBe('react.md');
+  });
+
+  it('drops legacy bookmark folder when disk-backed bookmark folder exists', () => {
+    const projectRootPath = '/Users/test/Documents/MdRender';
+    const legacyBookmarkFolder = {
+      id: 'folder-legacy',
+      type: 'folder',
+      name: '书签',
+      bookmarkFolder: true,
+      children: [],
+    };
+    const freshFolder = {
+      id: `project:${projectRootPath}:folder:Projects/书签`,
+      type: 'folder',
+      name: '书签',
+      relativePath: 'Projects/书签',
+      projectRootPath,
+      children: [],
+    };
+    const ws = {
+      ...createDefaultWorkspace(),
+      children: [legacyBookmarkFolder],
+    };
+
+    const result = mergeProjectsChildren(ws, [freshFolder]);
+    expect(result.children).toHaveLength(1);
+    expect(result.children[0].id).toBe(freshFolder.id);
   });
 });

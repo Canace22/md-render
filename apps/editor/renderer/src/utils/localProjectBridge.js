@@ -169,6 +169,17 @@ export async function readLocalProjectFileContent(payload) {
   throw new Error('本地文件读取仅支持桌面版应用');
 }
 
+export async function fetchBookmarkPageSnapshot(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.fetchBookmarkPageSnapshot === 'function') {
+    const result = await window.electronAPI.fetchBookmarkPageSnapshot(payload);
+    if (result?.ok === false) {
+      throw new Error(result.error || '网页抓取失败');
+    }
+    return result;
+  }
+  throw new Error('网页抓取仅支持桌面版应用');
+}
+
 export function onLocalProjectDiskChanged(callback) {
   if (hasDirectBridge() && typeof window.electronAPI.onLocalProjectDiskChanged === 'function') {
     return window.electronAPI.onLocalProjectDiskChanged(callback);

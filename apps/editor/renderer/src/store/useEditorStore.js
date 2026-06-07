@@ -410,6 +410,7 @@ const buildLocalProjectMetadataPayload = (node) => {
     metadata: {
       nodeType: node.nodeType,
       summary: node.summary,
+      url: node.url,
       aliases: node.aliases,
       relatedIds: node.relatedIds,
       draftStatus: node.draftStatus,
@@ -790,7 +791,7 @@ export const useEditorStore = create(
         const current = get();
         const baseWorkspace = ensureLocalWorkspaceRoot(current.workspace, current.projectRootPath);
         const withoutDuplicate = removeLocalProjectByPath(baseWorkspace, rootPath);
-        const nextWorkspace = addChildNode(withoutDuplicate, withoutDuplicate.id, projectNode);
+        const nextWorkspace = addChildNode(withoutDuplicate, withoutDuplicate.id, projectNode, true);
         const initialId = findFirstFileId(projectNode) ?? projectNode.id;
         const node = findNodeById(nextWorkspace, initialId);
 
@@ -941,7 +942,7 @@ export const useEditorStore = create(
             bookmarkFolder: true,
             children: [],
           };
-          nextWorkspace = addChildNode(workspace, workspace.id, newFolder);
+          nextWorkspace = addChildNode(workspace, workspace.id, newFolder, true);
         }
 
         const targetFolder = findNodeById(nextWorkspace, folderId);
@@ -959,7 +960,7 @@ export const useEditorStore = create(
           }
           const node = createBookmarkNode(item);
           existingUrls.add(item.url);
-          nextWorkspace = addChildNode(nextWorkspace, folderId, node);
+          nextWorkspace = addChildNode(nextWorkspace, folderId, node, true);
           if (!firstId) firstId = node.id;
           added += 1;
         }
@@ -1153,7 +1154,7 @@ export const useEditorStore = create(
 
         const { workspace } = get();
         const normalizedNode = ensureKnowledgeFields(node);
-        const nextWorkspace = addChildNode(workspace, workspace.id, normalizedNode);
+        const nextWorkspace = addChildNode(workspace, workspace.id, normalizedNode, true);
         const initialId = findFirstFileId(normalizedNode) ?? normalizedNode.id;
         const selectedNode = findNodeById(nextWorkspace, initialId);
 
@@ -1173,7 +1174,7 @@ export const useEditorStore = create(
         if (!node || !parentFolderId) return false;
 
         const { workspace } = get();
-        const nextWorkspace = addChildNode(workspace, parentFolderId, node);
+        const nextWorkspace = addChildNode(workspace, parentFolderId, node, true);
         persistWorkspace(nextWorkspace);
         set({
           workspace: nextWorkspace,

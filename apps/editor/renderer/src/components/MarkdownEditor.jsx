@@ -53,6 +53,7 @@ import {
   collectPendingPublishDrafts,
   collectRecentDrafts,
   CREATION_STATUS_OPTIONS,
+  getDocumentStatus,
   PLATFORM_OPTIONS,
 } from '../store/creationUtils.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
@@ -62,6 +63,7 @@ import {
   collectFiles,
   createLocalProjectFileNode,
   createLocalProjectFolderNode,
+  findNodeIdByRelativePath,
   findNodeById,
   findParentId,
   getFolderDirectChildren,
@@ -73,6 +75,11 @@ import {
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import { convertToMarkdown, IMPORT_ACCEPT, needsConversion } from '../utils/fileConverters.js';
 import {
+  buildBookmarkClipDocument,
+  buildFallbackBookmarkClip,
+  sanitizeBookmarkFileStem,
+} from '../utils/bookmarkClipper.js';
+import {
   buildAIActionContext,
   buildAIActionPrompt,
   getAIAction,
@@ -83,12 +90,14 @@ import {
   createLocalProjectFolderOnDisk,
   deleteLocalProjectEntryOnDisk,
   ensureMdRenderWorkspace,
+  fetchBookmarkPageSnapshot,
   isLocalProjectSupported,
   openLocalProject,
   readLocalProjectDisk,
   readLocalProjectFileContent,
   renameLocalProjectEntryOnDisk,
   saveLocalProjectFile,
+  saveLocalProjectMetadata,
 } from '../utils/localProjectBridge.js';
 import '../styles/styles.css';
 
@@ -119,6 +128,8 @@ const createCodeBlockHighlighter = async () => {
     langs: Object.keys(CODE_BLOCK_LANGUAGES),
   });
 };
+
+const LOCAL_BOOKMARK_FOLDER_RELATIVE_PATH = 'Projects/书签';
 
 const EDITOR_SCHEMA = BlockNoteSchema.create({
   blockSpecs: {
@@ -267,7 +278,8 @@ function MarkdownEditor() {
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
   const selectedInLocalProject = Boolean(selectedNode?.projectRootPath);
-  const selectedIsBookmark = selectedFile?.nodeType === 'bookmark';
+  const selectedUsesBookmarkCard = selectedFile?.nodeType === 'bookmark'
+    && !String(selectedFile?.content ?? '').trim();
   const hasLocalProjectWorkspace = useMemo(() => hasLocalProjectNode(workspace), [workspace]);
   const folderChildren = useMemo(
     () => (selectedFolder ? getFolderDirectChildren(selectedFolder) : []),
@@ -290,7 +302,7 @@ function MarkdownEditor() {
       title: stripMarkdownExtension(file.name),
       summary: file.summary,
       excerpt: truncateInlineText(file.content, 120),
-      stage: getStatusLabel(file.draftStatus || 'drafting'),
+      stage: getStatusLabel(getDocumentStatus(file) ?? 'drafting'),
       wordCount: String(file.content ?? '').trim().length,
       updatedAt: file.updatedAt,
     }));
@@ -321,24 +333,27 @@ function MarkdownEditor() {
     }));
   }, [allFiles]);
   const publishingQueueItems = useMemo(() => {
-    return collectPendingPublishDrafts(allFiles, allFiles.length).map((file) => ({
-      id: file.id,
-      title: stripMarkdownExtension(file.name),
-      summary: file.summary,
-      excerpt: truncateInlineText(file.content, 120),
-      scheduledPublishAt: file.scheduledPublishAt,
-      publishAt: file.scheduledPublishAt,
-      targetPlatforms: file.targetPlatforms ?? [],
-      draftStatus: file.draftStatus || 'ready',
-      draftStatusLabel: getStatusLabel(file.draftStatus || 'ready'),
-      wordCount: getParsedWordCount(file.content),
-      progress: file.scheduledPublishAt ? 80 : 48,
-      checklist: [
-        { label: '标题确认', done: Boolean(file.summary) },
-        { label: '渠道确认', done: Boolean(file.targetPlatforms?.length) },
-        { label: '发布时间确认', done: Boolean(file.scheduledPublishAt) },
-      ],
-    }));
+    return collectPendingPublishDrafts(allFiles, allFiles.length).map((file) => {
+      const resolvedStatus = getDocumentStatus(file) ?? 'ready';
+      return {
+        id: file.id,
+        title: stripMarkdownExtension(file.name),
+        summary: file.summary,
+        excerpt: truncateInlineText(file.content, 120),
+        scheduledPublishAt: file.scheduledPublishAt,
+        publishAt: file.scheduledPublishAt,
+        targetPlatforms: file.targetPlatforms ?? [],
+        draftStatus: resolvedStatus,
+        draftStatusLabel: getStatusLabel(resolvedStatus),
+        wordCount: getParsedWordCount(file.content),
+        progress: file.scheduledPublishAt ? 80 : 48,
+        checklist: [
+          { label: '标题确认', done: Boolean(file.summary) },
+          { label: '渠道确认', done: Boolean(file.targetPlatforms?.length) },
+          { label: '发布时间确认', done: Boolean(file.scheduledPublishAt) },
+        ],
+      };
+    });
   }, [allFiles]);
   const readyToPublish = useMemo(() => {
     return publishingQueueItems.slice(0, 4).map((item) => ({
@@ -354,23 +369,26 @@ function MarkdownEditor() {
     collectPendingPublishDrafts(allFiles, allFiles.length).forEach((file) => candidateIds.add(file.id));
     buildActiveTopicSummary(allFiles, allFiles.length).items.forEach((item) => candidateIds.add(item.id));
     allFiles.forEach((file) => {
-      if (file.draftStatus === 'published' || file.status === 'published') {
+      if (getDocumentStatus(file) === 'published') {
         candidateIds.add(file.id);
       }
     });
     return [...candidateIds]
       .map((id) => byId.get(id))
       .filter(Boolean)
-      .map((file) => ({
-        id: file.id,
-        title: stripMarkdownExtension(file.name),
-        summary: file.summary || truncateInlineText(file.content, 100),
-        updatedAt: file.updatedAt,
-        createdAt: file.createdAt,
-        draftStatus: file.draftStatus,
-        targetPlatforms: file.targetPlatforms ?? [],
-        wordCount: getParsedWordCount(file.content),
-      }));
+      .map((file) => {
+        const resolvedStatus = getDocumentStatus(file);
+        return {
+          id: file.id,
+          title: stripMarkdownExtension(file.name),
+          summary: file.summary || truncateInlineText(file.content, 100),
+          updatedAt: file.updatedAt,
+          createdAt: file.createdAt,
+          draftStatus: resolvedStatus ?? file.draftStatus,
+          targetPlatforms: file.targetPlatforms ?? [],
+          wordCount: getParsedWordCount(file.content),
+        };
+      });
   }, [allFiles]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
@@ -800,6 +818,7 @@ function MarkdownEditor() {
     const state = useEditorStore.getState();
     if (state.projectRootPath) return state.projectRootPath;
 
+    // 按需初始化本地目录，避免应用启动时直接触发 macOS Documents 权限弹窗。
     const result = await ensureMdRenderWorkspace();
     if (!result?.projectRootPath) return null;
 
@@ -1269,6 +1288,132 @@ function MarkdownEditor() {
     window.open(url, '_blank', 'noopener,noreferrer');
   }, []);
 
+  const handleImportBookmarks = useCallback(async (items) => {
+    const list = (Array.isArray(items) ? items : []).filter((item) => item?.url);
+    if (list.length === 0) {
+      return { added: 0, skipped: 0, folderId: null };
+    }
+
+    if (!localProjectSupported) {
+      const result = importBookmarks(list);
+      if (result.added > 0) {
+        message.success(`已导入 ${result.added} 条书签`);
+      }
+      return result;
+    }
+
+    try {
+      const initialWorkspace = await ensureMdRenderWorkspace();
+      if (!initialWorkspace?.projectRootPath) {
+        const result = importBookmarks(list);
+        if (result.added > 0) {
+          message.success(`已导入 ${result.added} 条书签`);
+        }
+        return result;
+      }
+
+      hydrateProjectsWorkspace(initialWorkspace);
+
+      let workingWorkspace = useEditorStore.getState().workspace;
+      let folderId = findNodeIdByRelativePath(workingWorkspace, LOCAL_BOOKMARK_FOLDER_RELATIVE_PATH);
+
+      if (!folderId) {
+        await createLocalProjectFolderOnDisk({
+          projectRootPath: initialWorkspace.projectRootPath,
+          relativePath: LOCAL_BOOKMARK_FOLDER_RELATIVE_PATH,
+        });
+        const refreshed = await ensureMdRenderWorkspace();
+        hydrateProjectsWorkspace(refreshed);
+        workingWorkspace = useEditorStore.getState().workspace;
+        folderId = findNodeIdByRelativePath(workingWorkspace, LOCAL_BOOKMARK_FOLDER_RELATIVE_PATH);
+      }
+
+      const folderNode = folderId ? findNodeById(workingWorkspace, folderId) : null;
+      if (!folderId || folderNode?.type !== 'folder') {
+        throw new Error('无法定位本地书签目录');
+      }
+
+      const existingUrls = new Set(
+        (folderNode.children ?? []).map((child) => String(child.url ?? '').trim()).filter(Boolean),
+      );
+      const reservedNames = new Set((folderNode.children ?? []).map((child) => child.name).filter(Boolean));
+
+      let added = 0;
+      let skipped = 0;
+      let firstRelativePath = null;
+
+      for (const item of list) {
+        const sourceUrl = String(item.url ?? '').trim();
+        if (!sourceUrl || existingUrls.has(sourceUrl)) {
+          skipped += 1;
+          continue;
+        }
+
+        let clip;
+        try {
+          const snapshot = await fetchBookmarkPageSnapshot({ url: sourceUrl });
+          clip = await buildBookmarkClipDocument(item, snapshot);
+        } catch (error) {
+          clip = buildFallbackBookmarkClip(item, error?.message || '正文抓取失败，已保留原链接。');
+        }
+
+        const stem = sanitizeBookmarkFileStem(clip.title || item.title || sourceUrl);
+        let fileName = `${stem}.md`;
+        let index = 1;
+        while (reservedNames.has(fileName)) {
+          fileName = `${stem} ${index}.md`;
+          index += 1;
+        }
+        reservedNames.add(fileName);
+
+        const relativePath = `${LOCAL_BOOKMARK_FOLDER_RELATIVE_PATH}/${fileName}`;
+        await createLocalProjectFileOnDisk({
+          projectRootPath: initialWorkspace.projectRootPath,
+          relativePath,
+          content: clip.markdown,
+        });
+        await saveLocalProjectMetadata({
+          projectRootPath: initialWorkspace.projectRootPath,
+          relativePath,
+          metadata: {
+            nodeType: 'bookmark',
+            summary: clip.summary,
+            tags: clip.tags,
+            url: clip.url,
+          },
+        });
+
+        existingUrls.add(sourceUrl);
+        if (!firstRelativePath) {
+          firstRelativePath = relativePath;
+        }
+        added += 1;
+      }
+
+      const finalWorkspace = await ensureMdRenderWorkspace();
+      hydrateProjectsWorkspace(finalWorkspace);
+
+      if (firstRelativePath) {
+        const nextWorkspace = useEditorStore.getState().workspace;
+        const nextId = findNodeIdByRelativePath(nextWorkspace, firstRelativePath);
+        if (nextId) {
+          selectNode(nextId);
+        }
+      }
+
+      if (added > 0) {
+        message.success(`已保存 ${added} 条书签到本地目录${skipped ? `，跳过 ${skipped} 条重复` : ''}`);
+      } else if (skipped > 0) {
+        message.info(`没有新增书签，已跳过 ${skipped} 条重复`);
+      }
+
+      return { added, skipped, folderId };
+    } catch (error) {
+      message.error(error?.message || '导入书签失败');
+      throw error;
+    }
+  }, [hydrateProjectsWorkspace, importBookmarks, localProjectSupported, selectNode]);
+
   useEffect(() => {
     applyThemeToBody(theme);
   }, [theme]);
@@ -1585,7 +1730,7 @@ function MarkdownEditor() {
             onOpenSurface={setSurface}
             onImportBookmarks={() => setBookmarkImportOpen(true)}
           />
-        ) : selectedIsBookmark ? (
+        ) : selectedUsesBookmarkCard ? (
           <BookmarkCard file={selectedFile} />
         ) : selectedNeedsConversion ? (
           <FilePreviewPanel
@@ -1708,7 +1853,7 @@ function MarkdownEditor() {
       <BookmarkImportModal
         open={bookmarkImportOpen}
         onClose={() => setBookmarkImportOpen(false)}
-        onImport={importBookmarks}
+        onImport={handleImportBookmarks}
       />
     </div>
   );

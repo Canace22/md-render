@@ -1044,6 +1044,12 @@ a.sidebar-rail-btn:hover {
     font-size: 11px;
 }
 
+.doc-meta-chip-link {
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+}
+
 .doc-meta-chip--alias {
     background: rgba(79, 70, 229, 0.1);
     color: var(--color-text-active);

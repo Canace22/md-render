@@ -243,6 +243,7 @@ const sliceLimit = (items, limit = DEFAULT_LIMIT) => {
 
 const getStatusCandidates = (file) => {
   return [
+    file?.draftStatus,
     file?.creationStatus,
     file?.manuscriptStatus,
     file?.publishStatus,
@@ -253,7 +254,7 @@ const getStatusCandidates = (file) => {
     .filter(Boolean);
 };
 
-const getDocumentStatus = (file) => {
+export const getDocumentStatus = (file) => {
   const statuses = getStatusCandidates(file);
   return STATUS_PRIORITY.find((status) => statuses.includes(status)) ?? null;
 };

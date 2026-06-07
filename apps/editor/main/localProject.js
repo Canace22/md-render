@@ -9,6 +9,8 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const LOCAL_PROJECT_META_SIDECAR_SUFFIX = '.md-render-meta.json';
 const LOCAL_PROJECT_META_VERSION = 1;
 const DEFAULT_NODE_TYPE = 'document';
+const BOOKMARK_FETCH_TIMEOUT_MS = 15000;
+const BOOKMARK_FETCH_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 const SUPPORTED_FILE_EXTENSIONS = new Set([
   '.md', '.markdown', '.txt',
   '.html', '.htm',
@@ -72,6 +74,7 @@ const normalizeLocalProjectMetadata = (metadata = {}) => {
   return {
     nodeType: String(metadata.nodeType ?? '').trim() || DEFAULT_NODE_TYPE,
     summary: String(metadata.summary ?? '').trim(),
+    url: String(metadata.url ?? metadata.source ?? '').trim(),
     aliases: sanitizeStringList(metadata.aliases),
     relatedIds: sanitizeStringList(metadata.relatedIds),
     draftStatus: String(metadata.draftStatus ?? '').trim(),
@@ -90,6 +93,7 @@ const hasMeaningfulMetadata = (metadata) => {
   if (!metadata) return false;
   return metadata.nodeType !== DEFAULT_NODE_TYPE
     || Boolean(metadata.summary)
+    || Boolean(metadata.url)
     || metadata.aliases.length > 0
     || metadata.relatedIds.length > 0
     || Boolean(metadata.draftStatus)
@@ -410,6 +414,45 @@ export async function readLocalProjectFileContent(projectRootPath, relativePath)
   // 文本格式直接返回
   const content = await fs.readFile(filePath, 'utf8');
   return { encoding: 'utf8', data: content };
+}
+
+export async function fetchBookmarkPageSnapshot(url) {
+  const targetUrl = String(url ?? '').trim();
+  if (!/^https?:\/\//i.test(targetUrl)) {
+    throw new Error('无效链接，仅支持 http(s) 地址');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BOOKMARK_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(targetUrl, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'User-Agent': BOOKMARK_FETCH_USER_AGENT,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`抓取失败：${response.status}`);
+    }
+
+    return {
+      url: response.url || targetUrl,
+      contentType: response.headers.get('content-type') ?? '',
+      html: await response.text(),
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('抓取网页超时');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function ensureMdRenderWorkspaceData() {
