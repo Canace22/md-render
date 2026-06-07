@@ -1,4 +1,5 @@
-import { ArrowLeft, Cloud, Download, Upload } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Cloud, Download, Plus, Trash2, Upload } from 'lucide-react';
 import { THEME_OPTIONS } from '../utils/themeUtils';
 import { TEMPLATES } from '../utils/wechatTemplates';
 
@@ -6,17 +7,65 @@ export default function SettingsPanel({
   selectedFileName,
   theme,
   copyStyle,
+  publishingPlatforms = [],
   storageMode,
   projectRootPath,
   localProjectSupported = false,
   onThemeChange,
   onCopyStyleChange,
+  onPublishingPlatformsChange,
   onOpenLocalProject,
   onImport,
   onExport,
   onOpenNotion,
   onClose,
 }) {
+  const [platformDrafts, setPlatformDrafts] = useState(publishingPlatforms);
+  const [newPlatformLabel, setNewPlatformLabel] = useState('');
+
+  useEffect(() => {
+    setPlatformDrafts(publishingPlatforms);
+  }, [publishingPlatforms]);
+
+  const handlePlatformDraftChange = (value, index) => {
+    setPlatformDrafts((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      return { ...item, label: value };
+    }));
+  };
+
+  const commitPlatformDraft = (index) => {
+    const nextLabel = String(platformDrafts[index]?.label ?? '').trim();
+    const currentOption = publishingPlatforms[index];
+    if (!currentOption) return;
+    if (!nextLabel) {
+      setPlatformDrafts(publishingPlatforms);
+      return;
+    }
+    if (nextLabel === currentOption.label) return;
+    const nextPlatforms = publishingPlatforms.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, label: nextLabel } : item
+    ));
+    onPublishingPlatformsChange?.(nextPlatforms);
+  };
+
+  const handleRemovePlatform = (value) => {
+    if (!value || publishingPlatforms.length <= 1) return;
+    onPublishingPlatformsChange?.(
+      publishingPlatforms.filter((item) => item.value !== value),
+    );
+  };
+
+  const handleAddPlatform = () => {
+    const nextLabel = newPlatformLabel.trim();
+    if (!nextLabel) return;
+    onPublishingPlatformsChange?.([
+      ...publishingPlatforms,
+      { label: nextLabel },
+    ]);
+    setNewPlatformLabel('');
+  };
+
   return (
     <section className="settings-panel" data-testid="settings-panel">
       <div className="settings-panel-header">
@@ -71,6 +120,69 @@ export default function SettingsPanel({
               <span>{template.name}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <div className="settings-group-title">发布平台</div>
+        <div className="settings-platform-list">
+          {platformDrafts.map((platform, index) => (
+            <div key={platform.value || index} className="settings-platform-row">
+              <input
+                className="settings-platform-input"
+                value={platform.label ?? ''}
+                placeholder="例如：知乎 / 即刻 / 个人博客"
+                onChange={(event) => handlePlatformDraftChange(event.target.value, index)}
+                onBlur={() => commitPlatformDraft(index)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitPlatformDraft(index);
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setPlatformDrafts(publishingPlatforms);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="settings-platform-remove"
+                onClick={() => handleRemovePlatform(platform.value)}
+                disabled={publishingPlatforms.length <= 1}
+                title={publishingPlatforms.length <= 1 ? '至少保留一个平台' : `删除 ${platform.label}`}
+              >
+                <Trash2 size={15} strokeWidth={1.8} />
+                <span>删除</span>
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="settings-platform-create">
+          <input
+            className="settings-platform-input"
+            value={newPlatformLabel}
+            placeholder="新增一个发布平台"
+            onChange={(event) => setNewPlatformLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddPlatform();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="settings-platform-add"
+            onClick={handleAddPlatform}
+            disabled={!newPlatformLabel.trim()}
+          >
+            <Plus size={15} strokeWidth={1.8} />
+            <span>新增平台</span>
+          </button>
+        </div>
+        <div className="settings-platform-hint">
+          这里改的是全局平台配置，稿件元数据、待发布列表和看板会同步使用这份配置。
         </div>
       </div>
 

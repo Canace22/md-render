@@ -37,12 +37,14 @@ import {
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
 import { saveLocalProjectMetadata } from '../utils/localProjectBridge.js';
+import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
 const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
 const SURFACE_STORAGE_KEY = 'md-renderer-surface';
+const PUBLISHING_PLATFORMS_STORAGE_KEY = 'md-renderer-publishing-platforms';
 const KNOWLEDGE_HOME_MIGRATION_KEY = 'md-renderer-knowledge-home-v1';
 const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
 const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
@@ -139,6 +141,7 @@ const buildStateFromLocalStorage = () => {
   const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
   const copyStyle = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
   const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
+  const publishingPlatformsRaw = window.localStorage.getItem(PUBLISHING_PLATFORMS_STORAGE_KEY);
   const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
   const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
   const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
@@ -156,6 +159,9 @@ const buildStateFromLocalStorage = () => {
   const migratedSurface = !knowledgeHomeMigrated && normalizedSurface === 'paper'
     ? 'overview'
     : normalizedSurface;
+  const publishingPlatforms = sanitizePublishingPlatforms(
+    safeParseJSON(publishingPlatformsRaw, null),
+  );
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -169,6 +175,7 @@ const buildStateFromLocalStorage = () => {
       storageMode: storageMode === 'project' ? 'project' : 'local',
       projectRootPath,
       surface: migratedSurface,
+      publishingPlatforms,
       ...notionSnapshot,
     },
     version: 0,
@@ -185,6 +192,9 @@ const buildStateFromDb = (raw) => {
   const selectedNode = findNodeById(ws, selId);
   const markdown = selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
   const notionFilePages = safeParseJSON(raw.notion_file_pages, {});
+  const publishingPlatforms = sanitizePublishingPlatforms(
+    safeParseJSON(raw.publishing_platforms, null),
+  );
   return {
     state: {
       workspace: ws,
@@ -198,6 +208,7 @@ const buildStateFromDb = (raw) => {
       storageMode: raw.storage_mode === 'project' ? 'project' : 'local',
       projectRootPath: raw.project_root_path ?? '',
       surface: normalizeSurface(raw.surface, 'overview'),
+      publishingPlatforms,
       notionToken: typeof raw.notion_token === 'string' ? raw.notion_token : '',
       notionFilePages:
         notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
@@ -216,6 +227,11 @@ const buildStateMap = (state) => {
   if (state.theme) map.theme = state.theme;
   if (state.copyStyle) map.copy_style = state.copyStyle;
   if (state.surface) map.surface = state.surface;
+  if (state.publishingPlatforms != null) {
+    map.publishing_platforms = JSON.stringify(
+      sanitizePublishingPlatforms(state.publishingPlatforms),
+    );
+  }
   if (state.storageMode) map.storage_mode = state.storageMode;
   if (state.projectRootPath != null) map.project_root_path = state.projectRootPath;
   if (state.notionToken != null) map.notion_token = state.notionToken;
@@ -305,6 +321,7 @@ const editorStorage = {
           storageMode: 'local',
           projectRootPath: '',
           surface: 'overview',
+          publishingPlatforms: sanitizePublishingPlatforms([]),
           ...notionSnapshot,
         },
         version: 0,
@@ -329,6 +346,12 @@ const editorStorage = {
         if (state.theme) window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
         if (state.copyStyle) window.localStorage.setItem(COPY_STYLE_STORAGE_KEY, state.copyStyle);
         if (state.surface) window.localStorage.setItem(SURFACE_STORAGE_KEY, state.surface);
+        if (state.publishingPlatforms != null) {
+          window.localStorage.setItem(
+            PUBLISHING_PLATFORMS_STORAGE_KEY,
+            JSON.stringify(sanitizePublishingPlatforms(state.publishingPlatforms)),
+          );
+        }
       } catch { /* ignore */ }
       return;
     }
@@ -357,6 +380,12 @@ const editorStorage = {
       if (state.surface) {
         window.localStorage.setItem(SURFACE_STORAGE_KEY, state.surface);
       }
+      if (state.publishingPlatforms != null) {
+        window.localStorage.setItem(
+          PUBLISHING_PLATFORMS_STORAGE_KEY,
+          JSON.stringify(sanitizePublishingPlatforms(state.publishingPlatforms)),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -380,6 +409,7 @@ const persistConfig = {
     storageMode: state.storageMode,
     projectRootPath: state.projectRootPath,
     surface: state.surface,
+    publishingPlatforms: state.publishingPlatforms,
     notionToken: state.notionToken,
     notionFilePages: state.notionFilePages,
     notionDatabaseId: state.notionDatabaseId,
@@ -511,6 +541,7 @@ export const useEditorStore = create(
       copyStyle: 'default',
       storageMode: 'local',
       projectRootPath: '',
+      publishingPlatforms: sanitizePublishingPlatforms([]),
       /** 正在等待 debounce 写入磁盘的文件 id */
       diskSavePendingFileIds: {},
       /** 磁盘外部变更触发编辑器重载（递增） */
@@ -564,6 +595,9 @@ export const useEditorStore = create(
         } catch (e) {
           /* ignore */
         }
+      },
+      setPublishingPlatforms: (publishingPlatforms) => {
+        set({ publishingPlatforms: sanitizePublishingPlatforms(publishingPlatforms) });
       },
       setSurface: (surface) => set({ surface: normalizeSurface(surface, 'overview') }),
 

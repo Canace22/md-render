@@ -6,6 +6,7 @@ import DocMetaPanel from './DocMetaPanel.jsx';
 export default function DocHeader({
   selectedFile,
   allFiles,
+  platformOptions,
   onTagsChange,
   onKnowledgeMetaChange,
   onOpenFile,
@@ -98,6 +99,7 @@ export default function DocHeader({
         <DocMetaPanel
           selectedFile={selectedFile}
           allFiles={allFiles}
+          platformOptions={platformOptions}
           onMetaChange={onKnowledgeMetaChange}
           onOpenFile={onOpenFile}
           onRestoreVersion={onRestoreVersion}

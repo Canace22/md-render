@@ -161,8 +161,8 @@ const getDocumentPlatforms = (document) => {
   );
 };
 
-const getPlatformLabels = (platforms) => {
-  return platforms.map((platform) => getPublishingPlatformLabel(platform) || platform);
+const getPlatformLabels = (platforms, platformOptions) => {
+  return platforms.map((platform) => getPublishingPlatformLabel(platform, platformOptions) || platform);
 };
 
 const getDocumentTags = (document) => {
@@ -183,7 +183,10 @@ const buildMetadataLines = (document) => {
   if (!document || typeof document !== 'object') return [];
 
   const status = getDocumentStatus(document);
-  const platforms = getPlatformLabels(getDocumentPlatforms(document));
+  const platforms = getPlatformLabels(
+    getDocumentPlatforms(document),
+    document?.platformOptions,
+  );
   const tags = getDocumentTags(document);
   const scheduledPublishAt = normalizeWhitespace(document?.scheduledPublishAt || document?.publishAt || '');
   const sourceMaterialCount = getSourceMaterialCount(document);
@@ -228,6 +231,7 @@ export const buildAiContextSummary = ({
       title: documentTitle,
       summary: documentSummary,
       content: documentContent,
+      platformOptions: [],
     };
   const resolvedTitle = getDocumentTitle(resolvedDocument, documentTitle);
   const resolvedSummary = getDocumentSummary(resolvedDocument, documentSummary);

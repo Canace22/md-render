@@ -52,6 +52,15 @@ const normalizeSourceMaterials = (selectedFile, filesById) => {
     .filter(Boolean);
 };
 
+const buildVisiblePlatformOptions = (platformOptions, currentPlatforms) => {
+  const baseOptions = Array.isArray(platformOptions) ? platformOptions : [];
+  const knownValues = new Set(baseOptions.map((option) => option.value));
+  const extraOptions = currentPlatforms
+    .filter((value) => !knownValues.has(value))
+    .map((value) => ({ value, label: value }));
+  return [...baseOptions, ...extraOptions];
+};
+
 const buildPlatformPatch = (currentPlatforms, value) => {
   if (currentPlatforms.includes(value)) {
     return currentPlatforms.filter((item) => item !== value);
@@ -91,6 +100,10 @@ export default function DraftMetaPanel({
   }, [allFiles]);
 
   const currentPlatforms = useMemo(() => normalizePlatforms(selectedFile), [selectedFile]);
+  const visiblePlatformOptions = useMemo(
+    () => buildVisiblePlatformOptions(platformOptions, currentPlatforms),
+    [platformOptions, currentPlatforms],
+  );
   const relatedDocs = useMemo(() => normalizeRelatedDocs(selectedFile, filesById), [selectedFile, filesById]);
   const sourceMaterials = useMemo(() => normalizeSourceMaterials(selectedFile, filesById), [selectedFile, filesById]);
   const currentStatus = getCurrentStatusValue(selectedFile);
@@ -156,7 +169,7 @@ export default function DraftMetaPanel({
         <div className="draft-meta-field">
           <span className="draft-meta-label">目标平台</span>
           <div className="draft-meta-platform-list" role="group" aria-label="选择目标平台">
-            {platformOptions.map((option) => {
+            {visiblePlatformOptions.map((option) => {
               const checked = currentPlatforms.includes(option.value);
               return (
                 <label

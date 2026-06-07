@@ -4576,6 +4576,72 @@ body.theme-light #markdown-output code {
     gap: 12px;
 }
 
+.settings-platform-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.settings-platform-row,
+.settings-platform-create {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.settings-platform-input {
+    flex: 1;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 16px;
+    background: #ffffff;
+    color: var(--color-text-primary);
+}
+
+.settings-platform-input:focus {
+    outline: none;
+    border-color: rgba(79, 70, 229, 0.42);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.settings-platform-remove,
+.settings-platform-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 16px;
+    background: #ffffff;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color var(--duration-fast) var(--easing), transform var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
+}
+
+.settings-platform-remove:hover:not(:disabled),
+.settings-platform-add:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.settings-platform-remove:disabled,
+.settings-platform-add:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.settings-platform-hint {
+    margin-top: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
 .settings-template-item,
 .settings-action-btn {
     justify-content: flex-start;
@@ -4892,6 +4958,14 @@ body.theme-dark .settings-action-btn {
     color: #e5e7eb;
 }
 
+body.theme-dark .settings-platform-input,
+body.theme-dark .settings-platform-remove,
+body.theme-dark .settings-platform-add {
+    background: rgba(15, 23, 42, 0.95);
+    border-color: rgba(71, 85, 105, 0.7);
+    color: #e5e7eb;
+}
+
 body.theme-dark .sidebar-footer-icon[data-active="true"] {
     background: rgba(148, 163, 184, 0.12);
     color: #e5e7eb;
@@ -5191,6 +5265,12 @@ body.theme-dark .notion-panel-error {
         flex-direction: column;
         gap: 12px;
         padding: 18px;
+    }
+
+    .settings-platform-row,
+    .settings-platform-create {
+        flex-direction: column;
+        align-items: stretch;
     }
 
     .knowledge-graph-core {

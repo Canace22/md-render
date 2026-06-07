@@ -103,6 +103,7 @@ function PublishingQueuePanel({
   title = '待发布清单',
   subtitle = '把待发布稿件、渠道、排期和上线前检查项放在一起，先过清单，再决定今天推哪篇。',
   items = [],
+  platformOptions = [],
   onOpenItem,
   onSchedule,
   onOpenSearch,
@@ -197,7 +198,7 @@ function PublishingQueuePanel({
                       <div>
                         <div className="publishing-queue-platforms">
                           {platforms.length ? platforms.map((platform) => (
-                            <Tag color="blue" key={platform}>{getPublishingPlatformLabel(platform) || platform}</Tag>
+                            <Tag color="blue" key={platform}>{getPublishingPlatformLabel(platform, platformOptions) || platform}</Tag>
                           )) : <Tag>待选渠道</Tag>}
                         </div>
                         <div className="publishing-queue-checklist">

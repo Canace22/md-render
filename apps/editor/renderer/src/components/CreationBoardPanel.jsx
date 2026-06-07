@@ -104,6 +104,7 @@ function CreationBoardPanel({
   subtitle = '把选题、资料、草稿和发布节奏放到同一块板里，先看堵点，再决定下一步。',
   items = [],
   statusOptions = DEFAULT_STATUS_OPTIONS,
+  platformOptions = [],
   lanes = DEFAULT_LANES,
   onOpenItem,
   onMoveStatus,
@@ -215,7 +216,7 @@ function CreationBoardPanel({
                             {label}
                           </Tag>
                           {getPlatforms(item).map((platform) => (
-                            <Tag key={platform}>{getPublishingPlatformLabel(normalizeToken(platform)) || platform}</Tag>
+                            <Tag key={platform}>{getPublishingPlatformLabel(normalizeToken(platform), platformOptions) || platform}</Tag>
                           ))}
                         </div>
                         {currentStatus === 'published' ? <CheckCircle2 size={15} strokeWidth={1.8} /> : null}

@@ -54,7 +54,6 @@ import {
   collectRecentDrafts,
   CREATION_STATUS_OPTIONS,
   getDocumentStatus,
-  PLATFORM_OPTIONS,
 } from '../store/creationUtils.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
 import {
@@ -79,7 +78,10 @@ import {
   buildFallbackBookmarkClip,
   sanitizeBookmarkFileStem,
 } from '../utils/bookmarkClipper.js';
-import { DEFAULT_TARGET_PLATFORMS } from '../utils/publishingPlatforms.js';
+import {
+  buildPublishingPlatformLabelMap,
+  getDefaultTargetPlatforms,
+} from '../utils/publishingPlatforms.js';
 import {
   buildAIActionContext,
   buildAIActionPrompt,
@@ -176,7 +178,6 @@ const hasLocalProjectNode = (node) => {
 };
 
 const STATUS_LABELS = new Map(CREATION_STATUS_OPTIONS.map((item) => [item.value, item.label]));
-const PLATFORM_LABELS = new Map(PLATFORM_OPTIONS.map((item) => [item.value, item.label]));
 
 const stripMarkdownExtension = (name = '') => String(name).replace(/\.md$/i, '');
 const truncateInlineText = (value, maxLength = 96) => {
@@ -186,9 +187,9 @@ const truncateInlineText = (value, maxLength = 96) => {
 };
 
 const getStatusLabel = (status) => STATUS_LABELS.get(status) ?? status ?? '待整理';
-const getPrimaryPlatformLabel = (platforms = []) => {
+const getPrimaryPlatformLabel = (platforms = [], platformLabels = new Map()) => {
   const primary = Array.isArray(platforms) ? platforms[0] : '';
-  return PLATFORM_LABELS.get(primary) ?? primary ?? '待选渠道';
+  return platformLabels.get(primary) ?? primary ?? '待选渠道';
 };
 const getParsedWordCount = (content = '') => {
   return String(content ?? '')
@@ -229,11 +230,13 @@ function MarkdownEditor() {
     copyStyle,
     storageMode,
     surface,
+    publishingPlatforms,
     notionToken,
     notionFilePages,
     notionDatabaseId,
     setTheme,
     setCopyStyle,
+    setPublishingPlatforms,
     setSurface,
     setNotionToken,
     setNotionDatabaseId,
@@ -274,6 +277,10 @@ function MarkdownEditor() {
     updateTabTitle,
     toggleEditorMode,
   } = useEditorStore();
+  const publishingPlatformLabelMap = useMemo(
+    () => buildPublishingPlatformLabelMap(publishingPlatforms),
+    [publishingPlatforms],
+  );
 
   const selectedFile = useSelectedFile();
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
@@ -362,9 +369,9 @@ function MarkdownEditor() {
     return publishingQueueItems.slice(0, 4).map((item) => ({
       ...item,
       checklistNote: truncateInlineText(item.excerpt || item.summary, 100),
-      channel: getPrimaryPlatformLabel(item.targetPlatforms),
+      channel: getPrimaryPlatformLabel(item.targetPlatforms, publishingPlatformLabelMap),
     }));
-  }, [publishingQueueItems]);
+  }, [publishingPlatformLabelMap, publishingQueueItems]);
   const creationBoardItems = useMemo(() => {
     const byId = new Map(allFiles.map((file) => [file.id, file]));
     const candidateIds = new Set();
@@ -696,6 +703,7 @@ function MarkdownEditor() {
       title: selectedFile?.name?.replace(/\.md$/i, '') ?? '',
       summary: selectedFile?.summary ?? '',
       content: markdown,
+      platformOptions: publishingPlatforms,
     };
 
     const context = buildAIActionContext({
@@ -714,7 +722,7 @@ function MarkdownEditor() {
         document: documentForAI,
       }),
     });
-  }, [markdown, selectedFile]);
+  }, [markdown, publishingPlatforms, selectedFile]);
 
   const handleCopyAIPrompt = useCallback(async () => {
     const prompt = aiActionState?.generatedPrompt ?? '';
@@ -1004,12 +1012,12 @@ function MarkdownEditor() {
 
     after.setFileKnowledgeMeta(nextFileId, {
       draftStatus: 'drafting',
-      targetPlatforms: DEFAULT_TARGET_PLATFORMS.slice(),
+      targetPlatforms: getDefaultTargetPlatforms(publishingPlatforms),
     });
     if (!localProjectSupported) {
       after.applyRename(nextFileId, buildUniqueName(after.workspace, '新稿件', '.md'));
     }
-  }, [handleAddFile, localProjectSupported, setSurface]);
+  }, [handleAddFile, localProjectSupported, publishingPlatforms, setSurface]);
 
   const handleCreateEntryWithStatus = useCallback(async (nextStatus) => {
     const beforeSelectedId = useEditorStore.getState().selectedId;
@@ -1020,7 +1028,7 @@ function MarkdownEditor() {
     if (!nextFile || nextFile.type !== 'file' || nextFileId === beforeSelectedId) return;
 
     const targetPlatforms = nextStatus === 'ready' || nextStatus === 'published'
-      ? DEFAULT_TARGET_PLATFORMS.slice()
+      ? getDefaultTargetPlatforms(publishingPlatforms)
       : [];
     after.setFileKnowledgeMeta(nextFileId, {
       draftStatus: nextStatus,
@@ -1038,7 +1046,7 @@ function MarkdownEditor() {
       };
       after.applyRename(nextFileId, buildUniqueName(after.workspace, nameMap[nextStatus] ?? '新稿件', '.md'));
     }
-  }, [handleAddFile, localProjectSupported]);
+  }, [handleAddFile, localProjectSupported, publishingPlatforms]);
 
   const handleDashboardViewSection = useCallback((sectionKey) => {
     if (sectionKey === 'planner') {
@@ -1670,11 +1678,13 @@ function MarkdownEditor() {
             selectedFileName={selectedFile?.name}
             theme={theme}
             copyStyle={copyStyle}
+            publishingPlatforms={publishingPlatforms}
             storageMode={visibleStorageMode}
             projectRootPath={visibleProjectRootPath}
             localProjectSupported={localProjectSupported}
             onThemeChange={setTheme}
             onCopyStyleChange={setCopyStyle}
+            onPublishingPlatformsChange={setPublishingPlatforms}
             onOpenLocalProject={handleOpenLocalProject}
             onImport={() => importInputRef.current?.click()}
             onExport={handleExport}
@@ -1729,6 +1739,7 @@ function MarkdownEditor() {
           <CreationBoardPanel
             items={creationBoardItems}
             statusOptions={CREATION_STATUS_OPTIONS}
+            platformOptions={publishingPlatforms}
             onOpenItem={handleBoardOpenItem}
             onMoveStatus={handleBoardMoveStatus}
             onCreate={handleCreateEntryWithStatus}
@@ -1736,6 +1747,7 @@ function MarkdownEditor() {
         ) : surface === 'publishing' ? (
           <PublishingQueuePanel
             items={publishingQueueItems}
+            platformOptions={publishingPlatforms}
             onOpenItem={handleBoardOpenItem}
             onSchedule={handlePublishingSchedule}
             onOpenSearch={handlePublishingOpenSearch}
@@ -1785,6 +1797,7 @@ function MarkdownEditor() {
             <DocHeader
               selectedFile={selectedFile}
               allFiles={allFiles}
+              platformOptions={publishingPlatforms}
               onOpenNotion={() => setSurface('notion')}
               notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}

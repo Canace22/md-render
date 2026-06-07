@@ -1,7 +1,6 @@
 import { collectFiles, sanitizeStringList } from './workspaceUtils.js';
 import {
   PUBLISHING_PLATFORM_OPTIONS,
-  PUBLISHING_PLATFORM_VALUES,
 } from '../utils/publishingPlatforms.js';
 
 export const CREATION_STATUSES = Object.freeze({
@@ -26,8 +25,6 @@ export const PLATFORM_OPTIONS = PUBLISHING_PLATFORM_OPTIONS;
 
 const FILE_TYPE = 'file';
 const DEFAULT_LIMIT = 5;
-const VALID_PLATFORM_VALUES = new Set(PUBLISHING_PLATFORM_VALUES);
-
 const STATUS_ALIAS_MAP = Object.freeze({
   idea: CREATION_STATUSES.IDEA,
   topic: CREATION_STATUSES.IDEA,
@@ -335,9 +332,7 @@ export const normalizePlatformList = (file) => {
 
   return values
     .map(normalizeToken)
-    .filter((value, index, array) => {
-      return VALID_PLATFORM_VALUES.has(value) && array.indexOf(value) === index;
-    });
+    .filter((value, index, array) => array.indexOf(value) === index);
 };
 
 export const isDraftDocument = (file) => {

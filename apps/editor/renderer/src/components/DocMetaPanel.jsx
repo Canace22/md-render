@@ -42,6 +42,15 @@ const normalizePlatforms = (file) => {
 const buildPlatformPatch = (current, value) =>
   current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
 
+const buildVisiblePlatformOptions = (platformOptions, currentPlatforms) => {
+  const baseOptions = Array.isArray(platformOptions) ? platformOptions : [];
+  const knownValues = new Set(baseOptions.map((option) => option.value));
+  const extraOptions = currentPlatforms
+    .filter((value) => !knownValues.has(value))
+    .map((value) => ({ value, label: value }));
+  return [...baseOptions, ...extraOptions];
+};
+
 const getCurrentStatus = (file) => file?.draftStatus ?? file?.status ?? 'drafting';
 
 const getStatusLabel = (options, value) =>
@@ -112,6 +121,10 @@ export default function DocMetaPanel({
 
   const filesById = useMemo(() => new Map((allFiles ?? []).map((f) => [f.id, f])), [allFiles]);
   const currentPlatforms = useMemo(() => normalizePlatforms(selectedFile), [selectedFile]);
+  const visiblePlatformOptions = useMemo(
+    () => buildVisiblePlatformOptions(platformOptions, currentPlatforms),
+    [platformOptions, currentPlatforms],
+  );
   const sourceMaterials = useMemo(() => normalizeSourceMaterials(selectedFile, filesById), [selectedFile, filesById]);
   const relatedDocs = (selectedFile?.relatedIds ?? []).map((id) => filesById.get(id)).filter(Boolean);
   const availableRelatedDocs = (allFiles ?? []).filter((f) => f.id !== selectedFile?.id && !(selectedFile?.relatedIds ?? []).includes(f.id));
@@ -274,7 +287,7 @@ export default function DocMetaPanel({
         <div className="doc-meta-field doc-meta-field--grow">
           <span className="doc-meta-label">平台</span>
           <div className="doc-meta-platform-list" role="group" aria-label="选择目标平台">
-            {platformOptions.map((o) => {
+            {visiblePlatformOptions.map((o) => {
               const checked = currentPlatforms.includes(o.value);
               return (
                 <label key={o.value} className={`doc-meta-platform-chip${checked ? ' is-selected' : ''}`}>
