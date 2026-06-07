@@ -1,6 +1,12 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import {
+  applyKnowledgeMetadataToFrontmatter,
+  extractKnowledgeMetadataFromFrontmatter,
+  parseMarkdownFrontmatter,
+  serializeMarkdownFrontmatter,
+} from '../shared/frontmatter.js';
 
 export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
@@ -164,6 +170,26 @@ async function readLocalProjectMetadata(filePath) {
 async function writeLocalProjectMetadata(filePath, metadata) {
   const sidecarPath = buildMetadataSidecarPath(filePath);
   const normalized = normalizeLocalProjectMetadata(metadata);
+  const fileName = path.basename(filePath);
+
+  if (isMarkdownFile(fileName)) {
+    try {
+      const rawContent = await fs.readFile(filePath, 'utf8');
+      const parsed = parseMarkdownFrontmatter(rawContent);
+      if (parsed.hasFrontmatter) {
+        const nextFrontmatter = applyKnowledgeMetadataToFrontmatter(parsed.frontmatter, normalized);
+        await fs.writeFile(
+          filePath,
+          serializeMarkdownFrontmatter(nextFrontmatter, parsed.content),
+          'utf8',
+        );
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        console.warn('[localProject] 同步 frontmatter 失败:', filePath, error);
+      }
+    }
+  }
 
   if (!hasMeaningfulMetadata(normalized)) {
     await deleteLocalProjectMetadataFiles(filePath);
@@ -224,7 +250,10 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
 
   // Markdown / 纯文本直接读取内容；其他格式只记录元信息，由 Renderer 按需转换
   if (isMarkdownFile(name)) {
-    const content = await fs.readFile(currentPath, 'utf8');
+    const rawContent = await fs.readFile(currentPath, 'utf8');
+    const parsed = parseMarkdownFrontmatter(rawContent);
+    const frontmatterMetadata = extractKnowledgeMetadataFromFrontmatter(parsed.frontmatter);
+    const content = parsed.hasFrontmatter ? parsed.content : rawContent;
     return {
       id: `file:${relativePath}`,
       type: 'file',
@@ -233,6 +262,7 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
       content,
       diskContentSnapshot: content,
       updatedAt: stat.mtimeMs,
+      ...frontmatterMetadata,
       ...(metadata ?? {}),
     };
   }
@@ -280,6 +310,30 @@ export function resolveProjectFilePath(projectRootPath, relativePath) {
 export async function saveLocalProjectFile(projectRootPath, relativePath, content) {
   const filePath = resolveProjectFilePath(projectRootPath, relativePath);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const fileName = path.basename(filePath);
+
+  if (!isMarkdownFile(fileName)) {
+    await fs.writeFile(filePath, content ?? '', 'utf8');
+    return;
+  }
+
+  try {
+    const rawContent = await fs.readFile(filePath, 'utf8');
+    const parsed = parseMarkdownFrontmatter(rawContent);
+    if (parsed.hasFrontmatter) {
+      await fs.writeFile(
+        filePath,
+        serializeMarkdownFrontmatter(parsed.frontmatter, content ?? ''),
+        'utf8',
+      );
+      return;
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
   await fs.writeFile(filePath, content ?? '', 'utf8');
 }
 

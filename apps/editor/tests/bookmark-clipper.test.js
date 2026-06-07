@@ -16,19 +16,27 @@ describe('sanitizeBookmarkFileStem', () => {
 });
 
 describe('buildBookmarkClipMarkdown', () => {
-  it('includes source metadata and body markdown', () => {
+  it('uses obsidian clipping frontmatter and keeps the body markdown', () => {
     const markdown = buildBookmarkClipMarkdown({
       title: 'MD Render',
       sourceUrl: 'https://example.com/post',
       author: 'Canace',
       publishedAt: '2026-06-07',
+      createdAt: '2026-06-07',
       description: '一段摘要',
+      tags: ['frontend'],
       bodyMarkdown: '## 正文\n\n内容段落',
     });
 
-    expect(markdown).toContain('# MD Render');
-    expect(markdown).toContain('> 来源：[https://example.com/post](https://example.com/post)');
-    expect(markdown).toContain('> 作者：Canace');
+    expect(markdown).toContain('---');
+    expect(markdown).toContain('title: "MD Render"');
+    expect(markdown).toContain('source: https://example.com/post');
+    expect(markdown).toContain('author: Canace');
+    expect(markdown).toContain('published: 2026-06-07');
+    expect(markdown).toContain('created: 2026-06-07');
+    expect(markdown).toContain('tags:');
+    expect(markdown).toContain('  - clippings');
+    expect(markdown).toContain('  - frontend');
     expect(markdown).toContain('## 正文');
   });
 });
@@ -42,7 +50,7 @@ describe('buildFallbackBookmarkClip', () => {
     }, '正文抓取失败');
 
     expect(clip.url).toBe('https://react.dev');
-    expect(clip.tags).toEqual(['frontend']);
+    expect(clip.tags).toEqual(['clippings', 'frontend']);
     expect(clip.markdown).toContain('正文抓取失败');
   });
 });

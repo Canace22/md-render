@@ -1,5 +1,10 @@
 import { htmlToMarkdown } from './fileConverters.js';
 import { normalizeMarkdown } from './markdownUtils.js';
+import {
+  buildClippingTags,
+  buildObsidianClippingMarkdown,
+  formatObsidianDate,
+} from '../../../shared/frontmatter.js';
 
 const CONTENT_SELECTORS = [
   'article',
@@ -43,10 +48,6 @@ const truncateText = (value = '', maxLength = MAX_SUMMARY_LENGTH) => {
   if (!text) return '';
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1).trimEnd()}…`;
-};
-
-const dedupeStrings = (values) => {
-  return Array.from(new Set((values ?? []).map((item) => collapseWhitespace(item)).filter(Boolean)));
 };
 
 const getMetaContent = (doc, selectors = []) => {
@@ -95,22 +96,23 @@ export const buildBookmarkClipMarkdown = ({
   sourceUrl,
   author = '',
   publishedAt = '',
+  createdAt = '',
   description = '',
+  tags = [],
   bodyMarkdown = '',
   error = '',
 }) => {
-  const lines = [`# ${collapseWhitespace(title) || '未命名书签'}`, ''];
-
-  if (sourceUrl) lines.push(`> 来源：[${sourceUrl}](${sourceUrl})`);
-  if (author) lines.push(`> 作者：${author}`);
-  if (publishedAt) lines.push(`> 发布时间：${publishedAt}`);
-  if (description) lines.push(`> 摘要：${description}`);
-  if (error) lines.push(`> 备注：${error}`);
-
-  lines.push('');
-  lines.push(bodyMarkdown || '> 未抓取到可预览正文，已保留原链接。');
-
-  return normalizeMarkdown(lines.join('\n')).replace(/\n{3,}/g, '\n\n').trim();
+  return buildObsidianClippingMarkdown({
+    title: collapseWhitespace(title) || '未命名书签',
+    sourceUrl,
+    author,
+    publishedAt: formatObsidianDate(publishedAt),
+    createdAt: formatObsidianDate(createdAt, formatObsidianDate(Date.now())),
+    description,
+    tags: buildClippingTags(tags),
+    bodyMarkdown: normalizeMarkdown(bodyMarkdown).replace(/\n{3,}/g, '\n\n').trim(),
+    error,
+  });
 };
 
 export const buildFallbackBookmarkClip = (item = {}, error = '') => {
@@ -120,7 +122,9 @@ export const buildFallbackBookmarkClip = (item = {}, error = '') => {
   const markdown = buildBookmarkClipMarkdown({
     title,
     sourceUrl,
+    createdAt: Date.now(),
     description,
+    tags: item.tags,
     error: error || '正文抓取失败，已保留原链接。',
   });
 
@@ -128,7 +132,7 @@ export const buildFallbackBookmarkClip = (item = {}, error = '') => {
     title,
     url: sourceUrl,
     summary: description,
-    tags: dedupeStrings(item.tags),
+    tags: buildClippingTags(item.tags),
     markdown,
   };
 };
@@ -181,7 +185,9 @@ export async function buildBookmarkClipDocument(item = {}, snapshot = {}) {
     sourceUrl,
     author,
     publishedAt,
+    createdAt: Date.now(),
     description: summary,
+    tags: item.tags,
     bodyMarkdown,
   });
 
@@ -189,7 +195,7 @@ export async function buildBookmarkClipDocument(item = {}, snapshot = {}) {
     title,
     url: sourceUrl,
     summary,
-    tags: dedupeStrings(item.tags),
+    tags: buildClippingTags(item.tags),
     markdown,
   };
 }
