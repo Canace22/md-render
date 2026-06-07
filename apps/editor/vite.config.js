@@ -38,7 +38,7 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               // better-sqlite3 是原生模块，不能被 bundled，必须作为外部依赖
-              external: ['better-sqlite3'],
+              external: ['better-sqlite3', 'electron-updater'],
             },
           },
         },

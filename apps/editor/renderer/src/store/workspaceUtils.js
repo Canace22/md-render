@@ -417,11 +417,16 @@ export function findProjectsFolder(localProjectRoot) {
   ) ?? null;
 }
 
-export function stripLocalProjectMounts(workspace) {
+export function stripLocalProjectMounts(workspace, projectRootPath) {
   if (!workspace?.children) return workspace;
   return {
     ...workspace,
-    children: workspace.children.filter((child) => !child.localProjectRoot),
+    children: workspace.children.filter((child) => {
+      if (!child.localProjectRoot) return true;
+      // 传了 projectRootPath 时只移除匹配的挂载，保留其他用户导入的目录
+      if (projectRootPath) return child.projectRootPath !== projectRootPath;
+      return false;
+    }),
   };
 }
 

@@ -42,6 +42,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVersionContent: (versionId) => ipcRenderer.invoke('db:get-version-content', { versionId }),
   },
 
+  // 自动更新 API
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    download: () => ipcRenderer.invoke('updater:download'),
+    install: () => ipcRenderer.invoke('updater:install'),
+    onStatus: (callback) => {
+      const sub = (_event, data) => callback(data);
+      ipcRenderer.on('updater-status', sub);
+      return () => ipcRenderer.removeListener('updater-status', sub);
+    },
+  },
+
   // 通用 IPC：渲染进程 → 主进程
   invoke: (channel, ...args) => {
     const allowedChannels = ['get-app-version'];
@@ -53,7 +65,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 通用 IPC：主进程 → 渲染进程（监听）
   on: (channel, callback) => {
-    const allowedChannels = ['update-available'];
+    const allowedChannels = ['update-available', 'updater-status'];
     if (allowedChannels.includes(channel)) {
       const sub = (_event, ...args) => callback(...args);
       ipcRenderer.on(channel, sub);

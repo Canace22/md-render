@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, protocol } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
@@ -474,6 +475,75 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// ---- 自动更新 ----
+function setupAutoUpdater() {
+  // 不自动下载，先通知用户
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  const send = (channel, data) => {
+    mainWindow?.webContents?.send(channel, data);
+  };
+
+  autoUpdater.on('checking-for-update', () => {
+    send('updater-status', { status: 'checking' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    send('updater-status', {
+      status: 'available',
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+      releaseDate: info.releaseDate,
+    });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    send('updater-status', { status: 'up-to-date' });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    send('updater-status', {
+      status: 'downloading',
+      percent: Math.round(progress.percent),
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total,
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    send('updater-status', {
+      status: 'downloaded',
+      version: info.version,
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] error:', err.message);
+    send('updater-status', { status: 'error', message: err.message });
+  });
+}
+
+// 更新相关 IPC
+ipcMain.handle('updater:check', () => {
+  autoUpdater.checkForUpdates().catch((err) =>
+    console.error('[updater] check failed:', err.message)
+  );
+});
+
+ipcMain.handle('updater:download', () => {
+  autoUpdater.downloadUpdate().catch((err) =>
+    console.error('[updater] download failed:', err.message)
+  );
+});
+
+ipcMain.handle('updater:install', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 // ---- preload 热重载 ----
 process.on('message', (msg) => {
   if (msg === 'electron-vite&type=hot-reload') {
@@ -515,6 +585,14 @@ app.whenReady().then(async () => {
   createMenu();
   createTray();
   await createWindow();
+
+  // 生产环境下启动自动更新检查
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    setupAutoUpdater();
+    // 启动后 3 秒检查一次，之后每 30 分钟检查一次
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 3000);
+    setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 30 * 60 * 1000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

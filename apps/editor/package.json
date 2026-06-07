@@ -65,12 +65,25 @@
       "node_modules/bindings/**/*",
       "node_modules/file-uri-to-path/**/*"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Canace22",
+        "repo": "md-render"
+      }
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "defaultArch": "universal",
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "universal"
           ]

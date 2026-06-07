@@ -778,7 +778,7 @@ export const useEditorStore = create(
         if (!projectRootPath) return;
 
         const { workspace } = get();
-        const cleaned = stripLocalProjectMounts(workspace);
+        const cleaned = stripLocalProjectMounts(workspace, projectRootPath);
         const nextWorkspace = mergeProjectsChildren(cleaned, projectsChildren ?? []);
 
         persistWorkspace(nextWorkspace);

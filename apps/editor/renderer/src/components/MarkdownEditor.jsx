@@ -25,6 +25,7 @@ import TocPanel from './TocPanel.jsx';
 import TabBar from './TabBar.jsx';
 import Breadcrumb from './Breadcrumb.jsx';
 import StatusBar from './StatusBar.jsx';
+import UpdateNotifier from './UpdateNotifier.jsx';
 import {
   createEmptyDocument,
   extractCodeBlockFromClipboardHtml,
@@ -1476,6 +1477,7 @@ function MarkdownEditor() {
         localProjectSupported={localProjectSupported}
       />
       <div className="right-area immersive-main">
+        <UpdateNotifier />
         {/* Obsidian 风格标签页栏 */}
         <TabBar
           tabs={displayTabs}
