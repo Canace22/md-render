@@ -6,6 +6,7 @@ export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
+const LOCAL_PROJECT_META_DIR_NAME = '.md-render';
 const LOCAL_PROJECT_META_SIDECAR_SUFFIX = '.md-render-meta.json';
 const LOCAL_PROJECT_META_VERSION = 1;
 const DEFAULT_NODE_TYPE = 'document';
@@ -59,10 +60,47 @@ const isLocalProjectMetadataSidecar = (name) => {
   return name.startsWith('.') && name.endsWith(LOCAL_PROJECT_META_SIDECAR_SUFFIX);
 };
 
-const buildMetadataSidecarPath = (filePath) => {
+const buildLegacyMetadataSidecarPath = (filePath) => {
   const dirPath = path.dirname(filePath);
   const baseName = path.basename(filePath);
   return path.join(dirPath, `.${baseName}${LOCAL_PROJECT_META_SIDECAR_SUFFIX}`);
+};
+
+const buildMetadataDirectoryPath = (filePath) => {
+  return path.join(path.dirname(filePath), LOCAL_PROJECT_META_DIR_NAME);
+};
+
+const buildMetadataSidecarPath = (filePath) => {
+  const baseName = path.basename(filePath);
+  return path.join(buildMetadataDirectoryPath(filePath), `${baseName}${LOCAL_PROJECT_META_SIDECAR_SUFFIX}`);
+};
+
+const listMetadataCandidatePaths = (filePath) => {
+  return [
+    buildMetadataSidecarPath(filePath),
+    buildLegacyMetadataSidecarPath(filePath),
+  ];
+};
+
+const removeLocalProjectMetadataDirIfEmpty = async (filePath) => {
+  const metadataDirPath = buildMetadataDirectoryPath(filePath);
+  try {
+    const entries = await fs.readdir(metadataDirPath);
+    if (entries.length === 0) {
+      await fs.rmdir(metadataDirPath);
+    }
+  } catch (error) {
+    if (!['ENOENT', 'ENOTEMPTY'].includes(error?.code)) {
+      throw error;
+    }
+  }
+};
+
+const deleteLocalProjectMetadataFiles = async (filePath) => {
+  await Promise.all(
+    listMetadataCandidatePaths(filePath).map((candidatePath) => fs.rm(candidatePath, { force: true })),
+  );
+  await removeLocalProjectMetadataDirIfEmpty(filePath);
 };
 
 const sanitizeStringList = (values) => {
@@ -104,20 +142,23 @@ const hasMeaningfulMetadata = (metadata) => {
 };
 
 async function readLocalProjectMetadata(filePath) {
-  const sidecarPath = buildMetadataSidecarPath(filePath);
-  try {
-    const raw = await fs.readFile(sidecarPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    const payload = parsed?.metadata && typeof parsed.metadata === 'object'
-      ? parsed.metadata
-      : parsed;
-    return normalizeLocalProjectMetadata(payload);
-  } catch (error) {
-    if (error?.code !== 'ENOENT') {
+  for (const sidecarPath of listMetadataCandidatePaths(filePath)) {
+    try {
+      const raw = await fs.readFile(sidecarPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const payload = parsed?.metadata && typeof parsed.metadata === 'object'
+        ? parsed.metadata
+        : parsed;
+      return normalizeLocalProjectMetadata(payload);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        continue;
+      }
       console.warn('[localProject] 读取元数据 sidecar 失败:', sidecarPath, error);
+      return null;
     }
-    return null;
   }
+  return null;
 }
 
 async function writeLocalProjectMetadata(filePath, metadata) {
@@ -125,7 +166,7 @@ async function writeLocalProjectMetadata(filePath, metadata) {
   const normalized = normalizeLocalProjectMetadata(metadata);
 
   if (!hasMeaningfulMetadata(normalized)) {
-    await fs.rm(sidecarPath, { force: true });
+    await deleteLocalProjectMetadataFiles(filePath);
     return { ok: true, deleted: true };
   }
 
@@ -134,6 +175,7 @@ async function writeLocalProjectMetadata(filePath, metadata) {
     version: LOCAL_PROJECT_META_VERSION,
     metadata: normalized,
   }, null, 2)}\n`, 'utf8');
+  await fs.rm(buildLegacyMetadataSidecarPath(filePath), { force: true });
   return { ok: true, deleted: false };
 }
 
@@ -283,7 +325,7 @@ export async function deleteLocalProjectEntry(projectRootPath, relativePath) {
   try {
     const stat = await fs.stat(targetPath);
     if (stat.isFile()) {
-      await fs.rm(buildMetadataSidecarPath(targetPath), { force: true });
+      await deleteLocalProjectMetadataFiles(targetPath);
     }
   } catch {
     // ignore missing metadata or target stats
@@ -294,8 +336,6 @@ export async function deleteLocalProjectEntry(projectRootPath, relativePath) {
 export async function renameLocalProjectEntry(projectRootPath, relativePath, newRelativePath) {
   const oldPath = resolveProjectFilePath(projectRootPath, relativePath);
   const newPath = resolveProjectFilePath(projectRootPath, newRelativePath);
-  const oldSidecarPath = buildMetadataSidecarPath(oldPath);
-  const newSidecarPath = buildMetadataSidecarPath(newPath);
   let isFile = false;
   try {
     const stat = await fs.stat(oldPath);
@@ -305,13 +345,11 @@ export async function renameLocalProjectEntry(projectRootPath, relativePath, new
   }
   await fs.rename(oldPath, newPath);
   if (isFile) {
-    try {
-      await fs.rename(oldSidecarPath, newSidecarPath);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
+    const metadata = await readLocalProjectMetadata(oldPath);
+    if (metadata) {
+      await writeLocalProjectMetadata(newPath, metadata);
     }
+    await deleteLocalProjectMetadataFiles(oldPath);
   }
   const stat = await fs.stat(newPath);
   return {
