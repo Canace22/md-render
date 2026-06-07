@@ -88,6 +88,10 @@ async function main() {
     builderArgs.push('--dir');
   }
 
+  if (!process.env.GH_TOKEN) {
+    builderArgs.push('--publish', 'never');
+  }
+
   await runCommand(process.execPath, builderArgs, {
     cwd: appDir,
     env: {
