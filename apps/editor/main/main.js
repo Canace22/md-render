@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, protocol } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg;
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
