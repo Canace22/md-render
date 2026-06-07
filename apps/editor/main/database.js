@@ -174,18 +174,50 @@ function flattenWorkspace(node, parentId = null, result = []) {
   return result;
 }
 
+function buildNotInClause(ids, columnName) {
+  if (!ids.length) return { sql: '', params: [] };
+  const placeholders = ids.map(() => '?').join(', ');
+  return {
+    sql: `${columnName} NOT IN (${placeholders})`,
+    params: ids,
+  };
+}
+
 export function syncDocuments(workspace) {
   const docs = flattenWorkspace(workspace);
-  if (docs.length === 0) return;
-
   const upsert = getDb().prepare(`
     INSERT OR REPLACE INTO documents
       (id, parent_id, type, name, content, node_type, summary, aliases, tags, related_ids, created_at, updated_at, disk_path, url)
     VALUES
       (@id, @parent_id, @type, @name, @content, @node_type, @summary, @aliases, @tags, @related_ids, @created_at, @updated_at, @disk_path, @url)
   `);
+  const deleteAllLinks = getDb().prepare('DELETE FROM links');
+  const deleteAllVersions = getDb().prepare('DELETE FROM versions');
+  const deleteAllDocuments = getDb().prepare('DELETE FROM documents');
+
   const syncAll = getDb().transaction((rows) => {
     for (const row of rows) upsert.run(row);
+
+    const docIds = rows.map((row) => row.id).filter(Boolean);
+    if (!docIds.length) {
+      deleteAllLinks.run();
+      deleteAllVersions.run();
+      deleteAllDocuments.run();
+      return;
+    }
+
+    const staleDocumentClause = buildNotInClause(docIds, 'id');
+    const staleVersionClause = buildNotInClause(docIds, 'document_id');
+    const staleLinkSourceClause = buildNotInClause(docIds, 'source_id');
+    const staleLinkTargetClause = buildNotInClause(docIds, 'target_id');
+
+    getDb().prepare(
+      `DELETE FROM links WHERE ${staleLinkSourceClause.sql} OR ${staleLinkTargetClause.sql}`,
+    ).run(...staleLinkSourceClause.params, ...staleLinkTargetClause.params);
+    getDb().prepare(`DELETE FROM versions WHERE ${staleVersionClause.sql}`)
+      .run(...staleVersionClause.params);
+    getDb().prepare(`DELETE FROM documents WHERE ${staleDocumentClause.sql}`)
+      .run(...staleDocumentClause.params);
   });
   syncAll(docs);
 }
@@ -250,6 +282,16 @@ export function getBacklinks(docId) {
     WHERE l.target_id = ?
     ORDER BY d.name
   `).all(docId);
+}
+
+function parseIdList(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }
 
 // ── version history ───────────────────────────────────────────────────────────
@@ -329,10 +371,33 @@ export function searchDocuments(query) {
 // ── graph data ────────────────────────────────────────────────────────────────
 
 export function getGraphData() {
-  const nodes = getDb().prepare(
-    "SELECT id, name, type, node_type FROM documents WHERE type = 'file' LIMIT 1000",
+  const rawNodes = getDb().prepare(
+    "SELECT id, name, type, node_type, related_ids FROM documents WHERE type = 'file' LIMIT 1000",
   ).all();
-  const edges = getDb().prepare('SELECT source_id, target_id FROM links').all();
+  const nodeIds = new Set(rawNodes.map((node) => node.id));
+  const nodes = rawNodes.map(({ related_ids, ...node }) => node);
+  const seenEdges = new Set();
+  const edges = [];
+
+  const pushEdge = (sourceId, targetId) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) return;
+    const edgeKey = `${sourceId}::${targetId}`;
+    if (seenEdges.has(edgeKey)) return;
+    seenEdges.add(edgeKey);
+    edges.push({ source_id: sourceId, target_id: targetId });
+  };
+
+  for (const node of rawNodes) {
+    for (const targetId of parseIdList(node.related_ids)) {
+      pushEdge(node.id, targetId);
+    }
+  }
+
+  const linkRows = getDb().prepare('SELECT source_id, target_id FROM links').all();
+  for (const edge of linkRows) {
+    pushEdge(edge.source_id, edge.target_id);
+  }
   return { nodes, edges };
 }
 

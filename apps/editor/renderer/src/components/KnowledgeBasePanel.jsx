@@ -77,6 +77,52 @@ const getSearchPreview = (file, query) => {
 const hasElectronDb = () =>
   typeof window !== 'undefined' && typeof window.electronAPI?.db?.search === 'function';
 
+const buildGraphEdgeKey = (sourceId, targetId) => `${sourceId}::${targetId}`;
+
+const buildWorkspaceGraphData = (files) => {
+  const safeFiles = Array.isArray(files) ? files : [];
+  const nodes = safeFiles.map((file) => ({
+    id: file.id,
+    name: file.name,
+    node_type: file.nodeType ?? 'document',
+  }));
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const seenEdges = new Set();
+  const edges = [];
+
+  for (const file of safeFiles) {
+    for (const targetId of (file.relatedIds ?? [])) {
+      if (!nodeIds.has(targetId) || targetId === file.id) continue;
+      const edgeKey = buildGraphEdgeKey(file.id, targetId);
+      if (seenEdges.has(edgeKey)) continue;
+      seenEdges.add(edgeKey);
+      edges.push({ source_id: file.id, target_id: targetId });
+    }
+  }
+
+  return { nodes, edges };
+};
+
+const mergeGraphData = (baseGraphData, extraEdges) => {
+  const baseNodes = baseGraphData?.nodes ?? [];
+  const nodeIds = new Set(baseNodes.map((node) => node.id));
+  const seenEdges = new Set((baseGraphData?.edges ?? []).map((edge) => buildGraphEdgeKey(edge.source_id, edge.target_id)));
+  const mergedEdges = [...(baseGraphData?.edges ?? [])];
+
+  for (const edge of (extraEdges ?? [])) {
+    const sourceId = edge?.source_id;
+    const targetId = edge?.target_id;
+    if (!sourceId || !targetId) continue;
+    if (!nodeIds.has(sourceId) || !nodeIds.has(targetId) || sourceId === targetId) continue;
+    const edgeKey = buildGraphEdgeKey(sourceId, targetId);
+    if (seenEdges.has(edgeKey)) continue;
+    seenEdges.add(edgeKey);
+    mergedEdges.push({ source_id: sourceId, target_id: targetId });
+  }
+
+  return { nodes: baseNodes, edges: mergedEdges };
+};
+
 // Escape HTML but restore <mark> tags for FTS highlighting
 const sanitizeExcerpt = (text) => {
   if (!text) return '';
@@ -154,25 +200,26 @@ export default function KnowledgeBasePanel({
   useEffect(() => {
     if (mode !== 'graph') return;
 
+    const workspaceGraphData = buildWorkspaceGraphData(files);
+    setGraphData(workspaceGraphData);
+
     if (hasElectronDb()) {
+      let cancelled = false;
       window.electronAPI.db.getGraph()
-        .then((res) => setGraphData(res?.data ?? { nodes: [], edges: [] }))
-        .catch(() => setGraphData({ nodes: [], edges: [] }));
+        .then((res) => {
+          if (cancelled) return;
+          setGraphData(mergeGraphData(workspaceGraphData, res?.data?.edges ?? []));
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setGraphData(workspaceGraphData);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     } else {
-      // Build from workspace relatedIds as edges fallback
-      const allFiles = files;
-      const nodes = allFiles.map((f) => ({
-        id: f.id,
-        name: f.name,
-        node_type: f.nodeType ?? 'document',
-      }));
-      const edges = [];
-      for (const f of allFiles) {
-        for (const targetId of (f.relatedIds ?? [])) {
-          edges.push({ source_id: f.id, target_id: targetId });
-        }
-      }
-      setGraphData({ nodes, edges });
+      setGraphData(workspaceGraphData);
     }
   }, [mode, files]);
 
