@@ -907,7 +907,310 @@ a.sidebar-rail-btn:hover {
     font-size: 12px;
 }
 
-/* ── backlink chip ──────────────────────────────────────────────────────────── */
+/* ── unified doc-meta panel ────────────────────────────────────────────────── */
+.doc-meta-panel {
+    margin: 0 var(--space-l, 24px) 12px;
+    padding: 14px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+/* rows */
+.doc-meta-row {
+    display: flex;
+    gap: 10px;
+}
+
+.doc-meta-row--publish {
+    align-items: flex-end;
+}
+
+.doc-meta-divider {
+    height: 1px;
+    background: rgba(148, 163, 184, 0.14);
+    margin: 6px 0;
+}
+
+/* fields */
+.doc-meta-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    margin-bottom: 8px;
+}
+
+.doc-meta-field:last-child {
+    margin-bottom: 0;
+}
+
+.doc-meta-field--half {
+    flex: 1;
+    min-width: 0;
+}
+
+.doc-meta-field--grow {
+    flex: 1;
+    min-width: 0;
+}
+
+.doc-meta-field--time {
+    flex: 0 0 140px;
+}
+
+.doc-meta-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.doc-meta-label-icon {
+    flex-shrink: 0;
+}
+
+.doc-meta-select,
+.doc-meta-input,
+.doc-meta-textarea {
+    width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    background: rgba(248, 250, 252, 0.86);
+    color: var(--color-text-primary);
+    outline: none;
+    font-size: 13px;
+}
+
+.doc-meta-select,
+.doc-meta-input {
+    min-height: 32px;
+    padding: 0 8px;
+}
+
+.doc-meta-textarea {
+    min-height: 48px;
+    padding: 6px 8px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+/* platforms */
+.doc-meta-platform-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.doc-meta-platform-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.76);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.doc-meta-platform-chip.is-selected {
+    border-color: rgba(37, 99, 235, 0.24);
+    background: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+}
+
+.doc-meta-platform-input {
+    margin: 0;
+}
+
+/* chips */
+.doc-meta-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.doc-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+}
+
+.doc-meta-chip--alias {
+    background: rgba(79, 70, 229, 0.1);
+    color: var(--color-text-active);
+}
+
+.doc-meta-chip--linked {
+    background: rgba(37, 99, 235, 0.1);
+    color: #1d4ed8;
+}
+
+.doc-meta-chip--external {
+    background: rgba(244, 114, 182, 0.08);
+    color: var(--color-text-primary);
+}
+
+.doc-meta-chip--plain {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(14, 165, 233, 0.08);
+    color: var(--color-text-primary);
+}
+
+.doc-meta-chip--backlink {
+    background: none;
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.doc-meta-chip--backlink:hover {
+    background: var(--color-surface-hover);
+}
+
+.doc-meta-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.doc-meta-chip button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+}
+
+.doc-meta-chip-input {
+    min-width: 72px;
+    max-width: 140px;
+    padding: 3px 8px;
+    border: 1px dashed rgba(148, 163, 184, 0.3);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.76);
+    color: var(--color-text-primary);
+    font-size: 11px;
+    outline: none;
+}
+
+/* related doc controls */
+.doc-meta-related-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.doc-meta-related-controls select {
+    flex: 1;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0 8px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    background: rgba(248, 250, 252, 0.86);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    outline: none;
+}
+
+.doc-meta-related-controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    color: #ffffff;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.doc-meta-related-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* section head with action button */
+.doc-meta-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.doc-meta-action {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-active);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+/* version history */
+.doc-meta-versions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.doc-meta-version-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 6px;
+    border-radius: 5px;
+    background: var(--color-surface-subtle, rgba(0,0,0,.03));
+    font-size: 11px;
+}
+
+.doc-meta-version-date {
+    color: var(--color-text-primary);
+}
+
+.doc-meta-version-size {
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    margin-right: auto;
+}
+
+.doc-meta-version-restore {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.doc-meta-version-restore:hover:not(:disabled) {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.doc-meta-version-restore:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── backlink chip (legacy) ────────────────────────────────────────────────── */
 .knowledge-chip--backlink {
     background: none;
     border: 1px solid var(--color-border);
@@ -4287,6 +4590,42 @@ body.theme-dark .knowledge-hero-stats,
 body.theme-dark .knowledge-card,
 body.theme-dark .knowledge-section,
 body.theme-dark .knowledge-mode-header,
+body.theme-dark .doc-meta-panel {
+    background: rgba(15, 23, 42, 0.72);
+    border-color: rgba(71, 85, 105, 0.42);
+    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.32);
+}
+
+body.theme-dark .doc-meta-divider {
+    background: rgba(71, 85, 105, 0.32);
+}
+
+body.theme-dark .doc-meta-select,
+body.theme-dark .doc-meta-input,
+body.theme-dark .doc-meta-textarea,
+body.theme-dark .doc-meta-chip-input,
+body.theme-dark .doc-meta-related-controls select,
+body.theme-dark .doc-meta-version-row {
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(71, 85, 105, 0.42);
+}
+
+body.theme-dark .doc-meta-platform-chip {
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(71, 85, 105, 0.42);
+}
+
+body.theme-dark .doc-meta-platform-chip.is-selected,
+body.theme-dark .doc-meta-chip--linked {
+    color: #93c5fd;
+}
+
+body.theme-dark .doc-meta-chip--backlink,
+body.theme-dark .doc-meta-version-restore {
+    border-color: rgba(71, 85, 105, 0.42);
+    color: var(--color-text-secondary);
+}
+
 body.theme-dark .knowledge-meta-panel {
     background: rgba(15, 23, 42, 0.72);
     border-color: rgba(71, 85, 105, 0.42);
