@@ -25,6 +25,7 @@ import {
   Tag,
   Pin,
   PinOff,
+  RefreshCw,
   ChevronDown,
 } from 'lucide-react';
 import {
@@ -85,6 +86,7 @@ const TreeNode = ({
   depth,
   allowStructureActions,
   onRemoveLocalProject,
+  onManualSyncLocalProject,
   onAddFile,
   onAddFolder,
   onRename,
@@ -110,6 +112,7 @@ const TreeNode = ({
   const channelLabel = getFolderChannelLabel(node);
   const showStructureActions = allowStructureActions && !isLocalProjectRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
+  const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
   const [folderOpen, setFolderOpen] = useState(() => {
     return isFolder && depth < DEFAULT_EXPANDED_FOLDER_DEPTH;
@@ -154,7 +157,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showStructureActions && !showRemoveProject && !showRevealInFileManager) return;
+    if (!showStructureActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -275,7 +278,7 @@ const TreeNode = ({
               <button type="button" onClick={runAndClose(() => onRevealLocalProjectEntry(node.id))}>
                 <FolderOpen size={14} strokeWidth={1.5} /> 在{FILE_MANAGER_LABEL}中查看
               </button>
-              {(showStructureActions || showRemoveProject) && <div className="tree-context-menu-divider" />}
+              {(showStructureActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
             </>
           )}
           {showStructureActions && isFolder && (
@@ -305,6 +308,14 @@ const TreeNode = ({
               </button>
             </>
           )}
+          {showManualSyncProject && (
+            <>
+              <button type="button" onClick={runAndClose(() => onManualSyncLocalProject(node.projectRootPath))}>
+                <RefreshCw size={14} strokeWidth={1.5} /> 手动同步
+              </button>
+              {showRemoveProject && <div className="tree-context-menu-divider" />}
+            </>
+          )}
           {showRemoveProject && (
             <button type="button" className="danger" onClick={runAndClose(() => onRemoveLocalProject(node.id))}>
               <Trash2 size={14} strokeWidth={1.5} /> 移除项目
@@ -324,6 +335,7 @@ const TreeNode = ({
               depth={depth + 1}
               allowStructureActions={allowStructureActions}
               onRemoveLocalProject={onRemoveLocalProject}
+              onManualSyncLocalProject={onManualSyncLocalProject}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
               onRename={onRename}
@@ -378,6 +390,7 @@ const WorkspaceSidebar = ({
   onSelect,
   onOpenLocalProject,
   onRemoveLocalProject,
+  onManualSyncLocalProject,
   onAddFile,
   onAddFolder,
   onRename,
@@ -792,6 +805,7 @@ const WorkspaceSidebar = ({
                   onRevealLocalProjectEntry,
                   allowStructureActions,
                   onRemoveLocalProject,
+                  onManualSyncLocalProject,
                   ...renameHandlers,
                 },
                 contextMenu,

@@ -279,9 +279,7 @@ function MarkdownEditor() {
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
-  const manualSyncProjectRootPath = selectedFolder?.localProjectRoot
-    ? selectedFolder.projectRootPath ?? ''
-    : '';
+  const manualSyncProjectRootPath = selectedFolder?.projectRootPath ?? '';
   const selectedInLocalProject = Boolean(selectedNode?.projectRootPath);
   const selectedUsesBookmarkCard = selectedFile?.nodeType === 'bookmark'
     && !String(selectedFile?.content ?? '').trim();
@@ -1113,13 +1111,13 @@ function MarkdownEditor() {
     }
   }, [localProjectSupported, openLocalProjectWorkspace]);
 
-  const handleManualSyncLocalProject = useCallback(async () => {
-    if (!canManualSyncLocalProject) return;
+  const handleManualSyncLocalProject = useCallback(async (projectRootPath = manualSyncProjectRootPath) => {
+    if (!localProjectSupported || !projectRootPath) return;
 
     setManualSyncLoading(true);
     try {
       allFiles
-        .filter((file) => file.projectRootPath === manualSyncProjectRootPath)
+        .filter((file) => file.projectRootPath === projectRootPath)
         .forEach((file) => {
           const timerId = projectSaveTimersRef.current.get(file.id);
           if (timerId) {
@@ -1130,10 +1128,10 @@ function MarkdownEditor() {
         });
 
       const isTreeMount = (workspace.children ?? []).some(
-        (child) => child.localProjectRoot && child.projectRootPath === manualSyncProjectRootPath,
+        (child) => child.localProjectRoot && child.projectRootPath === projectRootPath,
       );
       const result = await readLocalProjectDisk(
-        manualSyncProjectRootPath,
+        projectRootPath,
         isTreeMount ? 'tree' : 'projects',
       );
       if (!result?.ok) {
@@ -1141,7 +1139,7 @@ function MarkdownEditor() {
       }
 
       useEditorStore.getState().refreshDiskBackedProject({
-        projectRootPath: manualSyncProjectRootPath,
+        projectRootPath,
         workspace: result.workspace,
         projectsChildren: result.projectsChildren,
         conflictResolution: 'use-disk',
@@ -1155,8 +1153,7 @@ function MarkdownEditor() {
     }
   }, [
     allFiles,
-    canManualSyncLocalProject,
-    manualSyncProjectRootPath,
+    localProjectSupported,
     setDiskSavePending,
     workspace,
   ]);
@@ -1626,6 +1623,7 @@ function MarkdownEditor() {
         onSelect={selectNode}
         onOpenLocalProject={handleOpenLocalProject}
         onRemoveLocalProject={handleRemoveLocalProject}
+        onManualSyncLocalProject={handleManualSyncLocalProject}
         onAddFile={handleAddFile}
         onAddFolder={handleAddFolder}
         onMoveNode={moveNode}
