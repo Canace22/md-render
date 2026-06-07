@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, RefreshCw } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { countWords } from '../utils/wordCount.js';
 import DocMetaPanel from './DocMetaPanel.jsx';
 
@@ -10,9 +10,6 @@ export default function DocHeader({
   onKnowledgeMetaChange,
   onOpenFile,
   onRestoreVersion,
-  showSyncButton = false,
-  syncLoading = false,
-  onSyncFromDisk,
   titleEditable = true,
   isTitleEditing,
   titleDraft,
@@ -85,18 +82,6 @@ export default function DocHeader({
         </div>
         {selectedFile && (
           <div className="right-area-actions">
-            {showSyncButton && (
-              <button
-                type="button"
-                className={`doc-meta-toggle${syncLoading ? ' is-loading' : ''}`}
-                onClick={() => onSyncFromDisk?.()}
-                disabled={syncLoading}
-                title="从磁盘重新读取当前本地项目"
-              >
-                <RefreshCw size={13} strokeWidth={2} className="doc-meta-toggle-icon" />
-                <span>{syncLoading ? '同步中...' : '手动同步'}</span>
-              </button>
-            )}
             <button
               type="button"
               className={`doc-meta-toggle${metaOpen ? ' is-open' : ''}`}

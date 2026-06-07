@@ -7,6 +7,7 @@ import {
   getKnowledgeNodeTypeLabel,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
 } from '../store/workspaceUtils.js';
+import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 
 /* ── constants ─────────────────────────────────────────────── */
 
@@ -16,14 +17,6 @@ const DEFAULT_STATUS_OPTIONS = [
   { value: 'review', label: '待审阅' },
   { value: 'scheduled', label: '待发布' },
   { value: 'published', label: '已发布' },
-];
-
-const DEFAULT_PLATFORM_OPTIONS = [
-  { value: 'wechat', label: '公众号' },
-  { value: 'xiaohongshu', label: '小红书' },
-  { value: 'zhihu', label: '知乎' },
-  { value: 'jike', label: '即刻' },
-  { value: 'newsletter', label: 'Newsletter' },
 ];
 
 /* ── pure helpers ──────────────────────────────────────────── */
@@ -85,7 +78,7 @@ export default function DocMetaPanel({
   onManageRelatedDocs,
   onRestoreVersion,
   statusOptions = DEFAULT_STATUS_OPTIONS,
-  platformOptions = DEFAULT_PLATFORM_OPTIONS,
+  platformOptions = PUBLISHING_PLATFORM_OPTIONS,
   disabled = false,
 }) {
   const [summaryDraft, setSummaryDraft] = useState('');

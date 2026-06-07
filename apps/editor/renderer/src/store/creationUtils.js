@@ -1,4 +1,8 @@
 import { collectFiles, sanitizeStringList } from './workspaceUtils.js';
+import {
+  PUBLISHING_PLATFORM_OPTIONS,
+  PUBLISHING_PLATFORM_VALUES,
+} from '../utils/publishingPlatforms.js';
 
 export const CREATION_STATUSES = Object.freeze({
   IDEA: 'idea',
@@ -18,19 +22,11 @@ export const CREATION_STATUS_OPTIONS = Object.freeze([
   { value: CREATION_STATUSES.PUBLISHED, label: '已发布' },
 ]);
 
-export const PLATFORM_OPTIONS = Object.freeze([
-  { value: 'wechat', label: '公众号' },
-  { value: 'xiaohongshu', label: '小红书' },
-  { value: 'zhihu', label: '知乎' },
-  { value: 'juejin', label: '掘金' },
-  { value: 'weibo', label: '微博' },
-  { value: 'newsletter', label: 'Newsletter' },
-  { value: 'website', label: '网站' },
-]);
+export const PLATFORM_OPTIONS = PUBLISHING_PLATFORM_OPTIONS;
 
 const FILE_TYPE = 'file';
 const DEFAULT_LIMIT = 5;
-const VALID_PLATFORM_VALUES = new Set(PLATFORM_OPTIONS.map((option) => option.value));
+const VALID_PLATFORM_VALUES = new Set(PUBLISHING_PLATFORM_VALUES);
 
 const STATUS_ALIAS_MAP = Object.freeze({
   idea: CREATION_STATUSES.IDEA,

@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Button, Card, Empty, Progress, Tag } from 'antd';
 import { CalendarClock, CheckSquare, Rocket, Search } from 'lucide-react';
+import { getPublishingPlatformLabel } from '../utils/publishingPlatforms.js';
 
 const PANEL_STYLES = `
 .publishing-queue-panel { display:flex; flex-direction:column; gap:16px; padding:20px; background:var(--app-bg, var(--color-bg-page, #f6f7fb)); color:var(--color-text, #1f2430); }
@@ -196,7 +197,7 @@ function PublishingQueuePanel({
                       <div>
                         <div className="publishing-queue-platforms">
                           {platforms.length ? platforms.map((platform) => (
-                            <Tag color="blue" key={platform}>{platform}</Tag>
+                            <Tag color="blue" key={platform}>{getPublishingPlatformLabel(platform) || platform}</Tag>
                           )) : <Tag>待选渠道</Tag>}
                         </div>
                         <div className="publishing-queue-checklist">

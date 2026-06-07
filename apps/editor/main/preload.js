@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   registerLocalProjectWatch: (payload) => ipcRenderer.invoke('register-local-project-watch', payload),
   readLocalProjectDisk: (payload) => ipcRenderer.invoke('read-local-project-disk', payload),
   readLocalProjectFileContent: (payload) => ipcRenderer.invoke('read-local-project-file-content', payload),
+  revealLocalProjectEntry: (payload) => ipcRenderer.invoke('reveal-local-project-entry', payload),
   fetchBookmarkPageSnapshot: (payload) => ipcRenderer.invoke('fetch-bookmark-page-snapshot', payload),
   exportSaveFile: (payload) => ipcRenderer.invoke('export-save-file', payload),
   exportToPdf: (payload) => ipcRenderer.invoke('export-to-pdf', payload),

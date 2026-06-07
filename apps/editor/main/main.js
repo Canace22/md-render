@@ -298,6 +298,33 @@ ipcMain.handle('read-local-project-file-content', async (_event, payload = {}) =
   }
 });
 
+ipcMain.handle('reveal-local-project-entry', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath = '' } = payload;
+  if (!projectRootPath) {
+    return { ok: false, error: '缺少项目路径' };
+  }
+
+  try {
+    const targetPath = relativePath
+      ? resolveProjectFilePath(projectRootPath, relativePath)
+      : projectRootPath;
+    const stat = await fs.stat(targetPath);
+
+    if (stat.isDirectory()) {
+      const errorMessage = await shell.openPath(targetPath);
+      if (errorMessage) {
+        return { ok: false, error: errorMessage };
+      }
+      return { ok: true, targetPath, kind: 'directory' };
+    }
+
+    shell.showItemInFolder(targetPath);
+    return { ok: true, targetPath, kind: 'file' };
+  } catch (err) {
+    return { ok: false, error: err?.message || '在文件管理器中查看失败' };
+  }
+});
+
 ipcMain.handle('fetch-bookmark-page-snapshot', async (_event, payload = {}) => {
   try {
     const result = await fetchBookmarkPageSnapshot(payload.url);

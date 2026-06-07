@@ -1,3 +1,5 @@
+import { getPublishingPlatformLabel } from './publishingPlatforms.js';
+
 const DEFAULT_MAX_CONTEXT_CHARS = 2200;
 const DEFAULT_SUMMARY_LENGTH = 240;
 const DEFAULT_TITLE_SUGGESTION_COUNT = 5;
@@ -32,17 +34,6 @@ const ACTION_ALIASES = Object.freeze({
 });
 
 const ACTION_META_MAP = new Map(AI_ACTION_OPTIONS.map((item) => [item.key, item]));
-
-const PLATFORM_LABEL_MAP = Object.freeze({
-  wechat: '公众号',
-  xiaohongshu: '小红书',
-  zhihu: '知乎',
-  juejin: '掘金',
-  weibo: '微博',
-  jike: '即刻',
-  newsletter: 'Newsletter',
-  website: '网站',
-});
 
 const STATUS_LABEL_MAP = Object.freeze({
   idea: '选题中',
@@ -171,7 +162,7 @@ const getDocumentPlatforms = (document) => {
 };
 
 const getPlatformLabels = (platforms) => {
-  return platforms.map((platform) => PLATFORM_LABEL_MAP[platform] || platform);
+  return platforms.map((platform) => getPublishingPlatformLabel(platform) || platform);
 };
 
 const getDocumentTags = (document) => {

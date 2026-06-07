@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarClock, FileText, Link2, NotebookPen, PackageSearch } from 'lucide-react';
+import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 
 const DEFAULT_STATUS_OPTIONS = [
   { value: 'idea', label: '选题中' }, { value: 'drafting', label: '写作中' }, { value: 'review', label: '待审阅' },
   { value: 'scheduled', label: '待发布' }, { value: 'published', label: '已发布' },
-];
-
-const DEFAULT_PLATFORM_OPTIONS = [
-  { value: 'wechat', label: '公众号' }, { value: 'xiaohongshu', label: '小红书' }, { value: 'zhihu', label: '知乎' },
-  { value: 'jike', label: '即刻' }, { value: 'newsletter', label: 'Newsletter' },
 ];
 
 const normalizePlatforms = (selectedFile) => {
@@ -79,7 +75,7 @@ export default function DraftMetaPanel({
   onManageSourceMaterials,
   onManageRelatedDocs,
   statusOptions = DEFAULT_STATUS_OPTIONS,
-  platformOptions = DEFAULT_PLATFORM_OPTIONS,
+  platformOptions = PUBLISHING_PLATFORM_OPTIONS,
   disabled = false,
 }) {
   const [summaryDraft, setSummaryDraft] = useState('');

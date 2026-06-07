@@ -41,6 +41,9 @@ const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
 const DEFAULT_EXPANDED_FOLDER_DEPTH = 1;
+const FILE_MANAGER_LABEL = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin'
+  ? '访达'
+  : '文件管理器';
 
 const clampSidebarWidth = (width) => {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
@@ -97,6 +100,7 @@ const TreeNode = ({
   contextMenu,
   onContextMenu,
   onCloseContextMenu,
+  onRevealLocalProjectEntry,
   forceOpen,
 }) => {
   const isFolder = node.type === 'folder';
@@ -106,6 +110,7 @@ const TreeNode = ({
   const channelLabel = getFolderChannelLabel(node);
   const showStructureActions = allowStructureActions && !isLocalProjectRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
+  const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
   const [folderOpen, setFolderOpen] = useState(() => {
     return isFolder && depth < DEFAULT_EXPANDED_FOLDER_DEPTH;
   });
@@ -149,7 +154,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showStructureActions && !showRemoveProject) return;
+    if (!showStructureActions && !showRemoveProject && !showRevealInFileManager) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -265,6 +270,14 @@ const TreeNode = ({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           data-testid="tree-context-menu"
         >
+          {showRevealInFileManager && (
+            <>
+              <button type="button" onClick={runAndClose(() => onRevealLocalProjectEntry(node.id))}>
+                <FolderOpen size={14} strokeWidth={1.5} /> 在{FILE_MANAGER_LABEL}中查看
+              </button>
+              {(showStructureActions || showRemoveProject) && <div className="tree-context-menu-divider" />}
+            </>
+          )}
           {showStructureActions && isFolder && (
             <>
               <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
@@ -326,6 +339,7 @@ const TreeNode = ({
               contextMenu={contextMenu}
               onContextMenu={onContextMenu}
               onCloseContextMenu={onCloseContextMenu}
+              onRevealLocalProjectEntry={onRevealLocalProjectEntry}
               forceOpen={forceOpen}
             />
           ))}
@@ -370,6 +384,7 @@ const WorkspaceSidebar = ({
   onDelete,
   onMoveNode,
   onPinNode,
+  onRevealLocalProjectEntry,
   onImportMarkdown,
   onExportMarkdown,
   onExportAs,
@@ -774,6 +789,7 @@ const WorkspaceSidebar = ({
                   onDelete,
                   onMoveNode,
                   onPinNode,
+                  onRevealLocalProjectEntry,
                   allowStructureActions,
                   onRemoveLocalProject,
                   ...renameHandlers,

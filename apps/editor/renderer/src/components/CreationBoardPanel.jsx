@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Button, Card, Dropdown, Empty, Tag } from 'antd';
 import { CheckCircle2, FolderKanban, Lightbulb, MoreHorizontal, PenLine, Plus, Rocket } from 'lucide-react';
+import { getPublishingPlatformLabel } from '../utils/publishingPlatforms.js';
 
 const DEFAULT_STATUS_OPTIONS = [
   { value: 'idea', label: '选题中' },
@@ -111,18 +112,6 @@ function CreationBoardPanel({
   const statusLabelMap = useMemo(() => {
     return new Map((statusOptions || []).map((option) => [normalizeToken(option.value), option.label]));
   }, [statusOptions]);
-  const platformLabelMap = useMemo(() => {
-    return new Map([
-      ['wechat', '公众号'],
-      ['xiaohongshu', '小红书'],
-      ['zhihu', '知乎'],
-      ['jike', '即刻'],
-      ['weibo', '微博'],
-      ['newsletter', 'Newsletter'],
-      ['website', '网站'],
-    ]);
-  }, []);
-
   const laneItems = useMemo(() => {
     const groups = new Map((lanes || []).map((lane) => [lane.key, []]));
     for (const item of items || []) {
@@ -226,7 +215,7 @@ function CreationBoardPanel({
                             {label}
                           </Tag>
                           {getPlatforms(item).map((platform) => (
-                            <Tag key={platform}>{platformLabelMap.get(normalizeToken(platform)) || platform}</Tag>
+                            <Tag key={platform}>{getPublishingPlatformLabel(normalizeToken(platform)) || platform}</Tag>
                           ))}
                         </div>
                         {currentStatus === 'published' ? <CheckCircle2 size={15} strokeWidth={1.8} /> : null}

@@ -3498,6 +3498,13 @@ body.theme-light #markdown-output code {
     min-width: 0;
 }
 
+.folder-header-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
 .folder-title-row {
     display: flex;
     flex-wrap: wrap;
@@ -3505,6 +3512,13 @@ body.theme-light #markdown-output code {
     gap: 12px;
     color: var(--color-text-primary);
     min-width: 0;
+}
+
+.folder-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .folder-title {

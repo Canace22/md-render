@@ -79,6 +79,7 @@ import {
   buildFallbackBookmarkClip,
   sanitizeBookmarkFileStem,
 } from '../utils/bookmarkClipper.js';
+import { DEFAULT_TARGET_PLATFORMS } from '../utils/publishingPlatforms.js';
 import {
   buildAIActionContext,
   buildAIActionPrompt,
@@ -95,6 +96,7 @@ import {
   openLocalProject,
   readLocalProjectDisk,
   readLocalProjectFileContent,
+  revealLocalProjectEntry,
   renameLocalProjectEntryOnDisk,
   saveLocalProjectFile,
   saveLocalProjectMetadata,
@@ -277,6 +279,9 @@ function MarkdownEditor() {
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
+  const manualSyncProjectRootPath = selectedFolder?.localProjectRoot
+    ? selectedFolder.projectRootPath ?? ''
+    : '';
   const selectedInLocalProject = Boolean(selectedNode?.projectRootPath);
   const selectedUsesBookmarkCard = selectedFile?.nodeType === 'bookmark'
     && !String(selectedFile?.content ?? '').trim();
@@ -526,7 +531,7 @@ function MarkdownEditor() {
   const canSaveLocalProjectFile = localProjectSupported
     && Boolean(selectedProjectRootPath && selectedFile?.relativePath)
     && !selectedNeedsConversion;
-  const canManualSyncLocalProject = localProjectSupported && Boolean(selectedProjectRootPath);
+  const canManualSyncLocalProject = localProjectSupported && Boolean(manualSyncProjectRootPath);
   const visibleStorageMode = hasLocalProjectWorkspace ? 'project' : storageMode;
   const visibleProjectRootPath = hasLocalProjectWorkspace ? '已导入本地目录' : '';
 
@@ -1001,7 +1006,7 @@ function MarkdownEditor() {
 
     after.setFileKnowledgeMeta(nextFileId, {
       draftStatus: 'drafting',
-      targetPlatforms: ['wechat'],
+      targetPlatforms: DEFAULT_TARGET_PLATFORMS.slice(),
     });
     if (!localProjectSupported) {
       after.applyRename(nextFileId, buildUniqueName(after.workspace, '新稿件', '.md'));
@@ -1016,7 +1021,9 @@ function MarkdownEditor() {
     const nextFile = findNodeById(after.workspace, nextFileId);
     if (!nextFile || nextFile.type !== 'file' || nextFileId === beforeSelectedId) return;
 
-    const targetPlatforms = nextStatus === 'ready' || nextStatus === 'published' ? ['wechat'] : [];
+    const targetPlatforms = nextStatus === 'ready' || nextStatus === 'published'
+      ? DEFAULT_TARGET_PLATFORMS.slice()
+      : [];
     after.setFileKnowledgeMeta(nextFileId, {
       draftStatus: nextStatus,
       targetPlatforms,
@@ -1112,7 +1119,7 @@ function MarkdownEditor() {
     setManualSyncLoading(true);
     try {
       allFiles
-        .filter((file) => file.projectRootPath === selectedProjectRootPath)
+        .filter((file) => file.projectRootPath === manualSyncProjectRootPath)
         .forEach((file) => {
           const timerId = projectSaveTimersRef.current.get(file.id);
           if (timerId) {
@@ -1123,10 +1130,10 @@ function MarkdownEditor() {
         });
 
       const isTreeMount = (workspace.children ?? []).some(
-        (child) => child.localProjectRoot && child.projectRootPath === selectedProjectRootPath,
+        (child) => child.localProjectRoot && child.projectRootPath === manualSyncProjectRootPath,
       );
       const result = await readLocalProjectDisk(
-        selectedProjectRootPath,
+        manualSyncProjectRootPath,
         isTreeMount ? 'tree' : 'projects',
       );
       if (!result?.ok) {
@@ -1134,7 +1141,7 @@ function MarkdownEditor() {
       }
 
       useEditorStore.getState().refreshDiskBackedProject({
-        projectRootPath: selectedProjectRootPath,
+        projectRootPath: manualSyncProjectRootPath,
         workspace: result.workspace,
         projectsChildren: result.projectsChildren,
         conflictResolution: 'use-disk',
@@ -1149,7 +1156,7 @@ function MarkdownEditor() {
   }, [
     allFiles,
     canManualSyncLocalProject,
-    selectedProjectRootPath,
+    manualSyncProjectRootPath,
     setDiskSavePending,
     workspace,
   ]);
@@ -1168,6 +1175,21 @@ function MarkdownEditor() {
     deleteNode(nodeId);
     setContentResetKey((k) => k + 1);
   }, [workspace, deleteNode]);
+
+  const handleRevealLocalProjectEntry = useCallback(async (nodeId) => {
+    const node = findNodeById(workspace, nodeId);
+    if (!node?.projectRootPath || !localProjectSupported) return;
+
+    try {
+      await revealLocalProjectEntry({
+        projectRootPath: node.projectRootPath,
+        relativePath: node.relativePath ?? '',
+      });
+    } catch (error) {
+      console.error('在文件管理器中查看失败:', error);
+      message.error(error?.message || '打开失败');
+    }
+  }, [workspace, localProjectSupported]);
 
   const handleNotionPull = useCallback(async () => {
     if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
@@ -1608,6 +1630,7 @@ function MarkdownEditor() {
         onAddFolder={handleAddFolder}
         onMoveNode={moveNode}
         onPinNode={pinNode}
+        onRevealLocalProjectEntry={localProjectSupported ? handleRevealLocalProjectEntry : null}
         onRename={handleRename}
         onDelete={handleDelete}
         onImportMarkdown={localProjectSupported || !selectedInLocalProject
@@ -1690,6 +1713,9 @@ function MarkdownEditor() {
             folder={selectedFolder}
             children={folderChildren}
             onSelectItem={selectNode}
+            showSyncButton={canManualSyncLocalProject}
+            syncLoading={manualSyncLoading}
+            onSyncFromDisk={handleManualSyncLocalProject}
           />
         ) : surface === 'overview' ? (
           <CreationDashboard
@@ -1767,9 +1793,6 @@ function MarkdownEditor() {
               onKnowledgeMetaChange={setFileKnowledgeMeta}
               onOpenFile={selectNode}
               onRestoreVersion={updateSelectedFileContent}
-              showSyncButton={canManualSyncLocalProject}
-              syncLoading={manualSyncLoading}
-              onSyncFromDisk={handleManualSyncLocalProject}
               titleEditable={!selectedInLocalProject}
               {...titleEditing}
             />
