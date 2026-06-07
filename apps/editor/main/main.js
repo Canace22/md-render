@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import {
   readLocalProjectWorkspace,
   saveLocalProjectFile,
+  saveLocalProjectMetadata,
   ensureMdRenderWorkspaceData,
   createLocalProjectFile,
   createLocalProjectFolder,
@@ -57,6 +58,16 @@ let store = null;
 let mainWindow = null;
 let tray = null;
 
+const STABLE_USER_DATA_DIRNAME = 'md-render';
+const LEGACY_USER_DATA_PATH_SEGMENTS = [
+  ['md-render'],
+  ['@md-render', 'editor'],
+  ['MD Render'],
+];
+const KNOWLEDGE_DB_FILENAME = 'knowledge.db';
+
+app.setPath('userData', path.join(app.getPath('appData'), STABLE_USER_DATA_DIRNAME));
+
 const notifyLocalProjectDiskChanged = (payload) => {
   mainWindow?.webContents?.send('local-project-disk-changed', payload);
 };
@@ -74,6 +85,108 @@ const markSavedLocalFileIgnored = (projectRootPath, relativePath) => {
   } catch {
     // ignore invalid paths
   }
+};
+
+const pathExists = async (targetPath) => {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const getPathStat = async (targetPath) => {
+  try {
+    return await fs.stat(targetPath);
+  } catch {
+    return null;
+  }
+};
+
+const getLegacyUserDataPaths = () => {
+  const appDataPath = app.getPath('appData');
+  const stableUserDataPath = app.getPath('userData');
+  return LEGACY_USER_DATA_PATH_SEGMENTS
+    .map((segments) => path.join(appDataPath, ...segments))
+    .filter((candidatePath) => candidatePath !== stableUserDataPath);
+};
+
+const listLegacyUserDataCandidates = async () => {
+  const candidates = [];
+
+  for (const candidatePath of getLegacyUserDataPaths()) {
+    const dirStat = await getPathStat(candidatePath);
+    if (!dirStat?.isDirectory()) continue;
+
+    let entryCount = 0;
+    try {
+      entryCount = (await fs.readdir(candidatePath)).length;
+    } catch {
+      entryCount = 0;
+    }
+    if (entryCount === 0) continue;
+
+    const dbStat = await getPathStat(path.join(candidatePath, KNOWLEDGE_DB_FILENAME));
+    candidates.push({
+      candidatePath,
+      score: dbStat?.mtimeMs ?? dirStat.mtimeMs ?? 0,
+    });
+  }
+
+  return candidates
+    .sort((left, right) => right.score - left.score)
+    .map((candidate) => candidate.candidatePath);
+};
+
+const copyMissingDirectoryEntries = async (sourceDir, targetDir) => {
+  await fs.mkdir(targetDir, { recursive: true });
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyMissingDirectoryEntries(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+    if (await pathExists(targetPath)) continue;
+    await fs.copyFile(sourcePath, targetPath);
+  }
+};
+
+const migrateLegacyUserDataIfNeeded = async () => {
+  const stableUserDataPath = app.getPath('userData');
+  const stableDbPath = path.join(stableUserDataPath, KNOWLEDGE_DB_FILENAME);
+
+  if (await pathExists(stableDbPath)) {
+    return;
+  }
+
+  const legacyPaths = await listLegacyUserDataCandidates();
+  if (legacyPaths.length === 0) {
+    await fs.mkdir(stableUserDataPath, { recursive: true });
+    return;
+  }
+
+  const sourcePath = legacyPaths[0];
+  const stablePathExists = await pathExists(stableUserDataPath);
+
+  if (!stablePathExists) {
+    try {
+      await fs.rename(sourcePath, stableUserDataPath);
+      console.log('[electron] migrated userData directory:', sourcePath, '->', stableUserDataPath);
+      return;
+    } catch (err) {
+      console.warn('[electron] userData directory rename failed, falling back to copy:', err.message);
+    }
+  }
+
+  await copyMissingDirectoryEntries(sourcePath, stableUserDataPath);
+  console.log('[electron] copied legacy userData into stable directory:', sourcePath, '->', stableUserDataPath);
 };
 
 ipcMain.handle('open-local-project', async () => {
@@ -124,6 +237,13 @@ ipcMain.handle('read-local-project-disk', async (_event, payload = {}) => {
 ipcMain.handle('save-local-project-file', async (_event, payload = {}) => {
   const { projectRootPath, relativePath, content } = payload;
   await saveLocalProjectFile(projectRootPath, relativePath, content);
+  markSavedLocalFileIgnored(projectRootPath, relativePath);
+  return { ok: true };
+});
+
+ipcMain.handle('save-local-project-metadata', async (_event, payload = {}) => {
+  const { projectRootPath, relativePath, metadata } = payload;
+  await saveLocalProjectMetadata(projectRootPath, relativePath, metadata);
   markSavedLocalFileIgnored(projectRootPath, relativePath);
   return { ok: true };
 });
@@ -582,6 +702,7 @@ app.whenReady().then(async () => {
     }
   });
 
+  await migrateLegacyUserDataIfNeeded();
   initDatabase();
   createMenu();
   createTray();

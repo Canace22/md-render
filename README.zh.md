@@ -4,7 +4,7 @@
 
 **一个本地优先、对中文写作友好的内容创作工作台。**
 
-基于 **React + Vite + Electron** 构建，包含自研 CommonMark / GFM Markdown 解析渲染管线（`packages/markdown-core`）、macOS 桌面应用（`apps/editor`），以及可在浏览器或 GitHub Pages 上运行的 Web 版。
+基于 **React + Vite + Electron** 构建，产品定位已经从单纯的 Markdown 渲染器升级为内容创作工作台；底层仍保留自研 CommonMark / GFM Markdown 解析渲染管线（`packages/markdown-core`）、macOS 桌面应用（`apps/editor`），以及可在浏览器或 GitHub Pages 上运行的 Web 版。
 
 | | |
 |---|---|
@@ -85,7 +85,7 @@ pnpm install
 pnpm dev
 ```
 
-在浏览器打开 `http://localhost:3000`，左侧编辑 Markdown，右侧实时预览。
+在浏览器打开 `http://localhost:3000`，左侧编辑内容，右侧实时预览。
 
 ### 桌面开发（Electron）
 

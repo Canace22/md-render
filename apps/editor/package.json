@@ -89,7 +89,7 @@
           ]
         }
       ],
-      "icon": "build/icon.icns"
+      "icon": "assets/icon.icns"
     },
     "dmg": {
       "title": "MD Render",

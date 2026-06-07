@@ -4,7 +4,7 @@
 
 **A local-first, Chinese-writing-friendly content creation workbench.**
 
-Built with **React + Vite + Electron**. It ships a self-built CommonMark / GFM Markdown pipeline (`packages/markdown-core`), a desktop app for macOS (`apps/editor`), and a web build for browser or GitHub Pages.
+Built with **React + Vite + Electron**. The product has moved beyond a plain Markdown renderer into a content creation workbench, while still keeping its self-built CommonMark / GFM Markdown pipeline (`packages/markdown-core`), a desktop app for macOS (`apps/editor`), and a web build for browser or GitHub Pages.
 
 | | |
 |---|---|
@@ -85,7 +85,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000`. Edit Markdown on the left; preview updates in real time on the right.
+Open `http://localhost:3000`. Edit content on the left; preview updates in real time on the right.
 
 ### Desktop development (Electron)
 

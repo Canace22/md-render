@@ -102,6 +102,13 @@ export async function saveLocalProjectFile(payload) {
   });
 }
 
+export async function saveLocalProjectMetadata(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.saveLocalProjectMetadata === 'function') {
+    return window.electronAPI.saveLocalProjectMetadata(payload);
+  }
+  return null;
+}
+
 export async function ensureMdRenderWorkspace() {
   if (!hasMdRenderWorkspaceBridge()) {
     return null;

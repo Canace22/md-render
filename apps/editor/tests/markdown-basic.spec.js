@@ -61,8 +61,8 @@ test('renders default example markdown on first load in immersive paper mode', a
   await expect(page.locator('.panel-tabs')).toHaveCount(0);
   await expect(page.locator('.right-area-doc-title')).toContainText('示例文档.md');
 
-  await expect(preview.getByRole('heading', { name: '欢迎使用 Markdown 渲染器' })).toBeVisible();
-  await expect(preview.getByText('功能特性', { exact: false })).toBeVisible();
+  await expect(preview.getByRole('heading', { name: '欢迎使用 MD Render' })).toBeVisible();
+  await expect(preview.getByText('当前可用能力', { exact: false })).toBeVisible();
   await expect(preview.getByText('支持表格', { exact: false })).toBeVisible();
 
   await expect(preview.getByRole('columnheader', { name: '功能' })).toBeVisible();
@@ -73,7 +73,7 @@ test('renders default example markdown on first load in immersive paper mode', a
 test('updates content when typing in BlockNote editor', async ({ page }) => {
   await openWithFreshWorkspace(page);
 
-  await page.getByText('这是一个支持 CommonMark 规范的 Markdown 渲染器示例。').click();
+  await page.getByText('这不是一个单纯的 Markdown 渲染器，而是一个本地优先、面向中文创作者的内容创作工作台。').click();
   await page.keyboard.press('End');
   await page.keyboard.type(' 这是新的段落内容。');
 

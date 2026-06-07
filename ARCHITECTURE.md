@@ -1,6 +1,6 @@
 # 实现原理
 
-Markdown 渲染器采用两步流程：**解析 → 渲染**。解析器将 Markdown 文本转换为结构化的 token 数组，渲染器将 token 数组转换为最终的 HTML。当前仓库已经拆成 pnpm monorepo：`apps/editor` 负责 React + Electron 应用壳，`packages/markdown-core` 负责可复用的解析/渲染核心。
+当前产品是一个内容创作工作台，但底层仍保留一条清晰的 Markdown **解析 → 渲染** 流程。解析器将 Markdown 文本转换为结构化的 token 数组，渲染器将 token 数组转换为最终的 HTML。当前仓库已经拆成 pnpm monorepo：`apps/editor` 负责 React + Electron 应用壳，`packages/markdown-core` 负责可复用的解析/渲染核心。
 
 ## 工作流程图
 

@@ -6,6 +6,9 @@ export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
+const LOCAL_PROJECT_META_SIDECAR_SUFFIX = '.md-render-meta.json';
+const LOCAL_PROJECT_META_VERSION = 1;
+const DEFAULT_NODE_TYPE = 'document';
 const SUPPORTED_FILE_EXTENSIONS = new Set([
   '.md', '.markdown', '.txt',
   '.html', '.htm',
@@ -50,6 +53,86 @@ const shouldIgnoreDirectory = (name) => {
   return IGNORED_DIRECTORIES.has(name) || name.startsWith('.');
 };
 
+const isLocalProjectMetadataSidecar = (name) => {
+  return name.startsWith('.') && name.endsWith(LOCAL_PROJECT_META_SIDECAR_SUFFIX);
+};
+
+const buildMetadataSidecarPath = (filePath) => {
+  const dirPath = path.dirname(filePath);
+  const baseName = path.basename(filePath);
+  return path.join(dirPath, `.${baseName}${LOCAL_PROJECT_META_SIDECAR_SUFFIX}`);
+};
+
+const sanitizeStringList = (values) => {
+  if (!Array.isArray(values)) return [];
+  return Array.from(new Set(values.map((item) => String(item ?? '').trim()).filter(Boolean)));
+};
+
+const normalizeLocalProjectMetadata = (metadata = {}) => {
+  return {
+    nodeType: String(metadata.nodeType ?? '').trim() || DEFAULT_NODE_TYPE,
+    summary: String(metadata.summary ?? '').trim(),
+    aliases: sanitizeStringList(metadata.aliases),
+    relatedIds: sanitizeStringList(metadata.relatedIds),
+    draftStatus: String(metadata.draftStatus ?? '').trim(),
+    targetPlatforms: sanitizeStringList(
+      metadata.targetPlatforms ?? metadata.platforms ?? metadata.publishPlatforms,
+    ),
+    scheduledPublishAt: String(metadata.scheduledPublishAt ?? metadata.publishAt ?? '').trim(),
+    sourceMaterialIds: sanitizeStringList(
+      metadata.sourceMaterialIds ?? metadata.sourceMaterials,
+    ),
+    tags: sanitizeStringList(metadata.tags),
+  };
+};
+
+const hasMeaningfulMetadata = (metadata) => {
+  if (!metadata) return false;
+  return metadata.nodeType !== DEFAULT_NODE_TYPE
+    || Boolean(metadata.summary)
+    || metadata.aliases.length > 0
+    || metadata.relatedIds.length > 0
+    || Boolean(metadata.draftStatus)
+    || metadata.targetPlatforms.length > 0
+    || Boolean(metadata.scheduledPublishAt)
+    || metadata.sourceMaterialIds.length > 0
+    || metadata.tags.length > 0;
+};
+
+async function readLocalProjectMetadata(filePath) {
+  const sidecarPath = buildMetadataSidecarPath(filePath);
+  try {
+    const raw = await fs.readFile(sidecarPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const payload = parsed?.metadata && typeof parsed.metadata === 'object'
+      ? parsed.metadata
+      : parsed;
+    return normalizeLocalProjectMetadata(payload);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.warn('[localProject] 读取元数据 sidecar 失败:', sidecarPath, error);
+    }
+    return null;
+  }
+}
+
+async function writeLocalProjectMetadata(filePath, metadata) {
+  const sidecarPath = buildMetadataSidecarPath(filePath);
+  const normalized = normalizeLocalProjectMetadata(metadata);
+
+  if (!hasMeaningfulMetadata(normalized)) {
+    await fs.rm(sidecarPath, { force: true });
+    return { ok: true, deleted: true };
+  }
+
+  await fs.mkdir(path.dirname(sidecarPath), { recursive: true });
+  await fs.writeFile(sidecarPath, `${JSON.stringify({
+    version: LOCAL_PROJECT_META_VERSION,
+    metadata: normalized,
+  }, null, 2)}\n`, 'utf8');
+  return { ok: true, deleted: false };
+}
+
 async function readProjectNode(rootPath, currentPath, isRoot = false) {
   const stat = await fs.stat(currentPath);
   const name = isRoot ? path.basename(currentPath) : path.basename(currentPath);
@@ -86,11 +169,12 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
     };
   }
 
-  if (!stat.isFile() || !isSupportedFile(name)) {
+  if (!stat.isFile() || isLocalProjectMetadataSidecar(name) || !isSupportedFile(name)) {
     return null;
   }
 
   const relativePath = toRelativePath(rootPath, currentPath);
+  const metadata = await readLocalProjectMetadata(currentPath);
 
   // Markdown / 纯文本直接读取内容；其他格式只记录元信息，由 Renderer 按需转换
   if (isMarkdownFile(name)) {
@@ -103,6 +187,7 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
       content,
       diskContentSnapshot: content,
       updatedAt: stat.mtimeMs,
+      ...(metadata ?? {}),
     };
   }
 
@@ -115,6 +200,7 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
     diskContentSnapshot: null,
     needsConversion: true,
     updatedAt: stat.mtimeMs,
+    ...(metadata ?? {}),
   };
 }
 
@@ -151,6 +237,11 @@ export async function saveLocalProjectFile(projectRootPath, relativePath, conten
   await fs.writeFile(filePath, content ?? '', 'utf8');
 }
 
+export async function saveLocalProjectMetadata(projectRootPath, relativePath, metadata) {
+  const filePath = resolveProjectFilePath(projectRootPath, relativePath);
+  await writeLocalProjectMetadata(filePath, metadata);
+}
+
 export function getMdRenderRootPath() {
   return path.join(os.homedir(), 'Documents', MD_RENDER_DIR_NAME);
 }
@@ -185,13 +276,39 @@ export async function createLocalProjectFolder(projectRootPath, relativePath) {
 
 export async function deleteLocalProjectEntry(projectRootPath, relativePath) {
   const targetPath = resolveProjectFilePath(projectRootPath, relativePath);
+  try {
+    const stat = await fs.stat(targetPath);
+    if (stat.isFile()) {
+      await fs.rm(buildMetadataSidecarPath(targetPath), { force: true });
+    }
+  } catch {
+    // ignore missing metadata or target stats
+  }
   await fs.rm(targetPath, { recursive: true, force: true });
 }
 
 export async function renameLocalProjectEntry(projectRootPath, relativePath, newRelativePath) {
   const oldPath = resolveProjectFilePath(projectRootPath, relativePath);
   const newPath = resolveProjectFilePath(projectRootPath, newRelativePath);
+  const oldSidecarPath = buildMetadataSidecarPath(oldPath);
+  const newSidecarPath = buildMetadataSidecarPath(newPath);
+  let isFile = false;
+  try {
+    const stat = await fs.stat(oldPath);
+    isFile = stat.isFile();
+  } catch {
+    isFile = false;
+  }
   await fs.rename(oldPath, newPath);
+  if (isFile) {
+    try {
+      await fs.rename(oldSidecarPath, newSidecarPath);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
   const stat = await fs.stat(newPath);
   return {
     relativePath: toRelativePath(projectRootPath, newPath),

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   openLocalProject: () => ipcRenderer.invoke('open-local-project'),
   saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
+  saveLocalProjectMetadata: (payload) => ipcRenderer.invoke('save-local-project-metadata', payload),
   ensureMdRenderWorkspace: () => ipcRenderer.invoke('ensure-md-render-workspace'),
   createLocalProjectFile: (payload) => ipcRenderer.invoke('create-local-project-file', payload),
   createLocalProjectFolder: (payload) => ipcRenderer.invoke('create-local-project-folder', payload),

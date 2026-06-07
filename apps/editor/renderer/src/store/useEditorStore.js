@@ -36,6 +36,7 @@ import {
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
+import { saveLocalProjectMetadata } from '../utils/localProjectBridge.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
@@ -399,6 +400,35 @@ const persistWorkspace = (workspace) => {
   }
 };
 
+const buildLocalProjectMetadataPayload = (node) => {
+  if (!node || node.type !== 'file' || !node.projectRootPath || !node.relativePath) {
+    return null;
+  }
+  return {
+    projectRootPath: node.projectRootPath,
+    relativePath: node.relativePath,
+    metadata: {
+      nodeType: node.nodeType,
+      summary: node.summary,
+      aliases: node.aliases,
+      relatedIds: node.relatedIds,
+      draftStatus: node.draftStatus,
+      targetPlatforms: node.targetPlatforms,
+      scheduledPublishAt: node.scheduledPublishAt,
+      sourceMaterialIds: node.sourceMaterialIds,
+      tags: node.tags,
+    },
+  };
+};
+
+const persistLocalProjectMetadata = (node) => {
+  const payload = buildLocalProjectMetadataPayload(node);
+  if (!payload) return;
+  saveLocalProjectMetadata(payload).catch((error) => {
+    console.error('[store] 本地项目元数据保存失败:', error);
+  });
+};
+
 const createLocalProjectNodeId = (projectRootPath, suffix = '') => {
   return `project:${projectRootPath}${suffix}`;
 };
@@ -659,8 +689,10 @@ export const useEditorStore = create(
           if (node.type !== 'file') return node;
           return { ...node, tags: cleaned };
         });
+        const nextNode = findNodeById(updated, fileId);
         persistWorkspace(updated);
         set({ workspace: updated });
+        persistLocalProjectMetadata(nextNode);
       },
 
       setFileKnowledgeMeta: (fileId, patch) => {
@@ -694,8 +726,10 @@ export const useEditorStore = create(
           }
           return { ...node, ...createDefaultKnowledgeFields(node), ...nextPatch };
         });
+        const nextNode = findNodeById(updated, fileId);
         persistWorkspace(updated);
         set({ workspace: updated });
+        persistLocalProjectMetadata(nextNode);
       },
 
       setWorkspace: (workspace) => set({ workspace }),

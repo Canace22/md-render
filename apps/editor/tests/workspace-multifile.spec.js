@@ -17,7 +17,7 @@ async function editActiveDocument(page, text) {
 test('multiple files keep independent content when switching', async ({ page }) => {
   await openWithFreshWorkspace(page);
 
-  await expect(page.locator('#markdown-output').getByRole('heading', { name: '欢迎使用 Markdown 渲染器' })).toBeVisible();
+  await expect(page.locator('#markdown-output').getByRole('heading', { name: '欢迎使用 MD Render' })).toBeVisible();
 
   await page.getByRole('button', { name: '新建文件' }).click();
   await editActiveDocument(page, 'File A content');
@@ -32,7 +32,7 @@ test('multiple files keep independent content when switching', async ({ page }) 
   await expect(page.locator('#markdown-output').getByText('File B content')).toBeVisible();
 
   await page.locator('.tree-node-text', { hasText: '示例文档.md' }).click();
-  await expect(page.locator('#markdown-output').getByRole('heading', { name: '欢迎使用 Markdown 渲染器' })).toBeVisible();
+  await expect(page.locator('#markdown-output').getByRole('heading', { name: '欢迎使用 MD Render' })).toBeVisible();
 });
 
 test('workspace with multiple files persists after reload', async ({ page }) => {
