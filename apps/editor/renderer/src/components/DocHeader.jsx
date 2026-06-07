@@ -101,6 +101,7 @@ export default function DocHeader({
           allFiles={allFiles}
           platformOptions={platformOptions}
           onMetaChange={onKnowledgeMetaChange}
+          onTagsChange={onTagsChange}
           onOpenFile={onOpenFile}
           onRestoreVersion={onRestoreVersion}
         />

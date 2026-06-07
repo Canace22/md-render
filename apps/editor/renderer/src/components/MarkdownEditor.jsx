@@ -12,6 +12,7 @@ import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
 import CreationBoardPanel from './CreationBoardPanel.jsx';
+import CanvasSurface from './CanvasSurface.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import NotionPanel from './NotionPanel.jsx';
 import PublishingQueuePanel from './PublishingQueuePanel.jsx';
@@ -198,6 +199,17 @@ const getParsedWordCount = (content = '') => {
     .length;
 };
 
+const getCanvasCardSummary = (file) => {
+  return file?.summary || truncateInlineText(file?.content, 120) || '先补一句摘要，画布里扫节点会更快。';
+};
+
+const getCanvasCardTypeLabel = (file) => {
+  const nodeType = String(file?.nodeType ?? '').trim();
+  if (nodeType) return nodeType;
+  const status = getDocumentStatus(file);
+  return status || 'document';
+};
+
 const getSelectedEditorText = () => {
   if (typeof window === 'undefined' || typeof document === 'undefined') return '';
   const selection = window.getSelection();
@@ -238,6 +250,7 @@ function MarkdownEditor() {
     setCopyStyle,
     setPublishingPlatforms,
     setSurface,
+    setWorkspaceCanvas,
     setNotionToken,
     setNotionDatabaseId,
     setFileNotionPageId,
@@ -400,6 +413,41 @@ function MarkdownEditor() {
         };
       });
   }, [allFiles]);
+  const canvasItems = useMemo(() => {
+    return allFiles.map((file) => ({
+      id: file.id,
+      title: stripMarkdownExtension(file.name),
+      summary: getCanvasCardSummary(file),
+      nodeType: file.nodeType ?? 'document',
+      typeLabel: getCanvasCardTypeLabel(file),
+      tags: file.tags ?? [],
+      url: file.url ?? '',
+      updatedAt: file.updatedAt,
+      draftStatus: getDocumentStatus(file) ?? file.draftStatus ?? '',
+      targetPlatforms: file.targetPlatforms ?? [],
+      scheduledPublishAt: file.scheduledPublishAt ?? '',
+      sourceMaterialIds: file.sourceMaterialIds ?? [],
+      wordCount: getParsedWordCount(file.content),
+    }));
+  }, [allFiles]);
+  const canvasState = useMemo(() => {
+    const raw = workspace?.canvasState;
+    return {
+      nodes: Array.isArray(raw?.nodes) ? raw.nodes : [],
+      edges: Array.isArray(raw?.edges) ? raw.edges : [],
+    };
+  }, [workspace]);
+  const canvasSurfaceItems = useMemo(() => {
+    const nodeMap = new Map(
+      canvasState.nodes.map((node) => [String(node.sourceId ?? node.id), node]),
+    );
+    return canvasItems.map((item) => {
+      const savedNode = nodeMap.get(String(item.id));
+      return savedNode?.position
+        ? { ...item, position: savedNode.position, sourceId: savedNode.sourceId ?? item.id }
+        : item;
+    });
+  }, [canvasItems, canvasState.nodes]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
   const importInputRef = useRef(null);
@@ -411,6 +459,9 @@ function MarkdownEditor() {
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
+  const handleCanvasChange = useCallback((nodes, edges) => {
+    setWorkspaceCanvas({ nodes, edges });
+  }, [setWorkspaceCanvas]);
   const performRename = useCallback(async (targetId, rawName) => {
     const trimmed = String(rawName ?? '').trim();
     if (!trimmed) return false;
@@ -1648,6 +1699,7 @@ function MarkdownEditor() {
         onToggleCollapse={toggleSidebarCollapsed}
         surface={surface}
         onOpenOverview={() => setSurface('overview')}
+        onOpenCanvas={() => setSurface('canvas')}
         onOpenSearch={() => setSurface('search')}
         onOpenGraph={() => setSurface('graph')}
         onOpenCurrentContent={() => setSurface(selectedContentSurface)}
@@ -1734,6 +1786,13 @@ function MarkdownEditor() {
             onCreate={handleCreateDraftFromDashboard}
             onOpenItem={handleDashboardOpenItem}
             onViewSection={handleDashboardViewSection}
+          />
+        ) : surface === 'canvas' ? (
+          <CanvasSurface
+            items={canvasSurfaceItems}
+            edges={canvasState.edges}
+            onChange={handleCanvasChange}
+            onOpenFile={selectNode}
           />
         ) : surface === 'creation-board' ? (
           <CreationBoardPanel

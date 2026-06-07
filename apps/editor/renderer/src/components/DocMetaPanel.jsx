@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from 'antd';
 import {
   ArrowLeft, CalendarClock, Clock, FileText, GitBranch,
-  Link, Link2, PackageSearch, Plus, Shapes, Tag, X,
+  Link, Link2, PackageSearch, Plus,
 } from 'lucide-react';
 import {
-  getKnowledgeNodeTypeLabel,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
 } from '../store/workspaceUtils.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
@@ -53,9 +53,6 @@ const buildVisiblePlatformOptions = (platformOptions, currentPlatforms) => {
 
 const getCurrentStatus = (file) => file?.draftStatus ?? file?.status ?? 'drafting';
 
-const getStatusLabel = (options, value) =>
-  options.find((o) => o.value === value)?.label ?? value;
-
 const normalizeSourceMaterials = (file, filesById) => {
   const value = file?.sourceMaterials ?? file?.sourceMaterialIds ?? [];
   if (!Array.isArray(value)) return [];
@@ -76,12 +73,28 @@ const normalizeSourceMaterials = (file, filesById) => {
   }).filter(Boolean);
 };
 
+const collectReusableTags = (allFiles) => {
+  const counts = new Map();
+
+  (allFiles ?? []).forEach((file) => {
+    (file?.tags ?? []).forEach((tag) => {
+      if (!tag) return;
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    });
+  });
+
+  return Array.from(counts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+};
+
 /* ── main component ────────────────────────────────────────── */
 
 export default function DocMetaPanel({
   selectedFile,
   allFiles = [],
   onMetaChange,
+  onTagsChange,
   onOpenFile,
   onManageSourceMaterials,
   onManageRelatedDocs,
@@ -92,7 +105,6 @@ export default function DocMetaPanel({
 }) {
   const [summaryDraft, setSummaryDraft] = useState('');
   const [publishAtDraft, setPublishAtDraft] = useState('');
-  const [aliasDraft, setAliasDraft] = useState('');
   const [relatedDraft, setRelatedDraft] = useState('');
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
@@ -101,7 +113,6 @@ export default function DocMetaPanel({
   useEffect(() => {
     setSummaryDraft(selectedFile?.summary ?? '');
     setPublishAtDraft(selectedFile?.scheduledPublishAt ?? selectedFile?.publishAt ?? '');
-    setAliasDraft('');
     setRelatedDraft('');
   }, [selectedFile]);
 
@@ -128,6 +139,10 @@ export default function DocMetaPanel({
   const sourceMaterials = useMemo(() => normalizeSourceMaterials(selectedFile, filesById), [selectedFile, filesById]);
   const relatedDocs = (selectedFile?.relatedIds ?? []).map((id) => filesById.get(id)).filter(Boolean);
   const availableRelatedDocs = (allFiles ?? []).filter((f) => f.id !== selectedFile?.id && !(selectedFile?.relatedIds ?? []).includes(f.id));
+  const reusableTags = useMemo(
+    () => collectReusableTags(allFiles).map((item) => ({ label: item.tag, value: item.tag })),
+    [allFiles],
+  );
   const currentStatus = getCurrentStatus(selectedFile);
 
   const commitSummary = () => {
@@ -144,20 +159,9 @@ export default function DocMetaPanel({
     onMetaChange?.(selectedFile.id, { scheduledPublishAt: next });
   };
 
-  const commitAlias = () => {
-    if (!selectedFile) return;
-    const next = aliasDraft.trim();
-    if (!next) { setAliasDraft(''); return; }
-    const aliases = selectedFile.aliases ?? [];
-    if (!aliases.includes(next)) {
-      onMetaChange?.(selectedFile.id, { aliases: [...aliases, next] });
-    }
-    setAliasDraft('');
-  };
-
-  const removeAlias = (target) => {
-    if (!selectedFile) return;
-    onMetaChange?.(selectedFile.id, { aliases: (selectedFile.aliases ?? []).filter((a) => a !== target) });
+  const handleTagsChange = (nextTags) => {
+    if (!selectedFile || !onTagsChange) return;
+    onTagsChange(selectedFile.id, nextTags);
   };
 
   const handlePlatformToggle = (value) => {
@@ -252,32 +256,21 @@ export default function DocMetaPanel({
         </div>
       )}
 
-      {/* ── row 3: aliases ── */}
       <div className="doc-meta-field">
-        <span className="doc-meta-label">别名</span>
-        <div className="doc-meta-chip-list">
-          {(selectedFile.aliases ?? []).map((alias) => (
-            <span key={alias} className="doc-meta-chip doc-meta-chip--alias">
-              <Tag size={11} strokeWidth={1.8} />
-              <span>{alias}</span>
-              <button type="button" onClick={() => removeAlias(alias)} aria-label={`删除别名 ${alias}`}>
-                <X size={11} strokeWidth={2} />
-              </button>
-            </span>
-          ))}
-          <input
-            className="doc-meta-chip-input"
-            value={aliasDraft}
-            placeholder="+ 别名"
-            onChange={(e) => setAliasDraft(e.target.value)}
-            onBlur={commitAlias}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); commitAlias(); }
-              if (e.key === 'Escape') { e.preventDefault(); setAliasDraft(''); }
-            }}
-            disabled={disabled}
-          />
-        </div>
+        <span className="doc-meta-label">标签</span>
+        <Select
+          mode="tags"
+          size="small"
+          className="doc-meta-tag-select"
+          value={selectedFile.tags ?? []}
+          options={reusableTags}
+          placeholder="选择已有标签或直接输入"
+          onChange={handleTagsChange}
+          disabled={disabled || !onTagsChange}
+          maxTagCount="responsive"
+          open={reusableTags.length > 0 ? undefined : false}
+          popupClassName="doc-meta-tag-select-dropdown"
+        />
       </div>
 
       <div className="doc-meta-divider" />

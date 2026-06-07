@@ -68,6 +68,7 @@ const safeParseJSON = (value, fallback) => {
 
 const VALID_SURFACES = new Set([
   'overview',
+  'canvas',
   'creation-board',
   'publishing',
   'search',
@@ -430,6 +431,46 @@ const persistWorkspace = (workspace) => {
   }
 };
 
+const normalizeCanvasPosition = (value, fallback = 0) => {
+  return Number.isFinite(value) ? value : fallback;
+};
+
+const sanitizeCanvasNode = (node = {}, index = 0) => {
+  const sourceId = String(node.sourceId ?? node.fileId ?? node.id ?? '').trim();
+  if (!sourceId) return null;
+  const position = node.position ?? {};
+  return {
+    id: String(node.id ?? `canvas-${sourceId}`),
+    sourceId,
+    position: {
+      x: normalizeCanvasPosition(position.x, index * 48),
+      y: normalizeCanvasPosition(position.y, index * 48),
+    },
+  };
+};
+
+const sanitizeCanvasEdge = (edge = {}) => {
+  const id = String(edge.id ?? '').trim();
+  const source = String(edge.source ?? '').trim();
+  const target = String(edge.target ?? '').trim();
+  if (!id || !source || !target || source === target) return null;
+  return { id, source, target };
+};
+
+const sanitizeCanvasState = (canvasState = {}) => {
+  const nodes = Array.isArray(canvasState?.nodes)
+    ? canvasState.nodes.map((node, index) => sanitizeCanvasNode(node, index)).filter(Boolean)
+    : [];
+  const edges = Array.isArray(canvasState?.edges)
+    ? canvasState.edges.map((edge) => sanitizeCanvasEdge(edge)).filter(Boolean)
+    : [];
+  return { nodes, edges };
+};
+
+const areCanvasStatesEqual = (left, right) => {
+  return JSON.stringify(sanitizeCanvasState(left)) === JSON.stringify(sanitizeCanvasState(right));
+};
+
 const buildLocalProjectMetadataPayload = (node) => {
   if (!node || node.type !== 'file' || !node.projectRootPath || !node.relativePath) {
     return null;
@@ -600,6 +641,18 @@ export const useEditorStore = create(
         set({ publishingPlatforms: sanitizePublishingPlatforms(publishingPlatforms) });
       },
       setSurface: (surface) => set({ surface: normalizeSurface(surface, 'overview') }),
+      setWorkspaceCanvas: (canvasState) => {
+        const { workspace } = get();
+        if (areCanvasStatesEqual(workspace?.canvasState, canvasState)) {
+          return;
+        }
+        const nextWorkspace = {
+          ...workspace,
+          canvasState: sanitizeCanvasState(canvasState),
+        };
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+      },
 
       /** 切换编辑/预览模式 */
       setEditorMode: (mode) => set({ editorMode: mode === 'preview' ? 'preview' : 'edit' }),

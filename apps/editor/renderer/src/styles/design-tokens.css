@@ -121,7 +121,7 @@ body.theme-dark,
 
 /* 跟随系统深色 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  body:not(.theme-light) {
     --color-surface-base: #0F172A;
     --color-surface-elevated: #1E293B;
     --color-border-subtle: #1E293B;

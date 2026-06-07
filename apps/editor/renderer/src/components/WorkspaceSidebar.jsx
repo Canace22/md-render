@@ -405,6 +405,7 @@ const WorkspaceSidebar = ({
   onToggleCollapse,
   surface,
   onOpenOverview,
+  onOpenCanvas,
   onOpenSearch,
   onOpenGraph,
   onOpenCurrentContent,
@@ -573,6 +574,15 @@ const WorkspaceSidebar = ({
               aria-label="创作首页"
             >
               <LayoutGrid size={18} strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'canvas' ? 'active' : ''}`}
+              onClick={onOpenCanvas}
+              title="画布工作台"
+              aria-label="画布工作台"
+            >
+              <Pencil size={18} strokeWidth={1.6} />
             </button>
             <button
               type="button"
