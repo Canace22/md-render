@@ -34,6 +34,7 @@ import {
   looksLikeCodeBlockClipboardHtml,
   looksLikeMarkdownCodeFenceClipboardText,
   looksLikeMarkdownClipboardText,
+  looksLikePlainTextHtml,
   normalizeMarkdown,
 } from '../utils/markdownUtils';
 import { applyThemeToBody } from '../utils/themeUtils';
@@ -571,6 +572,14 @@ function MarkdownEditor() {
 
         if (looksLikeMarkdownClipboardText(plainText)) {
           pasteEditor.pasteMarkdown(plainText);
+          return true;
+        }
+
+        // HTML 只含 <br>/<p>/<div> 等结构标签、无富文本时，
+        // 用纯文本走 pasteMarkdown 避免 <br><br> 被转成多余空段落
+        if (plainText.trim() && looksLikePlainTextHtml(htmlText)) {
+          const collapsed = plainText.replace(/\n{3,}/g, '\n\n');
+          pasteEditor.pasteMarkdown(collapsed);
           return true;
         }
 

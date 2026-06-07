@@ -46,6 +46,16 @@ export const looksLikeCodeBlockClipboardHtml = (value = '') => {
 };
 
 /**
+ * 判断剪贴板 HTML 是否只是纯文本 + <br> 结构（无富文本标签）。
+ * 用于避免 <br><br> 被 BlockNote 默认粘贴器转成多余的空段落 block。
+ */
+export const looksLikePlainTextHtml = (value = '') => {
+  const html = value.trim();
+  if (!html) return false;
+  return !/<(?:a|b|strong|i|em|u|s|del|sup|sub|mark|img|table|t[hdr]|ul|ol|li|h[1-6]|pre|code|blockquote|figure)\b/i.test(html);
+};
+
+/**
  * 从剪贴板 HTML 中提取代码块内容
  */
 export const extractCodeBlockFromClipboardHtml = (value = '') => {
