@@ -457,6 +457,22 @@ const sanitizeCanvasEdge = (edge = {}) => {
   return { id, source, target };
 };
 
+const CANVAS_MIN_VIEWPORT_ZOOM = 0.2;
+const CANVAS_MAX_VIEWPORT_ZOOM = 2;
+
+const sanitizeCanvasViewport = (viewport) => {
+  if (!viewport || typeof viewport !== 'object') return null;
+  const x = Number(viewport.x);
+  const y = Number(viewport.y);
+  const zoom = Number(viewport.zoom);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(zoom)) return null;
+  return {
+    x,
+    y,
+    zoom: Math.min(CANVAS_MAX_VIEWPORT_ZOOM, Math.max(CANVAS_MIN_VIEWPORT_ZOOM, zoom)),
+  };
+};
+
 const sanitizeCanvasState = (canvasState = {}) => {
   const nodes = Array.isArray(canvasState?.nodes)
     ? canvasState.nodes.map((node, index) => sanitizeCanvasNode(node, index)).filter(Boolean)
@@ -464,7 +480,8 @@ const sanitizeCanvasState = (canvasState = {}) => {
   const edges = Array.isArray(canvasState?.edges)
     ? canvasState.edges.map((edge) => sanitizeCanvasEdge(edge)).filter(Boolean)
     : [];
-  return { nodes, edges };
+  const viewport = sanitizeCanvasViewport(canvasState?.viewport);
+  return viewport ? { nodes, edges, viewport } : { nodes, edges };
 };
 
 const areCanvasStatesEqual = (left, right) => {

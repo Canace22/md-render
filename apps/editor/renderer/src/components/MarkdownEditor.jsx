@@ -432,21 +432,35 @@ function MarkdownEditor() {
   }, [allFiles]);
   const canvasState = useMemo(() => {
     const raw = workspace?.canvasState;
+    const viewport = raw?.viewport;
+    const hasViewport = viewport
+      && Number.isFinite(Number(viewport.x))
+      && Number.isFinite(Number(viewport.y))
+      && Number.isFinite(Number(viewport.zoom));
     return {
       nodes: Array.isArray(raw?.nodes) ? raw.nodes : [],
       edges: Array.isArray(raw?.edges) ? raw.edges : [],
+      viewport: hasViewport ? viewport : null,
     };
   }, [workspace]);
   const canvasSurfaceItems = useMemo(() => {
-    const nodeMap = new Map(
-      canvasState.nodes.map((node) => [String(node.sourceId ?? node.id), node]),
+    const itemMap = new Map(
+      canvasItems.map((item) => [String(item.id), item]),
     );
-    return canvasItems.map((item) => {
-      const savedNode = nodeMap.get(String(item.id));
-      return savedNode?.position
-        ? { ...item, position: savedNode.position, sourceId: savedNode.sourceId ?? item.id }
-        : item;
-    });
+
+    return canvasState.nodes
+      .map((node) => {
+        const sourceId = String(node.sourceId ?? node.id);
+        const item = itemMap.get(sourceId);
+        if (!item) return null;
+
+        return {
+          ...item,
+          sourceId,
+          position: node.position,
+        };
+      })
+      .filter(Boolean);
   }, [canvasItems, canvasState.nodes]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
   const notionLocalDev = isLocalDevMode();
@@ -460,7 +474,27 @@ function MarkdownEditor() {
   const localProjectSupported = isLocalProjectSupported();
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
   const handleCanvasChange = useCallback((nodes, edges) => {
-    setWorkspaceCanvas({ nodes, edges });
+    const currentState = useEditorStore.getState().workspace?.canvasState;
+    setWorkspaceCanvas({
+      nodes,
+      edges,
+      viewport: currentState?.viewport ?? null,
+    });
+  }, [setWorkspaceCanvas]);
+  const handleCanvasViewportChange = useCallback((viewport) => {
+    const currentState = useEditorStore.getState().workspace?.canvasState ?? {};
+    setWorkspaceCanvas({
+      nodes: Array.isArray(currentState.nodes) ? currentState.nodes : [],
+      edges: Array.isArray(currentState.edges) ? currentState.edges : [],
+      viewport,
+    });
+  }, [setWorkspaceCanvas]);
+  const handleClearCanvas = useCallback(() => {
+    setWorkspaceCanvas({
+      nodes: [],
+      edges: [],
+      viewport: null,
+    });
   }, [setWorkspaceCanvas]);
   const performRename = useCallback(async (targetId, rawName) => {
     const trimmed = String(rawName ?? '').trim();
@@ -1790,8 +1824,12 @@ function MarkdownEditor() {
         ) : surface === 'canvas' ? (
           <CanvasSurface
             items={canvasSurfaceItems}
+            addableItems={canvasItems}
             edges={canvasState.edges}
+            viewport={canvasState.viewport}
             onChange={handleCanvasChange}
+            onClearCanvas={handleClearCanvas}
+            onViewportChange={handleCanvasViewportChange}
             onOpenFile={selectNode}
           />
         ) : surface === 'creation-board' ? (

@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Select } from 'antd';
+import { Alert, Button, Card, Empty, Input, Popconfirm, Popover, Select, Tag, Typography } from 'antd';
+import { Eraser, Maximize2, Menu, Minimize2 } from 'lucide-react';
 import {
   ReactFlow,
+  ReactFlowProvider,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
@@ -13,16 +15,26 @@ import {
   Position,
   useEdgesState,
   useNodesState,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 const NODE_WIDTH = 252;
-const GRID_COLUMNS = 4;
-const GRID_GAP_X = 284;
-const GRID_GAP_Y = 176;
+const GRID_COLUMNS_WIDE = 4;
+const GRID_COLUMNS_MEDIUM = 3;
+const GRID_COLUMNS_NARROW = 2;
+const GRID_NARROW_THRESHOLD = 4;
+const GRID_MEDIUM_THRESHOLD = 9;
+const GRID_GAP_X = 332;
+const GRID_GAP_Y = 228;
+const GRID_STAGGER_OFFSET_X = 42;
 const HANDLE_OFFSET = -8;
 const ALL_FILTER_VALUE = '__all__';
 const TITLE_FILTER_DEBOUNCE_MS = 360;
+const INITIAL_FIT_PADDING = 0.16;
+const INITIAL_FIT_MIN_ZOOM = 0.78;
+const INITIAL_FIT_MAX_ZOOM = 1;
+const DEFAULT_LIBRARY_OPEN = false;
 const LINK_FILTER_OPTIONS = [
   { value: ALL_FILTER_VALUE, label: '全部链接状态' },
   { value: 'linked', label: '有外链' },
@@ -71,16 +83,25 @@ const getItemLinkState = (item) => {
   return trimText(item?.url) ? 'linked' : 'plain';
 };
 
-function getItemPosition(item, index) {
+function getItemPosition(item, index, itemCount) {
   const x = item?.position?.x ?? item?.x;
   const y = item?.position?.y ?? item?.y;
   if (Number.isFinite(x) && Number.isFinite(y)) {
     return { x, y };
   }
+  const columns = getGridColumns(itemCount);
+  const row = Math.floor(index / columns);
+  const column = index % columns;
   return {
-    x: (index % GRID_COLUMNS) * GRID_GAP_X,
-    y: Math.floor(index / GRID_COLUMNS) * GRID_GAP_Y,
+    x: column * GRID_GAP_X + (row % 2 === 0 ? 0 : GRID_STAGGER_OFFSET_X),
+    y: row * GRID_GAP_Y,
   };
+}
+
+function getGridColumns(itemCount) {
+  if (itemCount <= GRID_NARROW_THRESHOLD) return GRID_COLUMNS_NARROW;
+  if (itemCount <= GRID_MEDIUM_THRESHOLD) return GRID_COLUMNS_MEDIUM;
+  return GRID_COLUMNS_WIDE;
 }
 
 function buildNodeData(item, index) {
@@ -103,10 +124,11 @@ function buildNodeData(item, index) {
 }
 
 function mapItemsToNodes(items) {
-  return (Array.isArray(items) ? items : []).map((item, index) => ({
+  const list = Array.isArray(items) ? items : [];
+  return list.map((item, index) => ({
     id: getItemId(item, index),
     type: 'canvasCard',
-    position: getItemPosition(item, index),
+    position: getItemPosition(item, index, list.length),
     data: buildNodeData(item, index),
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
@@ -221,12 +243,27 @@ function mergeVisibleEdgeChanges(allEdges, visibleEdges, visibleItems) {
   return [...hiddenEdges, ...serializeEdges(visibleEdges)];
 }
 
+function buildSerializedNodes(items) {
+  return serializeNodes(mapItemsToNodes(items));
+}
+
+function filterLibraryItems(items, query) {
+  const keyword = trimText(query).toLowerCase();
+  if (!keyword) return items;
+
+  return items.filter((item, index) => {
+    const title = getItemTitle(item, index).toLowerCase();
+    const summary = getItemSummary(item).toLowerCase();
+    return title.includes(keyword) || summary.includes(keyword);
+  });
+}
+
 const CanvasCardNode = memo(function CanvasCardNode({ data }) {
   const chips = data.tags.filter(Boolean);
   const sourceText = data.url ? data.url.replace(/^https?:\/\//, '') : '';
 
   return (
-    <div className="canvas-node-card" title={data.title}>
+    <Card size="small" bordered={false} className="canvas-node-card" title={null}>
       <Handle
         type="target"
         position={Position.Left}
@@ -241,99 +278,114 @@ const CanvasCardNode = memo(function CanvasCardNode({ data }) {
         className="canvas-node-handle canvas-node-handle--source"
         style={{ right: HANDLE_OFFSET }}
       />
-      <div className="canvas-node-type">{data.typeLabel}</div>
-      <h3 className="canvas-node-title">{data.title}</h3>
-      <div className="canvas-node-metaLine">{data.metaLine}</div>
-      <p className="canvas-node-summary">{data.summary}</p>
+      <Tag bordered={false} className="canvas-node-type">
+        {data.typeLabel}
+      </Tag>
+      <Typography.Title level={3} className="canvas-node-title" title={data.title}>
+        {data.title}
+      </Typography.Title>
+      <Typography.Text className="canvas-node-metaLine" title={data.metaLine}>
+        {data.metaLine}
+      </Typography.Text>
+      <Typography.Paragraph className="canvas-node-summary" ellipsis={{ rows: 2 }}>
+        {data.summary}
+      </Typography.Paragraph>
       {chips.length > 0 ? (
         <div className="canvas-node-tags">
           {chips.map((value, index) => (
-            <span key={`${data.id}-chip-${index}`} className="canvas-node-tag">
+            <Tag key={`${data.id}-chip-${index}`} bordered={false} className="canvas-node-tag">
               {value}
-            </span>
+            </Tag>
           ))}
         </div>
       ) : null}
       {sourceText ? (
-        <div className="canvas-node-source" title={data.url}>
+        <Typography.Text className="canvas-node-source" title={data.url} ellipsis>
           {sourceText}
-        </div>
+        </Typography.Text>
       ) : null}
-    </div>
+    </Card>
   );
 });
 
 function CanvasToolbar({
-  itemCount,
-  edgeCount,
-  bookmarkCount,
   filters,
+  hasCanvasContent,
+  isFullscreen,
   titleDraft,
   typeOptions,
   tagOptions,
+  onClearCanvas,
   onFilterChange,
+  onToggleFullscreen,
   onTitleDraftChange,
   onResetFilters,
 }) {
   return (
     <header className="canvas-toolbar">
-      <div className="canvas-toolbar-main">
-        <span className="canvas-toolbar-kicker">Canvas Workspace</span>
-        <h2 className="canvas-toolbar-title">内容画布</h2>
-        <p className="canvas-toolbar-desc">
-          保持现在的底色不变，把内容节点和关系线收成更清楚的内容流程图。
-        </p>
+      <div className="canvas-toolbar-filters">
+        <Select
+          size="small"
+          className="canvas-filter-select"
+          value={filters.type}
+          options={typeOptions}
+          onChange={(value) => onFilterChange('type', value)}
+        />
+        <Select
+          size="small"
+          className="canvas-filter-select"
+          value={filters.tag}
+          options={tagOptions}
+          onChange={(value) => onFilterChange('tag', value)}
+        />
+        <Select
+          size="small"
+          className="canvas-filter-select"
+          value={filters.link}
+          options={LINK_FILTER_OPTIONS}
+          onChange={(value) => onFilterChange('link', value)}
+        />
+        <Input
+          size="small"
+          className="canvas-filter-input"
+          value={titleDraft}
+          placeholder="筛选标题"
+          onChange={(event) => onTitleDraftChange(event.target.value)}
+          allowClear
+        />
+        <Button size="small" className="canvas-filter-reset" onClick={onResetFilters}>
+          重置
+        </Button>
       </div>
-      <div className="canvas-toolbar-side">
-        <div className="canvas-toolbar-filters">
-          <Select
+      <div className="canvas-toolbar-actions">
+        <Popconfirm
+          title="清空当前画布？"
+          description="会移除画布里的全部卡片、连线和视角位置。"
+          okText="清空"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          disabled={!hasCanvasContent}
+          onConfirm={onClearCanvas}
+        >
+          <Button
             size="small"
-            className="canvas-filter-select"
-            value={filters.type}
-            options={typeOptions}
-            onChange={(value) => onFilterChange('type', value)}
+            danger
+            disabled={!hasCanvasContent}
+            className="canvas-toolbar-action canvas-toolbar-action-danger"
+            icon={<Eraser size={14} strokeWidth={1.8} />}
+            title="一键清空当前画布"
+            aria-label="一键清空当前画布"
           />
-          <Select
-            size="small"
-            className="canvas-filter-select"
-            value={filters.tag}
-            options={tagOptions}
-            onChange={(value) => onFilterChange('tag', value)}
-          />
-          <Select
-            size="small"
-            className="canvas-filter-select"
-            value={filters.link}
-            options={LINK_FILTER_OPTIONS}
-            onChange={(value) => onFilterChange('link', value)}
-          />
-          <Input
-            size="small"
-            className="canvas-filter-input"
-            value={titleDraft}
-            placeholder="筛选标题"
-            onChange={(event) => onTitleDraftChange(event.target.value)}
-            allowClear
-          />
-          <Button size="small" className="canvas-filter-reset" onClick={onResetFilters}>
-            重置
-          </Button>
-        </div>
-        <div className="canvas-toolbar-stats">
-          <div className="canvas-stat">
-            <span className="canvas-stat-label">卡片</span>
-            <strong className="canvas-stat-value">{itemCount}</strong>
-          </div>
-          <div className="canvas-stat">
-            <span className="canvas-stat-label">连线</span>
-            <strong className="canvas-stat-value">{edgeCount}</strong>
-          </div>
-          <div className="canvas-stat">
-            <span className="canvas-stat-label">书签</span>
-            <strong className="canvas-stat-value">{bookmarkCount}</strong>
-          </div>
-        </div>
-        <div className="canvas-toolbar-hint">双击节点打开原文档，双击连线可删除</div>
+        </Popconfirm>
+        <Button
+          size="small"
+          className="canvas-toolbar-action"
+          icon={isFullscreen ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
+          onClick={onToggleFullscreen}
+          aria-pressed={isFullscreen}
+          title={isFullscreen ? '退出全屏' : '全屏显示'}
+        >
+        </Button>
       </div>
     </header>
   );
@@ -341,15 +393,85 @@ function CanvasToolbar({
 
 const NODE_TYPES = { canvasCard: CanvasCardNode };
 
+function CanvasFlowPanel({
+  flowNodes,
+  flowEdges,
+  savedViewport,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  onEdgeDoubleClick,
+  onNodeDoubleClick,
+  onViewportChange,
+}) {
+  const { fitView, getViewport } = useReactFlow();
+  const didInitialFitRef = useRef(false);
+
+  useEffect(() => {
+    if (savedViewport || didInitialFitRef.current || !flowNodes.length) return;
+    didInitialFitRef.current = true;
+    requestAnimationFrame(() => {
+      fitView({
+        padding: INITIAL_FIT_PADDING,
+        minZoom: INITIAL_FIT_MIN_ZOOM,
+        maxZoom: INITIAL_FIT_MAX_ZOOM,
+      }).then(() => {
+        onViewportChange?.(getViewport());
+      });
+    });
+  }, [flowNodes.length, fitView, getViewport, onViewportChange, savedViewport]);
+
+  const handleMoveEnd = useCallback((_event, viewport) => {
+    onViewportChange?.(viewport);
+  }, [onViewportChange]);
+
+  return (
+    <ReactFlow
+      nodes={flowNodes}
+      edges={flowEdges}
+      nodeTypes={NODE_TYPES}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onConnect={onConnect}
+      onEdgeDoubleClick={onEdgeDoubleClick}
+      onNodeDoubleClick={onNodeDoubleClick}
+      onMoveEnd={handleMoveEnd}
+      defaultViewport={savedViewport ?? undefined}
+      minZoom={0.2}
+      maxZoom={2}
+      panOnDrag
+      zoomOnScroll
+      zoomOnPinch
+      proOptions={{ hideAttribution: true }}
+    >
+      <MiniMap
+        pannable
+        zoomable
+        nodeBorderRadius={8}
+        maskColor="rgba(15, 23, 42, 0.08)"
+        style={{ background: 'rgba(255, 255, 255, 0.92)' }}
+      />
+      <Controls showInteractive />
+      <Background gap={20} size={1} color="rgba(100, 116, 139, 0.18)" />
+    </ReactFlow>
+  );
+}
+
 function CanvasSurfaceInner({
   documents,
   items,
+  addableItems,
   edges,
+  viewport,
   onChange,
+  onClearCanvas,
+  onViewportChange,
   onOpenFile,
-  emptyText = '暂无可展示的内容。',
+  emptyText = '先从右上角候选列表选择内容，开始灵感之旅吧',
 }) {
   const sourceItems = items ?? documents ?? [];
+  const libraryItems = addableItems ?? documents ?? [];
+  const [isLibraryOpen, setIsLibraryOpen] = useState(DEFAULT_LIBRARY_OPEN);
   const [filters, setFilters] = useState({
     type: ALL_FILTER_VALUE,
     tag: ALL_FILTER_VALUE,
@@ -357,6 +479,8 @@ function CanvasSurfaceInner({
     title: '',
   });
   const [titleDraft, setTitleDraft] = useState('');
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const allCanvasNodes = useMemo(() => mapItemsToNodes(sourceItems), [sourceItems]);
   const allCanvasEdges = useMemo(() => mapEdges(edges), [edges]);
   const typeOptions = useMemo(() => buildTypeOptions(sourceItems), [sourceItems]);
@@ -364,15 +488,17 @@ function CanvasSurfaceInner({
   const filteredItems = useMemo(() => {
     return sourceItems.filter((item) => matchesFilters(item, filters));
   }, [filters, sourceItems]);
+  const addedItemIds = useMemo(() => {
+    return new Set(sourceItems.map((item) => String(item?.sourceId ?? item?.id)));
+  }, [sourceItems]);
+  const filteredLibraryItems = useMemo(() => {
+    return filterLibraryItems(libraryItems, libraryQuery);
+  }, [libraryItems, libraryQuery]);
   const filteredEdges = useMemo(() => {
     return filterEdgesByVisibleNodes(edges, filteredItems);
   }, [edges, filteredItems]);
   const controlledNodes = useMemo(() => mapItemsToNodes(filteredItems), [filteredItems]);
   const controlledEdges = useMemo(() => mapEdges(filteredEdges), [filteredEdges]);
-  const bookmarkCount = useMemo(
-    () => filteredItems.filter((item) => trimText(item?.nodeType ?? item?.type) === 'bookmark').length,
-    [filteredItems],
-  );
   const [flowNodes, setFlowNodes] = useNodesState(controlledNodes);
   const [flowEdges, setFlowEdges] = useEdgesState(controlledEdges);
   const isSyncingRef = useRef(false);
@@ -385,6 +511,7 @@ function CanvasSurfaceInner({
       || Boolean(trimText(filters.title))
     );
   }, [filters]);
+  const hasCanvasContent = allCanvasNodes.length > 0 || allCanvasEdges.length > 0 || Boolean(viewport);
   const emptyStateText = hasActiveFilters
     ? '当前筛选条件下没有命中内容。可以重置筛选，或换一个标签、类型或标题关键词。'
     : emptyText;
@@ -396,6 +523,27 @@ function CanvasSurfaceInner({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      document.body.classList.remove('canvas-fullscreen-active');
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsFullscreen(false);
+      }
+    };
+
+    document.body.classList.add('canvas-fullscreen-active');
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.classList.remove('canvas-fullscreen-active');
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     isSyncingRef.current = true;
@@ -469,64 +617,169 @@ function CanvasSurfaceInner({
     });
   }, []);
 
+  const handleToggleFullscreen = useCallback(() => {
+    setIsLibraryOpen(false);
+    setIsFullscreen((current) => !current);
+  }, []);
+
+  const handleAddItem = useCallback((item) => {
+    const targetId = String(item?.sourceId ?? item?.id ?? '');
+    if (!targetId || addedItemIds.has(targetId)) return;
+
+    const nextItems = [...sourceItems, item];
+    onChange?.(buildSerializedNodes(nextItems), serializeEdges(allCanvasEdges));
+  }, [addedItemIds, allCanvasEdges, onChange, sourceItems]);
+
+  const handleRemoveItem = useCallback((itemId) => {
+    const targetId = String(itemId ?? '');
+    if (!targetId) return;
+
+    const nextItems = sourceItems.filter((item) => String(item?.sourceId ?? item?.id) !== targetId);
+    const nextEdges = serializeEdges(allCanvasEdges).filter((edge) => {
+      return String(edge.source) !== targetId && String(edge.target) !== targetId;
+    });
+
+    onChange?.(buildSerializedNodes(nextItems), nextEdges);
+  }, [allCanvasEdges, onChange, sourceItems]);
+
+  const libraryPanel = (
+    <div className="canvas-library">
+      <div className="canvas-library-head">
+        <div className="canvas-library-head-copy">
+          <Typography.Title level={4} className="canvas-library-title">
+            候选卡片
+          </Typography.Title>
+          <Typography.Paragraph className="canvas-library-subtitle">
+            从列表里挑内容加入画布，按你的节奏搭灵感链路。
+          </Typography.Paragraph>
+        </div>
+        <Tag bordered={false} className="canvas-library-count">
+          {filteredLibraryItems.length} 项
+        </Tag>
+      </div>
+
+      <Input
+        size="small"
+        value={libraryQuery}
+        className="canvas-library-search"
+        placeholder="搜索候选卡片"
+        onChange={(event) => setLibraryQuery(event.target.value)}
+        allowClear
+      />
+
+      <div className="canvas-library-list">
+        {filteredLibraryItems.length ? filteredLibraryItems.map((item, index) => {
+          const itemId = String(item?.sourceId ?? item?.id ?? `library-${index}`);
+          const added = addedItemIds.has(itemId);
+
+          return (
+            <article key={itemId} className={`canvas-library-item${added ? ' is-added' : ''}`}>
+              <div className="canvas-library-item-copy">
+                <div className="canvas-library-item-head">
+                  <strong>{getItemTitle(item, index)}</strong>
+                  <span>{getItemTypeLabel(item)}</span>
+                </div>
+                <p>{getItemSummary(item)}</p>
+              </div>
+              <Button
+                size="small"
+                type={added ? 'default' : 'primary'}
+                onClick={() => (added ? handleRemoveItem(itemId) : handleAddItem(item))}
+              >
+                {added ? '移出画布' : '加入画布'}
+              </Button>
+            </article>
+          );
+        }) : (
+          <div className="canvas-library-empty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的候选卡片" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <section className="canvas-surface" data-testid="canvas-surface">
+    <section
+      className={`canvas-surface${isFullscreen ? ' canvas-surface--fullscreen' : ''}`}
+      data-testid="canvas-surface"
+    >
       <CanvasToolbar
-        itemCount={flowNodes.length}
-        edgeCount={flowEdges.length}
-        bookmarkCount={bookmarkCount}
         filters={filters}
+        hasCanvasContent={hasCanvasContent}
+        isFullscreen={isFullscreen}
         titleDraft={titleDraft}
         typeOptions={typeOptions}
         tagOptions={tagOptions}
+        onClearCanvas={onClearCanvas}
         onFilterChange={handleFilterChange}
+        onToggleFullscreen={handleToggleFullscreen}
         onTitleDraftChange={handleTitleDraftChange}
         onResetFilters={handleResetFilters}
       />
-      {flowNodes.length ? (
-        <div className="canvas-flow">
-          <div className="canvas-flow-callout">
-            提示：拖拽排布节点，用左右锚点连线，适合整理“素材 -> 稿件 -> 发布”的内容链路。
-          </div>
-          <ReactFlow
-            nodes={flowNodes}
-            edges={flowEdges}
-            nodeTypes={NODE_TYPES}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onConnect={handleConnect}
-            onEdgeDoubleClick={handleEdgeDoubleClick}
-            onNodeDoubleClick={handleNodeDoubleClick}
-            fitView
-            fitViewOptions={{ padding: 0.08, maxZoom: 0.92 }}
-            minZoom={0.2}
-            maxZoom={2}
-            panOnDrag
-            zoomOnScroll
-            zoomOnPinch
-            proOptions={{ hideAttribution: true }}
-          >
-            <MiniMap
-              pannable
-              zoomable
-              nodeBorderRadius={8}
-              maskColor="rgba(15, 23, 42, 0.08)"
-              style={{ background: 'rgba(255, 255, 255, 0.92)' }}
+      <div className="canvas-stage">
+        <Popover
+          trigger="click"
+          placement="bottomRight"
+          overlayClassName="canvas-library-popover"
+          content={libraryPanel}
+          open={isLibraryOpen}
+          onOpenChange={setIsLibraryOpen}
+        >
+          <Button
+            type="text"
+            className="canvas-library-trigger"
+            icon={<Menu size={16} strokeWidth={1.8} />}
+            title="候选列表"
+            aria-label="候选列表"
+          />
+        </Popover>
+        {flowNodes.length ? (
+          <div className="canvas-flow">
+            <Alert
+              className="canvas-flow-callout"
+              type="info"
+              showIcon
+              message="提示：点右上角菜单加入卡片，再拖拽排布节点、用左右锚点连线。"
             />
-            <Controls showInteractive />
-            <Background gap={20} size={1} color="rgba(100, 116, 139, 0.18)" />
-          </ReactFlow>
-        </div>
-      ) : (
-        <div className="canvas-empty-state">
-          <strong className="canvas-empty-state-title">画布还没有内容</strong>
-          <p className="canvas-empty-state-text">{emptyStateText}</p>
-        </div>
-      )}
+            <CanvasFlowPanel
+              flowNodes={flowNodes}
+              flowEdges={flowEdges}
+              savedViewport={viewport}
+              onNodesChange={handleNodesChange}
+              onEdgesChange={handleEdgesChange}
+              onConnect={handleConnect}
+              onEdgeDoubleClick={handleEdgeDoubleClick}
+              onNodeDoubleClick={handleNodeDoubleClick}
+              onViewportChange={onViewportChange}
+            />
+          </div>
+        ) : (
+          <div className="canvas-empty-state">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={(
+                <div className="canvas-empty-state-copy">
+                  <Typography.Title level={3} className="canvas-empty-state-title">
+                    画布一开始保持空白
+                  </Typography.Title>
+                  <Typography.Paragraph className="canvas-empty-state-text">
+                    {emptyStateText}
+                  </Typography.Paragraph>
+                </div>
+              )}
+            />
+          </div>
+        )}
+      </div>
     </section>
   );
 }
 
 export default function CanvasSurface(props) {
-  return <CanvasSurfaceInner {...props} />;
+  return (
+    <ReactFlowProvider>
+      <CanvasSurfaceInner {...props} />
+    </ReactFlowProvider>
+  );
 }
