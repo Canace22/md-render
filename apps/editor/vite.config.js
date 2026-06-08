@@ -7,6 +7,17 @@ import electron from 'vite-plugin-electron/simple';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererRoot = path.join(__dirname, 'renderer');
 
+// blocknote-core 仅消费 dist 构建产物（纯 JS），避免把包的 .ts 源码引入 renderer 构建链
+const blocknoteCoreDist = path.join(
+  __dirname,
+  '..',
+  '..',
+  'packages',
+  'blocknote-core',
+  'dist',
+  'index.js',
+);
+
 // 是否以 Electron 模式运行（pnpm electron:dev / electron:build）
 const isElectron = !!process.env.ELECTRON;
 
@@ -22,6 +33,12 @@ const inferBase = () => {
 export default defineConfig({
   root: rendererRoot,
   base: inferBase(),
+  resolve: {
+    alias: {
+      // 明确消费包的 dist 构建产物（ESM），不引入包的 .ts 源码
+      '@narrative/blocknote-core': blocknoteCoreDist,
+    },
+  },
   build: {
     outDir: path.join(__dirname, 'dist'),
     emptyOutDir: true,

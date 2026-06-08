@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
 import { useCreateBlockNote } from '@blocknote/react';
-import { BlockNoteEditor, BlockNoteSchema, createCodeBlockSpec, defaultBlockSpecs } from '@blocknote/core';
+import { BlockNoteEditor, createCodeBlockSpec } from '@blocknote/core';
+import { buildSchema } from '@narrative/blocknote-core';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
 import '@blocknote/core/fonts/inter.css';
@@ -136,15 +137,18 @@ const createCodeBlockHighlighter = async () => {
 
 const LOCAL_BOOKMARK_FOLDER_RELATIVE_PATH = 'Projects/书签';
 
-const EDITOR_SCHEMA = BlockNoteSchema.create({
+// 用 blocknote-core 的 buildSchema 统一组装；本应用是 Markdown 编辑器，
+// 必须保留 heading / quote（buildSchema 默认会排除它们），故传 excludeDefaultBlocks: []。
+// buildSchema 内部已合并 defaultBlockSpecs，这里只需传自定义块。
+const EDITOR_SCHEMA = buildSchema({
   blockSpecs: {
-    ...defaultBlockSpecs,
     codeBlock: createCodeBlockSpec({
       supportedLanguages: CODE_BLOCK_LANGUAGES,
       defaultLanguage: 'text',
       createHighlighter: createCodeBlockHighlighter,
     }),
   },
+  excludeDefaultBlocks: [],
 });
 
 const BLOCKNOTE_OPTIONS = {

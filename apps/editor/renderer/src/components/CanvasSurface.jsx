@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Empty, Input, Popconfirm, Popover, Select, Tag, Typography } from 'antd';
-import { Eraser, Maximize2, Menu, Minimize2 } from 'lucide-react';
+import { Button, Card, Empty, Input, Popconfirm, Popover, Select, Tag, Typography } from 'antd';
+import { Eraser, FileText, Filter, Maximize2, Minimize2 } from 'lucide-react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -35,6 +35,13 @@ const INITIAL_FIT_PADDING = 0.16;
 const INITIAL_FIT_MIN_ZOOM = 0.78;
 const INITIAL_FIT_MAX_ZOOM = 1;
 const DEFAULT_LIBRARY_OPEN = false;
+const CANVAS_TITLE = '白板';
+const CANVAS_EMPTY_HINTS = [
+  '从下方加入卡片，或双击空白处打开候选列表',
+  '拖动画布空白处移动视角',
+  '滚轮缩放，拖拽节点锚点建立连线',
+];
+const REACT_FLOW_PANE_CLASS = 'react-flow__pane';
 const LINK_FILTER_OPTIONS = [
   { value: ALL_FILTER_VALUE, label: '全部链接状态' },
   { value: 'linked', label: '有外链' },
@@ -321,43 +328,59 @@ function CanvasToolbar({
   onTitleDraftChange,
   onResetFilters,
 }) {
+  const filterPanel = (
+    <div className="canvas-filter-panel">
+      <Select
+        size="small"
+        className="canvas-filter-select"
+        value={filters.type}
+        options={typeOptions}
+        onChange={(value) => onFilterChange('type', value)}
+      />
+      <Select
+        size="small"
+        className="canvas-filter-select"
+        value={filters.tag}
+        options={tagOptions}
+        onChange={(value) => onFilterChange('tag', value)}
+      />
+      <Select
+        size="small"
+        className="canvas-filter-select"
+        value={filters.link}
+        options={LINK_FILTER_OPTIONS}
+        onChange={(value) => onFilterChange('link', value)}
+      />
+      <Input
+        size="small"
+        className="canvas-filter-input"
+        value={titleDraft}
+        placeholder="筛选标题"
+        onChange={(event) => onTitleDraftChange(event.target.value)}
+        allowClear
+      />
+      <Button size="small" className="canvas-filter-reset" onClick={onResetFilters}>
+        重置筛选
+      </Button>
+    </div>
+  );
+
   return (
-    <header className="canvas-toolbar">
-      <div className="canvas-toolbar-filters">
-        <Select
+    <header className="canvas-floating-controls" aria-label="白板工具栏">
+      <Popover
+        trigger="click"
+        placement="leftTop"
+        overlayClassName="canvas-filter-popover"
+        content={filterPanel}
+      >
+        <Button
           size="small"
-          className="canvas-filter-select"
-          value={filters.type}
-          options={typeOptions}
-          onChange={(value) => onFilterChange('type', value)}
+          className="canvas-toolbar-action"
+          icon={<Filter size={14} strokeWidth={1.8} />}
+          title="筛选画布卡片"
+          aria-label="筛选画布卡片"
         />
-        <Select
-          size="small"
-          className="canvas-filter-select"
-          value={filters.tag}
-          options={tagOptions}
-          onChange={(value) => onFilterChange('tag', value)}
-        />
-        <Select
-          size="small"
-          className="canvas-filter-select"
-          value={filters.link}
-          options={LINK_FILTER_OPTIONS}
-          onChange={(value) => onFilterChange('link', value)}
-        />
-        <Input
-          size="small"
-          className="canvas-filter-input"
-          value={titleDraft}
-          placeholder="筛选标题"
-          onChange={(event) => onTitleDraftChange(event.target.value)}
-          allowClear
-        />
-        <Button size="small" className="canvas-filter-reset" onClick={onResetFilters}>
-          重置
-        </Button>
-      </div>
-      <div className="canvas-toolbar-actions">
+      </Popover>
         <Popconfirm
           title="清空当前画布？"
           description="会移除画布里的全部卡片、连线和视角位置。"
@@ -386,7 +409,6 @@ function CanvasToolbar({
           title={isFullscreen ? '退出全屏' : '全屏显示'}
         >
         </Button>
-      </div>
     </header>
   );
 }
@@ -444,15 +466,17 @@ function CanvasFlowPanel({
       zoomOnPinch
       proOptions={{ hideAttribution: true }}
     >
-      <MiniMap
-        pannable
-        zoomable
-        nodeBorderRadius={8}
-        maskColor="rgba(15, 23, 42, 0.08)"
-        style={{ background: 'rgba(255, 255, 255, 0.92)' }}
-      />
-      <Controls showInteractive />
-      <Background gap={20} size={1} color="rgba(100, 116, 139, 0.18)" />
+      {flowNodes.length ? (
+        <MiniMap
+          pannable
+          zoomable
+          nodeBorderRadius={8}
+          maskColor="rgba(15, 23, 42, 0.08)"
+          style={{ background: 'rgba(255, 255, 255, 0.92)' }}
+        />
+      ) : null}
+      <Controls position="top-right" showInteractive={false} />
+      <Background gap={20} size={1} color="var(--canvas-grid-color)" />
     </ReactFlow>
   );
 }
@@ -588,6 +612,12 @@ function CanvasSurfaceInner({
     onOpenFile?.(node.data?.sourceId ?? node.id);
   }, [onOpenFile]);
 
+  const handlePaneDoubleClick = useCallback((event) => {
+    if (!event.target?.classList?.contains(REACT_FLOW_PANE_CLASS)) return;
+    event.preventDefault();
+    setIsLibraryOpen(true);
+  }, []);
+
   const handleFilterChange = useCallback((key, value) => {
     setFilters((current) => ({ ...current, [key]: value }));
   }, []);
@@ -704,23 +734,26 @@ function CanvasSurfaceInner({
       className={`canvas-surface${isFullscreen ? ' canvas-surface--fullscreen' : ''}`}
       data-testid="canvas-surface"
     >
-      <CanvasToolbar
-        filters={filters}
-        hasCanvasContent={hasCanvasContent}
-        isFullscreen={isFullscreen}
-        titleDraft={titleDraft}
-        typeOptions={typeOptions}
-        tagOptions={tagOptions}
-        onClearCanvas={onClearCanvas}
-        onFilterChange={handleFilterChange}
-        onToggleFullscreen={handleToggleFullscreen}
-        onTitleDraftChange={handleTitleDraftChange}
-        onResetFilters={handleResetFilters}
-      />
       <div className="canvas-stage">
+        <div className="canvas-titlebar" aria-label={CANVAS_TITLE}>
+          {CANVAS_TITLE}
+        </div>
+        <CanvasToolbar
+          filters={filters}
+          hasCanvasContent={hasCanvasContent}
+          isFullscreen={isFullscreen}
+          titleDraft={titleDraft}
+          typeOptions={typeOptions}
+          tagOptions={tagOptions}
+          onClearCanvas={onClearCanvas}
+          onFilterChange={handleFilterChange}
+          onToggleFullscreen={handleToggleFullscreen}
+          onTitleDraftChange={handleTitleDraftChange}
+          onResetFilters={handleResetFilters}
+        />
         <Popover
           trigger="click"
-          placement="bottomRight"
+          placement="top"
           overlayClassName="canvas-library-popover"
           content={libraryPanel}
           open={isLibraryOpen}
@@ -728,49 +761,33 @@ function CanvasSurfaceInner({
         >
           <Button
             type="text"
-            className="canvas-library-trigger"
-            icon={<Menu size={16} strokeWidth={1.8} />}
-            title="候选列表"
-            aria-label="候选列表"
+            className="canvas-add-dock"
+            icon={<FileText size={22} strokeWidth={1.7} />}
+            title="加入卡片"
+            aria-label="加入卡片"
           />
         </Popover>
-        {flowNodes.length ? (
-          <div className="canvas-flow">
-            <Alert
-              className="canvas-flow-callout"
-              type="info"
-              showIcon
-              message="提示：点右上角菜单加入卡片，再拖拽排布节点、用左右锚点连线。"
-            />
-            <CanvasFlowPanel
-              flowNodes={flowNodes}
-              flowEdges={flowEdges}
-              savedViewport={viewport}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={handleEdgesChange}
-              onConnect={handleConnect}
-              onEdgeDoubleClick={handleEdgeDoubleClick}
-              onNodeDoubleClick={handleNodeDoubleClick}
-              onViewportChange={onViewportChange}
-            />
-          </div>
-        ) : (
-          <div className="canvas-empty-state">
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={(
-                <div className="canvas-empty-state-copy">
-                  <Typography.Title level={3} className="canvas-empty-state-title">
-                    画布一开始保持空白
-                  </Typography.Title>
-                  <Typography.Paragraph className="canvas-empty-state-text">
-                    {emptyStateText}
-                  </Typography.Paragraph>
-                </div>
-              )}
-            />
-          </div>
-        )}
+        <div className="canvas-flow" onDoubleClick={handlePaneDoubleClick}>
+          {!flowNodes.length ? (
+            <div className="canvas-center-help">
+              <div className="canvas-center-help-title">{emptyStateText}</div>
+              {CANVAS_EMPTY_HINTS.map((hint) => (
+                <div key={hint} className="canvas-center-help-line">{hint}</div>
+              ))}
+            </div>
+          ) : null}
+          <CanvasFlowPanel
+            flowNodes={flowNodes}
+            flowEdges={flowEdges}
+            savedViewport={viewport}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={handleConnect}
+            onEdgeDoubleClick={handleEdgeDoubleClick}
+            onNodeDoubleClick={handleNodeDoubleClick}
+            onViewportChange={onViewportChange}
+          />
+        </div>
       </div>
     </section>
   );

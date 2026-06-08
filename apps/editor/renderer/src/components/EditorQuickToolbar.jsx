@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'antd';
+import { EditorToolbar } from '@narrative/blocknote-core';
 import {
   Sparkles,
   Heading1,
@@ -99,6 +99,13 @@ function insertDivider(editor) {
   editor.focus();
 }
 
+/**
+ * 编辑器底部快捷工具栏。
+ *
+ * 渲染交由 blocknote-core 的通用 EditorToolbar（数据驱动）；本组件只负责
+ * 把「块插入 / AI / 复制 / 预览」这些领域动作映射成 EditorToolbar 的 entries。
+ * disabled 时所有 onItemClick 变为 no-op（EditorToolbar 不感知业务禁用态）。
+ */
 export default function EditorQuickToolbar({
   editor,
   disabled,
@@ -142,64 +149,93 @@ export default function EditorQuickToolbar({
     applyBlock(editor, item.block);
   };
 
+  // 把领域动作映射为 EditorToolbar 的 entries（按钮 / 分隔线）。
+  // 注：EditorToolbar 无单项 disabled，故 disabled 时 onItemClick 直接 no-op。
+  const blockEntries = TOOL_ITEMS.map((item) => ({
+    type: 'button',
+    key: item.key,
+    button: {
+      title: item.label,
+      label: item.label,
+      icon: item.icon,
+      onItemClick: () => handleToolClick(item),
+    },
+  }));
+
+  const aiEntries = AI_TOOL_ITEMS.map((item) => ({
+    type: 'button',
+    key: `ai-${item.key}`,
+    button: {
+      title: `AI ${item.label}`,
+      label: item.label,
+      icon: <Sparkles size={15} strokeWidth={1.9} />,
+      // AI 续写不聚焦编辑器，避免光标跳到文档末尾
+      skipFocusEditor: true,
+      onItemClick: () => {
+        if (disabled) return;
+        onAIAction?.(item.key);
+      },
+    },
+  }));
+
+  const actionEntries = [
+    {
+      type: 'button',
+      key: 'copy-rich',
+      button: {
+        title: '复制富文本内容（可粘贴到其他平台）',
+        label: richCopied ? '已复制！' : '复制内容',
+        icon: <ClipboardCopy size={15} strokeWidth={1.9} />,
+        skipFocusEditor: true,
+        onItemClick: () => {
+          if (disabled) return;
+          void handleCopyRichText();
+        },
+      },
+    },
+    {
+      type: 'button',
+      key: 'preview-wechat',
+      button: {
+        title: `预览微信格式${copyStyleName ? `（${copyStyleName}）` : ''}`,
+        label: '预览',
+        icon: <Eye size={15} strokeWidth={1.9} />,
+        skipFocusEditor: true,
+        onItemClick: () => {
+          if (disabled) return;
+          onPreviewWeChat?.();
+        },
+      },
+    },
+    {
+      type: 'button',
+      key: 'copy-wechat',
+      button: {
+        title: `复制为微信公众号格式${copyStyleName ? `（${copyStyleName}）` : ''}`,
+        label: copied ? '已复制！' : '复制',
+        icon: <Copy size={15} strokeWidth={1.9} />,
+        skipFocusEditor: true,
+        onItemClick: () => {
+          if (disabled) return;
+          void handleCopy();
+        },
+      },
+    },
+  ];
+
+  const entries = [
+    ...blockEntries,
+    { type: 'divider', key: 'sep-actions' },
+    ...aiEntries,
+    ...actionEntries,
+  ];
+
   return (
     <div className="editor-quick-toolbar-shell" data-testid="editor-quick-toolbar">
-      <div className="editor-quick-toolbar-scroller">
-        {TOOL_ITEMS.map((item) => (
-          <Button
-            key={item.key}
-            className="editor-quick-toolbar-btn"
-            icon={item.icon}
-            disabled={disabled}
-            onClick={() => handleToolClick(item)}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </div>
-
-      <div className="editor-quick-toolbar-actions">
-        <div className="editor-quick-toolbar-divider" />
-        {AI_TOOL_ITEMS.map((item) => (
-          <Button
-            key={item.key}
-            className="editor-quick-toolbar-btn"
-            icon={<Sparkles size={15} strokeWidth={1.9} />}
-            disabled={disabled}
-            onClick={() => onAIAction?.(item.key)}
-            title={`AI ${item.label}`}
-          >
-            {item.label}
-          </Button>
-        ))}
-        <Button
-          className={`editor-quick-toolbar-btn ${richCopied ? 'is-copied' : ''}`}
-          icon={<ClipboardCopy size={15} strokeWidth={1.9} />}
-          disabled={disabled}
-          onClick={handleCopyRichText}
-          title="复制富文本内容（可粘贴到其他平台）"
-        >
-          {richCopied ? '已复制！' : '复制内容'}
-        </Button>
-        <Button
-          className="editor-quick-toolbar-btn"
-          icon={<Eye size={15} strokeWidth={1.9} />}
-          disabled={disabled}
-          onClick={onPreviewWeChat}
-          title={`预览微信格式${copyStyleName ? `（${copyStyleName}）` : ''}`}
-        >
-          预览
-        </Button>
-        <Button
-          className={`editor-quick-toolbar-btn ${copied ? 'is-copied' : ''}`}
-          icon={copied ? <Copy size={15} strokeWidth={1.9} /> : <Copy size={15} strokeWidth={1.9} />}
-          disabled={disabled}
-          onClick={handleCopy}
-          title={`复制为微信公众号格式${copyStyleName ? `（${copyStyleName}）` : ''}`}
-        >
-          {copied ? '已复制！' : '复制'}
-        </Button>
-      </div>
+      <EditorToolbar
+        entries={entries}
+        onFocusEditor={() => editor?.focus?.()}
+      />
     </div>
   );
 }
