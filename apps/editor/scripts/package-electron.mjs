@@ -98,6 +98,7 @@ async function main() {
       ...process.env,
       HOME: STAGING_HOME,
       npm_config_devdir: path.join(STAGING_HOME, '.electron-gyp'),
+      ELECTRON_MIRROR: process.env.ELECTRON_MIRROR ?? 'https://npmmirror.com/mirrors/electron/',
     },
   });
 
