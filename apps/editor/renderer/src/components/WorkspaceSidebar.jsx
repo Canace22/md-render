@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dropdown } from 'antd';
+import logoUrl from '../assets/logo.png';
 import {
   File,
   Folder,
@@ -561,7 +562,7 @@ const WorkspaceSidebar = ({
             title={collapsed ? '展开侧边栏' : '知识库'}
             aria-label={collapsed ? '展开侧边栏' : '知识库'}
           >
-            <LayoutGrid size={18} strokeWidth={1.5} />
+            <img src={logoUrl} alt="" className="sidebar-rail-logo-img" />
           </button>
 
           {/* 视图导航 */}

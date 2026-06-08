@@ -55,9 +55,16 @@ export const BOOKMARK_FOLDER_NAME = '书签';
 
 /**
  * 创建一个书签节点（纯函数）。书签复用 file 节点，nodeType='bookmark' 且带 url 字段，
- * content 留空（只存链接，不抓正文），title/summary/tags 会进搜索与图谱。
+ * 可选保留正文摘录，title/summary/tags 会进搜索与图谱。
  */
-export const createBookmarkNode = ({ title, url, tags = [], summary = '', createdAt } = {}) => {
+export const createBookmarkNode = ({
+  title,
+  url,
+  tags = [],
+  summary = '',
+  content = '',
+  createdAt,
+} = {}) => {
   const cleanUrl = String(url ?? '').trim();
   const ts = Number.isFinite(createdAt) ? createdAt : Date.now();
   const name = String(title ?? '').trim() || cleanUrl || '未命名书签';
@@ -66,7 +73,7 @@ export const createBookmarkNode = ({ title, url, tags = [], summary = '', create
     type: 'file',
     name,
     url: cleanUrl,
-    content: '',
+    content: String(content ?? ''),
     createdAt: ts,
     updatedAt: ts,
     tags: sanitizeStringList(tags),

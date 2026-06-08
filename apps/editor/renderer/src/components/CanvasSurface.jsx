@@ -1,686 +1,253 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Empty, Input, Popconfirm, Popover, Select, Tag, Typography } from 'antd';
-import { Eraser, FileText, Filter, Maximize2, Minimize2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Empty, Input, Popconfirm, Popover, Tag, Typography } from 'antd';
+import { Eraser, FileText, Plus } from 'lucide-react';
+import { Excalidraw, THEME } from '@excalidraw/excalidraw';
+import '@excalidraw/excalidraw/index.css';
 import {
-  ReactFlow,
-  ReactFlowProvider,
-  addEdge,
-  applyEdgeChanges,
-  applyNodeChanges,
-  Background,
-  Controls,
-  Handle,
-  MarkerType,
-  MiniMap,
-  Position,
-  useEdgesState,
-  useNodesState,
-  useReactFlow,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+  buildExcalidrawCanvasState,
+  buildExcalidrawElementsFromItems,
+  buildInitialExcalidrawData,
+  getCanvasSourceIdFromElement,
+} from '../utils/excalidrawCanvas.js';
 
-const NODE_WIDTH = 252;
-const GRID_COLUMNS_WIDE = 4;
-const GRID_COLUMNS_MEDIUM = 3;
-const GRID_COLUMNS_NARROW = 2;
-const GRID_NARROW_THRESHOLD = 4;
-const GRID_MEDIUM_THRESHOLD = 9;
-const GRID_GAP_X = 332;
-const GRID_GAP_Y = 228;
-const GRID_STAGGER_OFFSET_X = 42;
-const HANDLE_OFFSET = -8;
-const ALL_FILTER_VALUE = '__all__';
-const TITLE_FILTER_DEBOUNCE_MS = 360;
-const INITIAL_FIT_PADDING = 0.16;
-const INITIAL_FIT_MIN_ZOOM = 0.78;
-const INITIAL_FIT_MAX_ZOOM = 1;
+const CANVAS_TITLE = '灵感白板';
+const SAVE_DEBOUNCE_MS = 420;
+const DOUBLE_CLICK_INTERVAL_MS = 320;
 const DEFAULT_LIBRARY_OPEN = false;
-const CANVAS_TITLE = '白板';
-const CANVAS_EMPTY_HINTS = [
-  '从下方加入卡片，或双击空白处打开候选列表',
-  '拖动画布空白处移动视角',
-  '滚轮缩放，拖拽节点锚点建立连线',
-];
-const REACT_FLOW_PANE_CLASS = 'react-flow__pane';
-const LINK_FILTER_OPTIONS = [
-  { value: ALL_FILTER_VALUE, label: '全部链接状态' },
-  { value: 'linked', label: '有外链' },
-  { value: 'plain', label: '无外链' },
-];
+const LIBRARY_PREVIEW_LENGTH = 96;
+const BLANK_CARD_TITLE = '空白卡片';
 
 const trimText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
-const getItemId = (item, index) => String(item?.id ?? `canvas-node-${index}`);
-const getItemTitle = (item, index) => trimText(item?.title ?? item?.name ?? item?.label) || `未命名节点 ${index + 1}`;
 
-function getItemSummary(item) {
-  const summary = trimText(item?.summary ?? item?.excerpt ?? item?.description ?? item?.content);
-  if (!summary) return '这条内容还没有摘要。';
-  return summary.length > 54 ? `${summary.slice(0, 54)}...` : summary;
-}
-
-const getItemTags = (item) => (Array.isArray(item?.tags) ? item.tags : [])
-  .map((tag) => trimText(tag))
-  .filter(Boolean)
-  .slice(0, 2);
-
-const getItemPlatforms = (item) => (Array.isArray(item?.targetPlatforms) ? item.targetPlatforms : [])
-  .map((value) => trimText(value))
-  .filter(Boolean)
-  .slice(0, 3);
-
-const getItemStatus = (item) => trimText(item?.draftStatus ?? item?.status);
-
-const getItemTypeLabel = (item) => trimText(item?.typeLabel ?? item?.nodeType ?? item?.type) || 'document';
-
-function getItemMetaLine(item) {
-  const platforms = getItemPlatforms(item);
-  if (platforms.length) return platforms.join(', ');
-
-  const status = getItemStatus(item);
-  if (status) return status;
-
-  if (Number.isFinite(Number(item?.wordCount)) && Number(item.wordCount) > 0) {
-    return `${item.wordCount} 字`;
-  }
-
-  return getItemTypeLabel(item);
-}
-
-const getItemLinkState = (item) => {
-  return trimText(item?.url) ? 'linked' : 'plain';
+const getItemId = (item, index) => {
+  return String(item?.sourceId ?? item?.fileId ?? item?.id ?? `library-${index}`);
 };
 
-function getItemPosition(item, index, itemCount) {
-  const x = item?.position?.x ?? item?.x;
-  const y = item?.position?.y ?? item?.y;
-  if (Number.isFinite(x) && Number.isFinite(y)) {
-    return { x, y };
-  }
-  const columns = getGridColumns(itemCount);
-  const row = Math.floor(index / columns);
-  const column = index % columns;
-  return {
-    x: column * GRID_GAP_X + (row % 2 === 0 ? 0 : GRID_STAGGER_OFFSET_X),
-    y: row * GRID_GAP_Y,
-  };
-}
+const getItemTitle = (item, index) => {
+  return trimText(item?.title ?? item?.name ?? item?.label) || `未命名卡片 ${index + 1}`;
+};
 
-function getGridColumns(itemCount) {
-  if (itemCount <= GRID_NARROW_THRESHOLD) return GRID_COLUMNS_NARROW;
-  if (itemCount <= GRID_MEDIUM_THRESHOLD) return GRID_COLUMNS_MEDIUM;
-  return GRID_COLUMNS_WIDE;
-}
+const getItemTypeLabel = (item) => {
+  return trimText(item?.typeLabel ?? item?.nodeType ?? item?.type) || 'document';
+};
 
-function buildNodeData(item, index) {
-  return {
-    id: getItemId(item, index),
-    sourceId: String(item?.sourceId ?? item?.fileId ?? item?.id ?? getItemId(item, index)),
-    title: getItemTitle(item, index),
-    summary: getItemSummary(item),
-    typeLabel: getItemTypeLabel(item),
-    metaLine: getItemMetaLine(item),
-    nodeType: trimText(item?.nodeType ?? item?.type) || 'document',
-    tags: getItemTags(item),
-    platforms: getItemPlatforms(item),
-    status: getItemStatus(item),
-    url: trimText(item?.url),
-    linkState: getItemLinkState(item),
-    wordCount: Number(item?.wordCount) || 0,
-    raw: item,
-  };
-}
-
-function mapItemsToNodes(items) {
-  const list = Array.isArray(items) ? items : [];
-  return list.map((item, index) => ({
-    id: getItemId(item, index),
-    type: 'canvasCard',
-    position: getItemPosition(item, index, list.length),
-    data: buildNodeData(item, index),
-    sourcePosition: Position.Right,
-    targetPosition: Position.Left,
-    className: 'canvas-node',
-    style: { width: NODE_WIDTH, minHeight: 172 },
-  }));
-}
-
-function mapEdges(edges) {
-  return (Array.isArray(edges) ? edges : [])
-    .filter((edge) => (edge?.source ?? edge?.source_id) && (edge?.target ?? edge?.target_id))
-    .map((edge, index) => ({
-      id: String(edge.id ?? `${edge.source ?? edge.source_id}-${edge.target ?? edge.target_id}-${index}`),
-      source: String(edge.source ?? edge.source_id),
-      target: String(edge.target ?? edge.target_id),
-      label: trimText(edge.label),
-      type: edge.type ?? 'step',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      data: edge.data ?? null,
-    }));
-}
-
-function buildTypeOptions(items) {
-  const values = Array.from(new Set(
-    items.map((item) => trimText(item?.nodeType ?? item?.type)).filter(Boolean),
-  ));
-  return [
-    { value: ALL_FILTER_VALUE, label: '全部类型' },
-    ...values.map((value) => ({ value, label: value })),
-  ];
-}
-
-function buildTagOptions(items) {
-  const values = Array.from(new Set(
-    items.flatMap((item) => getItemTags(item)),
-  ));
-  return [
-    { value: ALL_FILTER_VALUE, label: '全部标签' },
-    ...values.map((value) => ({ value, label: value })),
-  ];
-}
-
-function matchesFilters(item, filters) {
-  const itemType = trimText(item?.nodeType ?? item?.type) || 'document';
-  const itemTags = getItemTags(item);
-  const linkState = getItemLinkState(item);
-  const title = getItemTitle(item, 0).toLowerCase();
-  const titleKeyword = trimText(filters.title).toLowerCase();
-
-  if (filters.type !== ALL_FILTER_VALUE && itemType !== filters.type) return false;
-  if (filters.tag !== ALL_FILTER_VALUE && !itemTags.includes(filters.tag)) return false;
-  if (filters.link !== ALL_FILTER_VALUE && linkState !== filters.link) return false;
-  if (titleKeyword && !title.includes(titleKeyword)) return false;
-  return true;
-}
-
-function filterEdgesByVisibleNodes(edges, visibleItems) {
-  const visibleIds = new Set(visibleItems.map((item) => String(item.id)));
-  return (edges ?? []).filter((edge) => {
-    const sourceId = String(edge?.source ?? edge?.source_id ?? '');
-    const targetId = String(edge?.target ?? edge?.target_id ?? '');
-    return visibleIds.has(sourceId) && visibleIds.has(targetId);
-  });
-}
-
-function serializeNodes(nodes) {
-  return nodes.map((node) => ({
-    id: node.id,
-    sourceId: node.data?.sourceId ?? node.id,
-    position: node.position,
-    title: node.data?.title,
-    summary: node.data?.summary,
-    typeLabel: node.data?.typeLabel,
-    metaLine: node.data?.metaLine,
-    nodeType: node.data?.nodeType,
-    tags: node.data?.tags ?? [],
-    platforms: node.data?.platforms ?? [],
-    status: node.data?.status ?? '',
-    url: node.data?.url ?? '',
-    wordCount: node.data?.wordCount ?? 0,
-    raw: node.data?.raw ?? null,
-  }));
-}
-
-function serializeEdges(edges) {
-  return edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    source_id: edge.source,
-    target_id: edge.target,
-    label: edge.label ?? '',
-    type: edge.type ?? 'step',
-    data: edge.data ?? null,
-  }));
-}
-
-function mergeVisibleNodeChanges(allNodes, visibleNodes) {
-  const visibleBySourceId = new Map(
-    serializeNodes(visibleNodes).map((node) => [String(node.sourceId ?? node.id), node]),
-  );
-  return serializeNodes(allNodes).map((node) => {
-    return visibleBySourceId.get(String(node.sourceId ?? node.id)) ?? node;
-  });
-}
-
-function mergeVisibleEdgeChanges(allEdges, visibleEdges, visibleItems) {
-  const visibleIds = new Set(visibleItems.map((item) => String(item.id)));
-  const hiddenEdges = serializeEdges(allEdges).filter((edge) => {
-    return !(visibleIds.has(String(edge.source)) && visibleIds.has(String(edge.target)));
-  });
-  return [...hiddenEdges, ...serializeEdges(visibleEdges)];
-}
-
-function buildSerializedNodes(items) {
-  return serializeNodes(mapItemsToNodes(items));
-}
+const getItemSummary = (item) => {
+  const text = trimText(item?.summary ?? item?.excerpt ?? item?.description ?? item?.content);
+  return text.length > LIBRARY_PREVIEW_LENGTH ? `${text.slice(0, LIBRARY_PREVIEW_LENGTH)}...` : text;
+};
 
 function filterLibraryItems(items, query) {
   const keyword = trimText(query).toLowerCase();
   if (!keyword) return items;
 
   return items.filter((item, index) => {
-    const title = getItemTitle(item, index).toLowerCase();
-    const summary = getItemSummary(item).toLowerCase();
-    return title.includes(keyword) || summary.includes(keyword);
+    return getItemTitle(item, index).toLowerCase().includes(keyword)
+      || getItemSummary(item).toLowerCase().includes(keyword);
   });
 }
 
-const CanvasCardNode = memo(function CanvasCardNode({ data }) {
-  const chips = data.tags.filter(Boolean);
-  const sourceText = data.url ? data.url.replace(/^https?:\/\//, '') : '';
-
-  return (
-    <Card size="small" bordered={false} className="canvas-node-card" title={null}>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="target"
-        className="canvas-node-handle canvas-node-handle--target"
-        style={{ left: HANDLE_OFFSET }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="source"
-        className="canvas-node-handle canvas-node-handle--source"
-        style={{ right: HANDLE_OFFSET }}
-      />
-      <Tag bordered={false} className="canvas-node-type">
-        {data.typeLabel}
-      </Tag>
-      <Typography.Title level={3} className="canvas-node-title" title={data.title}>
-        {data.title}
-      </Typography.Title>
-      <Typography.Text className="canvas-node-metaLine" title={data.metaLine}>
-        {data.metaLine}
-      </Typography.Text>
-      <Typography.Paragraph className="canvas-node-summary" ellipsis={{ rows: 2 }}>
-        {data.summary}
-      </Typography.Paragraph>
-      {chips.length > 0 ? (
-        <div className="canvas-node-tags">
-          {chips.map((value, index) => (
-            <Tag key={`${data.id}-chip-${index}`} bordered={false} className="canvas-node-tag">
-              {value}
-            </Tag>
-          ))}
-        </div>
-      ) : null}
-      {sourceText ? (
-        <Typography.Text className="canvas-node-source" title={data.url} ellipsis>
-          {sourceText}
-        </Typography.Text>
-      ) : null}
-    </Card>
-  );
-});
-
-function CanvasToolbar({
-  filters,
-  hasCanvasContent,
-  isFullscreen,
-  titleDraft,
-  typeOptions,
-  tagOptions,
-  onClearCanvas,
-  onFilterChange,
-  onToggleFullscreen,
-  onTitleDraftChange,
-  onResetFilters,
-}) {
-  const filterPanel = (
-    <div className="canvas-filter-panel">
-      <Select
-        size="small"
-        className="canvas-filter-select"
-        value={filters.type}
-        options={typeOptions}
-        onChange={(value) => onFilterChange('type', value)}
-      />
-      <Select
-        size="small"
-        className="canvas-filter-select"
-        value={filters.tag}
-        options={tagOptions}
-        onChange={(value) => onFilterChange('tag', value)}
-      />
-      <Select
-        size="small"
-        className="canvas-filter-select"
-        value={filters.link}
-        options={LINK_FILTER_OPTIONS}
-        onChange={(value) => onFilterChange('link', value)}
-      />
-      <Input
-        size="small"
-        className="canvas-filter-input"
-        value={titleDraft}
-        placeholder="筛选标题"
-        onChange={(event) => onTitleDraftChange(event.target.value)}
-        allowClear
-      />
-      <Button size="small" className="canvas-filter-reset" onClick={onResetFilters}>
-        重置筛选
-      </Button>
-    </div>
-  );
-
-  return (
-    <header className="canvas-floating-controls" aria-label="白板工具栏">
-      <Popover
-        trigger="click"
-        placement="leftTop"
-        overlayClassName="canvas-filter-popover"
-        content={filterPanel}
-      >
-        <Button
-          size="small"
-          className="canvas-toolbar-action"
-          icon={<Filter size={14} strokeWidth={1.8} />}
-          title="筛选画布卡片"
-          aria-label="筛选画布卡片"
-        />
-      </Popover>
-        <Popconfirm
-          title="清空当前画布？"
-          description="会移除画布里的全部卡片、连线和视角位置。"
-          okText="清空"
-          cancelText="取消"
-          okButtonProps={{ danger: true }}
-          disabled={!hasCanvasContent}
-          onConfirm={onClearCanvas}
-        >
-          <Button
-            size="small"
-            danger
-            disabled={!hasCanvasContent}
-            className="canvas-toolbar-action canvas-toolbar-action-danger"
-            icon={<Eraser size={14} strokeWidth={1.8} />}
-            title="一键清空当前画布"
-            aria-label="一键清空当前画布"
-          />
-        </Popconfirm>
-        <Button
-          size="small"
-          className="canvas-toolbar-action"
-          icon={isFullscreen ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
-          onClick={onToggleFullscreen}
-          aria-pressed={isFullscreen}
-          title={isFullscreen ? '退出全屏' : '全屏显示'}
-        >
-        </Button>
-    </header>
-  );
-}
-
-const NODE_TYPES = { canvasCard: CanvasCardNode };
-
-function CanvasFlowPanel({
-  flowNodes,
-  flowEdges,
-  savedViewport,
-  onNodesChange,
-  onEdgesChange,
-  onConnect,
-  onEdgeDoubleClick,
-  onNodeDoubleClick,
-  onViewportChange,
-}) {
-  const { fitView, getViewport } = useReactFlow();
-  const didInitialFitRef = useRef(false);
-
-  useEffect(() => {
-    if (savedViewport || didInitialFitRef.current || !flowNodes.length) return;
-    didInitialFitRef.current = true;
-    requestAnimationFrame(() => {
-      fitView({
-        padding: INITIAL_FIT_PADDING,
-        minZoom: INITIAL_FIT_MIN_ZOOM,
-        maxZoom: INITIAL_FIT_MAX_ZOOM,
-      }).then(() => {
-        onViewportChange?.(getViewport());
-      });
-    });
-  }, [flowNodes.length, fitView, getViewport, onViewportChange, savedViewport]);
-
-  const handleMoveEnd = useCallback((_event, viewport) => {
-    onViewportChange?.(viewport);
-  }, [onViewportChange]);
-
-  return (
-    <ReactFlow
-      nodes={flowNodes}
-      edges={flowEdges}
-      nodeTypes={NODE_TYPES}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onEdgeDoubleClick={onEdgeDoubleClick}
-      onNodeDoubleClick={onNodeDoubleClick}
-      onMoveEnd={handleMoveEnd}
-      defaultViewport={savedViewport ?? undefined}
-      minZoom={0.2}
-      maxZoom={2}
-      panOnDrag
-      zoomOnScroll
-      zoomOnPinch
-      proOptions={{ hideAttribution: true }}
-    >
-      {flowNodes.length ? (
-        <MiniMap
-          pannable
-          zoomable
-          nodeBorderRadius={8}
-          maskColor="rgba(15, 23, 42, 0.08)"
-          style={{ background: 'rgba(255, 255, 255, 0.92)' }}
-        />
-      ) : null}
-      <Controls position="top-right" showInteractive={false} />
-      <Background gap={20} size={1} color="var(--canvas-grid-color)" />
-    </ReactFlow>
-  );
-}
-
-function CanvasSurfaceInner({
-  documents,
+export default function CanvasSurface({
+  canvasState,
   items,
   addableItems,
   edges,
-  viewport,
+  theme,
   onChange,
   onClearCanvas,
-  onViewportChange,
+  onCaptureLibraryItems,
   onOpenFile,
-  emptyText = '先从右上角候选列表选择内容，开始灵感之旅吧',
+  emptyText = '从下方加入候选卡片，或直接使用白板工具自由绘制',
 }) {
-  const sourceItems = items ?? documents ?? [];
-  const libraryItems = addableItems ?? documents ?? [];
+  const excalidrawApiRef = useRef(null);
+  const saveTimerRef = useRef(null);
+  const latestSceneRef = useRef(null);
+  const lastHitRef = useRef({ elementId: '', occurredAt: 0 });
+  const processedLibraryIdsRef = useRef(new Set());
+  const librarySyncReadyRef = useRef(false);
+  const sourceItems = items ?? [];
+  const libraryItems = addableItems ?? sourceItems;
   const [isLibraryOpen, setIsLibraryOpen] = useState(DEFAULT_LIBRARY_OPEN);
-  const [filters, setFilters] = useState({
-    type: ALL_FILTER_VALUE,
-    tag: ALL_FILTER_VALUE,
-    link: ALL_FILTER_VALUE,
-    title: '',
-  });
-  const [titleDraft, setTitleDraft] = useState('');
   const [libraryQuery, setLibraryQuery] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const allCanvasNodes = useMemo(() => mapItemsToNodes(sourceItems), [sourceItems]);
-  const allCanvasEdges = useMemo(() => mapEdges(edges), [edges]);
-  const typeOptions = useMemo(() => buildTypeOptions(sourceItems), [sourceItems]);
-  const tagOptions = useMemo(() => buildTagOptions(sourceItems), [sourceItems]);
-  const filteredItems = useMemo(() => {
-    return sourceItems.filter((item) => matchesFilters(item, filters));
-  }, [filters, sourceItems]);
-  const addedItemIds = useMemo(() => {
-    return new Set(sourceItems.map((item) => String(item?.sourceId ?? item?.id)));
-  }, [sourceItems]);
+
+  const initialData = useMemo(() => {
+    return buildInitialExcalidrawData(canvasState, sourceItems, edges);
+  }, [canvasState, edges, sourceItems]);
+  const [sceneHasContent, setSceneHasContent] = useState(() => {
+    return Boolean(initialData.elements?.some((element) => !element?.isDeleted));
+  });
+
   const filteredLibraryItems = useMemo(() => {
     return filterLibraryItems(libraryItems, libraryQuery);
   }, [libraryItems, libraryQuery]);
-  const filteredEdges = useMemo(() => {
-    return filterEdgesByVisibleNodes(edges, filteredItems);
-  }, [edges, filteredItems]);
-  const controlledNodes = useMemo(() => mapItemsToNodes(filteredItems), [filteredItems]);
-  const controlledEdges = useMemo(() => mapEdges(filteredEdges), [filteredEdges]);
-  const [flowNodes, setFlowNodes] = useNodesState(controlledNodes);
-  const [flowEdges, setFlowEdges] = useEdgesState(controlledEdges);
-  const isSyncingRef = useRef(false);
-  const titleFilterTimerRef = useRef(null);
-  const hasActiveFilters = useMemo(() => {
-    return (
-      filters.type !== ALL_FILTER_VALUE
-      || filters.tag !== ALL_FILTER_VALUE
-      || filters.link !== ALL_FILTER_VALUE
-      || Boolean(trimText(filters.title))
+
+  const openableSourceIds = useMemo(() => {
+    return new Set(
+      libraryItems
+        .map((item, index) => getItemId(item, index))
+        .filter(Boolean),
     );
-  }, [filters]);
-  const hasCanvasContent = allCanvasNodes.length > 0 || allCanvasEdges.length > 0 || Boolean(viewport);
-  const emptyStateText = hasActiveFilters
-    ? '当前筛选条件下没有命中内容。可以重置筛选，或换一个标签、类型或标题关键词。'
-    : emptyText;
+  }, [libraryItems]);
 
   useEffect(() => {
+    setSceneHasContent(Boolean(initialData.elements?.some((element) => !element?.isDeleted)));
+  }, [initialData]);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      librarySyncReadyRef.current = true;
+    }, 0);
     return () => {
-      if (titleFilterTimerRef.current) {
-        window.clearTimeout(titleFilterTimerRef.current);
-      }
+      window.clearTimeout(timerId);
+      librarySyncReadyRef.current = false;
     };
   }, []);
 
+  const flushScene = useCallback(() => {
+    if (!latestSceneRef.current) return;
+    onChange?.(buildExcalidrawCanvasState(latestSceneRef.current));
+    latestSceneRef.current = null;
+  }, [onChange]);
+
   useEffect(() => {
-    if (!isFullscreen) {
-      document.body.classList.remove('canvas-fullscreen-active');
-      return undefined;
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+      flushScene();
+    };
+  }, [flushScene]);
+
+  const scheduleSceneSave = useCallback((elements, appState, files) => {
+    setSceneHasContent(Boolean(elements?.some((element) => !element?.isDeleted)));
+    latestSceneRef.current = { elements, appState, files };
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      flushScene();
+    }, SAVE_DEBOUNCE_MS);
+  }, [flushScene]);
+
+  const handleAddItem = useCallback((item, index) => {
+    const api = excalidrawApiRef.current;
+    if (!api) return;
+
+    const currentElements = api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements?.() ?? [];
+    const nextElements = buildExcalidrawElementsFromItems([item], {
+      startIndex: currentElements.length + index,
+    });
+    api.updateScene({
+      elements: [...currentElements, ...nextElements],
+      appState: {
+        ...api.getAppState?.(),
+        selectedElementIds: Object.fromEntries(nextElements.map((element) => [element.id, true])),
+      },
+    });
+    scheduleSceneSave(
+      [...currentElements, ...nextElements],
+      api.getAppState?.() ?? {},
+      api.getFiles?.() ?? {},
+    );
+    setIsLibraryOpen(false);
+  }, [scheduleSceneSave]);
+
+  const handleCreateBlankCard = useCallback(() => {
+    const id = `blank-${Date.now().toString(36)}`;
+    handleAddItem({
+      id,
+      title: BLANK_CARD_TITLE,
+      summary: '写下一个想法，再用白板工具继续延展。',
+      nodeType: 'blank-card',
+      typeLabel: '卡片',
+    }, 0);
+  }, [handleAddItem]);
+
+  const handleClearCanvas = useCallback(() => {
+    excalidrawApiRef.current?.resetScene?.();
+    onClearCanvas?.();
+  }, [onClearCanvas]);
+
+  const resolveOpenFileId = useCallback((hitElement, hitElements = []) => {
+    if (!hitElement) return '';
+
+    const api = excalidrawApiRef.current;
+    const sceneElements = api?.getSceneElementsIncludingDeleted?.() ?? api?.getSceneElements?.() ?? [];
+    const elementsById = new Map(sceneElements.map((element) => [element.id, element]));
+    const candidates = [hitElement, ...hitElements];
+    const containerElement = hitElement?.containerId ? elementsById.get(hitElement.containerId) : null;
+    if (containerElement) {
+      candidates.push(containerElement);
     }
 
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setIsFullscreen(false);
+    for (const candidate of candidates) {
+      const sourceId = getCanvasSourceIdFromElement(candidate);
+      if (sourceId && openableSourceIds.has(sourceId)) {
+        return sourceId;
       }
-    };
+    }
 
-    document.body.classList.add('canvas-fullscreen-active');
-    window.addEventListener('keydown', handleKeyDown);
+    return '';
+  }, [openableSourceIds]);
 
-    return () => {
-      document.body.classList.remove('canvas-fullscreen-active');
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isFullscreen]);
+  const handleCanvasPointerUp = useCallback((_, pointerDownState) => {
+    if (!onOpenFile) return;
+    if (pointerDownState?.drag?.hasOccurred || pointerDownState?.boxSelection?.hasOccurred) return;
 
-  useEffect(() => {
-    isSyncingRef.current = true;
-    setFlowNodes(controlledNodes);
-    setFlowEdges(controlledEdges);
-  }, [controlledEdges, controlledNodes, setFlowEdges, setFlowNodes]);
+    const hitElement = pointerDownState?.hit?.element;
+    const hitElements = pointerDownState?.hit?.allHitElements ?? [];
+    const fileId = resolveOpenFileId(hitElement, hitElements);
+    if (!fileId) return;
 
-  useEffect(() => {
-    if (isSyncingRef.current) {
-      isSyncingRef.current = false;
+    const currentElementId = String(hitElement?.id ?? fileId);
+    const occurredAt = Date.now();
+    const lastHit = lastHitRef.current;
+    const isDoubleClick = lastHit.elementId === currentElementId
+      && occurredAt - lastHit.occurredAt <= DOUBLE_CLICK_INTERVAL_MS;
+
+    lastHitRef.current = { elementId: currentElementId, occurredAt };
+    if (!isDoubleClick) return;
+
+    lastHitRef.current = { elementId: '', occurredAt: 0 };
+    onOpenFile(fileId);
+  }, [onOpenFile, resolveOpenFileId]);
+
+  const handleLibraryChange = useCallback(async (libraryItems = []) => {
+    const nextItems = (Array.isArray(libraryItems) ? libraryItems : []).filter((item) => {
+      const itemId = String(item?.id ?? '').trim();
+      if (!itemId || processedLibraryIdsRef.current.has(itemId)) return false;
+      processedLibraryIdsRef.current.add(itemId);
+      return true;
+    });
+    if (!nextItems.length) return;
+
+    if (!librarySyncReadyRef.current) {
+      await excalidrawApiRef.current?.updateLibrary?.({
+        libraryItems: [],
+        merge: false,
+      });
       return;
     }
-    onChange?.(
-      mergeVisibleNodeChanges(allCanvasNodes, flowNodes),
-      mergeVisibleEdgeChanges(allCanvasEdges, flowEdges, filteredItems),
-    );
-  }, [allCanvasEdges, allCanvasNodes, filteredItems, flowEdges, flowNodes, onChange]);
 
-  const handleNodesChange = useCallback((changes) => {
-    setFlowNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
-  }, [setFlowNodes]);
-
-  const handleEdgesChange = useCallback((changes) => {
-    setFlowEdges((currentEdges) => applyEdgeChanges(changes, currentEdges));
-  }, [setFlowEdges]);
-
-  const handleConnect = useCallback((connection) => {
-    setFlowEdges((currentEdges) => addEdge({
-      ...connection,
-      type: 'step',
-      markerEnd: { type: MarkerType.ArrowClosed },
-    }, currentEdges));
-  }, [setFlowEdges]);
-
-  const handleEdgeDoubleClick = useCallback((event, edge) => {
-    event.preventDefault();
-    setFlowEdges((currentEdges) => currentEdges.filter((item) => item.id !== edge.id));
-  }, [setFlowEdges]);
-
-  const handleNodeDoubleClick = useCallback((event, node) => {
-    event.preventDefault();
-    onOpenFile?.(node.data?.sourceId ?? node.id);
-  }, [onOpenFile]);
-
-  const handlePaneDoubleClick = useCallback((event) => {
-    if (!event.target?.classList?.contains(REACT_FLOW_PANE_CLASS)) return;
-    event.preventDefault();
-    setIsLibraryOpen(true);
-  }, []);
-
-  const handleFilterChange = useCallback((key, value) => {
-    setFilters((current) => ({ ...current, [key]: value }));
-  }, []);
-
-  const handleTitleDraftChange = useCallback((value) => {
-    setTitleDraft(value);
-    if (titleFilterTimerRef.current) {
-      window.clearTimeout(titleFilterTimerRef.current);
+    try {
+      await onCaptureLibraryItems?.(nextItems);
+    } finally {
+      await excalidrawApiRef.current?.updateLibrary?.({
+        libraryItems: [],
+        merge: false,
+      });
     }
-    titleFilterTimerRef.current = window.setTimeout(() => {
-      setFilters((current) => ({ ...current, title: value }));
-      titleFilterTimerRef.current = null;
-    }, TITLE_FILTER_DEBOUNCE_MS);
-  }, []);
-
-  const handleResetFilters = useCallback(() => {
-    if (titleFilterTimerRef.current) {
-      window.clearTimeout(titleFilterTimerRef.current);
-      titleFilterTimerRef.current = null;
-    }
-    setTitleDraft('');
-    setFilters({
-      type: ALL_FILTER_VALUE,
-      tag: ALL_FILTER_VALUE,
-      link: ALL_FILTER_VALUE,
-      title: '',
-    });
-  }, []);
-
-  const handleToggleFullscreen = useCallback(() => {
-    setIsLibraryOpen(false);
-    setIsFullscreen((current) => !current);
-  }, []);
-
-  const handleAddItem = useCallback((item) => {
-    const targetId = String(item?.sourceId ?? item?.id ?? '');
-    if (!targetId || addedItemIds.has(targetId)) return;
-
-    const nextItems = [...sourceItems, item];
-    onChange?.(buildSerializedNodes(nextItems), serializeEdges(allCanvasEdges));
-  }, [addedItemIds, allCanvasEdges, onChange, sourceItems]);
-
-  const handleRemoveItem = useCallback((itemId) => {
-    const targetId = String(itemId ?? '');
-    if (!targetId) return;
-
-    const nextItems = sourceItems.filter((item) => String(item?.sourceId ?? item?.id) !== targetId);
-    const nextEdges = serializeEdges(allCanvasEdges).filter((edge) => {
-      return String(edge.source) !== targetId && String(edge.target) !== targetId;
-    });
-
-    onChange?.(buildSerializedNodes(nextItems), nextEdges);
-  }, [allCanvasEdges, onChange, sourceItems]);
+  }, [onCaptureLibraryItems]);
 
   const libraryPanel = (
-    <div className="canvas-library">
+    <div className="canvas-library canvas-library--excalidraw">
       <div className="canvas-library-head">
         <div className="canvas-library-head-copy">
           <Typography.Title level={4} className="canvas-library-title">
             候选卡片
           </Typography.Title>
           <Typography.Paragraph className="canvas-library-subtitle">
-            从列表里挑内容加入画布，按你的节奏搭灵感链路。
+            选择内容后会以卡片插入当前白板。
           </Typography.Paragraph>
         </div>
         <Tag bordered={false} className="canvas-library-count">
@@ -699,24 +266,18 @@ function CanvasSurfaceInner({
 
       <div className="canvas-library-list">
         {filteredLibraryItems.length ? filteredLibraryItems.map((item, index) => {
-          const itemId = String(item?.sourceId ?? item?.id ?? `library-${index}`);
-          const added = addedItemIds.has(itemId);
-
+          const itemId = getItemId(item, index);
           return (
-            <article key={itemId} className={`canvas-library-item${added ? ' is-added' : ''}`}>
+            <article key={itemId} className="canvas-library-item">
               <div className="canvas-library-item-copy">
                 <div className="canvas-library-item-head">
                   <strong>{getItemTitle(item, index)}</strong>
                   <span>{getItemTypeLabel(item)}</span>
                 </div>
-                <p>{getItemSummary(item)}</p>
+                <p>{getItemSummary(item) || '这条内容还没有摘要。'}</p>
               </div>
-              <Button
-                size="small"
-                type={added ? 'default' : 'primary'}
-                onClick={() => (added ? handleRemoveItem(itemId) : handleAddItem(item))}
-              >
-                {added ? '移出画布' : '加入画布'}
+              <Button size="small" type="primary" onClick={() => handleAddItem(item, index)}>
+                插入
               </Button>
             </article>
           );
@@ -730,73 +291,79 @@ function CanvasSurfaceInner({
   );
 
   return (
-    <section
-      className={`canvas-surface${isFullscreen ? ' canvas-surface--fullscreen' : ''}`}
-      data-testid="canvas-surface"
-    >
+    <section className="canvas-surface canvas-surface--excalidraw" data-testid="canvas-surface">
       <div className="canvas-stage">
         <div className="canvas-titlebar" aria-label={CANVAS_TITLE}>
           {CANVAS_TITLE}
         </div>
-        <CanvasToolbar
-          filters={filters}
-          hasCanvasContent={hasCanvasContent}
-          isFullscreen={isFullscreen}
-          titleDraft={titleDraft}
-          typeOptions={typeOptions}
-          tagOptions={tagOptions}
-          onClearCanvas={onClearCanvas}
-          onFilterChange={handleFilterChange}
-          onToggleFullscreen={handleToggleFullscreen}
-          onTitleDraftChange={handleTitleDraftChange}
-          onResetFilters={handleResetFilters}
-        />
-        <Popover
-          trigger="click"
-          placement="top"
-          overlayClassName="canvas-library-popover"
-          content={libraryPanel}
-          open={isLibraryOpen}
-          onOpenChange={setIsLibraryOpen}
-        >
+        <div className="canvas-floating-controls" aria-label="白板工具栏">
+          <Popconfirm
+            title="清空当前画布？"
+            description="会移除当前白板里的所有内容。"
+            okText="清空"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={handleClearCanvas}
+          >
+            <Button
+              size="small"
+              danger
+              className="canvas-toolbar-action canvas-toolbar-action-danger"
+              icon={<Eraser size={14} strokeWidth={1.8} />}
+              title="清空当前画布"
+              aria-label="清空当前画布"
+            />
+          </Popconfirm>
+        </div>
+
+        <div className="canvas-dock">
           <Button
             type="text"
-            className="canvas-add-dock"
-            icon={<FileText size={22} strokeWidth={1.7} />}
-            title="加入卡片"
-            aria-label="加入卡片"
+            className="canvas-dock-action"
+            icon={<Plus size={22} strokeWidth={1.8} />}
+            title="新建空白卡片"
+            aria-label="新建空白卡片"
+            onClick={handleCreateBlankCard}
           />
-        </Popover>
-        <div className="canvas-flow" onDoubleClick={handlePaneDoubleClick}>
-          {!flowNodes.length ? (
+          <Popover
+            trigger="click"
+            placement="top"
+            overlayClassName="canvas-library-popover"
+            content={libraryPanel}
+            open={isLibraryOpen}
+            onOpenChange={setIsLibraryOpen}
+          >
+            <Button
+              type="text"
+              className="canvas-dock-action"
+              icon={<FileText size={22} strokeWidth={1.7} />}
+              title="插入候选卡片"
+              aria-label="插入候选卡片"
+            />
+          </Popover>
+        </div>
+
+        <div className="canvas-flow canvas-excalidraw-host">
+          {!sourceItems.length && !sceneHasContent ? (
             <div className="canvas-center-help">
-              <div className="canvas-center-help-title">{emptyStateText}</div>
-              {CANVAS_EMPTY_HINTS.map((hint) => (
-                <div key={hint} className="canvas-center-help-line">{hint}</div>
-              ))}
+              <div className="canvas-center-help-title">{emptyText}</div>
             </div>
           ) : null}
-          <CanvasFlowPanel
-            flowNodes={flowNodes}
-            flowEdges={flowEdges}
-            savedViewport={viewport}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onConnect={handleConnect}
-            onEdgeDoubleClick={handleEdgeDoubleClick}
-            onNodeDoubleClick={handleNodeDoubleClick}
-            onViewportChange={onViewportChange}
+          <Excalidraw
+            initialData={initialData}
+            excalidrawAPI={(api) => {
+              excalidrawApiRef.current = api;
+            }}
+            onChange={scheduleSceneSave}
+            onLibraryChange={handleLibraryChange}
+            onPointerUp={handleCanvasPointerUp}
+            theme={theme === 'dark' ? THEME.DARK : THEME.LIGHT}
+            langCode="zh-CN"
+            gridModeEnabled
+            autoFocus
           />
         </div>
       </div>
     </section>
-  );
-}
-
-export default function CanvasSurface(props) {
-  return (
-    <ReactFlowProvider>
-      <CanvasSurfaceInner {...props} />
-    </ReactFlowProvider>
   );
 }

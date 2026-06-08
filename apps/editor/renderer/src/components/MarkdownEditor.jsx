@@ -76,10 +76,12 @@ import {
 import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import { convertToMarkdown, IMPORT_ACCEPT, needsConversion } from '../utils/fileConverters.js';
 import {
+  buildBookmarkClipMarkdown,
   buildBookmarkClipDocument,
   buildFallbackBookmarkClip,
   sanitizeBookmarkFileStem,
 } from '../utils/bookmarkClipper.js';
+import { extractCanvasBookmarkCandidate } from '../utils/canvasBookmark.js';
 import {
   buildPublishingPlatformLabelMap,
   getDefaultTargetPlatforms,
@@ -183,6 +185,11 @@ const hasLocalProjectNode = (node) => {
 };
 
 const STATUS_LABELS = new Map(CREATION_STATUS_OPTIONS.map((item) => [item.value, item.label]));
+const BLANK_CANVAS_CARD_KIND = 'blank';
+const BLANK_CANVAS_CARD_NODE_TYPE = 'blank-card';
+const BLANK_CANVAS_CARD_TITLE = '空白卡片';
+const BLANK_CANVAS_CARD_TYPE_LABEL = '卡片';
+const BLANK_CANVAS_CARD_META = '自由记录';
 
 const stripMarkdownExtension = (name = '') => String(name).replace(/\.md$/i, '');
 const truncateInlineText = (value, maxLength = 96) => {
@@ -212,6 +219,29 @@ const getCanvasCardTypeLabel = (file) => {
   if (nodeType) return nodeType;
   const status = getDocumentStatus(file);
   return status || 'document';
+};
+
+const isBlankCanvasNode = (node) => {
+  return String(node?.cardKind ?? '').trim() === BLANK_CANVAS_CARD_KIND
+    || String(node?.nodeType ?? '').trim() === BLANK_CANVAS_CARD_NODE_TYPE;
+};
+
+const buildBlankCanvasItem = (node) => {
+  const id = String(node?.sourceId ?? node?.id ?? '').trim();
+  if (!id) return null;
+  const content = String(node?.content ?? node?.summary ?? '');
+  return {
+    id,
+    sourceId: id,
+    title: String(node?.title ?? '').trim() || BLANK_CANVAS_CARD_TITLE,
+    summary: content,
+    content,
+    nodeType: BLANK_CANVAS_CARD_NODE_TYPE,
+    typeLabel: BLANK_CANVAS_CARD_TYPE_LABEL,
+    metaLine: BLANK_CANVAS_CARD_META,
+    cardKind: BLANK_CANVAS_CARD_KIND,
+    position: node.position,
+  };
 };
 
 const getSelectedEditorText = () => {
@@ -442,9 +472,11 @@ function MarkdownEditor() {
       && Number.isFinite(Number(viewport.y))
       && Number.isFinite(Number(viewport.zoom));
     return {
+      engine: raw?.engine,
       nodes: Array.isArray(raw?.nodes) ? raw.nodes : [],
       edges: Array.isArray(raw?.edges) ? raw.edges : [],
       viewport: hasViewport ? viewport : null,
+      excalidraw: raw?.excalidraw && typeof raw.excalidraw === 'object' ? raw.excalidraw : null,
     };
   }, [workspace]);
   const canvasSurfaceItems = useMemo(() => {
@@ -456,6 +488,9 @@ function MarkdownEditor() {
       .map((node) => {
         const sourceId = String(node.sourceId ?? node.id);
         const item = itemMap.get(sourceId);
+        if (!item && isBlankCanvasNode(node)) {
+          return buildBlankCanvasItem(node);
+        }
         if (!item) return null;
 
         return {
@@ -477,7 +512,18 @@ function MarkdownEditor() {
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
-  const handleCanvasChange = useCallback((nodes, edges) => {
+  const handleCanvasChange = useCallback((nextCanvasState, edges) => {
+    if (
+      nextCanvasState
+      && typeof nextCanvasState === 'object'
+      && !Array.isArray(nextCanvasState)
+      && Object.prototype.hasOwnProperty.call(nextCanvasState, 'excalidraw')
+    ) {
+      setWorkspaceCanvas(nextCanvasState);
+      return;
+    }
+
+    const nodes = Array.isArray(nextCanvasState) ? nextCanvasState : [];
     const currentState = useEditorStore.getState().workspace?.canvasState;
     setWorkspaceCanvas({
       nodes,
@@ -498,6 +544,7 @@ function MarkdownEditor() {
       nodes: [],
       edges: [],
       viewport: null,
+      excalidraw: null,
     });
   }, [setWorkspaceCanvas]);
   const performRename = useCallback(async (targetId, rawName) => {
@@ -1465,12 +1512,22 @@ function MarkdownEditor() {
           continue;
         }
 
-        let clip;
-        try {
-          const snapshot = await fetchBookmarkPageSnapshot({ url: sourceUrl });
-          clip = await buildBookmarkClipDocument(item, snapshot);
-        } catch (error) {
-          clip = buildFallbackBookmarkClip(item, error?.message || '正文抓取失败，已保留原链接。');
+        let clip = null;
+        if (String(item.markdown ?? '').trim()) {
+          clip = {
+            title: item.title || sourceUrl,
+            url: sourceUrl,
+            summary: String(item.summary ?? '').trim(),
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            markdown: item.markdown,
+          };
+        } else {
+          try {
+            const snapshot = await fetchBookmarkPageSnapshot({ url: sourceUrl });
+            clip = await buildBookmarkClipDocument(item, snapshot);
+          } catch (error) {
+            clip = buildFallbackBookmarkClip(item, error?.message || '正文抓取失败，已保留原链接。');
+          }
         }
 
         const stem = sanitizeBookmarkFileStem(clip.title || item.title || sourceUrl);
@@ -1529,6 +1586,50 @@ function MarkdownEditor() {
       throw error;
     }
   }, [hydrateProjectsWorkspace, importBookmarks, localProjectSupported, selectNode]);
+
+  const handleCaptureCanvasLibraryItems = useCallback(async (libraryItems) => {
+    const bookmarkItems = (Array.isArray(libraryItems) ? libraryItems : [])
+      .map((item) => extractCanvasBookmarkCandidate(item))
+      .filter(Boolean)
+      .map((item) => ({
+        ...item,
+        markdown: buildBookmarkClipMarkdown({
+          title: item.title,
+          sourceUrl: item.url,
+          createdAt: Date.now(),
+          description: item.summary,
+          tags: item.tags,
+          bodyMarkdown: item.content,
+        }),
+      }));
+
+    if (!bookmarkItems.length) {
+      message.warning('选区里没有可保存的链接');
+      return { added: 0, skipped: 0, folderId: null };
+    }
+
+    const previousSelectedId = useEditorStore.getState().selectedId;
+    const previousSurface = useEditorStore.getState().surface;
+
+    try {
+      const result = await handleImportBookmarks(bookmarkItems);
+      if (previousSelectedId && findNodeById(useEditorStore.getState().workspace, previousSelectedId)) {
+        selectNode(previousSelectedId);
+      }
+      if (previousSurface === 'canvas') {
+        setSurface('canvas');
+      }
+      return result;
+    } catch (error) {
+      if (previousSelectedId && findNodeById(useEditorStore.getState().workspace, previousSelectedId)) {
+        selectNode(previousSelectedId);
+      }
+      if (previousSurface === 'canvas') {
+        setSurface('canvas');
+      }
+      throw error;
+    }
+  }, [handleImportBookmarks, selectNode, setSurface]);
 
   useEffect(() => {
     applyThemeToBody(theme);
@@ -1827,13 +1928,16 @@ function MarkdownEditor() {
           />
         ) : surface === 'canvas' ? (
           <CanvasSurface
+            canvasState={canvasState}
             items={canvasSurfaceItems}
             addableItems={canvasItems}
             edges={canvasState.edges}
             viewport={canvasState.viewport}
+            theme={theme}
             onChange={handleCanvasChange}
             onClearCanvas={handleClearCanvas}
             onViewportChange={handleCanvasViewportChange}
+            onCaptureLibraryItems={handleCaptureCanvasLibraryItems}
             onOpenFile={selectNode}
           />
         ) : surface === 'creation-board' ? (

@@ -435,18 +435,48 @@ const normalizeCanvasPosition = (value, fallback = 0) => {
   return Number.isFinite(value) ? value : fallback;
 };
 
+const CANVAS_NODE_POSITION_STEP = 48;
+const CANVAS_NODE_TEXT_FIELDS = [
+  'title',
+  'summary',
+  'typeLabel',
+  'metaLine',
+  'nodeType',
+  'cardKind',
+  'content',
+  'status',
+  'url',
+];
+const CANVAS_NODE_LIST_FIELDS = ['tags', 'platforms'];
+const CANVAS_ENGINE_EXCALIDRAW = 'excalidraw';
+
 const sanitizeCanvasNode = (node = {}, index = 0) => {
   const sourceId = String(node.sourceId ?? node.fileId ?? node.id ?? '').trim();
   if (!sourceId) return null;
   const position = node.position ?? {};
-  return {
+  const sanitized = {
     id: String(node.id ?? `canvas-${sourceId}`),
     sourceId,
     position: {
-      x: normalizeCanvasPosition(position.x, index * 48),
-      y: normalizeCanvasPosition(position.y, index * 48),
+      x: normalizeCanvasPosition(position.x, index * CANVAS_NODE_POSITION_STEP),
+      y: normalizeCanvasPosition(position.y, index * CANVAS_NODE_POSITION_STEP),
     },
   };
+
+  CANVAS_NODE_TEXT_FIELDS.forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(node, field)) return;
+    sanitized[field] = field === 'content'
+      ? String(node[field] ?? '')
+      : String(node[field] ?? '').trim();
+  });
+  CANVAS_NODE_LIST_FIELDS.forEach((field) => {
+    if (!Array.isArray(node[field])) return;
+    sanitized[field] = node[field].map((item) => String(item ?? '').trim()).filter(Boolean);
+  });
+  if (Number.isFinite(Number(node.wordCount))) {
+    sanitized.wordCount = Number(node.wordCount);
+  }
+  return sanitized;
 };
 
 const sanitizeCanvasEdge = (edge = {}) => {
@@ -454,7 +484,35 @@ const sanitizeCanvasEdge = (edge = {}) => {
   const source = String(edge.source ?? '').trim();
   const target = String(edge.target ?? '').trim();
   if (!id || !source || !target || source === target) return null;
-  return { id, source, target };
+  const sanitized = { id, source, target };
+  ['label', 'type', 'relationType', 'origin'].forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(edge, field)) return;
+    sanitized[field] = String(edge[field] ?? '').trim();
+  });
+  if (edge.data && typeof edge.data === 'object' && !Array.isArray(edge.data)) {
+    sanitized.data = cloneJsonObject(edge.data, null);
+  }
+  return sanitized;
+};
+
+const cloneJsonObject = (value, fallback) => {
+  if (!value || typeof value !== 'object') return fallback;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return fallback;
+  }
+};
+
+const sanitizeCanvasExcalidrawState = (excalidraw) => {
+  if (!excalidraw || typeof excalidraw !== 'object') return null;
+  return {
+    elements: Array.isArray(excalidraw.elements)
+      ? cloneJsonObject(excalidraw.elements, [])
+      : [],
+    appState: cloneJsonObject(excalidraw.appState, {}),
+    files: cloneJsonObject(excalidraw.files, {}),
+  };
 };
 
 const CANVAS_MIN_VIEWPORT_ZOOM = 0.2;
@@ -481,7 +539,15 @@ const sanitizeCanvasState = (canvasState = {}) => {
     ? canvasState.edges.map((edge) => sanitizeCanvasEdge(edge)).filter(Boolean)
     : [];
   const viewport = sanitizeCanvasViewport(canvasState?.viewport);
-  return viewport ? { nodes, edges, viewport } : { nodes, edges };
+  const excalidraw = sanitizeCanvasExcalidrawState(canvasState?.excalidraw);
+  const nextState = viewport ? { nodes, edges, viewport } : { nodes, edges };
+  if (canvasState?.engine === CANVAS_ENGINE_EXCALIDRAW || excalidraw) {
+    nextState.engine = CANVAS_ENGINE_EXCALIDRAW;
+  }
+  if (excalidraw) {
+    nextState.excalidraw = excalidraw;
+  }
+  return nextState;
 };
 
 const areCanvasStatesEqual = (left, right) => {

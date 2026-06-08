@@ -88,15 +88,22 @@ h1, h2, h3, h4, h5, h6, p, pre, code, blockquote, a, hr, strong, em {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    background: var(--color-brand-primary);
-    color: #ffffff;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    background: transparent;
     border: none;
     border-radius: 10px;
     cursor: default;
     margin-bottom: 8px;
     flex-shrink: 0;
+}
+
+.sidebar-rail-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 10px;
 }
 
 .workspace-panel.collapsed .sidebar-rail-logo {
@@ -4836,6 +4843,28 @@ body.canvas-fullscreen-active {
     box-shadow: none;
 }
 
+.canvas-excalidraw-host {
+    height: 100%;
+}
+
+.canvas-excalidraw-host .excalidraw {
+    --color-primary: var(--color-brand-primary, var(--color-primary));
+    --color-primary-darker: var(--color-primary-btn-hover, var(--color-brand-primary, var(--color-primary)));
+    --island-bg-color: var(--canvas-panel-bg);
+    --default-border-color: var(--canvas-panel-border);
+    width: 100%;
+    height: 100%;
+    background: var(--canvas-surface-bg);
+}
+
+.canvas-excalidraw-host .excalidraw .App-menu_top {
+    top: 14px;
+}
+
+.canvas-excalidraw-host .excalidraw .default-sidebar-trigger {
+    display: none;
+}
+
 .canvas-surface--fullscreen .canvas-stage,
 .canvas-surface--fullscreen .canvas-flow,
 .canvas-surface--fullscreen .canvas-empty-state {
@@ -4982,13 +5011,14 @@ body.canvas-fullscreen-active {
     white-space: nowrap;
 }
 
-.canvas-add-dock {
+.canvas-dock {
     position: absolute;
     left: 50%;
     bottom: 18px;
     z-index: 5;
-    width: 78px;
     height: 54px;
+    display: flex;
+    overflow: hidden;
     transform: translateX(-50%);
     border-radius: 12px;
     border: 1px solid var(--canvas-panel-border);
@@ -4997,7 +5027,20 @@ body.canvas-fullscreen-active {
     color: var(--color-text-primary);
 }
 
-.canvas-add-dock:hover {
+.canvas-dock-action {
+    width: 54px;
+    height: 54px;
+    border-radius: 0;
+    color: var(--color-text-primary);
+}
+
+.canvas-dock-action + .canvas-dock-action,
+.canvas-dock-action + .ant-popover-open,
+.canvas-dock .ant-popover-open + .canvas-dock-action {
+    border-left: 1px solid var(--canvas-panel-border);
+}
+
+.canvas-dock-action:hover {
     color: var(--color-text-primary) !important;
     background: rgba(255, 255, 255, 0.98) !important;
 }
@@ -5202,6 +5245,28 @@ body.canvas-fullscreen-active {
     margin-bottom: 0;
 }
 
+.canvas-blank-card-input.ant-input {
+    resize: none;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: 15px;
+    line-height: 1.55;
+    box-shadow: none;
+    text-align: left;
+}
+
+.canvas-blank-card-input.ant-input:focus,
+.canvas-blank-card-input.ant-input-focused {
+    box-shadow: none;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.canvas-blank-card-input.ant-input::placeholder {
+    color: var(--color-text-secondary);
+}
+
 .canvas-node-tags {
     display: flex;
     flex-wrap: wrap;
@@ -5333,15 +5398,15 @@ body.theme-dark .canvas-library-item,
 body.theme-dark .canvas-flow .react-flow__minimap,
 body.theme-dark .canvas-flow .react-flow__controls,
 body.theme-dark .canvas-floating-controls,
-body.theme-dark .canvas-add-dock {
+body.theme-dark .canvas-dock {
     background: rgba(15, 23, 42, 0.82);
 }
 
-body.theme-dark .canvas-add-dock {
+body.theme-dark .canvas-dock {
     background: rgba(15, 23, 42, 0.92);
 }
 
-body.theme-dark .canvas-add-dock:hover {
+body.theme-dark .canvas-dock-action:hover {
     background: rgba(30, 41, 59, 0.96) !important;
 }
 
@@ -5356,6 +5421,11 @@ body.theme-dark .canvas-center-help {
 
 body.theme-dark .canvas-filter-reset {
     background: rgba(15, 23, 42, 0.82);
+}
+
+body.theme-dark .canvas-blank-card-input.ant-input:focus,
+body.theme-dark .canvas-blank-card-input.ant-input-focused {
+    background: rgba(30, 41, 59, 0.72);
 }
 
 body.theme-dark .canvas-toolbar-action {
@@ -6000,9 +6070,13 @@ body.theme-dark .notion-panel-error {
         font-size: 17px;
     }
 
-    .canvas-add-dock {
+    .canvas-dock {
         bottom: 14px;
-        width: 68px;
+        height: 50px;
+    }
+
+    .canvas-dock-action {
+        width: 50px;
         height: 50px;
     }
 
