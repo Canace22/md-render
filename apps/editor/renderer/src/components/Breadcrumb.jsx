@@ -23,27 +23,27 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
     return <div className="breadcrumb-bar breadcrumb-bar-empty" aria-hidden="true" />;
   }
 
-  const currentNode = pathChain[pathChain.length - 1];
-  const visiblePath = currentNode?.type === 'file'
-    ? pathChain.slice(0, -1)
-    : pathChain;
-
-  if (!visiblePath.length) {
-    return <div className="breadcrumb-bar breadcrumb-bar-empty" aria-hidden="true" />;
-  }
+  const currentNodeId = pathChain[pathChain.length - 1]?.id;
+  const fullPathLabel = pathChain.map((item) => item.name).join(' / ');
 
   return (
-    <nav className="breadcrumb-bar" aria-label="文件路径">
-      {visiblePath.map((item, i) => (
+    <nav className="breadcrumb-bar" aria-label="文件路径" title={fullPathLabel}>
+      {pathChain.map((item, i) => (
         <span key={item.id} className="breadcrumb-segment">
           {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="breadcrumb-sep" aria-hidden />}
-          <button
-            type="button"
-            className="breadcrumb-link"
-            onClick={() => onNavigate(item.id)}
-          >
-            {item.name}
-          </button>
+          {item.id === currentNodeId ? (
+            <span className="breadcrumb-current" aria-current="page" title={fullPathLabel}>
+              {item.name}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="breadcrumb-link"
+              onClick={() => onNavigate(item.id)}
+            >
+              {item.name}
+            </button>
+          )}
         </span>
       ))}
     </nav>
