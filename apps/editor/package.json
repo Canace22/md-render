@@ -14,8 +14,9 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "electron:dev": "ELECTRON=true vite",
+    "electron:dev": "cross-env ELECTRON=true vite",
     "electron:build": "node ./scripts/package-electron.mjs build",
+    "electron:build:win": "node ./scripts/package-electron.mjs build --win",
     "electron:pack": "node ./scripts/package-electron.mjs pack",
     "electron:rebuild": "npm_config_devdir=.cache/electron-gyp electron-rebuild -f -w better-sqlite3"
   },
@@ -48,6 +49,7 @@
     "@electron/rebuild": "^4.0.4",
     "@playwright/test": "^1.57.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "cross-env": "^7.0.3",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "vite": "^5.0.8",
@@ -107,6 +109,24 @@
           "path": "/Applications"
         }
       ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MD Render"
     }
   }
 }

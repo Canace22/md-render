@@ -526,12 +526,15 @@ async function createWindow() {
   const position = s.get('windowPosition');
   const maximized = s.get('windowMaximized');
 
+  const isMac = process.platform === 'darwin';
+
   mainWindow = new BrowserWindow({
     width,
     height,
     ...(position ? { x: position.x, y: position.y } : {}),
     title: 'MD Render',
-    titleBarStyle: 'hiddenInset',
+    ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
+    icon: isMac ? undefined : path.join(__dirname, '../assets/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -580,13 +583,18 @@ async function createWindow() {
 
 // ---- 托盘图标 ----
 function createTray() {
-  const size = 16;
-  const canvas = Buffer.alloc(size * size * 4, 0);
-  for (let i = 0; i < size * size; i++) {
-    canvas[i * 4 + 3] = 180;
+  let icon;
+  if (process.platform === 'darwin') {
+    const size = 16;
+    const canvas = Buffer.alloc(size * size * 4, 0);
+    for (let i = 0; i < size * size; i++) {
+      canvas[i * 4 + 3] = 180;
+    }
+    icon = nativeImage.createFromBuffer(canvas, { width: size, height: size });
+    icon.setTemplateImage(true);
+  } else {
+    icon = nativeImage.createFromPath(path.join(__dirname, '../assets/icon.ico'));
   }
-  const icon = nativeImage.createFromBuffer(canvas, { width: size, height: size });
-  icon.setTemplateImage(true);
 
   tray = new Tray(icon);
   tray.setToolTip('MD Render');
@@ -601,22 +609,31 @@ function createTray() {
 
 // ---- 应用菜单 ----
 function createMenu() {
+  const isMac = process.platform === 'darwin';
+
   const template = [
+    ...(isMac
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            { role: 'services' },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' },
+          ],
+        }]
+      : []),
     {
-      label: app.name,
+      label: '文件',
       submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' },
+        isMac ? { role: 'close' } : { role: 'quit' },
       ],
     },
-    { label: '文件', submenu: [{ role: 'close' }] },
     {
       label: '编辑',
       submenu: [
@@ -638,9 +655,10 @@ function createMenu() {
     {
       label: '窗口',
       submenu: [
-        { role: 'minimize' }, { role: 'zoom' },
+        { role: 'minimize' },
+        ...(isMac ? [{ role: 'zoom' }] : []),
         { type: 'separator' },
-        { role: 'front' },
+        ...(isMac ? [{ role: 'front' }] : [{ role: 'close' }]),
       ],
     },
   ];

@@ -46,15 +46,79 @@ jobs:
             exit 1
           fi
 
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-mac
+          path: apps/editor/release/*.dmg
+
+  release-win:
+    name: Windows 发布
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Electron app
+        run: pnpm electron:build:win
+
+      - name: Check build output
+        shell: pwsh
+        run: |
+          $releaseDir = "apps/editor/release"
+          if (!(Test-Path $releaseDir)) {
+            Write-Error "release directory not found"
+            exit 1
+          }
+          Get-ChildItem $releaseDir
+          $exeFiles = Get-ChildItem "$releaseDir/*.exe"
+          if ($exeFiles.Count -eq 0) {
+            Write-Error "exe file not found"
+            exit 1
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-win
+          path: apps/editor/release/*.exe
+
+  publish-release:
+    name: 发布 GitHub Release
+    needs: [release-mac, release-win]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -la release-assets/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/editor/release/*.dmg
+          files: release-assets/*
           generate_release_notes: true
           body: |
             ## 下载
 
-            下载下方 **Assets** 中的 `.dmg` 安装 macOS 桌面版（Universal，支持 Intel 与 Apple Silicon）。
+            - **macOS**: 下载 `.dmg` 文件（Universal，支持 Intel 与 Apple Silicon）
+            - **Windows**: 下载 `.exe` 安装包（x64）
 
             ## macOS 安装说明
 
@@ -65,5 +129,9 @@ jobs:
                ```bash
                xattr -dr com.apple.quarantine "/Applications/MD Render.app"
                ```
+
+            ## Windows 安装说明
+
+            安装包未做代码签名。若 Windows Defender SmartScreen 弹出警告，点击「更多信息 → 仍要运行」即可。
 
             网页版见仓库 **Deployments → github-pages** 或 README 中的 Pages 链接。

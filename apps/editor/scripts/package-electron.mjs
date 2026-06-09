@@ -9,9 +9,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const appDir = path.resolve(__dirname, '..');
 const workspaceRoot = path.resolve(appDir, '..', '..');
-const mode = process.argv[2] === 'pack' ? 'pack' : 'build';
+const cliArgs = process.argv.slice(2);
+const mode = cliArgs.includes('pack') ? 'pack' : 'build';
+const explicitPlatform = cliArgs.find((a) => ['--mac', '--win', '--linux'].includes(a));
 
-const STAGING_ROOT = '/private/tmp/md-render-electron-builder';
+const isWindows = process.platform === 'win32';
+const STAGING_ROOT = isWindows
+  ? path.join(process.env.TEMP || 'C:\\Temp', 'md-render-electron-builder')
+  : '/private/tmp/md-render-electron-builder';
 const STAGING_APP_DIR = path.join(STAGING_ROOT, 'app');
 const STAGING_HOME = path.join(STAGING_ROOT, 'home');
 const APP_RELEASE_DIR = path.join(appDir, 'release');
@@ -76,11 +81,13 @@ async function main() {
 
   await prepareStagingDirectory();
 
+  const platformFlag = explicitPlatform || (isWindows ? '--win' : '--mac');
+
   const builderArgs = [
     electronBuilderCli,
     '--projectDir',
     STAGING_APP_DIR,
-    '--mac',
+    platformFlag,
     `-c.electronVersion=${electronVersion}`,
   ];
 
@@ -92,14 +99,22 @@ async function main() {
     builderArgs.push('--publish', 'never');
   }
 
+  const builderEnv = {
+    ...process.env,
+    npm_config_devdir: path.join(STAGING_HOME, '.electron-gyp'),
+    ELECTRON_MIRROR: process.env.ELECTRON_MIRROR ?? 'https://npmmirror.com/mirrors/electron/',
+  };
+  if (isWindows) {
+    builderEnv.USERPROFILE = STAGING_HOME;
+    builderEnv.APPDATA = path.join(STAGING_HOME, 'AppData', 'Roaming');
+    builderEnv.LOCALAPPDATA = path.join(STAGING_HOME, 'AppData', 'Local');
+  } else {
+    builderEnv.HOME = STAGING_HOME;
+  }
+
   await runCommand(process.execPath, builderArgs, {
     cwd: appDir,
-    env: {
-      ...process.env,
-      HOME: STAGING_HOME,
-      npm_config_devdir: path.join(STAGING_HOME, '.electron-gyp'),
-      ELECTRON_MIRROR: process.env.ELECTRON_MIRROR ?? 'https://npmmirror.com/mirrors/electron/',
-    },
+    env: builderEnv,
   });
 
   await copyArtifactsBack();
