@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('window-fullscreen-changed', sub);
   },
   openLocalProject: () => ipcRenderer.invoke('open-local-project'),
+  selectCoverImage: () => ipcRenderer.invoke('select-cover-image'),
   saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
   saveLocalProjectMetadata: (payload) => ipcRenderer.invoke('save-local-project-metadata', payload),
   ensureMdRenderWorkspace: () => ipcRenderer.invoke('ensure-md-render-workspace'),

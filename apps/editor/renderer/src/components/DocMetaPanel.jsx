@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Select } from 'antd';
 import {
   ArrowLeft, CalendarClock, Clock, FileText, GitBranch,
-  Link, Link2, PackageSearch, Plus, X,
+  Image, Link, Link2, PackageSearch, Plus, X,
 } from 'lucide-react';
 import {
   KNOWLEDGE_NODE_TYPE_OPTIONS,
@@ -23,6 +23,19 @@ const DEFAULT_STATUS_OPTIONS = [
 
 const hasElectronDb = () =>
   typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
+
+const hasElectronSelectCoverImage = () =>
+  typeof window !== 'undefined' && typeof window.electronAPI?.selectCoverImage === 'function';
+
+const toPreviewSrc = (value) => {
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
+  // local absolute path → file:// protocol for <img> preview
+  if (value.startsWith('/') || /^[A-Z]:\\/i.test(value)) {
+    return `file://${value}`;
+  }
+  return value;
+};
 
 const formatVersionDate = (ts) => {
   if (!ts) return '';
@@ -105,6 +118,8 @@ export default function DocMetaPanel({
 }) {
   const [summaryDraft, setSummaryDraft] = useState('');
   const [publishAtDraft, setPublishAtDraft] = useState('');
+  const [coverDraft, setCoverDraft] = useState('');
+  const [coverError, setCoverError] = useState(false);
   const [relatedDraft, setRelatedDraft] = useState('');
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
@@ -114,6 +129,8 @@ export default function DocMetaPanel({
   useEffect(() => {
     setSummaryDraft(selectedFile?.summary ?? '');
     setPublishAtDraft(selectedFile?.scheduledPublishAt ?? selectedFile?.publishAt ?? '');
+    setCoverDraft(selectedFile?.cover ?? '');
+    setCoverError(false);
     setRelatedDraft('');
   }, [selectedFile]);
 
@@ -158,6 +175,29 @@ export default function DocMetaPanel({
     const next = publishAtDraft.trim();
     if (next === (selectedFile.scheduledPublishAt ?? selectedFile.publishAt ?? '')) return;
     onMetaChange?.(selectedFile.id, { scheduledPublishAt: next });
+  };
+
+  const commitCover = () => {
+    if (!selectedFile) return;
+    const next = coverDraft.trim();
+    if (next === (selectedFile.cover ?? '')) return;
+    onMetaChange?.(selectedFile.id, { cover: next });
+  };
+
+  const clearCover = () => {
+    if (!selectedFile) return;
+    setCoverDraft('');
+    setCoverError(false);
+    onMetaChange?.(selectedFile.id, { cover: '' });
+  };
+
+  const selectLocalCoverImage = async () => {
+    if (!hasElectronSelectCoverImage()) return;
+    const result = await window.electronAPI.selectCoverImage();
+    if (result?.canceled || !result?.filePath) return;
+    setCoverDraft(result.filePath);
+    setCoverError(false);
+    onMetaChange?.(selectedFile.id, { cover: result.filePath });
   };
 
   const handleTagsChange = (nextTags) => {
@@ -236,6 +276,50 @@ export default function DocMetaPanel({
           disabled={disabled}
         />
       </label>
+
+      {/* ── cover image ── */}
+      <div className="doc-meta-field">
+        <div className="doc-meta-section-head">
+          <span className="doc-meta-label">
+            <Image size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
+            封面图片
+          </span>
+          <span className="doc-meta-cover-actions">
+            {hasElectronSelectCoverImage() && (
+              <button type="button" className="doc-meta-action" onClick={selectLocalCoverImage} disabled={disabled}>选择图片</button>
+            )}
+            {coverDraft && (
+              <button type="button" className="doc-meta-action" onClick={clearCover} disabled={disabled}>清除</button>
+            )}
+          </span>
+        </div>
+        <input
+          className="doc-meta-input"
+          value={coverDraft}
+          placeholder="输入图片 URL 或本地路径"
+          onChange={(e) => { setCoverDraft(e.target.value); setCoverError(false); }}
+          onBlur={commitCover}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitCover(); }
+            if (e.key === 'Escape') { e.preventDefault(); setCoverDraft(selectedFile?.cover ?? ''); setCoverError(false); }
+          }}
+          disabled={disabled}
+        />
+        {coverDraft && (
+          <div className="doc-meta-cover-preview">
+            {coverError ? (
+              <div className="doc-meta-cover-fallback">图片加载失败</div>
+            ) : (
+              <img
+                src={toPreviewSrc(coverDraft)}
+                alt="封面预览"
+                className="doc-meta-cover-thumb"
+                onError={() => setCoverError(true)}
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       {selectedFile.url && (
         <div className="doc-meta-field">

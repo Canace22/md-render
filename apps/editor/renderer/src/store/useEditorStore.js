@@ -892,6 +892,9 @@ export const useEditorStore = create(
           if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'scheduledPublishAt')) {
             nextPatch.scheduledPublishAt = String(patch.scheduledPublishAt ?? '').trim();
           }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'cover')) {
+            nextPatch.cover = String(patch.cover ?? '').trim();
+          }
           if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'sourceMaterialIds')) {
             nextPatch.sourceMaterialIds = sanitizeStringList(patch.sourceMaterialIds);
           }

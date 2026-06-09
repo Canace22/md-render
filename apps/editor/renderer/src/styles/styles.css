@@ -1183,6 +1183,36 @@ a.sidebar-rail-btn:hover {
     font-size: 11px;
 }
 
+.doc-meta-cover-actions {
+    display: inline-flex;
+    gap: 8px;
+}
+
+/* cover preview */
+.doc-meta-cover-preview {
+    margin-top: 4px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(248, 250, 252, 0.5);
+}
+
+.doc-meta-cover-thumb {
+    display: block;
+    width: 100%;
+    max-height: 120px;
+    object-fit: cover;
+}
+
+.doc-meta-cover-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 60px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+
 /* version history toggle */
 .doc-meta-history-toggle {
     display: flex;
@@ -5543,6 +5573,11 @@ body.theme-dark .doc-meta-platform-chip {
 body.theme-dark .doc-meta-platform-chip.is-selected,
 body.theme-dark .doc-meta-chip--linked {
     color: #93c5fd;
+}
+
+body.theme-dark .doc-meta-cover-preview {
+    border-color: rgba(71, 85, 105, 0.42);
+    background: rgba(15, 23, 42, 0.5);
 }
 
 body.theme-dark .doc-meta-chip--backlink,

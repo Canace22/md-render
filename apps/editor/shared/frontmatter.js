@@ -3,6 +3,7 @@ const FRONTMATTER_CLOSE = '---';
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?/;
 const KNOWN_FRONTMATTER_ORDER = [
   'title',
+  'cover',
   'source',
   'author',
   'published',
@@ -213,7 +214,10 @@ export const extractKnowledgeMetadataFromFrontmatter = (frontmatter = {}) => {
   const createdAtText = formatObsidianDate(frontmatter.created);
   const createdAt = createdAtText ? Date.parse(createdAtText) : NaN;
 
+  const cover = cleanString(frontmatter.cover);
+
   return {
+    ...(cover ? { cover } : {}),
     ...(url ? { url } : {}),
     ...(summary ? { summary } : {}),
     ...(tags.length ? { tags } : {}),
@@ -228,6 +232,12 @@ export const applyKnowledgeMetadataToFrontmatter = (frontmatter = {}, metadata =
   const next = {
     ...(frontmatter && typeof frontmatter === 'object' ? frontmatter : {}),
   };
+
+  if (Object.prototype.hasOwnProperty.call(metadata ?? {}, 'cover')) {
+    const cover = cleanString(metadata.cover);
+    if (cover) next.cover = cover;
+    else delete next.cover;
+  }
 
   if (Object.prototype.hasOwnProperty.call(metadata ?? {}, 'url')) {
     const url = cleanString(metadata.url);

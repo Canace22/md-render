@@ -218,6 +218,20 @@ ipcMain.handle('open-local-project', async () => {
   };
 });
 
+ipcMain.handle('select-cover-image', async () => {
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+    title: '选择封面图片',
+    properties: ['openFile'],
+    filters: [
+      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] },
+    ],
+  });
+  if (result.canceled || !result.filePaths?.length) {
+    return { canceled: true };
+  }
+  return { canceled: false, filePath: result.filePaths[0] };
+});
+
 ipcMain.handle('register-local-project-watch', async (_event, payload = {}) => {
   const { projectRootPath } = payload;
   startWatchingLocalProject(projectRootPath);
