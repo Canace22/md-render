@@ -108,3 +108,43 @@ export const getMarkdownCodeFenceLanguage = (value = '') => {
  * BlockNote 空文档结构
  */
 export const createEmptyDocument = () => [{ type: 'paragraph', content: '' }];
+
+/** BlockNote JSON 内容的前缀标识 */
+const BN_PREFIX = '__bn:';
+
+/**
+ * 判断 content 字段是否是 BlockNote JSON 格式（以 __bn: 开头）
+ */
+export const isBlockNoteContent = (value) => {
+  return typeof value === 'string' && value.startsWith(BN_PREFIX);
+};
+
+/**
+ * 将 BlockNote blocks 数组序列化为带前缀的字符串，用于存入 content 字段
+ */
+export const serializeBlockNoteContent = (blocks) => {
+  return BN_PREFIX + JSON.stringify(blocks);
+};
+
+/**
+ * 解析 __bn: 前缀的 content 字符串，返回 blocks 数组；失败返回 null
+ */
+export const parseBlockNoteContent = (value) => {
+  if (!isBlockNoteContent(value)) return null;
+  try {
+    const parsed = JSON.parse(value.slice(BN_PREFIX.length));
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 从 content 字段提取纯 Markdown 字符串（供导出/预览使用）。
+ * 若是 BlockNote JSON 格式，需由调用方先用 editor 转换；
+ * 此函数仅处理普通 Markdown 字符串（原样返回）。
+ */
+export const extractMarkdownFromContent = (value) => {
+  if (!isBlockNoteContent(value)) return normalizeMarkdown(value);
+  return ''; // BlockNote JSON 需通过 editor.blocksToMarkdownLossy 转换
+};

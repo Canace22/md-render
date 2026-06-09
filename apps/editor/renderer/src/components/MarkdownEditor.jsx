@@ -33,6 +33,9 @@ import {
   extractCodeBlockFromClipboardHtml,
   getBlockTextContent,
   getMarkdownCodeFenceLanguage,
+  isBlockNoteContent,
+  parseBlockNoteContent,
+  serializeBlockNoteContent,
   looksLikeCodeBlockClipboardHtml,
   looksLikeMarkdownCodeFenceClipboardText,
   looksLikeMarkdownClipboardText,
@@ -677,6 +680,16 @@ function MarkdownEditor() {
   const visibleProjectRootPath = hasLocalProjectWorkspace ? '已导入本地目录' : '';
 
   const initialContent = useMemo(() => {
+    // BlockNote JSON 格式：直接解析，无需经过 Markdown 转换
+    if (isBlockNoteContent(markdown)) {
+      const blocks = parseBlockNoteContent(markdown);
+      if (blocks && blocks.length > 0) {
+        // lastSyncedMarkdownRef 存原始 content 字符串，用于变更检测
+        lastSyncedMarkdownRef.current = markdown;
+        return blocks;
+      }
+    }
+
     const sourceMarkdown = normalizeMarkdown(markdown);
     lastSyncedMarkdownRef.current = sourceMarkdown;
 
@@ -756,10 +769,25 @@ function MarkdownEditor() {
     [selectedId, contentResetKey, editorReloadToken],
   );
 
-  const wechatSourceHtml = useMemo(() => {
-    const tokens = parserRef.current.parse(markdown);
-    return rendererRef.current.render(tokens);
+  // 供导出/预览/微信使用的纯 Markdown 文本：
+  // content 存的是 BlockNote JSON，需通过 editor 转换；旧数据直接用
+  const resolvedMarkdown = useMemo(() => {
+    if (isBlockNoteContent(markdown)) {
+      const blocks = parseBlockNoteContent(markdown);
+      if (blocks) {
+        // 用临时 editor 实例转换，避免依赖当前 editor 状态
+        const tempEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
+        return normalizeMarkdown(tempEditor.blocksToMarkdownLossy(blocks));
+      }
+      return '';
+    }
+    return normalizeMarkdown(markdown);
   }, [markdown]);
+
+  const wechatSourceHtml = useMemo(() => {
+    const tokens = parserRef.current.parse(resolvedMarkdown);
+    return rendererRef.current.render(tokens);
+  }, [resolvedMarkdown]);
 
   const resolvedTheme = theme === 'dark' ? 'dark' : 'light';
   const selectedContentSurface = selectedFolder ? 'folder' : selectedFile ? 'paper' : 'overview';
@@ -801,10 +829,12 @@ function MarkdownEditor() {
   const handleEditorChange = () => {
     tryConvertTypedMarkdownCodeFence();
 
-    const nextMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
-    if (nextMarkdown === lastSyncedMarkdownRef.current) return;
-    lastSyncedMarkdownRef.current = nextMarkdown;
-    updateSelectedFileContent(nextMarkdown);
+    // content 字段存 BlockNote JSON（保留颜色等富文本样式）
+    const nextContent = serializeBlockNoteContent(editor.document);
+    if (nextContent === lastSyncedMarkdownRef.current) return;
+    lastSyncedMarkdownRef.current = nextContent;
+    updateSelectedFileContent(nextContent);
+
     if (canSaveLocalProjectFile) {
       const existingTimer = projectSaveTimersRef.current.get(selectedFile.id);
       if (existingTimer) {
@@ -813,10 +843,12 @@ function MarkdownEditor() {
       setDiskSavePending(selectedFile.id, true);
       const timerId = window.setTimeout(async () => {
         try {
+          // 磁盘 .md 文件仍写 Markdown（有损转换，但保持文件可读性）
+          const diskMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
           await saveLocalProjectFile({
             projectRootPath: selectedProjectRootPath,
             relativePath: selectedFile.relativePath,
-            content: nextMarkdown,
+            content: diskMarkdown,
           });
         } catch (error) {
           console.error('保存本地项目文件失败:', error);
@@ -838,7 +870,7 @@ function MarkdownEditor() {
       ...selectedFile,
       title: selectedFile?.name?.replace(/\.md$/i, '') ?? '',
       summary: selectedFile?.summary ?? '',
-      content: markdown,
+      content: resolvedMarkdown,
       platformOptions: publishingPlatforms,
     };
 
@@ -858,7 +890,7 @@ function MarkdownEditor() {
         document: documentForAI,
       }),
     });
-  }, [markdown, publishingPlatforms, selectedFile]);
+  }, [resolvedMarkdown, publishingPlatforms, selectedFile]);
 
   const handleCopyAIPrompt = useCallback(async () => {
     const prompt = aiActionState?.generatedPrompt ?? '';
@@ -942,7 +974,17 @@ function MarkdownEditor() {
       return;
     }
     const filename = ensureMarkdownDownloadName(node.name);
-    downloadMarkdownFile(normalizeMarkdown(state.markdown), filename);
+    // content 可能是 BlockNote JSON，需先转为纯 Markdown
+    const rawContent = state.markdown;
+    let md;
+    if (isBlockNoteContent(rawContent)) {
+      const blocks = parseBlockNoteContent(rawContent);
+      const tempEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
+      md = normalizeMarkdown(tempEditor.blocksToMarkdownLossy(blocks ?? []));
+    } else {
+      md = normalizeMarkdown(rawContent);
+    }
+    downloadMarkdownFile(md, filename);
   }, []);
 
   const handleExportAs = useCallback(async (format) => {
@@ -952,7 +994,16 @@ function MarkdownEditor() {
       alert('请先选中一个文档后再导出。');
       return;
     }
-    const md = normalizeMarkdown(state.markdown);
+    // content 可能是 BlockNote JSON，需先转为纯 Markdown
+    const rawContent = state.markdown;
+    let md;
+    if (isBlockNoteContent(rawContent)) {
+      const blocks = parseBlockNoteContent(rawContent);
+      const tempEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
+      md = normalizeMarkdown(tempEditor.blocksToMarkdownLossy(blocks ?? []));
+    } else {
+      md = normalizeMarkdown(rawContent);
+    }
     const title = node.name.replace(/\.[^.]+$/, '');
     const filename = title || '导出文档';
     const tokens = parserRef.current.parse(md);
@@ -1373,7 +1424,7 @@ function MarkdownEditor() {
     setNotionPushLoading(true);
     try {
       const id = cleanPageId(linkedNotionPageId);
-      const blocks = markdownToBlocks(normalizeMarkdown(markdown));
+      const blocks = markdownToBlocks(resolvedMarkdown);
       await updatePageBlocks(id, blocks, notionToken);
       setNotionMessage('已推送到 Notion。');
     } catch (e) {
@@ -1381,7 +1432,7 @@ function MarkdownEditor() {
     } finally {
       setNotionPushLoading(false);
     }
-  }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, markdown, updateSelectedFileContent]);
+  }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, resolvedMarkdown, updateSelectedFileContent]);
 
   const handleBatchPull = useCallback(async () => {
     if (!notionLocalDev || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
@@ -2060,7 +2111,7 @@ function MarkdownEditor() {
               />
             </div>
             {/* 底部状态栏 */}
-            <StatusBar content={markdown} backlinks={0} />
+            <StatusBar content={resolvedMarkdown} backlinks={0} />
           </>
         )}
       </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Select } from 'antd';
 import {
   ArrowLeft, CalendarClock, Clock, FileText, GitBranch,
-  Link, Link2, PackageSearch, Plus,
+  Link, Link2, PackageSearch, Plus, X,
 } from 'lucide-react';
 import {
   KNOWLEDGE_NODE_TYPE_OPTIONS,
@@ -109,6 +109,7 @@ export default function DocMetaPanel({
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
   const [restoringVersionId, setRestoringVersionId] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     setSummaryDraft(selectedFile?.summary ?? '');
@@ -395,13 +396,19 @@ export default function DocMetaPanel({
       {hasElectronDb() && versions.length > 0 && (
         <>
           <div className="doc-meta-divider" />
-          <div className="doc-meta-field">
-            <span className="doc-meta-label">
-              <Clock size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
-              版本历史
-            </span>
+          <button
+            type="button"
+            className="doc-meta-history-toggle"
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            <Clock size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
+            版本历史
+            <span className="doc-meta-history-count">{versions.length}</span>
+            <span className="doc-meta-history-arrow">{historyOpen ? '▲' : '▼'}</span>
+          </button>
+          {historyOpen && (
             <div className="doc-meta-versions-list">
-              {versions.map((ver) => (
+              {versions.slice(0, 10).map((ver) => (
                 <div key={ver.id} className="doc-meta-version-row">
                   <span className="doc-meta-version-date">{formatVersionDate(ver.created_at)}</span>
                   <span className="doc-meta-version-size">{ver.char_count} 字</span>
@@ -413,7 +420,7 @@ export default function DocMetaPanel({
                 </div>
               ))}
             </div>
-          </div>
+          )}
         </>
       )}
     </div>

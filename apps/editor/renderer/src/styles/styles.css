@@ -1183,6 +1183,39 @@ a.sidebar-rail-btn:hover {
     font-size: 11px;
 }
 
+/* version history toggle */
+.doc-meta-history-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    text-align: left;
+}
+
+.doc-meta-history-toggle:hover {
+    color: var(--color-text-primary);
+}
+
+.doc-meta-history-count {
+    background: var(--color-border);
+    border-radius: 8px;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 16px;
+}
+
+.doc-meta-history-arrow {
+    margin-left: auto;
+    font-size: 9px;
+    opacity: 0.6;
+}
+
 /* version history */
 .doc-meta-versions-list {
     display: flex;
@@ -5516,6 +5549,10 @@ body.theme-dark .doc-meta-chip--backlink,
 body.theme-dark .doc-meta-version-restore {
     border-color: rgba(71, 85, 105, 0.42);
     color: var(--color-text-secondary);
+}
+
+body.theme-dark .doc-meta-history-count {
+    background: rgba(71, 85, 105, 0.35);
 }
 
 body.theme-dark .knowledge-meta-panel {
