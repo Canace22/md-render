@@ -151,6 +151,20 @@ const TreeNode = ({
     return () => document.removeEventListener('click', close);
   }, [isMenuTarget, onCloseContextMenu]);
 
+  // 菜单边界检测：避免超出视口被截断
+  useEffect(() => {
+    if (!isMenuTarget || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (rect.bottom > vh) {
+      menuRef.current.style.top = `${Math.max(0, vh - rect.height - 4)}px`;
+    }
+    if (rect.right > vw) {
+      menuRef.current.style.left = `${Math.max(0, vw - rect.width - 4)}px`;
+    }
+  }, [isMenuTarget]);
+
   useEffect(() => {
     if (!isRenaming || !renameInputRef.current) return;
     renameInputRef.current.focus();
