@@ -79,3 +79,4 @@ flowchart TD
 | `md-render-wechat` | 微信公众号格式化的规范 |
 | `skill-harvest` | 判断并生成新 skill（本进化机制的执行器） |
 | `pre-commit-secrets` | 提交/push 前扫描 API key、.env、私钥等敏感信息 |
+| `md-render-external-api-proxy` | 前端调第三方 API（如 Notion）的代理化规范：解决 CORS、避免只在 dev 可用、代理地址可配置 |

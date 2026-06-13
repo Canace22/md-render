@@ -1,12 +1,20 @@
 /**
  * Notion API 封装
  *
- * 所有请求通过 Vite 开发服务器的 /notion-api 代理转发到 https://api.notion.com，
- * 以解决浏览器直接访问 Notion API 时的 CORS 问题。
- * 注意：此功能仅在本地开发模式（npm run dev）下可用。
+ * 请求需经一个代理转发到 https://api.notion.com，以解决浏览器直连的 CORS 问题。
+ * 代理基地址按以下优先级确定（见 resolveProxyBase）：
+ *   1. 构建时注入的 VITE_NOTION_PROXY（指向你服务器上的转发服务，生产可用）
+ *   2. 回退到 /notion-api/v1（仅 pnpm dev 下的 Vite 代理可用）
  */
 
-const NOTION_PROXY_BASE = '/notion-api/v1';
+// 末尾去掉多余斜杠，统一成 .../v1 形式
+const resolveProxyBase = () => {
+  const configured = import.meta.env?.VITE_NOTION_PROXY?.trim();
+  if (configured) return configured.replace(/\/+$/, '');
+  return '/notion-api/v1';
+};
+
+const NOTION_PROXY_BASE = resolveProxyBase();
 const NOTION_VERSION = '2022-06-28';
 
 function makeHeaders(token) {
@@ -231,9 +239,12 @@ export async function fetchChildPages(pageId, token) {
 }
 
 /**
- * 判断当前是否处于本地开发模式（Notion 代理仅在 localhost 可用）
+ * 判断 Notion 同步当前是否可用。
+ * - 配了 VITE_NOTION_PROXY（指向服务器转发服务）→ 任何环境都可用，含打包后的 Electron app
+ * - 没配 → 回退到只在本机 dev（localhost，走 Vite 代理）可用
  */
-export function isLocalDevMode() {
+export function isNotionAvailable() {
+  if (import.meta.env?.VITE_NOTION_PROXY?.trim()) return true;
   if (typeof window === 'undefined') return false;
   const { hostname } = window.location;
   return hostname === 'localhost' || hostname === '127.0.0.1';

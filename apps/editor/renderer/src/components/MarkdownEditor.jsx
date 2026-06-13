@@ -46,7 +46,7 @@ import { applyThemeToBody } from '../utils/themeUtils';
 import { copyToWeChat, htmlToPlainText } from '../utils/wechatCopy';
 import { getTemplateById } from '../utils/wechatTemplates';
 import { blocksToMarkdown, markdownToBlocks } from '../utils/notionConverter.js';
-import { cleanPageId, fetchBlocks, isLocalDevMode, updatePageBlocks } from '../utils/notionService.js';
+import { cleanPageId, fetchBlocks, isNotionAvailable, updatePageBlocks } from '../utils/notionService.js';
 import { batchPull, batchPush } from '../utils/notionBatchSync.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
@@ -505,7 +505,7 @@ function MarkdownEditor() {
       .filter(Boolean);
   }, [canvasItems, canvasState.nodes]);
   const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
-  const notionLocalDev = isLocalDevMode();
+  const notionAvailable = isNotionAvailable();
   const importInputRef = useRef(null);
   const markdownImportInputRef = useRef(null);
   const projectSaveTimersRef = useRef(new Map());
@@ -929,7 +929,7 @@ function MarkdownEditor() {
   const handleCopyRichText = async () => {
     const html = wechatSourceHtml;
     if (!html.trim()) {
-      alert('没有可复制的内容');
+      message.warning('没有可复制的内容');
       return;
     }
     const plainText = htmlToPlainText(html);
@@ -940,6 +940,7 @@ function MarkdownEditor() {
           'text/plain': new Blob([plainText], { type: 'text/plain;charset=utf-8' }),
         }),
       ]);
+      message.success('已复制富文本');
     } catch {
       // 降级：execCommand
       const container = document.createElement('div');
@@ -951,19 +952,26 @@ function MarkdownEditor() {
       const range = document.createRange();
       range.selectNodeContents(container);
       sel.addRange(range);
-      document.execCommand('copy');
+      const ok = document.execCommand('copy');
       document.body.removeChild(container);
       sel.removeAllRanges();
+      if (ok) message.success('已复制富文本');
+      else message.error('复制失败，请重试');
     }
   };
 
   const handleCopyToWeChat = async () => {
     const html = wechatSourceHtml;
     if (!html.trim()) {
-      alert('没有可复制的内容');
+      message.warning('没有可复制的内容');
       return;
     }
-    await copyToWeChat(html, { templateId: copyStyle });
+    try {
+      await copyToWeChat(html, { templateId: copyStyle });
+      message.success('已复制，可直接粘贴到公众号编辑器');
+    } catch {
+      message.error('复制失败，请重试');
+    }
   };
 
   const handleExportMarkdown = useCallback(() => {
@@ -1384,7 +1392,7 @@ function MarkdownEditor() {
   }, [workspace, localProjectSupported]);
 
   const handleNotionPull = useCallback(async () => {
-    if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
+    if (!notionAvailable || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
     setNotionError('');
     setNotionMessage('');
     setNotionPullLoading(true);
@@ -1408,7 +1416,7 @@ function MarkdownEditor() {
       setNotionPullLoading(false);
     }
   }, [
-    notionLocalDev,
+    notionAvailable,
     canSaveLocalProjectFile,
     selectedProjectRootPath,
     selectedFile,
@@ -1418,7 +1426,7 @@ function MarkdownEditor() {
   ]);
 
   const handleNotionPush = useCallback(async () => {
-    if (!notionLocalDev || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
+    if (!notionAvailable || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
     setNotionError('');
     setNotionMessage('');
     setNotionPushLoading(true);
@@ -1432,10 +1440,10 @@ function MarkdownEditor() {
     } finally {
       setNotionPushLoading(false);
     }
-  }, [notionLocalDev, selectedFile, notionToken, linkedNotionPageId, resolvedMarkdown, updateSelectedFileContent]);
+  }, [notionAvailable, selectedFile, notionToken, linkedNotionPageId, resolvedMarkdown, updateSelectedFileContent]);
 
   const handleBatchPull = useCallback(async () => {
-    if (!notionLocalDev || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
+    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
     setNotionError('');
     setNotionMessage('');
     setBatchPullLoading(true);
@@ -1463,10 +1471,10 @@ function MarkdownEditor() {
       setBatchPullLoading(false);
       setBatchProgress(null);
     }
-  }, [notionLocalDev, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
+  }, [notionAvailable, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
 
   const handleBatchPush = useCallback(async () => {
-    if (!notionLocalDev || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
+    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
     // 推送当前选中的文件夹，若没选文件夹则推送整个工作区
     const pushTarget = selectedFolder ?? workspace;
     setNotionError('');
@@ -1494,7 +1502,7 @@ function MarkdownEditor() {
       setBatchPushLoading(false);
       setBatchProgress(null);
     }
-  }, [notionLocalDev, notionToken, notionDatabaseId, selectedFolder, workspace, notionFilePages, mergeNotionFilePages]);
+  }, [notionAvailable, notionToken, notionDatabaseId, selectedFolder, workspace, notionFilePages, mergeNotionFilePages]);
 
   const handleOpenBookmarkTabExternal = useCallback((tab) => {
     const url = String(tab?.url ?? '').trim();
@@ -2055,7 +2063,7 @@ function MarkdownEditor() {
               allFiles={allFiles}
               platformOptions={publishingPlatforms}
               onOpenNotion={() => setSurface('notion')}
-              notionLinked={Boolean(notionLocalDev && linkedNotionPageId && notionToken?.trim())}
+              notionLinked={Boolean(notionAvailable && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
               onKnowledgeMetaChange={setFileKnowledgeMeta}
               onOpenFile={selectNode}

@@ -1,5 +1,5 @@
 import { ArrowLeft, Cloud, CloudUpload, Database, Link2, Loader2 } from 'lucide-react';
-import { isLocalDevMode } from '../utils/notionService.js';
+import { isNotionAvailable } from '../utils/notionService.js';
 
 export default function NotionPanel({
   selectedFileName,
@@ -23,7 +23,7 @@ export default function NotionPanel({
   message,
   error,
 }) {
-  const dev = isLocalDevMode();
+  const available = isNotionAvailable();
   const busy = pullLoading || pushLoading || batchPullLoading || batchPushLoading;
 
   return (
@@ -40,11 +40,11 @@ export default function NotionPanel({
         </div>
       </div>
 
-      {!dev && (
+      {!available && (
         <div className="notion-dev-warning settings-group" role="status">
           <p>
-            Notion 同步仅在本机开发（<code>localhost</code>）时可用。通过 Vite 代理访问 Notion API；部署到
-            GitHub Pages 后无法使用。
+            未检测到 Notion 代理。请在构建时配置 <code>VITE_NOTION_PROXY</code> 指向你的转发服务，
+            或在本机开发（<code>localhost</code>）模式下使用。详见 <code>server/notion-proxy/README.md</code>。
           </p>
         </div>
       )}
@@ -60,7 +60,7 @@ export default function NotionPanel({
             placeholder="secret_…"
             value={token}
             onChange={(e) => onTokenChange(e.target.value)}
-            disabled={!dev}
+            disabled={!available}
           />
         </label>
         <p className="notion-hint">在 Notion 集成中创建并授予目标页面访问权限。</p>
@@ -76,7 +76,7 @@ export default function NotionPanel({
             placeholder="32 位 ID 或完整页面链接"
             value={pageId}
             onChange={(e) => onPageIdChange(e.target.value)}
-            disabled={!dev || !canSync}
+            disabled={!available || !canSync}
           />
         </label>
         <p className="notion-hint">每个本地 .md 文件可绑定一个 Notion 页面，用于拉取与推送。</p>
@@ -85,7 +85,7 @@ export default function NotionPanel({
             type="button"
             className="notion-primary-btn"
             onClick={onPull}
-            disabled={!dev || busy || !token?.trim() || !pageId?.trim() || !canSync}
+            disabled={!available || busy || !token?.trim() || !pageId?.trim() || !canSync}
           >
             {pullLoading ? <Loader2 className="notion-btn-spinner" size={18} /> : <Cloud size={18} strokeWidth={1.6} />}
             <span>从 Notion 拉取</span>
@@ -94,7 +94,7 @@ export default function NotionPanel({
             type="button"
             className="notion-primary-btn"
             onClick={onPush}
-            disabled={!dev || busy || !token?.trim() || !pageId?.trim() || !canSync}
+            disabled={!available || busy || !token?.trim() || !pageId?.trim() || !canSync}
           >
             {pushLoading ? <Loader2 className="notion-btn-spinner" size={18} /> : <CloudUpload size={18} strokeWidth={1.6} />}
             <span>推送到 Notion</span>
@@ -115,7 +115,7 @@ export default function NotionPanel({
             placeholder="32 位数据库 ID 或完整链接"
             value={databaseId}
             onChange={(e) => onDatabaseIdChange(e.target.value)}
-            disabled={!dev}
+            disabled={!available}
           />
         </label>
         <p className="notion-hint">指定一个 Notion 数据库，批量拉取/推送其中所有页面。</p>
@@ -134,7 +134,7 @@ export default function NotionPanel({
             type="button"
             className="notion-primary-btn"
             onClick={onBatchPull}
-            disabled={!dev || busy || !token?.trim() || !databaseId?.trim()}
+            disabled={!available || busy || !token?.trim() || !databaseId?.trim()}
           >
             {batchPullLoading
               ? <Loader2 className="notion-btn-spinner" size={18} />
@@ -145,7 +145,7 @@ export default function NotionPanel({
             type="button"
             className="notion-primary-btn"
             onClick={onBatchPush}
-            disabled={!dev || busy || !token?.trim() || !databaseId?.trim()}
+            disabled={!available || busy || !token?.trim() || !databaseId?.trim()}
           >
             {batchPushLoading
               ? <Loader2 className="notion-btn-spinner" size={18} />
