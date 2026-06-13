@@ -17,7 +17,7 @@ const blocknoteCoreDist = path.join(
   'index.js',
 );
 
-// 仅跑单元测试：Playwright E2E 使用 tests/*.spec.js，此处用 *.test.js 避免冲突
+// 单元测试统一放在 apps/editor/tests-unit/（Playwright E2E 仍用 tests/*.spec.js）
 export default defineConfig({
   root: rendererRoot,
   plugins: [react()],
@@ -28,7 +28,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,jsx}', '../tests/**/*.test.{js,jsx}'],
-    exclude: ['node_modules', 'dist', '../tests/**/*.spec.{js,jsx}'],
+    include: ['../tests-unit/**/*.test.{js,jsx}'],
+    exclude: ['node_modules', 'dist'],
   },
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { blocksToMarkdown } from './notionConverter.js';
+import { blocksToMarkdown, markdownToNotionPayload } from '../renderer/src/utils/notionConverter.js';
 
 // 辅助函数：构造 Notion 块
 const mkBlock = (type, data, children) => ({
@@ -89,5 +89,79 @@ describe('blocksToMarkdown - 新增块类型', () => {
     expect(md).toContain('- 📄 AI 助理');
     expect(md).toContain('- 📄 缺陷巡检');
     expect(md).toContain('这是普通段落');
+  });
+});
+
+describe('markdownToNotionPayload - 目录 + 元数据', () => {
+  const SAMPLE = [
+    '---',
+    'title: 我的文章',
+    'author: 张三',
+    'published: 2026-06-13',
+    'tags:',
+    '  - 技术',
+    '  - Notion',
+    'source: https://example.com/post',
+    'description: 一段摘要',
+    '---',
+    '# 正文标题',
+    '正文内容。',
+  ].join('\n');
+
+  // Case 1: 默认在最前面插入 TOC 块
+  it('默认应插入目录块作为首个块', () => {
+    const { blocks } = markdownToNotionPayload(SAMPLE);
+    expect(blocks[0].type).toBe('table_of_contents');
+  });
+
+  // Case 2: withToc=false 时不插入目录块
+  it('withToc=false 时不应有目录块', () => {
+    const { blocks } = markdownToNotionPayload(SAMPLE, { withToc: false });
+    expect(blocks.some((b) => b.type === 'table_of_contents')).toBe(false);
+  });
+
+  // Case 3: 元数据 callout 含各字段
+  it('应生成含元数据的 callout 块', () => {
+    const { blocks } = markdownToNotionPayload(SAMPLE);
+    const callout = blocks.find((b) => b.type === 'callout');
+    expect(callout).toBeTruthy();
+    const text = callout.callout.rich_text[0].text.content;
+    expect(text).toContain('作者：张三');
+    expect(text).toContain('标签：技术、Notion');
+    expect(text).toContain('来源：https://example.com/post');
+  });
+
+  // Case 4: properties 映射类型正确
+  it('应把 frontmatter 映射为 properties', () => {
+    const { properties, title } = markdownToNotionPayload(SAMPLE);
+    expect(title).toBe('我的文章');
+    expect(properties.Tags.multi_select.map((t) => t.name)).toEqual(['技术', 'Notion']);
+    expect(properties.Source.url).toBe('https://example.com/post');
+    expect(properties.Published.date.start).toBe('2026-06-13');
+    expect(properties.Author.rich_text[0].text.content).toBe('张三');
+  });
+
+  // Case 5: 正文块在元数据之后，且 frontmatter 已剥离
+  it('正文块应跟在元数据后，且不含 frontmatter', () => {
+    const { blocks } = markdownToNotionPayload(SAMPLE);
+    const heading = blocks.find((b) => b.type === 'heading_1');
+    expect(heading.heading_1.rich_text[0].text.content).toBe('正文标题');
+    const dividerIdx = blocks.findIndex((b) => b.type === 'divider');
+    expect(dividerIdx).toBe(-1);
+  });
+
+  // Case 6: 无 frontmatter 时仅 TOC + 正文，无 callout、无 properties
+  it('无 frontmatter 时不生成 callout 和 properties', () => {
+    const { blocks, properties, title } = markdownToNotionPayload('# 只有正文\n内容');
+    expect(blocks.some((b) => b.type === 'callout')).toBe(false);
+    expect(Object.keys(properties)).toHaveLength(0);
+    expect(title).toBeNull();
+  });
+
+  // Case 7: 空输入安全返回
+  it('空输入应返回只含目录块的负载', () => {
+    const { blocks, properties } = markdownToNotionPayload('');
+    expect(blocks).toEqual([{ type: 'table_of_contents', table_of_contents: {} }]);
+    expect(properties).toEqual({});
   });
 });

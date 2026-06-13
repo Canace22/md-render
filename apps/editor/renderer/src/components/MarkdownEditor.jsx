@@ -45,8 +45,16 @@ import {
 import { applyThemeToBody } from '../utils/themeUtils';
 import { copyToWeChat, htmlToPlainText } from '../utils/wechatCopy';
 import { getTemplateById } from '../utils/wechatTemplates';
-import { blocksToMarkdown, markdownToBlocks } from '../utils/notionConverter.js';
-import { cleanPageId, fetchBlocks, isNotionAvailable, updatePageBlocks } from '../utils/notionService.js';
+import { blocksToMarkdown, markdownToNotionPayload } from '../utils/notionConverter.js';
+import {
+  cleanPageId,
+  extractPageTitle,
+  fetchBlocks,
+  isNotionAvailable,
+  queryDatabase,
+  updatePageBlocks,
+} from '../utils/notionService.js';
+import { incrementalPull } from '../utils/notionIncrementalSync.js';
 import { batchPull, batchPush } from '../utils/notionBatchSync.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
@@ -662,6 +670,7 @@ function MarkdownEditor() {
   const [notionPushLoading, setNotionPushLoading] = useState(false);
   const [batchPullLoading, setBatchPullLoading] = useState(false);
   const [batchPushLoading, setBatchPushLoading] = useState(false);
+  const [incrementalPullLoading, setIncrementalPullLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
   const [aiActionState, setAIActionState] = useState(null);
@@ -1432,7 +1441,8 @@ function MarkdownEditor() {
     setNotionPushLoading(true);
     try {
       const id = cleanPageId(linkedNotionPageId);
-      const blocks = markdownToBlocks(resolvedMarkdown);
+      // 单文件目标是独立页面：带上目录块 + 元数据卡片（属性列只对数据库页面有效，这里不传）
+      const { blocks } = markdownToNotionPayload(resolvedMarkdown);
       await updatePageBlocks(id, blocks, notionToken);
       setNotionMessage('已推送到 Notion。');
     } catch (e) {
@@ -1472,6 +1482,90 @@ function MarkdownEditor() {
       setBatchProgress(null);
     }
   }, [notionAvailable, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
+
+  /**
+   * 增量拉取：落盘到本地目录，按 last_edited_time 比对，只更新变更页。
+   * 目录：Projects/notion-sync/<数据库ID> 下，附 .notion-sync.json 索引。
+   */
+  const handleIncrementalPull = useCallback(async () => {
+    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
+    if (!localProjectSupported) {
+      setNotionError('增量拉取仅支持桌面版应用。');
+      return;
+    }
+    setNotionError('');
+    setNotionMessage('');
+    setIncrementalPullLoading(true);
+    setBatchProgress(null);
+    try {
+      const projectRootPath = await ensureLocalMdRenderWorkspace();
+      if (!projectRootPath) {
+        setNotionError('无法初始化本地 Projects 目录，请稍后重试。');
+        return;
+      }
+
+      const dbId = cleanPageId(notionDatabaseId);
+      const dbDirRelative = `Projects/notion-sync/${dbId}`;
+
+      // IO 适配器：把统一接口映射到现有本地项目桥接
+      const io = {
+        ensureDir: (rel) =>
+          createLocalProjectFolderOnDisk({ projectRootPath, relativePath: rel }),
+        readFile: async (rel) => {
+          try {
+            const res = await readLocalProjectFileContent({ projectRootPath, relativePath: rel });
+            return res?.encoding === 'utf8' ? res.data : null;
+          } catch {
+            return null; // 文件不存在等价于首次拉取
+          }
+        },
+        writeFile: (rel, content) =>
+          saveLocalProjectFile({ projectRootPath, relativePath: rel, content }),
+      };
+
+      const notion = {
+        queryPages: (id) => queryDatabase(id, notionToken),
+        extractTitle: (page) => extractPageTitle(page),
+        fetchPageMarkdown: async (pageId) => {
+          const blocks = await fetchBlocks(cleanPageId(pageId), notionToken);
+          return normalizeMarkdown(blocksToMarkdown(blocks));
+        },
+      };
+
+      const result = await incrementalPull({
+        databaseId: dbId,
+        dbDirRelative,
+        io,
+        notion,
+        onProgress: (current, total, title) => setBatchProgress({ current, total, title }),
+      });
+
+      // 拉完刷新本地目录树，新增/更新的文件才会出现在侧栏
+      const disk = await readLocalProjectDisk(projectRootPath, 'projects');
+      if (disk?.projectsChildren) {
+        hydrateProjectsWorkspace({ projectRootPath, projectsChildren: disk.projectsChildren });
+      }
+
+      setNotionMessage(
+        `增量同步完成：新增 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped}` +
+          (result.deleted ? `，远端已删 ${result.deleted}（本地保留）` : ''),
+      );
+      const failureText = formatBatchFailures(result.failed, '页面');
+      if (failureText) setNotionError(failureText);
+    } catch (e) {
+      setNotionError(e?.message || '增量拉取失败');
+    } finally {
+      setIncrementalPullLoading(false);
+      setBatchProgress(null);
+    }
+  }, [
+    notionAvailable,
+    notionToken,
+    notionDatabaseId,
+    localProjectSupported,
+    ensureLocalMdRenderWorkspace,
+    hydrateProjectsWorkspace,
+  ]);
 
   const handleBatchPush = useCallback(async () => {
     if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
@@ -1955,12 +2049,13 @@ function MarkdownEditor() {
             onDatabaseIdChange={setNotionDatabaseId}
             onPull={handleNotionPull}
             onPush={handleNotionPush}
-            onBatchPull={handleBatchPull}
-            onBatchPush={handleBatchPush}
+            onDatabasePull={localProjectSupported ? handleIncrementalPull : handleBatchPull}
+            onDatabasePush={handleBatchPush}
             pullLoading={notionPullLoading}
             pushLoading={notionPushLoading}
-            batchPullLoading={batchPullLoading}
-            batchPushLoading={batchPushLoading}
+            databasePullLoading={localProjectSupported ? incrementalPullLoading : batchPullLoading}
+            databasePushLoading={batchPushLoading}
+            incrementalActive={localProjectSupported}
             batchProgress={batchProgress}
             message={notionMessage}
             error={notionError}

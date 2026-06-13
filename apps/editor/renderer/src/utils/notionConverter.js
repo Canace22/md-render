@@ -3,7 +3,11 @@
  *
  * blocksToMarkdown：Notion API 返回的块列表 → Markdown 字符串
  * markdownToBlocks：Markdown 字符串 → 可直接提交给 Notion API 的块列表
+ * markdownToNotionPayload：带 frontmatter 的 Markdown → { blocks, properties }
+ *   blocks 含目录块 + 元数据 callout + 正文；properties 为数据库页面属性映射
  */
+
+import { parseMarkdownFrontmatter } from '../../../shared/frontmatter.js';
 
 // ─── Notion → Markdown ───────────────────────────────────────────────────────
 
@@ -468,9 +472,10 @@ export function markdownToBlocks(markdown) {
       continue;
     }
 
-    // 空行 → 空段落（保留段落间距）
+    // 空行 → 跳过：Notion 块自带间距，无需空段落（否则会产生大量空节点）
     else if (!line.trim()) {
-      blocks.push({ type: 'paragraph', paragraph: { rich_text: [] } });
+      i++;
+      continue;
     }
 
     // 普通段落
@@ -491,4 +496,111 @@ export function markdownToBlocks(markdown) {
   }
 
   return blocks;
+}
+
+// ─── frontmatter → 目录 + 元数据 ──────────────────────────────────────────────
+
+// frontmatter 字段 → 元数据 callout 里展示用的中文标签
+const META_LABELS = {
+  title: '标题',
+  author: '作者',
+  published: '发布',
+  created: '创建',
+  source: '来源',
+  description: '摘要',
+  tags: '标签',
+  cover: '封面',
+};
+// callout 里展示的字段顺序（title 单独作为页面标题，不重复进 callout）
+const META_DISPLAY_ORDER = ['author', 'published', 'created', 'source', 'description', 'tags'];
+
+const asText = (value) => (Array.isArray(value) ? value.join('、') : String(value ?? '')).trim();
+
+/**
+ * 把 frontmatter 渲染成一个 callout 块，作为页面正文顶部的元数据卡片。
+ * 没有任何可展示字段时返回 null。
+ */
+function buildMetadataCallout(frontmatter) {
+  const lines = META_DISPLAY_ORDER.map((key) => {
+    const text = asText(frontmatter[key]);
+    if (!text) return null;
+    return `${META_LABELS[key]}：${text}`;
+  }).filter(Boolean);
+
+  if (!lines.length) return null;
+
+  // 用软换行（\n）把多字段塞进一个 callout 的 rich_text
+  return {
+    type: 'callout',
+    callout: {
+      icon: { type: 'emoji', emoji: '🗂️' },
+      rich_text: [{ type: 'text', text: { content: lines.join('\n') } }],
+    },
+  };
+}
+
+/**
+ * 把 frontmatter 映射为 Notion 数据库页面的 properties。
+ * 只映射类型明确、低风险的字段；标题列由调用方按数据库实际标题属性名注入。
+ * 返回不含 title 的属性对象（title 仍由 service 层处理）。
+ */
+function buildPageProperties(frontmatter) {
+  const props = {};
+
+  const tags = Array.isArray(frontmatter.tags)
+    ? frontmatter.tags
+    : asText(frontmatter.tags) ? [asText(frontmatter.tags)] : [];
+  if (tags.length) {
+    props.Tags = { multi_select: tags.map((name) => ({ name: String(name).slice(0, 100) })) };
+  }
+
+  const author = asText(frontmatter.author);
+  if (author) props.Author = { rich_text: parseInline(author) };
+
+  const source = asText(frontmatter.source);
+  if (source) props.Source = { url: source };
+
+  const description = asText(frontmatter.description);
+  if (description) props.Description = { rich_text: longText(description) };
+
+  for (const key of ['published', 'created']) {
+    const text = asText(frontmatter[key]);
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+      const label = key === 'published' ? 'Published' : 'Created';
+      props[label] = { date: { start: text.slice(0, 10) } };
+    }
+  }
+
+  return props;
+}
+
+/**
+ * 带 frontmatter 的 Markdown → Notion 推送负载。
+ *
+ * @param {string} markdown 原始 Markdown（可含 --- frontmatter ---）
+ * @param {object} [options]
+ * @param {boolean} [options.withToc=true] 是否在正文顶部插入 Notion 原生目录块
+ * @returns {{ blocks: Array, properties: object, title: string|null }}
+ *   blocks: [目录块?, 元数据 callout?, ...正文块]
+ *   properties: 数据库页面属性（不含标题列）
+ *   title: frontmatter.title（无则 null，调用方可回退到文件名）
+ */
+export function markdownToNotionPayload(markdown, { withToc = true } = {}) {
+  const { frontmatter, content } = parseMarkdownFrontmatter(markdown ?? '');
+  const fm = frontmatter ?? {};
+
+  const blocks = [];
+  if (withToc) {
+    blocks.push({ type: 'table_of_contents', table_of_contents: {} });
+  }
+  const callout = buildMetadataCallout(fm);
+  if (callout) blocks.push(callout);
+
+  blocks.push(...markdownToBlocks(content));
+
+  return {
+    blocks,
+    properties: buildPageProperties(fm),
+    title: asText(fm.title) || null,
+  };
 }

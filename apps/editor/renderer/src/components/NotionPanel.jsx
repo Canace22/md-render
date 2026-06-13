@@ -7,24 +7,26 @@ export default function NotionPanel({
   token,
   pageId,
   databaseId,
+  parentPageId,
   onTokenChange,
   onPageIdChange,
   onDatabaseIdChange,
   onPull,
   onPush,
-  onBatchPull,
-  onBatchPush,
+  onDatabasePull,
+  onDatabasePush,
   onClose,
   pullLoading,
   pushLoading,
-  batchPullLoading,
-  batchPushLoading,
+  databasePullLoading,
+  databasePushLoading,
+  incrementalActive,
   batchProgress,
   message,
   error,
 }) {
   const available = isNotionAvailable();
-  const busy = pullLoading || pushLoading || batchPullLoading || batchPushLoading;
+  const busy = pullLoading || pushLoading || databasePullLoading || databasePushLoading;
 
   return (
     <section className="notion-panel settings-panel" data-testid="notion-panel">
@@ -106,8 +108,9 @@ export default function NotionPanel({
         </p>
       </div>
 
-      {/* ── 批量同步 ── */}
+      {/* ── 数据库同步 ── */}
       <div className="settings-group">
+        <div className="settings-group-title">从数据库拉取</div>
         <label className="notion-field">
           <span>数据库 ID 或 URL</span>
           <input
@@ -118,7 +121,7 @@ export default function NotionPanel({
             disabled={!available}
           />
         </label>
-        <p className="notion-hint">指定一个 Notion 数据库，批量拉取/推送其中所有页面。</p>
+        <p className="notion-hint">指定一个 Notion 数据库，一键拉取其中所有页面到本地。</p>
 
         {batchProgress && (
           <div className="notion-batch-progress" role="status">
@@ -133,31 +136,38 @@ export default function NotionPanel({
           <button
             type="button"
             className="notion-primary-btn"
-            onClick={onBatchPull}
+            onClick={onDatabasePull}
             disabled={!available || busy || !token?.trim() || !databaseId?.trim()}
           >
-            {batchPullLoading
+            {databasePullLoading
               ? <Loader2 className="notion-btn-spinner" size={18} />
               : <Database size={18} strokeWidth={1.6} />}
-            <span>批量拉取</span>
+            <span>从数据库拉取</span>
           </button>
           <button
             type="button"
             className="notion-primary-btn"
-            onClick={onBatchPush}
+            onClick={onDatabasePush}
             disabled={!available || busy || !token?.trim() || !databaseId?.trim()}
           >
-            {batchPushLoading
+            {databasePushLoading
               ? <Loader2 className="notion-btn-spinner" size={18} />
               : <CloudUpload size={18} strokeWidth={1.6} />}
-            <span>批量推送</span>
+            <span>推送到数据库</span>
           </button>
         </div>
         <p className="notion-hint small">
           <Database size={14} className="notion-hint-icon" strokeWidth={1.8} />
-          批量拉取会在工作区中创建「Notion 同步」文件夹；批量推送会将当前选中文件夹下的所有文件推到数据库。
+          {incrementalActive
+            ? '增量同步：同一目录原地更新，只动有变化的页面，不会重复堆文件夹。'
+            : '会在工作区创建「Notion 同步」文件夹，存放拉取到的页面。'}
+        </p>
+        <p className="notion-hint small">
+          <CloudUpload size={14} className="notion-hint-icon" strokeWidth={1.8} />
+          把选中文件夹推回这个数据库：已拉取过的页面原地更新，新文件在库中新建页面。
         </p>
       </div>
+
 
       {message && (
         <p className="notion-panel-message" role="status">

@@ -7,9 +7,14 @@ packages/*/node_modules/
 dist/
 apps/*/dist/
 
-# Test output
+# Test output（只忽略产物，保留 tests-unit/ 测试源码）
 test-results/
 apps/*/test-results/
+coverage/
+apps/*/coverage/
+playwright-report/
+apps/*/playwright-report/
+.playwright-mcp/
 
 # Environment variables
 .env
@@ -40,3 +45,7 @@ build/
 apps/*/dist-electron/
 apps/*/release/
 apps/*/build/
+
+# Vitest 加载配置时的临时转译文件（进程被打断时可能残留）
+**/vitest.config.*.timestamp-*.mjs
+**/vite.config.*.timestamp-*.mjs

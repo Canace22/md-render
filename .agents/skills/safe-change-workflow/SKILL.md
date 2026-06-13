@@ -73,6 +73,8 @@ flowchart TD
 
 不要主动跑 Playwright / E2E / 浏览器自动化测试；只有用户明确点名 e2e、Playwright、浏览器验证，或正在处理必须靠浏览器复现的视觉/交互问题并得到用户同意时，才执行。
 
+**跑完必须清理临时产物。** 一旦执行过测试，完成后检查并删除工作区残留的临时文件，尤其是 `vitest.config.*.timestamp-*.mjs` / `vite.config.*.timestamp-*.mjs`——这是 Vitest 加载配置时生成的临时转译文件，正常退出会自删，但进程被超时打断（如沙箱 45s 超时）就会残留。不能把它们留在工作区污染 git 状态。沙箱里 `rm` 报 `Operation not permitted` 时，用删除授权工具放行后再删。这类 glob 已加入根 `.gitignore` 兜底。
+
 ## 完成标准
 
 - 只改了必要的代码，没碰无关模块
