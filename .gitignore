@@ -6,6 +6,8 @@ packages/*/node_modules/
 # Build output
 dist/
 apps/*/dist/
+**/dist-new/
+**/dist-verify/
 
 # Test output（只忽略产物，保留 tests-unit/ 测试源码）
 test-results/
