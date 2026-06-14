@@ -7888,6 +7888,38 @@ body.theme-dark .file-preview-iframe {
   font-weight: var(--font-weight-medium);
 }
 
+.agent-panel__quick-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-l);
+  padding: 4px 10px;
+  font-size: var(--font-size-s);
+  transition: background var(--duration-fast) var(--easing),
+    color var(--duration-fast) var(--easing);
+}
+
+.agent-panel__quick-btn:hover:not(:disabled) {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.agent-panel__quick-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .agent-panel__icon-btn,
 .agent-panel__send-btn {
   display: inline-flex;
@@ -8082,4 +8114,159 @@ body.theme-dark .file-preview-iframe {
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 13px;
+}
+
+/* AI 助手：头部多按钮 + 会话列表 */
+.agent-panel__header-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.agent-panel__sessions {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-page);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.agent-panel__session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  transition: background var(--duration-fast) var(--easing);
+}
+
+.agent-panel__session:hover {
+  background: var(--color-bg-active);
+}
+
+.agent-panel__session.is-active {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.agent-panel__session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-panel__session-del {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-l);
+  display: inline-flex;
+}
+
+.agent-panel__session-del:hover {
+  color: var(--color-brand-primary);
+  background: var(--color-bg-surface);
+}
+
+/* AI 助手：@文件 选择器 + 已选附件 */
+.agent-panel__file-picker {
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.agent-panel__file-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.agent-panel__file-option:hover {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.agent-panel__file-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.agent-panel__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.agent-panel__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 8px;
+  border-radius: var(--radius-l);
+  background: var(--color-bg-active);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  max-width: 160px;
+}
+
+.agent-panel__chip--selection {
+  max-width: 220px;
+  background: color-mix(in srgb, var(--color-brand-primary) 14%, var(--color-bg-active));
+  color: var(--color-text-primary);
+}
+
+.agent-panel__chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-panel__chip-del {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+}
+
+.agent-panel__chip-del:hover {
+  color: var(--color-brand-primary);
+}
+
+.agent-panel__msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.agent-panel__msg-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  opacity: 0.8;
+  background: rgba(127, 127, 127, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
 }

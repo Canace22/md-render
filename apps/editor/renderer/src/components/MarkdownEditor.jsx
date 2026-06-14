@@ -8,7 +8,6 @@ import { zh } from '@blocknote/core/locales';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
-import AIActionModal from './AIActionModal.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
@@ -99,11 +98,6 @@ import {
   buildPublishingPlatformLabelMap,
   getDefaultTargetPlatforms,
 } from '../utils/publishingPlatforms.js';
-import {
-  buildAIActionContext,
-  buildAIActionPrompt,
-  getAIAction,
-} from '../utils/aiActions.js';
 import { exportDocument } from '../utils/exportService.js';
 import {
   createLocalProjectFileOnDisk,
@@ -339,6 +333,7 @@ function MarkdownEditor() {
     closeTabsToTheRight,
     updateTabTitle,
     toggleEditorMode,
+    setAiQuotedSelection,
   } = useEditorStore();
   const publishingPlatformLabelMap = useMemo(
     () => buildPublishingPlatformLabelMap(publishingPlatforms),
@@ -680,8 +675,6 @@ function MarkdownEditor() {
   const [incrementalPullLoading, setIncrementalPullLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
-  const [aiActionState, setAIActionState] = useState(null);
-  const [aiResultDraft, setAIResultDraft] = useState('');
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
       || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
@@ -897,70 +890,6 @@ function MarkdownEditor() {
     }
   };
 
-  const handleOpenAIAction = useCallback((actionKey) => {
-    const action = getAIAction(actionKey);
-    if (!action) return;
-    const selectionText = getSelectedEditorText();
-    const documentForAI = {
-      ...selectedFile,
-      title: selectedFile?.name?.replace(/\.md$/i, '') ?? '',
-      summary: selectedFile?.summary ?? '',
-      content: resolvedMarkdown,
-      platformOptions: publishingPlatforms,
-    };
-
-    const context = buildAIActionContext({
-      actionKey,
-      selectionText,
-      document: documentForAI,
-    });
-
-    setAIResultDraft('');
-    setAIActionState({
-      ...action,
-      ...context,
-      generatedPrompt: buildAIActionPrompt({
-        actionKey,
-        selectionText,
-        document: documentForAI,
-      }),
-    });
-  }, [resolvedMarkdown, publishingPlatforms, selectedFile]);
-
-  const handleCopyAIPrompt = useCallback(async () => {
-    const prompt = aiActionState?.generatedPrompt ?? '';
-    if (!prompt.trim()) return;
-    try {
-      await navigator.clipboard.writeText(prompt);
-      message.success('Prompt 已复制');
-    } catch (error) {
-      console.error('复制 AI Prompt 失败:', error);
-      message.error('复制 Prompt 失败');
-    }
-  }, [aiActionState]);
-
-  const handleApplyAIResult = useCallback(() => {
-    const nextText = normalizeMarkdown(aiResultDraft);
-    if (!nextText) return;
-
-    const parsedBlocks = editor.tryParseMarkdownToBlocks(nextText);
-    const blocksToInsert = parsedBlocks.length > 0
-      ? parsedBlocks
-      : [{ type: 'paragraph', content: nextText }];
-    const anchorBlock = editor.getTextCursorPosition()?.block ?? editor.document?.[editor.document.length - 1];
-
-    if (!anchorBlock) {
-      message.warning('当前无法定位插入位置');
-      return;
-    }
-
-    editor.insertBlocks(blocksToInsert, anchorBlock, 'after');
-    editor.focus();
-    setAIActionState(null);
-    setAIResultDraft('');
-    message.success('AI 内容已插入到文档');
-  }, [aiResultDraft, editor]);
-
   const handleCopyRichText = async () => {
     const html = wechatSourceHtml;
     if (!html.trim()) {
@@ -1034,7 +963,7 @@ function MarkdownEditor() {
     const state = useEditorStore.getState();
     const node = findNodeById(state.workspace, state.selectedId);
     if (node?.type !== 'file') {
-      alert('请先选中一个文档后再导出。');
+      message.warning('请先选中一个文档后再导出。');
       return;
     }
     // content 可能是 BlockNote JSON，需先转为纯 Markdown
@@ -1051,7 +980,17 @@ function MarkdownEditor() {
     const filename = title || '导出文档';
     const tokens = parserRef.current.parse(md);
     const html = rendererRef.current.render(tokens);
-    await exportDocument(format, { markdown: md, html, title, filename });
+    const closeLoading = message.loading('正在导出…', 0);
+    try {
+      const result = await exportDocument(format, { markdown: md, html, title, filename });
+      if (result?.canceled) return;
+      message.success('导出成功');
+    } catch (error) {
+      console.error('导出失败:', error);
+      message.error(error?.message || '导出失败');
+    } finally {
+      closeLoading();
+    }
   }, []);
 
   const ensureLocalMdRenderWorkspace = useCallback(async () => {
@@ -1075,6 +1014,7 @@ function MarkdownEditor() {
     const reader = new FileReader();
 
     reader.onload = async () => {
+      const closeLoading = message.loading('正在导入文件…', 0);
       try {
         const raw = reader.result;
         const markdownText = normalizeMarkdown(await convertToMarkdown(file.name, raw));
@@ -1083,13 +1023,13 @@ function MarkdownEditor() {
         if (localProjectSupported) {
           const projectRootPath = await ensureLocalMdRenderWorkspace();
           if (!projectRootPath) {
-            alert('无法初始化本地 Projects 目录，请稍后重试。');
+            message.error('无法初始化本地 Projects 目录，请稍后重试。');
             return;
           }
           const state = useEditorStore.getState();
           const target = resolveLocalProjectCreateTarget(state.workspace, state.selectedId, projectRootPath);
           if (!target) {
-            alert('无法定位本地 Projects 目录，请稍后重试。');
+            message.error('无法定位本地 Projects 目录，请稍后重试。');
             return;
           }
           const name = buildUniqueNameInFolder(target.parentFolder, stem, '.md');
@@ -1103,12 +1043,13 @@ function MarkdownEditor() {
           node.updatedAt = result.updatedAt;
           insertLocalProjectNode(target.parentFolderId, node);
           setContentResetKey((k) => k + 1);
+          message.success(`已导入「${name}」`);
           return;
         }
 
         const { selectedId, addFile } = useEditorStore.getState();
         if (!addFile(selectedId)) {
-          alert('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
+          message.error('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
           return;
         }
         const after = useEditorStore.getState();
@@ -1116,9 +1057,12 @@ function MarkdownEditor() {
         const uniqueName = buildUniqueName(after.workspace, stem, '.md');
         after.applyRename(after.selectedId, uniqueName);
         setContentResetKey((k) => k + 1);
+        message.success(`已导入「${uniqueName}」`);
       } catch (error) {
         console.error('导入文件失败:', error);
-        alert(error?.message || '导入文件失败，格式可能不受支持。');
+        message.error(error?.message || '导入文件失败，格式可能不受支持。');
+      } finally {
+        closeLoading();
       }
     };
 
@@ -1136,7 +1080,7 @@ function MarkdownEditor() {
       try {
         const projectRootPath = await ensureLocalMdRenderWorkspace();
         if (!projectRootPath) {
-          alert('无法初始化本地 Projects 目录，请稍后重试。');
+          message.error('无法初始化本地 Projects 目录，请稍后重试。');
           return;
         }
         const state = useEditorStore.getState();
@@ -1146,7 +1090,7 @@ function MarkdownEditor() {
           projectRootPath,
         );
         if (!target) {
-          alert('无法定位本地 Projects 目录，请稍后重试。');
+          message.error('无法定位本地 Projects 目录，请稍后重试。');
           return;
         }
         const name = buildUniqueNameInFolder(target.parentFolder, '未命名', '.md');
@@ -1160,15 +1104,16 @@ function MarkdownEditor() {
         node.updatedAt = result.updatedAt;
         insertLocalProjectNode(target.parentFolderId, node);
         setContentResetKey((k) => k + 1);
+        message.success(`已新建「${name}」`);
       } catch (error) {
         console.error('新建本地文件失败:', error);
-        alert(error?.message || '新建本地文件失败');
+        message.error(error?.message || '新建本地文件失败');
       }
       return;
     }
 
     if (!addFile(contextNodeId)) {
-      alert('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
+      message.error('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
     }
   }, [localProjectSupported, ensureLocalMdRenderWorkspace, addFile, insertLocalProjectNode]);
 
@@ -1177,7 +1122,7 @@ function MarkdownEditor() {
       try {
         const projectRootPath = await ensureLocalMdRenderWorkspace();
         if (!projectRootPath) {
-          alert('无法初始化本地 Projects 目录，请稍后重试。');
+          message.error('无法初始化本地 Projects 目录，请稍后重试。');
           return;
         }
         const state = useEditorStore.getState();
@@ -1187,7 +1132,7 @@ function MarkdownEditor() {
           projectRootPath,
         );
         if (!target) {
-          alert('无法定位本地 Projects 目录，请稍后重试。');
+          message.error('无法定位本地 Projects 目录，请稍后重试。');
           return;
         }
         const name = buildUniqueNameInFolder(target.parentFolder, '新建文件夹');
@@ -1199,15 +1144,16 @@ function MarkdownEditor() {
         const node = createLocalProjectFolderNode(target.projectRootPath, result.relativePath, name);
         insertLocalProjectNode(target.parentFolderId, node);
         setContentResetKey((k) => k + 1);
+        message.success(`已新建文件夹「${name}」`);
       } catch (error) {
         console.error('新建本地文件夹失败:', error);
-        alert(error?.message || '新建本地文件夹失败');
+        message.error(error?.message || '新建本地文件夹失败');
       }
       return;
     }
 
     if (!addFolder(contextNodeId)) {
-      alert('本地项目目录暂不支持新建文件夹，请先在磁盘目录中创建文件夹后重新打开项目。');
+      message.error('本地项目目录暂不支持新建文件夹，请先在磁盘目录中创建文件夹后重新打开项目。');
     }
   }, [localProjectSupported, ensureLocalMdRenderWorkspace, addFolder, insertLocalProjectNode]);
 
@@ -1327,25 +1273,29 @@ function MarkdownEditor() {
 
   const handleOpenLocalProject = useCallback(async () => {
     if (!localProjectSupported) {
-      alert('打开本地项目仅支持桌面版应用。');
+      message.error('打开本地项目仅支持桌面版应用。');
       return;
     }
+    let closeLoading = null;
     try {
       const result = await openLocalProject();
       if (!result || result.canceled) return;
       const projects = Array.isArray(result.projects)
         ? result.projects
         : [{ workspace: result.workspace, projectRootPath: result.projectRootPath }];
-      if (!projects.some((project) => project?.workspace)) return;
-      projects.forEach((project) => {
-        if (project?.workspace) {
-          openLocalProjectWorkspace(project.workspace, project.projectRootPath);
-        }
+      const validProjects = projects.filter((project) => project?.workspace);
+      if (validProjects.length === 0) return;
+      closeLoading = message.loading('正在打开本地项目…', 0);
+      validProjects.forEach((project) => {
+        openLocalProjectWorkspace(project.workspace, project.projectRootPath);
       });
       setContentResetKey((k) => k + 1);
+      message.success(`已打开 ${validProjects.length} 个本地项目`);
     } catch (error) {
       console.error('打开本地项目失败:', error);
-      alert(error?.message || '打开本地项目失败');
+      message.error(error?.message || '打开本地项目失败');
+    } finally {
+      closeLoading?.();
     }
   }, [localProjectSupported, openLocalProjectWorkspace]);
 
@@ -1975,6 +1925,21 @@ function MarkdownEditor() {
     syncSelectedIdFromWorkspace();
   }, [selectedFile, workspace, markdown, syncMarkdownFromSelectedFile, syncSelectedIdFromWorkspace]);
 
+  // 选中即引用：在编辑器里选中文字（松开鼠标/键），自动写入 store 供 AI 助手引用。
+  // 覆盖式更新；选区折叠（点空白）不清空，保留引用，由用户从 chip 上的 × 移除。
+  useEffect(() => {
+    const commitSelection = () => {
+      const text = getSelectedEditorText();
+      if (text) setAiQuotedSelection(text);
+    };
+    document.addEventListener('mouseup', commitSelection);
+    document.addEventListener('keyup', commitSelection);
+    return () => {
+      document.removeEventListener('mouseup', commitSelection);
+      document.removeEventListener('keyup', commitSelection);
+    };
+  }, [setAiQuotedSelection]);
+
   return (
     <div className={`container immersive-shell${macWindowed ? ' mac-windowed' : ''}`}>
       <input
@@ -2223,7 +2188,6 @@ function MarkdownEditor() {
             <EditorQuickToolbar
               editor={editor}
               disabled={!selectedFile}
-              onAIAction={handleOpenAIAction}
               onPreviewWeChat={() => setWechatPreviewOpen(true)}
               onCopyWeChat={handleCopyToWeChat}
               onCopyRichText={handleCopyRichText}
@@ -2284,22 +2248,6 @@ function MarkdownEditor() {
         sourceHtml={wechatSourceHtml}
         initialTemplateId={copyStyle}
         onTemplateChange={setCopyStyle}
-      />
-
-      <AIActionModal
-        open={Boolean(aiActionState)}
-        action={aiActionState}
-        sourceText={aiActionState?.sourceText ?? ''}
-        scopeLabel={aiActionState?.scopeLabel ?? ''}
-        generatedPrompt={aiActionState?.generatedPrompt ?? ''}
-        resultDraft={aiResultDraft}
-        onResultDraftChange={setAIResultDraft}
-        onCopyPrompt={handleCopyAIPrompt}
-        onApplyResult={handleApplyAIResult}
-        onClose={() => {
-          setAIActionState(null);
-          setAIResultDraft('');
-        }}
       />
 
       <BookmarkImportModal

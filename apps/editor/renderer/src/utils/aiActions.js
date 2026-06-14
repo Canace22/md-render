@@ -214,6 +214,20 @@ export const getAiActionPromptLabel = (actionKey) => {
   return getActionMeta(actionKey).promptLabel || '处理这段内容';
 };
 
+/**
+ * 给 AI 助手用的「快捷指令」：一句任务 + 几条输出要求。
+ * 不内嵌正文——交给 agent 通过「读取当前文档」工具自行获取，避免重复拼正文。
+ */
+export const buildQuickActionInstruction = (actionKey) => {
+  const { task, outputRules } = getActionConfig(actionKey);
+  const rules = (outputRules || []).map((rule) => `- ${rule}`).join('\n');
+  return [
+    '请先读取当前文档，然后处理整篇正文。',
+    task,
+    rules ? `输出要求：\n${rules}` : '',
+  ].filter(Boolean).join('\n\n');
+};
+
 export const buildAiContextSummary = ({
   actionKey = '',
   selectedText = '',

@@ -38,6 +38,12 @@ import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
 import { saveLocalProjectMetadata } from '../utils/localProjectBridge.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
+import {
+  createSession,
+  deriveTitle,
+  mapSession,
+  removeSession,
+} from '../core/agent/sessionUtils.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
@@ -697,6 +703,69 @@ export const useEditorStore = create(
       notionProxyBase: '',
       activeBlockId: null,
       activeBlockDraft: '',
+
+      // ===== AI 助手会话（全局内存态，故意不进 persist：切页不丢、关 app 清空）=====
+      agentSessions: [createSession()],
+      activeAgentSessionId: null, // null 时下方 getter 兜底用第一个
+
+      // 编辑器「引用到 AI」暂存的选中文字（内存态，不进 persist）。
+      // null = 无引用；AgentPanel 消费后调 clearAiQuotedSelection 清空。
+      aiQuotedSelection: null,
+      setAiQuotedSelection: (text) => {
+        const t = String(text ?? '').trim();
+        set({ aiQuotedSelection: t || null });
+      },
+      clearAiQuotedSelection: () => set({ aiQuotedSelection: null }),
+
+      /** 当前激活会话 id（兜底第一个） */
+      getActiveAgentSessionId: () => {
+        const { agentSessions, activeAgentSessionId } = get();
+        if (activeAgentSessionId && agentSessions.some((s) => s.id === activeAgentSessionId)) {
+          return activeAgentSessionId;
+        }
+        return agentSessions[0]?.id ?? null;
+      },
+
+      createAgentSession: () => {
+        const session = createSession();
+        set((state) => ({
+          agentSessions: [session, ...state.agentSessions],
+          activeAgentSessionId: session.id,
+        }));
+        return session.id;
+      },
+
+      switchAgentSession: (sessionId) => set({ activeAgentSessionId: sessionId }),
+
+      deleteAgentSession: (sessionId) => set((state) => {
+        const { sessions, nextActiveId } = removeSession(
+          state.agentSessions, sessionId, get().getActiveAgentSessionId(),
+        );
+        return { agentSessions: sessions, activeAgentSessionId: nextActiveId };
+      }),
+
+      /** 给某会话追加一条 UI 消息 */
+      appendAgentMessage: (sessionId, msg) => set((state) => ({
+        agentSessions: mapSession(state.agentSessions, sessionId, (s) => ({
+          ...s,
+          messages: [...s.messages, msg],
+          // 首条用户消息自动命名会话
+          title: s.messages.length === 0 && msg.role === 'user' ? deriveTitle(msg.text) : s.title,
+        })),
+      })),
+
+      /** 用 updater 改某会话最后一条匹配的消息（如把 tool running→done）*/
+      updateAgentMessages: (sessionId, updater) => set((state) => ({
+        agentSessions: mapSession(state.agentSessions, sessionId, (s) => ({
+          ...s,
+          messages: updater(s.messages),
+        })),
+      })),
+
+      /** 保存某会话的模型对话历史（跨轮复用）*/
+      setAgentHistory: (sessionId, history) => set((state) => ({
+        agentSessions: mapSession(state.agentSessions, sessionId, (s) => ({ ...s, history })),
+      })),
 
       setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
       setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),

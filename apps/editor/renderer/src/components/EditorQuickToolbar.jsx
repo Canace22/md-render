@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { EditorToolbar } from '@narrative/blocknote-core';
 import {
-  Sparkles,
   Heading1,
   Heading2,
   List,
@@ -51,12 +50,6 @@ const TOOL_ITEMS = [
     block: { type: 'divider' },
     behavior: 'insert-divider',
   },
-];
-
-const AI_TOOL_ITEMS = [
-  { key: 'compress', label: '压缩' },
-  { key: 'expand', label: '扩写' },
-  { key: 'title', label: '标题' },
 ];
 
 function isInlineBlockContent(editor, block) {
@@ -109,7 +102,6 @@ function insertDivider(editor) {
 export default function EditorQuickToolbar({
   editor,
   disabled,
-  onAIAction,
   onPreviewWeChat,
   onCopyWeChat,
   onCopyRichText,
@@ -162,22 +154,6 @@ export default function EditorQuickToolbar({
     },
   }));
 
-  const aiEntries = AI_TOOL_ITEMS.map((item) => ({
-    type: 'button',
-    key: `ai-${item.key}`,
-    button: {
-      title: `AI ${item.label}`,
-      label: item.label,
-      icon: <Sparkles size={15} strokeWidth={1.9} />,
-      // AI 续写不聚焦编辑器，避免光标跳到文档末尾
-      skipFocusEditor: true,
-      onItemClick: () => {
-        if (disabled) return;
-        onAIAction?.(item.key);
-      },
-    },
-  }));
-
   const actionEntries = [
     {
       type: 'button',
@@ -226,7 +202,6 @@ export default function EditorQuickToolbar({
   const entries = [
     ...blockEntries,
     { type: 'divider', key: 'sep-actions' },
-    ...aiEntries,
     ...actionEntries,
   ];
 
