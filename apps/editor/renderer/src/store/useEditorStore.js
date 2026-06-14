@@ -717,6 +717,33 @@ export const useEditorStore = create(
       },
       clearAiQuotedSelection: () => set({ aiQuotedSelection: null }),
 
+      // AI 待确认的文档写入（内存态，不进 persist）。
+      // null = 无待确认改动。stageAgentWrite 暂存改动并返回一个 Promise，
+      // 用户点「应用」或「放弃」后 resolve，agent 工具据此回填模型结果。
+      agentPendingWrite: null,
+      /**
+       * 暂存一次待确认写入，返回 Promise<boolean>（true=已应用，false=已放弃）。
+       * @param {{ oldText: string, newText: string }} change
+       */
+      stageAgentWrite: ({ oldText, newText }) => new Promise((resolve) => {
+        set({ agentPendingWrite: { oldText: oldText ?? '', newText: newText ?? '', resolve } });
+      }),
+      /** 应用待确认写入：真正写回当前文档，并 resolve(true) */
+      applyAgentWrite: () => {
+        const pending = get().agentPendingWrite;
+        if (!pending) return;
+        get().updateSelectedFileContent(pending.newText);
+        set({ agentPendingWrite: null });
+        pending.resolve?.(true);
+      },
+      /** 放弃待确认写入：不动文档，resolve(false) */
+      discardAgentWrite: () => {
+        const pending = get().agentPendingWrite;
+        if (!pending) return;
+        set({ agentPendingWrite: null });
+        pending.resolve?.(false);
+      },
+
       /** 当前激活会话 id（兜底第一个） */
       getActiveAgentSessionId: () => {
         const { agentSessions, activeAgentSessionId } = get();

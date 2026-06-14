@@ -7,12 +7,14 @@ const DEFAULT_TITLE_SUGGESTION_COUNT = 5;
 export const AI_ACTION_KEYS = Object.freeze({
   SUMMARIZE: 'summarize',
   EXPAND: 'expand',
+  POLISH: 'polish',
   TITLE_SUGGESTIONS: 'title_suggestions',
 });
 
 export const AI_ACTION_OPTIONS = Object.freeze([
   { key: AI_ACTION_KEYS.SUMMARIZE, value: AI_ACTION_KEYS.SUMMARIZE, label: '压缩', promptLabel: '压缩这段内容' },
   { key: AI_ACTION_KEYS.EXPAND, value: AI_ACTION_KEYS.EXPAND, label: '扩写', promptLabel: '扩写这段内容' },
+  { key: AI_ACTION_KEYS.POLISH, value: AI_ACTION_KEYS.POLISH, label: '润色', promptLabel: '润色这段内容' },
   { key: AI_ACTION_KEYS.TITLE_SUGGESTIONS, value: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '标题建议', promptLabel: '给这篇内容提标题' },
 ]);
 
@@ -26,6 +28,9 @@ const ACTION_ALIASES = Object.freeze({
   expand: AI_ACTION_KEYS.EXPAND,
   expansion: AI_ACTION_KEYS.EXPAND,
   '扩写': AI_ACTION_KEYS.EXPAND,
+  polish: AI_ACTION_KEYS.POLISH,
+  refine: AI_ACTION_KEYS.POLISH,
+  '润色': AI_ACTION_KEYS.POLISH,
   title: AI_ACTION_KEYS.TITLE_SUGGESTIONS,
   titles: AI_ACTION_KEYS.TITLE_SUGGESTIONS,
   title_suggestions: AI_ACTION_KEYS.TITLE_SUGGESTIONS,
@@ -61,6 +66,15 @@ const ACTION_PROMPT_CONFIG = Object.freeze({
       '优先补充论证、细节、例子、过渡句和读者收益。',
       '尽量延续原文语气、叙述视角和段落节奏。',
       '如果上下文不够，不要乱编具体事实，用稳妥方式补足。',
+    ],
+  },
+  [AI_ACTION_KEYS.POLISH]: {
+    task: '请润色内容，提升表达流畅度和可读性，不改变原意和信息量。',
+    outputRules: [
+      '直接输出润色后的中文正文，不要解释你的做法。',
+      '优先修顺病句、错别字、标点和生硬的衔接。',
+      '保留原文观点、结构、语气和段落顺序，不增删事实。',
+      '不要过度堆砌辞藻，以清晰自然为准。',
     ],
   },
   [AI_ACTION_KEYS.TITLE_SUGGESTIONS]: {
@@ -219,12 +233,19 @@ export const getAiActionPromptLabel = (actionKey) => {
  * 不内嵌正文——交给 agent 通过「读取当前文档」工具自行获取，避免重复拼正文。
  */
 export const buildQuickActionInstruction = (actionKey) => {
-  const { task, outputRules } = getActionConfig(actionKey);
+  const normalized = normalizeAiActionKey(actionKey);
+  const { task, outputRules } = getActionConfig(normalized);
   const rules = (outputRules || []).map((rule) => `- ${rule}`).join('\n');
+  // 标题建议是「不改正文」的需求，直接输出候选；其余（压缩/扩写）是改写，需写回文档。
+  const isRewrite = normalized !== AI_ACTION_KEYS.TITLE_SUGGESTIONS;
+  const writeBackLine = isRewrite
+    ? '处理完成后，调用 write_active_doc 把结果写回当前文档（会弹 diff 让用户确认）。'
+    : '';
   return [
     '请先读取当前文档，然后处理整篇正文。',
     task,
     rules ? `输出要求：\n${rules}` : '',
+    writeBackLine,
   ].filter(Boolean).join('\n\n');
 };
 

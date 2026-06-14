@@ -7,7 +7,8 @@
  *
  * host 接口约定（由 AgentPanel 注入，内部对接 store / IPC）：
  *   host.readActiveDoc()            -> { title, content }
- *   host.writeActiveDoc(content)    -> void            （覆盖当前文档正文）
+ *   host.writeActiveDoc(content)    -> string           （提交一次写入；返回给模型的结果文案，
+ *                                                         如「已应用」「用户已放弃」。可异步）
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
  */
 
@@ -81,8 +82,9 @@ const EXECUTORS = {
   write_active_doc: async (args, host) => {
     const content = String(args?.content ?? '');
     if (!content.trim()) return '写入失败：内容为空。';
-    await host.writeActiveDoc(content);
-    return `已写入当前文档（${content.length} 字）。`;
+    // host 提交写入（可能弹 diff 让用户确认），返回结果文案回填给模型
+    const result = await host.writeActiveDoc(content);
+    return typeof result === 'string' ? result : `已提交写入（${content.length} 字）。`;
   },
 
   search_docs: async (args, host) => {

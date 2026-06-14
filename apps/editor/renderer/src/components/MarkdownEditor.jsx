@@ -24,6 +24,7 @@ import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import FilePreviewPanel from './FilePreviewPanel.jsx';
 import TocPanel from './TocPanel.jsx';
 import AgentPanel from './AgentPanel.jsx';
+import DiffOverlay from './DiffOverlay.jsx';
 import TabBar from './TabBar.jsx';
 import Breadcrumb from './Breadcrumb.jsx';
 import StatusBar from './StatusBar.jsx';
@@ -2196,6 +2197,7 @@ function MarkdownEditor() {
             <div className="editor-layout">
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
+                  <DiffOverlay />
                   {editorMode === 'preview' ? (
                     <div
                       id="markdown-output"

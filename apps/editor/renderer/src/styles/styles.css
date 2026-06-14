@@ -8023,6 +8023,7 @@ body.theme-dark .file-preview-iframe {
 }
 
 .agent-panel__bubble {
+  position: relative;
   max-width: 80%;
   padding: 8px 12px;
   border-radius: var(--radius-lg);
@@ -8031,6 +8032,52 @@ body.theme-dark .file-preview-iframe {
   word-break: break-word;
   line-height: var(--line-height-body);
   font-size: 14px;
+}
+
+/* AI 回复右下角的复制按钮：默认隐藏，悬停气泡或聚焦时显现 */
+.agent-panel__copy-btn {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.18);
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.agent-panel__copy-label {
+  white-space: nowrap;
+}
+
+.agent-panel__bubble:hover .agent-panel__copy-btn,
+.agent-panel__copy-btn:focus-visible {
+  opacity: 0.85;
+}
+
+.agent-panel__copy-btn:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.32);
+}
+
+/* 复制成功：变绿并常驻 2 秒，给出明确反馈 */
+.agent-panel__copy-btn.is-copied {
+  opacity: 1;
+  color: var(--color-success, #16a34a);
+  background: rgba(22, 163, 74, 0.16);
+}
+
+/* 给 AI 气泡底部留出复制按钮的空间，避免压住最后一行文字 */
+.agent-panel__msg--assistant .agent-panel__bubble {
+  padding-bottom: 24px;
 }
 
 .agent-panel__msg--user .agent-panel__bubble {
@@ -8251,6 +8298,107 @@ body.theme-dark .file-preview-iframe {
 
 .agent-panel__chip-del:hover {
   color: var(--color-brand-primary);
+}
+
+/* AI 待确认写入：预览区 diff 浮层（覆盖在纸面上，确认后消失） */
+.diff-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+}
+
+.diff-overlay__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.diff-overlay__title { flex: 1; }
+
+.diff-overlay__stat {
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-overlay__add { color: var(--color-brand-success); }
+.diff-overlay__del { color: var(--color-inline-code); }
+
+.diff-overlay__actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.diff-overlay__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m, 6px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.diff-overlay__btn:hover { background: var(--color-bg-active); }
+
+.diff-overlay__btn--apply {
+  border-color: transparent;
+  background: var(--color-brand-success);
+  color: #fff;
+}
+
+.diff-overlay__btn--apply:hover { background: var(--color-primary-btn-hover); }
+
+.diff-overlay__body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.diff-overlay__line {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-overlay__line--add {
+  background: color-mix(in srgb, var(--color-brand-success) 16%, transparent);
+}
+
+.diff-overlay__line--del {
+  background: color-mix(in srgb, var(--color-inline-code) 16%, transparent);
+}
+
+.diff-overlay__line--del .diff-overlay__text {
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.diff-overlay__sign {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.diff-overlay__text {
+  flex: 1;
+  color: var(--color-text-primary);
 }
 
 .agent-panel__msg-files {

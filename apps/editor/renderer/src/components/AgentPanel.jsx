@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Bot, Send, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, Sparkles, MessageSquareQuote } from 'lucide-react';
+import { Bot, Send, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, Sparkles, MessageSquareQuote, Check, Copy } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import { runAgent } from '../core/agent/agentEngine.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
@@ -46,6 +46,7 @@ const markLastToolDone = (messages, label) => {
 const AI_QUICK_ACTIONS = [
   { key: 'compress', label: '压缩' },
   { key: 'expand', label: '扩写' },
+  { key: 'polish', label: '润色' },
   { key: 'title', label: '标题' },
 ];
 
@@ -53,7 +54,9 @@ export default function AgentPanel() {
   const markdown = useEditorStore((s) => s.markdown);
   const workspace = useEditorStore((s) => s.workspace);
   const selectedId = useEditorStore((s) => s.selectedId);
-  const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
+
+  // AI 待确认写入：stage 暂存改动；diff 对比与应用/放弃由预览区的 DiffOverlay 负责
+  const stageAgentWrite = useEditorStore((s) => s.stageAgentWrite);
 
   // 全局会话状态（切页不丢）
   const sessions = useEditorStore((s) => s.agentSessions);
@@ -77,6 +80,8 @@ export default function AgentPanel() {
 
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
+  // 刚复制成功的消息下标，用于切换复制按钮的反馈图标
+  const [copiedIndex, setCopiedIndex] = useState(null);
   // @文件：弹出选择器 + 已选文件（{id, name, content}）
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
@@ -107,8 +112,11 @@ export default function AgentPanel() {
       const active = files.find((f) => f.id === selectedId);
       return { title: active?.name ?? '', content: markdown ?? '' };
     },
-    writeActiveDoc: (content) => {
-      updateSelectedFileContent(content);
+    // 不直接覆盖：暂存成待确认改动，弹 diff 卡片让用户应用/放弃。
+    // 返回结果文案回填给模型，让它知道改动到底有没有生效。
+    writeActiveDoc: async (content) => {
+      const applied = await stageAgentWrite({ oldText: markdown ?? '', newText: content });
+      return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
     },
     searchDocs: async (query) => {
       if (hasElectronSearch()) {
@@ -128,11 +136,45 @@ export default function AgentPanel() {
         .filter((f) => `${f.name ?? ''}${f.content ?? ''}`.toLowerCase().includes(q))
         .map((f) => ({ title: f.name ?? '未命名', snippet: String(f.content ?? '').slice(0, 200), id: f.id }));
     },
-  }), [workspace, selectedId, markdown, updateSelectedFileContent]);
+  }), [workspace, selectedId, markdown, stageAgentWrite]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
     setRunning(false);
+  }, []);
+
+  // 复制某条 AI 回复文本，2 秒内显示「已复制」反馈。
+  // 优先用 clipboard API；非安全上下文（如 file:// 下的 Electron）会抛错，
+  // 退回 execCommand('copy')，保证「已复制」提示一定能出来。
+  const handleCopy = useCallback(async (index, text) => {
+    const value = text ?? '';
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        ok = true;
+      }
+    } catch {
+      /* 落到 execCommand 兜底 */
+    }
+    if (!ok) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch {
+        ok = false;
+      }
+    }
+    if (ok) {
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex((cur) => (cur === index ? null : cur)), 2000);
+    }
   }, []);
 
   // 输入变化：检测末尾的 @关键词 → 打开文件选择器并带过滤词
@@ -376,6 +418,19 @@ export default function AgentPanel() {
                   </div>
                 )}
                 {m.text}
+                {m.role === 'assistant' && m.text && (
+                  <button
+                    type="button"
+                    className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
+                    title={copiedIndex === i ? '已复制' : '复制'}
+                    onClick={() => handleCopy(i, m.text)}
+                  >
+                    {copiedIndex === i ? <Check size={13} /> : <Copy size={13} />}
+                    <span className="agent-panel__copy-label">
+                      {copiedIndex === i ? '已复制' : '复制'}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           );
