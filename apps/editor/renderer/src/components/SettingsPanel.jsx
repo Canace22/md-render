@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Cloud, Download, Plus, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { THEME_OPTIONS } from '../utils/themeUtils';
 import { TEMPLATES } from '../utils/wechatTemplates';
 
@@ -10,22 +10,30 @@ export default function SettingsPanel({
   publishingPlatforms = [],
   storageMode,
   projectRootPath,
-  localProjectSupported = false,
+  notionProxyBase = '',
+  onNotionProxyBaseChange,
   onThemeChange,
   onCopyStyleChange,
   onPublishingPlatformsChange,
-  onOpenLocalProject,
-  onImport,
-  onExport,
-  onOpenNotion,
   onClose,
 }) {
   const [platformDrafts, setPlatformDrafts] = useState(publishingPlatforms);
   const [newPlatformLabel, setNewPlatformLabel] = useState('');
+  const [proxyDraft, setProxyDraft] = useState(notionProxyBase);
 
   useEffect(() => {
     setPlatformDrafts(publishingPlatforms);
   }, [publishingPlatforms]);
+
+  useEffect(() => {
+    setProxyDraft(notionProxyBase);
+  }, [notionProxyBase]);
+
+  const commitProxyDraft = () => {
+    const next = proxyDraft.trim();
+    if (next === (notionProxyBase ?? '').trim()) return;
+    onNotionProxyBaseChange?.(next);
+  };
 
   const handlePlatformDraftChange = (value, index) => {
     setPlatformDrafts((current) => current.map((item, itemIndex) => {
@@ -187,39 +195,31 @@ export default function SettingsPanel({
       </div>
 
       <div className="settings-group">
-        <div className="settings-group-title">工作区</div>
-        <div className="settings-action-list">
-          <button
-            type="button"
-            className="settings-action-btn"
-            onClick={onOpenLocalProject}
-            disabled={!localProjectSupported}
-            title={localProjectSupported ? '打开本地项目文件夹' : '仅桌面版应用支持'}
-          >
-            <Upload size={16} strokeWidth={1.6} />
-            <span>{localProjectSupported ? '打开本地项目文件夹' : '打开本地项目文件夹（仅桌面版）'}</span>
-          </button>
-          <button type="button" className="settings-action-btn" onClick={onImport}>
-            <Upload size={16} strokeWidth={1.6} />
-            <span>导入工作区 JSON</span>
-          </button>
-          <button type="button" className="settings-action-btn" onClick={onExport}>
-            <Download size={16} strokeWidth={1.6} />
-            <span>导出当前工作区</span>
-          </button>
-          {onOpenNotion && (
-            <button
-              type="button"
-              className="settings-action-btn"
-              data-testid="open-notion-from-settings"
-              onClick={onOpenNotion}
-            >
-              <Cloud size={16} strokeWidth={1.6} />
-              <span>Notion 页面同步</span>
-            </button>
-          )}
+        <div className="settings-group-title">Notion 反代地址</div>
+        <input
+          className="settings-platform-input"
+          data-testid="notion-proxy-input"
+          value={proxyDraft}
+          placeholder="https://你的服务器/notion-api/v1"
+          onChange={(event) => setProxyDraft(event.target.value)}
+          onBlur={commitProxyDraft}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              commitProxyDraft();
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setProxyDraft(notionProxyBase);
+            }
+          }}
+        />
+        <div className="settings-platform-hint">
+          填你自己部署的 Notion 转发服务地址（末尾到 <code>/v1</code>），用于绕过浏览器跨域限制。
+          只保存在本机、不会打进安装包；留空则仅本机开发模式可用。部署见 <code>server/notion-proxy/README.md</code>。
         </div>
       </div>
+
     </section>
   );
 }

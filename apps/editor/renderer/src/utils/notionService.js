@@ -3,18 +3,37 @@
  *
  * 请求需经一个代理转发到 https://api.notion.com，以解决浏览器直连的 CORS 问题。
  * 代理基地址按以下优先级确定（见 resolveProxyBase）：
- *   1. 构建时注入的 VITE_NOTION_PROXY（指向你服务器上的转发服务，生产可用）
- *   2. 回退到 /notion-api/v1（仅 pnpm dev 下的 Vite 代理可用）
+ *   1. 运行时在「设置」里填的反代地址（持久化在 localStorage，打包后的 app 也能改）
+ *   2. 构建时注入的 VITE_NOTION_PROXY（旧方式，仍兼容）
+ *   3. 回退到 /notion-api/v1（仅 pnpm dev 下的 Vite 代理可用）
+ *
+ * 用 localStorage 直接读，避免把代理地址打进构建产物，也省去额外的状态同步。
  */
 
+// 与 store 中 NOTION_PROXY_STORAGE_KEY 保持一致
+const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
+
 // 末尾去掉多余斜杠，统一成 .../v1 形式
+const normalizeBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
+
+const readRuntimeProxy = () => {
+  if (typeof window === 'undefined') return '';
+  try {
+    return normalizeBase(window.localStorage.getItem(NOTION_PROXY_STORAGE_KEY));
+  } catch {
+    return '';
+  }
+};
+
+// 每次请求都重新解析，保证设置里改完立即生效（无需重启/重载）
 const resolveProxyBase = () => {
+  const runtime = readRuntimeProxy();
+  if (runtime) return runtime;
   const configured = import.meta.env?.VITE_NOTION_PROXY?.trim();
   if (configured) return configured.replace(/\/+$/, '');
   return '/notion-api/v1';
 };
 
-const NOTION_PROXY_BASE = resolveProxyBase();
 const NOTION_VERSION = '2022-06-28';
 
 function makeHeaders(token) {
@@ -71,7 +90,7 @@ export function extractPageTitle(page) {
 export async function fetchPage(pageId, token) {
   const id = cleanPageId(pageId);
   if (!id) throw new Error('无效的页面 ID');
-  const res = await fetch(`${NOTION_PROXY_BASE}/pages/${id}`, {
+  const res = await fetch(`${resolveProxyBase()}/pages/${id}`, {
     headers: makeHeaders(token),
   });
   return handleResponse(res);
@@ -86,7 +105,7 @@ export async function fetchBlocks(blockId, token) {
 
   do {
     const qs = startCursor ? `?page_size=100&start_cursor=${startCursor}` : '?page_size=100';
-    const res = await fetch(`${NOTION_PROXY_BASE}/blocks/${blockId}/children${qs}`, {
+    const res = await fetch(`${resolveProxyBase()}/blocks/${blockId}/children${qs}`, {
       headers: makeHeaders(token),
     });
     const data = await handleResponse(res);
@@ -109,7 +128,7 @@ export async function fetchBlocks(blockId, token) {
  */
 async function patchPageProperties(pageId, properties, token) {
   if (!properties || Object.keys(properties).length === 0) return;
-  const res = await fetch(`${NOTION_PROXY_BASE}/pages/${pageId}`, {
+  const res = await fetch(`${resolveProxyBase()}/pages/${pageId}`, {
     method: 'PATCH',
     headers: makeHeaders(token),
     body: JSON.stringify({ properties }),
@@ -134,7 +153,7 @@ export async function updatePageBlocks(pageId, notionBlocks, token, { properties
   // 1. 获取并删除现有顶层块
   const existing = await fetchBlocks(id, token);
   for (const block of existing) {
-    await fetch(`${NOTION_PROXY_BASE}/blocks/${block.id}`, {
+    await fetch(`${resolveProxyBase()}/blocks/${block.id}`, {
       method: 'DELETE',
       headers: makeHeaders(token),
     });
@@ -144,7 +163,7 @@ export async function updatePageBlocks(pageId, notionBlocks, token, { properties
   const CHUNK_SIZE = 100;
   for (let i = 0; i < notionBlocks.length; i += CHUNK_SIZE) {
     const chunk = notionBlocks.slice(i, i + CHUNK_SIZE);
-    const res = await fetch(`${NOTION_PROXY_BASE}/blocks/${id}/children`, {
+    const res = await fetch(`${resolveProxyBase()}/blocks/${id}/children`, {
       method: 'PATCH',
       headers: makeHeaders(token),
       body: JSON.stringify({ children: chunk }),
@@ -168,7 +187,7 @@ export async function queryDatabase(databaseId, token) {
     const body = { page_size: 100 };
     if (startCursor) body.start_cursor = startCursor;
 
-    const res = await fetch(`${NOTION_PROXY_BASE}/databases/${id}/query`, {
+    const res = await fetch(`${resolveProxyBase()}/databases/${id}/query`, {
       method: 'POST',
       headers: makeHeaders(token),
       body: JSON.stringify(body),
@@ -189,7 +208,7 @@ export async function fetchDatabaseSchema(databaseId, token) {
   const id = cleanPageId(databaseId);
   if (!id) throw new Error('无效的数据库 ID');
 
-  const dbRes = await fetch(`${NOTION_PROXY_BASE}/databases/${id}`, {
+  const dbRes = await fetch(`${resolveProxyBase()}/databases/${id}`, {
     headers: makeHeaders(token),
   });
   const dbInfo = await handleResponse(dbRes);
@@ -227,7 +246,7 @@ export async function ensureDatabaseSelectProperty(databaseId, propName, token, 
     if (propertyTypes[propName]) return false;
   }
 
-  const res = await fetch(`${NOTION_PROXY_BASE}/databases/${id}`, {
+  const res = await fetch(`${resolveProxyBase()}/databases/${id}`, {
     method: 'PATCH',
     headers: makeHeaders(token),
     body: JSON.stringify({
@@ -278,7 +297,7 @@ export async function createDatabasePage(databaseId, title, children, token, tit
   const CHUNK_SIZE = 100;
   const firstChunk = children.slice(0, CHUNK_SIZE);
 
-  const res = await fetch(`${NOTION_PROXY_BASE}/pages`, {
+  const res = await fetch(`${resolveProxyBase()}/pages`, {
     method: 'POST',
     headers: makeHeaders(token),
     body: JSON.stringify({
@@ -303,7 +322,7 @@ export async function createDatabasePage(databaseId, title, children, token, tit
 async function appendBlocksInChunks(parentId, blocks, token, chunkSize = 100) {
   for (let i = 0; i < blocks.length; i += chunkSize) {
     const chunk = blocks.slice(i, i + chunkSize);
-    const res = await fetch(`${NOTION_PROXY_BASE}/blocks/${parentId}/children`, {
+    const res = await fetch(`${resolveProxyBase()}/blocks/${parentId}/children`, {
       method: 'PATCH',
       headers: makeHeaders(token),
       body: JSON.stringify({ children: chunk }),
@@ -327,7 +346,7 @@ export async function createChildPage(parentPageId, title, children, token) {
   if (!parent) throw new Error('无效的父页面 ID');
 
   const CHUNK_SIZE = 100;
-  const res = await fetch(`${NOTION_PROXY_BASE}/pages`, {
+  const res = await fetch(`${resolveProxyBase()}/pages`, {
     method: 'POST',
     headers: makeHeaders(token),
     body: JSON.stringify({
@@ -355,10 +374,12 @@ export async function fetchChildPages(pageId, token) {
 
 /**
  * 判断 Notion 同步当前是否可用。
- * - 配了 VITE_NOTION_PROXY（指向服务器转发服务）→ 任何环境都可用，含打包后的 Electron app
- * - 没配 → 回退到只在本机 dev（localhost，走 Vite 代理）可用
+ * - 在「设置」里填了反代地址（运行时）→ 任何环境都可用，含打包后的 Electron app
+ * - 配了 VITE_NOTION_PROXY（构建期注入，旧方式）→ 同样可用
+ * - 都没配 → 回退到只在本机 dev（localhost，走 Vite 代理）可用
  */
 export function isNotionAvailable() {
+  if (readRuntimeProxy()) return true;
   if (import.meta.env?.VITE_NOTION_PROXY?.trim()) return true;
   if (typeof window === 'undefined') return false;
   const { hostname } = window.location;

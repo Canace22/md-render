@@ -51,6 +51,8 @@ const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
 const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
+// 与 notionService.js 中同名常量保持一致：服务层直接从这个 key 读运行时反代地址
+const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 
 /** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
@@ -77,6 +79,7 @@ const VALID_SURFACES = new Set([
   'folder',
   'settings',
   'notion',
+  'sync',
 ]);
 
 const normalizeSurface = (surface, fallback = 'overview') => {
@@ -92,14 +95,16 @@ const readNotionPersistSnapshot = () => {
     const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
     const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
     const notionDatabaseId = window.localStorage.getItem(NOTION_DATABASE_ID_STORAGE_KEY) ?? '';
+    const notionProxyBase = window.localStorage.getItem(NOTION_PROXY_STORAGE_KEY) ?? '';
     return {
       notionToken: typeof notionToken === 'string' ? notionToken : '',
       notionFilePages:
         notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
       notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
+      notionProxyBase: typeof notionProxyBase === 'string' ? notionProxyBase : '',
     };
   } catch {
-    return { notionToken: '', notionFilePages: {}, notionDatabaseId: '' };
+    return { notionToken: '', notionFilePages: {}, notionDatabaseId: '', notionProxyBase: '' };
   }
 };
 
@@ -132,6 +137,7 @@ const persistNotionSnapshot = (state) => {
   persistNotionStringField(NOTION_TOKEN_STORAGE_KEY, state.notionToken);
   persistNotionFilePagesField(state.notionFilePages);
   persistNotionStringField(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
+  persistNotionStringField(NOTION_PROXY_STORAGE_KEY, state.notionProxyBase);
 };
 
 /** 从 localStorage 构建标准 state 对象（在非 Electron 或 Electron 迁移时使用） */
@@ -215,6 +221,8 @@ const buildStateFromDb = (raw) => {
         notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
       notionDatabaseId:
         typeof raw.notion_database_id === 'string' ? raw.notion_database_id : '',
+      notionProxyBase:
+        typeof raw.notion_proxy_base === 'string' ? raw.notion_proxy_base : '',
     },
     version: 0,
   };
@@ -238,6 +246,7 @@ const buildStateMap = (state) => {
   if (state.notionToken != null) map.notion_token = state.notionToken;
   if (state.notionFilePages != null) map.notion_file_pages = JSON.stringify(state.notionFilePages);
   if (state.notionDatabaseId != null) map.notion_database_id = state.notionDatabaseId;
+  if (state.notionProxyBase != null) map.notion_proxy_base = state.notionProxyBase;
   return map;
 };
 
@@ -414,6 +423,7 @@ const persistConfig = {
     notionToken: state.notionToken,
     notionFilePages: state.notionFilePages,
     notionDatabaseId: state.notionDatabaseId,
+    notionProxyBase: state.notionProxyBase,
   }),
 };
 
@@ -683,11 +693,25 @@ export const useEditorStore = create(
       notionToken: '',
       notionFilePages: {},
       notionDatabaseId: '',
+      // Notion 反代地址（运行时可配，不打进构建产物）。空 = 未配置，走 dev 回退。
+      notionProxyBase: '',
       activeBlockId: null,
       activeBlockDraft: '',
 
       setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
       setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),
+      // 立即写一份到 localStorage，让 notionService 当次请求即可读到新地址
+      setNotionProxyBase: (notionProxyBase) => {
+        const next = (notionProxyBase ?? '').trim();
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem(NOTION_PROXY_STORAGE_KEY, next);
+          } catch {
+            /* localStorage 不可用时忽略，状态仍生效 */
+          }
+        }
+        set({ notionProxyBase: next });
+      },
       setFileNotionPageId: (fileId, pageId) =>
         set((state) => {
           const next = { ...(state.notionFilePages ?? {}) };
@@ -811,18 +835,22 @@ export const useEditorStore = create(
       setActiveBlockDraft: (draft) => set({ activeBlockDraft: draft }),
       cancelActiveBlock: () => set({ activeBlockId: null, activeBlockDraft: '' }),
 
-      selectNode: (nodeId) => {
+      // 构建选中节点的状态补丁；includeSurface=false 时保持当前 surface 不变
+      // （用于同步/设置等覆盖页：点目录只记选中态，返回后再切到内容）
+      _buildSelectPatch: (nodeId, includeSurface) => {
         const { workspace, openTabs } = get();
         const node = findNodeById(workspace, nodeId);
         const isFolder = node?.type === 'folder';
         const markdown = isFolder ? get().markdown : (node?.content ?? '');
         const patch = {
-          surface: isFolder ? 'folder' : 'paper',
           activeBlockId: null,
           activeBlockDraft: '',
           selectedId: nodeId,
           markdown,
         };
+        if (includeSurface) {
+          patch.surface = isFolder ? 'folder' : 'paper';
+        }
         // 打开文件时自动添加 tab
         if (!isFolder && node) {
           const exists = openTabs.some((t) => t.id === nodeId);
@@ -830,7 +858,16 @@ export const useEditorStore = create(
             patch.openTabs = [...openTabs, { id: nodeId, title: node.name || '未命名' }];
           }
         }
-        set(patch);
+        return patch;
+      },
+
+      selectNode: (nodeId) => {
+        set(get()._buildSelectPatch(nodeId, true));
+      },
+
+      // 只更新选中态与内容，不切换 surface（覆盖页下点目录用）
+      selectNodeKeepSurface: (nodeId) => {
+        set(get()._buildSelectPatch(nodeId, false));
       },
 
       updateSelectedFileContent: (nextMarkdown) => {

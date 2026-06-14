@@ -427,9 +427,9 @@ const WorkspaceSidebar = ({
   searchQuery,
   onSearchQueryChange,
   onOpenSettings,
-  onOpenNotion,
+  onOpenSync,
   settingsActive,
-  notionActive,
+  syncActive,
   localProjectSupported = false,
 }) => {
   const [activeTag, setActiveTag] = useState(null);
@@ -655,15 +655,15 @@ const WorkspaceSidebar = ({
             <Settings size={18} strokeWidth={1.5} />
           </button>
 
-          {onOpenNotion && (
+          {onOpenSync && (
             <button
               type="button"
               className="sidebar-rail-btn"
-              data-testid="open-notion"
-              data-active={notionActive ? 'true' : 'false'}
-              onClick={onOpenNotion}
-              title="Notion 同步"
-              aria-label="Notion 同步"
+              data-testid="open-sync"
+              data-active={syncActive ? 'true' : 'false'}
+              onClick={onOpenSync}
+              title="渠道同步"
+              aria-label="渠道同步"
             >
               <Cloud size={18} strokeWidth={1.5} />
             </button>

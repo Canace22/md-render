@@ -45,8 +45,8 @@ export default function NotionPanel({
       {!available && (
         <div className="notion-dev-warning settings-group" role="status">
           <p>
-            未检测到 Notion 代理。请在构建时配置 <code>VITE_NOTION_PROXY</code> 指向你的转发服务，
-            或在本机开发（<code>localhost</code>）模式下使用。详见 <code>server/notion-proxy/README.md</code>。
+            未检测到 Notion 代理。请到「设置 → Notion 反代地址」填入你的转发服务地址，
+            或在本机开发（<code>localhost</code>）模式下使用。部署见 <code>server/notion-proxy/README.md</code>。
           </p>
         </div>
       )}

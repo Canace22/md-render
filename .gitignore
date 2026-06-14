@@ -51,3 +51,6 @@ apps/*/build/
 # Vitest 加载配置时的临时转译文件（进程被打断时可能残留）
 **/vitest.config.*.timestamp-*.mjs
 **/vite.config.*.timestamp-*.mjs
+
+# 工具/进程在仓库根目录残留的临时文件（如 _tmp_34_<hash>）
+/_tmp_*

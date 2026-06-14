@@ -15,9 +15,9 @@ import CreationDashboard from './CreationDashboard.jsx';
 import CreationBoardPanel from './CreationBoardPanel.jsx';
 import CanvasSurface from './CanvasSurface.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
-import NotionPanel from './NotionPanel.jsx';
 import PublishingQueuePanel from './PublishingQueuePanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
+import SyncPanel from './SyncPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import BookmarkCard from './BookmarkCard.jsx';
@@ -73,6 +73,7 @@ import {
   buildUniqueName,
   buildUniqueNameInFolder,
   collectFiles,
+  collectLocalProjectRootPaths,
   createLocalProjectFileNode,
   createLocalProjectFolderNode,
   findNodeIdByRelativePath,
@@ -291,6 +292,7 @@ function MarkdownEditor() {
     notionToken,
     notionFilePages,
     notionDatabaseId,
+    notionProxyBase,
     setTheme,
     setCopyStyle,
     setPublishingPlatforms,
@@ -298,6 +300,7 @@ function MarkdownEditor() {
     setWorkspaceCanvas,
     setNotionToken,
     setNotionDatabaseId,
+    setNotionProxyBase,
     setFileNotionPageId,
     setFileTags,
     setFileKnowledgeMeta,
@@ -306,6 +309,7 @@ function MarkdownEditor() {
     toggleTocCollapsed,
     updateSelectedFileContent,
     selectNode,
+    selectNodeKeepSurface,
     openLocalProjectWorkspace,
     addFile,
     addFolder,
@@ -660,6 +664,7 @@ function MarkdownEditor() {
 
     deleteNode(targetId);
   }, [workspace, selectedId, localProjectSupported, deleteNode, removeDiskBackedNode]);
+  const [syncChannel, setSyncChannel] = useState('notion');
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
@@ -685,6 +690,15 @@ function MarkdownEditor() {
     && Boolean(selectedProjectRootPath && selectedFile?.relativePath)
     && !selectedNeedsConversion;
   const canManualSyncLocalProject = localProjectSupported && Boolean(manualSyncProjectRootPath);
+  // 同步页用：不论当前选中文件还是文件夹，只要工作区里有本地项目就能同步。
+  // 取路径优先级：选中文件夹 → 选中文件 → 工作区第一个本地项目根。
+  const currentWorkspaceProjectRoot = useMemo(() => (
+    manualSyncProjectRootPath
+      || selectedProjectRootPath
+      || collectLocalProjectRootPaths(workspace)[0]
+      || ''
+  ), [manualSyncProjectRootPath, selectedProjectRootPath, workspace]);
+  const canSyncWorkspaceFromDisk = localProjectSupported && Boolean(currentWorkspaceProjectRoot);
   const visibleStorageMode = hasLocalProjectWorkspace ? 'project' : storageMode;
   const visibleProjectRootPath = hasLocalProjectWorkspace ? '已导入本地目录' : '';
 
@@ -802,10 +816,20 @@ function MarkdownEditor() {
   const selectedContentSurface = selectedFolder ? 'folder' : selectedFile ? 'paper' : 'overview';
 
   useEffect(() => {
-    if (surface !== 'settings' && surface !== 'notion') {
+    if (surface !== 'settings' && surface !== 'notion' && surface !== 'sync') {
       lastContentSurfaceRef.current = surface;
     }
   }, [surface]);
+
+  // 同步页打开时，点左侧目录只更新选中态、保留同步页；
+  // 点「返回」后再切到选中目标。其它情况按正常逻辑直接打开。
+  const handleSidebarSelect = useCallback((nodeId) => {
+    if (surface === 'sync') {
+      selectNodeKeepSurface(nodeId);
+    } else {
+      selectNode(nodeId);
+    }
+  }, [surface, selectNode, selectNodeKeepSurface]);
 
   const tryConvertTypedMarkdownCodeFence = useCallback(() => {
     const cursorPosition = editor.getTextCursorPosition();
@@ -1971,7 +1995,7 @@ function MarkdownEditor() {
       <WorkspaceSidebar
         workspace={workspace}
         selectedId={selectedId}
-        onSelect={selectNode}
+        onSelect={handleSidebarSelect}
         onOpenLocalProject={handleOpenLocalProject}
         onRemoveLocalProject={handleRemoveLocalProject}
         onManualSyncLocalProject={handleManualSyncLocalProject}
@@ -1998,9 +2022,16 @@ function MarkdownEditor() {
         searchQuery={knowledgeSearchQuery}
         onSearchQueryChange={setKnowledgeSearchQuery}
         onOpenSettings={() => setSurface(surface === 'settings' ? lastContentSurfaceRef.current : 'settings')}
-        onOpenNotion={() => setSurface(surface === 'notion' ? lastContentSurfaceRef.current : 'notion')}
+        onOpenSync={() => {
+          if (surface === 'sync') {
+            setSurface(lastContentSurfaceRef.current);
+          } else {
+            setSyncChannel('notion');
+            setSurface('sync');
+          }
+        }}
         settingsActive={surface === 'settings'}
-        notionActive={surface === 'notion'}
+        syncActive={surface === 'sync'}
         localProjectSupported={localProjectSupported}
       />
       <div className="right-area immersive-main">
@@ -2025,41 +2056,53 @@ function MarkdownEditor() {
             publishingPlatforms={publishingPlatforms}
             storageMode={visibleStorageMode}
             projectRootPath={visibleProjectRootPath}
-            localProjectSupported={localProjectSupported}
+            notionProxyBase={notionProxyBase}
+            onNotionProxyBaseChange={setNotionProxyBase}
             onThemeChange={setTheme}
             onCopyStyleChange={setCopyStyle}
             onPublishingPlatformsChange={setPublishingPlatforms}
-            onOpenLocalProject={handleOpenLocalProject}
-            onImport={() => importInputRef.current?.click()}
-            onExport={handleExport}
-            onOpenNotion={() => setSurface('notion')}
             onClose={() => setSurface(lastContentSurfaceRef.current)}
           />
-        ) : surface === 'notion' ? (
-          <NotionPanel
+        ) : surface === 'sync' ? (
+          <SyncPanel
+            initialChannel={syncChannel}
             selectedFileName={selectedFile?.name}
-            canSync={Boolean(selectedFile)}
-            token={notionToken}
-            pageId={linkedNotionPageId}
-            databaseId={notionDatabaseId}
-            onTokenChange={setNotionToken}
-            onPageIdChange={(v) => {
-              if (selectedFile) setFileNotionPageId(selectedFile.id, v);
+            localProjectSupported={localProjectSupported}
+            onClose={() => setSurface(selectedContentSurface)}
+            notion={{
+              canSync: Boolean(selectedFile),
+              token: notionToken,
+              pageId: linkedNotionPageId,
+              databaseId: notionDatabaseId,
+              onTokenChange: setNotionToken,
+              onPageIdChange: (v) => {
+                if (selectedFile) setFileNotionPageId(selectedFile.id, v);
+              },
+              onDatabaseIdChange: setNotionDatabaseId,
+              onPull: handleNotionPull,
+              onPush: handleNotionPush,
+              onDatabasePull: localProjectSupported ? handleIncrementalPull : handleBatchPull,
+              onDatabasePush: handleBatchPush,
+              pullLoading: notionPullLoading,
+              pushLoading: notionPushLoading,
+              databasePullLoading: localProjectSupported ? incrementalPullLoading : batchPullLoading,
+              databasePushLoading: batchPushLoading,
+              incrementalActive: localProjectSupported,
+              batchProgress,
+              message: notionMessage,
+              error: notionError,
             }}
-            onDatabaseIdChange={setNotionDatabaseId}
-            onPull={handleNotionPull}
-            onPush={handleNotionPush}
-            onDatabasePull={localProjectSupported ? handleIncrementalPull : handleBatchPull}
-            onDatabasePush={handleBatchPush}
-            pullLoading={notionPullLoading}
-            pushLoading={notionPushLoading}
-            databasePullLoading={localProjectSupported ? incrementalPullLoading : batchPullLoading}
-            databasePushLoading={batchPushLoading}
-            incrementalActive={localProjectSupported}
-            batchProgress={batchProgress}
-            message={notionMessage}
-            error={notionError}
-            onClose={() => setSurface(lastContentSurfaceRef.current)}
+            local={{
+              localProjectSupported,
+              canSyncFromDisk: canSyncWorkspaceFromDisk,
+              syncLoading: manualSyncLoading,
+              onOpenLocalProject: handleOpenLocalProject,
+              onSyncFromDisk: () => handleManualSyncLocalProject(currentWorkspaceProjectRoot),
+            }}
+            workspace={{
+              onImport: () => importInputRef.current?.click(),
+              onExport: handleExport,
+            }}
           />
         ) : surface === 'folder' && selectedFolder ? (
           <FolderFileList
@@ -2157,7 +2200,7 @@ function MarkdownEditor() {
               selectedFile={selectedFile}
               allFiles={allFiles}
               platformOptions={publishingPlatforms}
-              onOpenNotion={() => setSurface('notion')}
+              onOpenNotion={() => { setSyncChannel('notion'); setSurface('sync'); }}
               notionLinked={Boolean(notionAvailable && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
               onKnowledgeMetaChange={setFileKnowledgeMeta}
