@@ -7862,3 +7862,224 @@ body.theme-dark .file-preview-iframe {
 .spin {
     animation: spin 1s linear infinite;
 }
+
+/* ===================== AI 助手面板 (AgentPanel) ===================== */
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border-left: 1px solid var(--color-border);
+}
+
+.agent-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--font-weight-medium);
+}
+
+.agent-panel__icon-btn,
+.agent-panel__send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-icon-neutral);
+  cursor: pointer;
+  border-radius: var(--radius-l);
+  padding: 6px;
+  transition: background var(--duration-fast) var(--easing);
+}
+
+.agent-panel__icon-btn:hover,
+.agent-panel__send-btn:hover:not(:disabled) {
+  background: var(--color-bg-active);
+}
+
+.agent-panel__send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.agent-panel__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-page);
+}
+
+.agent-panel__settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.agent-panel__settings input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.agent-panel__save-btn {
+  align-self: flex-end;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-l);
+  background: var(--color-primary-btn);
+  color: #fff;
+  cursor: pointer;
+}
+
+.agent-panel__save-btn:hover {
+  background: var(--color-primary-btn-hover);
+}
+
+.agent-panel__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-panel__empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.agent-panel__msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.agent-panel__msg--user {
+  flex-direction: row-reverse;
+}
+
+.agent-panel__avatar {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-bg-active);
+  color: var(--color-icon-neutral);
+}
+
+.agent-panel__bubble {
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-page);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: var(--line-height-body);
+  font-size: 14px;
+}
+
+.agent-panel__msg--user .agent-panel__bubble {
+  background: var(--color-primary-btn);
+  color: #fff;
+}
+
+.agent-panel__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding-left: 32px;
+}
+
+.agent-panel__spin {
+  animation: agent-spin 1s linear infinite;
+}
+
+@keyframes agent-spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-panel__input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__input {
+  flex: 1;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: var(--line-height-body);
+}
+
+.agent-panel__input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+.agent-panel__send-btn {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary-btn);
+  color: #fff;
+}
+
+.agent-panel__send-btn:hover:not(:disabled) {
+  background: var(--color-primary-btn-hover);
+}
+
+/* AI 助手停靠区（右侧抽屉） */
+.agent-panel-dock {
+  flex: none;
+  width: 340px;
+  min-width: 280px;
+  max-width: 420px;
+  height: 100%;
+}
+
+.agent-toggle-btn.is-active {
+  background: var(--color-primary-btn);
+  color: #fff;
+}
+
+.agent-panel__settings select {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 13px;
+}

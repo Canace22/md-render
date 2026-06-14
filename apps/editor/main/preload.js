@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('local-project-disk-changed', sub);
   },
 
+  // AI 请求 IPC（主进程直连，无 CORS，无需代理服务器）
+  ai: {
+    chat: (payload) => ipcRenderer.invoke('ai:chat', payload),
+  },
+
   // SQLite 数据库 IPC
   db: {
     isMigrated: () => ipcRenderer.invoke('db:is-migrated'),

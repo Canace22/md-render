@@ -18,6 +18,7 @@ import {
   resolveProjectFilePath,
   readLocalProjectFileContent,
 } from './localProject.js';
+import { requestChatCompletion } from './aiRequest.js';
 import {
   watchLocalProjectRoot,
   markLocalProjectWriteIgnored,
@@ -343,6 +344,15 @@ ipcMain.handle('fetch-bookmark-page-snapshot', async (_event, payload = {}) => {
   try {
     const result = await fetchBookmarkPageSnapshot(payload.url);
     return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('ai:chat', async (_event, payload = {}) => {
+  try {
+    const message = await requestChatCompletion(payload);
+    return { ok: true, message };
   } catch (err) {
     return { ok: false, error: err.message };
   }

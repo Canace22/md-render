@@ -24,6 +24,7 @@ import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import FilePreviewPanel from './FilePreviewPanel.jsx';
 import TocPanel from './TocPanel.jsx';
+import AgentPanel from './AgentPanel.jsx';
 import TabBar from './TabBar.jsx';
 import Breadcrumb from './Breadcrumb.jsx';
 import StatusBar from './StatusBar.jsx';
@@ -667,6 +668,7 @@ function MarkdownEditor() {
   const [syncChannel, setSyncChannel] = useState('notion');
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const [notionMessage, setNotionMessage] = useState('');
@@ -2194,6 +2196,15 @@ function MarkdownEditor() {
               >
                 {editorMode === 'preview' ? '预览' : '编辑'}
               </button>
+              <button
+                type="button"
+                className={`editor-mode-toggle agent-toggle-btn${agentPanelOpen ? ' is-active' : ''}`}
+                onClick={() => setAgentPanelOpen((v) => !v)}
+                title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
+                aria-label="AI 助手"
+              >
+                AI 助手
+              </button>
             </div>
 
             <DocHeader
@@ -2255,6 +2266,11 @@ function MarkdownEditor() {
                 collapsed={tocCollapsed}
                 onToggle={toggleTocCollapsed}
               />
+              {agentPanelOpen && (
+                <div className="agent-panel-dock">
+                  <AgentPanel />
+                </div>
+              )}
             </div>
             {/* 底部状态栏 */}
             <StatusBar content={resolvedMarkdown} backlinks={0} />
