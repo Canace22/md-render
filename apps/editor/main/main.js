@@ -12,6 +12,7 @@ import {
   fetchBookmarkPageSnapshot,
   createLocalProjectFile,
   createLocalProjectFolder,
+  saveBinaryAsset,
   renameLocalProjectEntry,
   deleteLocalProjectEntry,
   readProjectsChildren,
@@ -281,6 +282,15 @@ ipcMain.handle('create-local-project-folder', async (_event, payload = {}) => {
   const { projectRootPath, relativePath } = payload;
   const result = await createLocalProjectFolder(projectRootPath, relativePath);
   markLocalProjectRootIgnored(projectRootPath);
+  return result;
+});
+
+ipcMain.handle('save-binary-asset', async (_event, payload = {}) => {
+  const { projectRootPath, base64, mimeSubtype } = payload;
+  const result = await saveBinaryAsset(projectRootPath, base64, mimeSubtype);
+  // 新建素材文件 + 其所在目录都标记忽略，避免 watcher 误触发刷新
+  markLocalProjectRootIgnored(projectRootPath);
+  markSavedLocalFileIgnored(projectRootPath, result.relativePath);
   return result;
 });
 
@@ -760,8 +770,11 @@ app.whenReady().then(async () => {
   // 注册 local-media:// 协议处理器，安全地向渲染进程提供本地媒体文件
   // 直接读取文件返回 Response，避免 net.fetch + file:// 在部分 Electron 版本下 ERR_FILE_NOT_FOUND
   protocol.handle('local-media', async (request) => {
-    const url = new URL(request.url);
-    const filePath = decodeURIComponent(url.pathname);
+    // local-media 注册为 standard 协议，new URL() 会把绝对路径首段（如 /Users 的 Users）
+    // 当成 host 丢失并强制小写，导致读盘 404、图片碎图。
+    // 因此直接从原始 URL 切掉 scheme 前缀取完整路径，保留首段、不受大小写影响。
+    const rawPath = request.url.replace(/^local-media:\/\/+/i, '/');
+    const filePath = decodeURIComponent(rawPath);
     try {
       const buffer = await fs.readFile(filePath);
       const ext = path.extname(filePath).toLowerCase();

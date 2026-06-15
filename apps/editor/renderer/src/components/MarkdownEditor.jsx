@@ -19,6 +19,7 @@ import SettingsPanel from './SettingsPanel.jsx';
 import SyncPanel from './SyncPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
+import ImageLightbox from './ImageLightbox.jsx';
 import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import FilePreviewPanel from './FilePreviewPanel.jsx';
@@ -160,6 +161,60 @@ const EDITOR_SCHEMA = buildSchema({
   },
   excludeDefaultBlocks: [],
 });
+
+// 读取 File 为 data URL（含 data:image/png;base64, 前缀）
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error ?? new Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+
+// 从 data URL 拆出 mime 子类型与纯 base64，如 'image/png;base64' → { mimeSubtype: 'png', base64 }
+const parseDataUrl = (dataUrl = '') => {
+  const match = /^data:image\/([^;]+);base64,(.*)$/s.exec(dataUrl);
+  if (!match) throw new Error('不支持的图片数据');
+  return { mimeSubtype: match[1], base64: match[2] };
+};
+
+// 从剪贴板里取第一张图片文件（截图/复制图片），没有则返回 null
+const pickClipboardImageFile = (clipboardData) => {
+  const items = clipboardData?.items;
+  if (!items) return null;
+  for (const item of items) {
+    if (item.kind === 'file' && item.type?.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return null;
+};
+
+// 把一张图片文件存盘并在光标处插入图片块；失败时提示，不抛错
+const insertImageFromFile = async (editor, file, uploadFile) => {
+  try {
+    const url = await uploadFile(file);
+    const currentBlock = editor.getTextCursorPosition()?.block;
+    const imageBlock = { type: 'image', props: { url } };
+    if (!currentBlock) {
+      editor.insertBlocks([imageBlock], editor.document[0], 'after');
+      return;
+    }
+    const isEmptyParagraph =
+      currentBlock.type === 'paragraph' &&
+      !currentBlock.content?.length &&
+      !(currentBlock.children?.length > 0);
+    if (isEmptyParagraph) {
+      editor.updateBlock(currentBlock, imageBlock);
+    } else {
+      editor.insertBlocks([imageBlock], currentBlock, 'after');
+    }
+  } catch (error) {
+    console.error('[asset] 粘贴图片失败:', error);
+    message.error('图片粘贴失败');
+  }
+};
 
 const BLOCKNOTE_OPTIONS = {
   dictionary: zh,
@@ -523,6 +578,8 @@ function MarkdownEditor() {
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
+  // uploadFile 钩子在编辑器内是稳定闭包，用 ref 拿当前项目根，避免 stale
+  const assetProjectRootRef = useRef('');
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
   const handleCanvasChange = useCallback((nextCanvasState, edges) => {
     if (
@@ -682,6 +739,26 @@ function MarkdownEditor() {
   );
   const [previewData, setPreviewData] = useState({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
   const [previewLoading, setPreviewLoading] = useState(false);
+  // 图片放大查看器：lightbox.index < 0 表示关闭
+  const [lightbox, setLightbox] = useState({ images: [], index: -1 });
+
+  // 点击编辑器内图片：收集当前文档所有图片，打开 lightbox 并定位到被点的那张
+  const handlePaperClick = useCallback((event) => {
+    const img = event.target.closest?.('img.bn-visual-media');
+    if (!img) return;
+    const paper = event.currentTarget;
+    const imgs = Array.from(paper.querySelectorAll('img.bn-visual-media'));
+    const images = imgs.map((node) => node.currentSrc || node.src).filter(Boolean);
+    const index = imgs.indexOf(img);
+    if (index < 0 || !images.length) return;
+    setLightbox({ images, index });
+  }, []);
+
+  const closeLightbox = useCallback(() => setLightbox((prev) => ({ ...prev, index: -1 })), []);
+  const changeLightboxIndex = useCallback(
+    (next) => setLightbox((prev) => ({ ...prev, index: next })),
+    [],
+  );
   const canSaveLocalProjectFile = localProjectSupported
     && Boolean(selectedProjectRootPath && selectedFile?.relativePath)
     && !selectedNeedsConversion;
@@ -721,11 +798,49 @@ function MarkdownEditor() {
     return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
   }, [selectedId, contentResetKey, editorReloadToken]);
 
+  // 同步当前项目根到 ref，供 uploadFile 闭包读取
+  useEffect(() => {
+    assetProjectRootRef.current = selectedProjectRootPath;
+  }, [selectedProjectRootPath]);
+
+  // 粘贴/拖入图片：存到工作区 素材/ 目录，返回 local-media URL；
+  // 无项目根（如内置文档）或保存失败时降级为 data URL，保证图片仍可显示
+  const uploadFile = useCallback(async (file) => {
+    const dataUrl = await fileToDataUrl(file);
+    const projectRootPath = assetProjectRootRef.current;
+    if (!localProjectSupported || !projectRootPath) return dataUrl;
+
+    try {
+      const { base64, mimeSubtype } = parseDataUrl(dataUrl);
+      const res = await window.electronAPI.saveBinaryAsset({
+        projectRootPath,
+        base64,
+        mimeSubtype,
+      });
+      if (!res?.relativePath) throw new Error('保存素材失败');
+      const absPath = `${projectRootPath}/${res.relativePath}`;
+      return `local-media://${encodeURI(absPath)}`;
+    } catch (error) {
+      console.error('[asset] 保存截图失败，降级为内嵌:', error);
+      message.warning('图片未能存入素材库，已内嵌到文档');
+      return dataUrl;
+    }
+  }, [localProjectSupported]);
+
   const editor = useCreateBlockNote(
     {
       ...BLOCKNOTE_OPTIONS,
       initialContent,
+      uploadFile,
       pasteHandler: ({ event, editor: pasteEditor, defaultPasteHandler }) => {
+        // 优先处理剪贴板里的图片文件（截图、复制图片）：直接存盘并插入图片块，
+        // 避免被下面的文本/HTML 分支拦截，或被默认处理器内嵌成 base64
+        const imageFile = pickClipboardImageFile(event.clipboardData);
+        if (imageFile) {
+          insertImageFromFile(pasteEditor, imageFile, uploadFile);
+          return true;
+        }
+
         const plainText = event.clipboardData?.getData('text/plain') ?? '';
         const htmlText = event.clipboardData?.getData('text/html') ?? '';
         const hasHtmlCodeBlock = looksLikeCodeBlockClipboardHtml(htmlText);
@@ -2206,7 +2321,7 @@ function MarkdownEditor() {
                     />
                   ) : (
                     <div id="markdown-output" className="paper-content">
-                      <div className="blocknote-paper">
+                      <div className="blocknote-paper" onClick={handlePaperClick}>
                         <BlockNoteView
                           editor={editor}
                           className="blocknote-editor"
@@ -2256,6 +2371,13 @@ function MarkdownEditor() {
         open={bookmarkImportOpen}
         onClose={() => setBookmarkImportOpen(false)}
         onImport={handleImportBookmarks}
+      />
+
+      <ImageLightbox
+        images={lightbox.images}
+        index={lightbox.index}
+        onClose={closeLightbox}
+        onIndexChange={changeLightboxIndex}
       />
     </div>
   );

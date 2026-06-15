@@ -1,9 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Bot, Send, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, Sparkles, MessageSquareQuote, Check, Copy } from 'lucide-react';
+import { Bot, Send, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, Sparkles, MessageSquareQuote, Check, Copy, Share2 } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
+import { findNodeById } from '../store/workspaceUtils.js';
+import AgentDocMeta from './AgentDocMeta.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import { buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
+import { buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
+import { extractRecallKeywords, rankRelatedDocs } from '../core/agent/contextRecall.js';
 import {
   isAiConfigured,
   listProviders,
@@ -48,7 +52,15 @@ const AI_QUICK_ACTIONS = [
   { key: 'expand', label: '扩写' },
   { key: 'polish', label: '润色' },
   { key: 'title', label: '标题' },
+  { key: 'tone', label: '改语气' },
+  { key: 'key_points', label: '提炼要点' },
+  { key: 'subheadings', label: '小标题' },
+  { key: 'continue', label: '续写' },
+  { key: 'outline', label: '提纲' },
 ];
+
+// 平台版本：同一正文改写成对应平台版（走 AI 助手，让 agent 读当前文档并写回）
+const PLATFORM_VARIANTS = listPlatformVariants();
 
 export default function AgentPanel() {
   const markdown = useEditorStore((s) => s.markdown);
@@ -57,6 +69,8 @@ export default function AgentPanel() {
 
   // AI 待确认写入：stage 暂存改动；diff 对比与应用/放弃由预览区的 DiffOverlay 负责
   const stageAgentWrite = useEditorStore((s) => s.stageAgentWrite);
+  // 直接写当前文档（插入引用用，无需 diff 确认）
+  const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
 
   // 全局会话状态（切页不丢）
   const sessions = useEditorStore((s) => s.agentSessions);
@@ -71,6 +85,12 @@ export default function AgentPanel() {
   // 编辑器「引用到 AI」暂存的选中文字（发送时拼进 prompt，发送后清空）
   const quotedSelection = useEditorStore((s) => s.aiQuotedSelection);
   const clearAiQuotedSelection = useEditorStore((s) => s.clearAiQuotedSelection);
+
+  // 当前选中的文件对象（含稿件元数据：状态/平台/标签/摘要），供稿件信息区展示
+  const activeFile = useMemo(
+    () => findNodeById(workspace, selectedId),
+    [workspace, selectedId],
+  );
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) || null,
@@ -278,14 +298,53 @@ export default function AgentPanel() {
     await runTurn({ promptText, displayText: text, fileNames });
   }, [input, running, attachedFiles, quotedSelection, clearAiQuotedSelection, runTurn]);
 
-  // 快捷动作（压缩/扩写/标题）：直接走 AI 助手，让 agent 读当前文档并处理
+  // 快捷动作：直接走 AI 助手，让 agent 读当前文档并处理。
+  // 有引用选区时，改写类动作只处理这段（其余动作内部会忽略选区），触发后清空引用。
   const handleQuickAction = useCallback((actionKey) => {
     if (running) return;
     runTurn({
-      promptText: buildQuickActionInstruction(actionKey),
+      promptText: buildQuickActionInstruction(actionKey, { selectionText: quotedSelection }),
       displayText: getAiActionLabel(actionKey),
     });
+    if (quotedSelection) clearAiQuotedSelection();
+  }, [running, runTurn, quotedSelection, clearAiQuotedSelection]);
+
+  // 平台版本：把当前正文改写成指定平台版（微信/小红书/知乎），走 AI 写回。
+  const handlePlatformVariant = useCallback((platformValue, platformLabel) => {
+    if (running) return;
+    runTurn({
+      promptText: buildPlatformVariantInstruction(platformValue),
+      displayText: `生成${platformLabel}版本`,
+    });
   }, [running, runTurn]);
+
+  // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
+  // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
+  const handleRecall = useCallback(async () => {
+    const doc = host.readActiveDoc();
+    const keywords = extractRecallKeywords({ title: doc.title, content: doc.content });
+    if (keywords.length === 0) return [];
+    const seen = new Map();
+    for (const kw of keywords) {
+      const hits = await host.searchDocs(kw);
+      hits.forEach((h) => { if (h?.id != null && !seen.has(h.id)) seen.set(h.id, h); });
+    }
+    return rankRelatedDocs(
+      { id: selectedId, title: doc.title, content: doc.content },
+      [...seen.values()],
+      { limit: 5 },
+    );
+  }, [host, selectedId]);
+
+  // 一键插入引用：把选中的相关旧文以 Markdown 引用块追加到当前文档末尾。
+  const handleInsertReference = useCallback((ref) => {
+    const title = ref?.title ?? '未命名';
+    const snippet = String(ref?.snippet ?? '').trim();
+    const block = snippet
+      ? `\n\n> 参考：${title}\n>\n> ${snippet.replace(/\n/g, '\n> ')}\n`
+      : `\n\n> 参考：${title}\n`;
+    updateSelectedFileContent(`${markdown ?? ''}${block}`);
+  }, [markdown, updateSelectedFileContent]);
 
   // 切换服务商：记住选择并带出该商已存配置（参考 Cursor，每商独立 key）
   const handleProviderChange = useCallback((nextId) => {
@@ -325,21 +384,11 @@ export default function AgentPanel() {
         </div>
       </div>
 
-      <div className="agent-panel__quick-actions">
-        {AI_QUICK_ACTIONS.map((a) => (
-          <button
-            key={a.key}
-            type="button"
-            className="agent-panel__quick-btn"
-            title={`AI ${a.label}（处理当前文档）`}
-            disabled={running}
-            onClick={() => handleQuickAction(a.key)}
-          >
-            <Sparkles size={14} />
-            {a.label}
-          </button>
-        ))}
-      </div>
+      <AgentDocMeta
+        document={activeFile}
+        onRecall={handleRecall}
+        onInsertReference={handleInsertReference}
+      />
 
       {showSessions && (
         <div className="agent-panel__sessions">
@@ -479,6 +528,39 @@ export default function AgentPanel() {
           ))}
         </div>
       )}
+
+      <div className="agent-panel__quick-actions agent-panel__quick-actions--bottom">
+        {AI_QUICK_ACTIONS.map((a) => (
+          <button
+            key={a.key}
+            type="button"
+            className="agent-panel__quick-btn"
+            title={`AI ${a.label}（处理当前文档）`}
+            disabled={running}
+            onClick={() => handleQuickAction(a.key)}
+          >
+            <Sparkles size={14} />
+            {a.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="agent-panel__quick-actions agent-panel__platform-actions">
+        <span className="agent-panel__group-label">平台版本</span>
+        {PLATFORM_VARIANTS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            className="agent-panel__quick-btn"
+            title={`生成${p.label}版本（改写当前文档并写回）`}
+            disabled={running}
+            onClick={() => handlePlatformVariant(p.value, p.label)}
+          >
+            <Share2 size={14} />
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       <div className="agent-panel__input-row">
         <textarea

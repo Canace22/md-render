@@ -11,6 +11,20 @@ import {
 export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
 
+// 粘贴/拖入的图片素材统一存到项目根下的此目录
+const ASSETS_DIR_NAME = '素材';
+// base64 mime 子类型 → 文件扩展名（仅允许图片，防止写入可执行文件）
+const ASSET_MIME_EXTENSIONS = {
+  png: 'png',
+  jpeg: 'jpg',
+  jpg: 'jpg',
+  gif: 'gif',
+  webp: 'webp',
+  svg: 'svg',
+  'svg+xml': 'svg',
+  bmp: 'bmp',
+};
+
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const LOCAL_PROJECT_META_DIR_NAME = '.md-render';
 const LOCAL_PROJECT_META_SIDECAR_SUFFIX = '.md-render-meta.json';
@@ -364,6 +378,30 @@ export async function createLocalProjectFile(projectRootPath, relativePath, cont
     relativePath: toRelativePath(projectRootPath, filePath),
     updatedAt: stat.mtimeMs,
   };
+}
+
+/**
+ * 把粘贴/拖入的图片（base64）存到项目根的 素材/ 目录。
+ * @param {string} projectRootPath 当前项目根路径
+ * @param {string} base64 不含 data: 前缀的纯 base64
+ * @param {string} mimeSubtype 形如 'png' / 'jpeg' / 'svg+xml'
+ * @returns {{ relativePath: string }} 相对项目根的 POSIX 路径
+ */
+export async function saveBinaryAsset(projectRootPath, base64, mimeSubtype = 'png') {
+  if (!projectRootPath) throw new Error('缺少项目根路径');
+  if (!base64) throw new Error('图片数据为空');
+
+  const ext = ASSET_MIME_EXTENSIONS[String(mimeSubtype).toLowerCase()] || 'png';
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const rand = Math.random().toString(36).slice(2, 6);
+  const relativePath = `${ASSETS_DIR_NAME}/截图-${stamp}-${rand}.${ext}`;
+
+  // 复用 resolveProjectFilePath 的越界校验，杜绝写出项目目录外
+  const filePath = resolveProjectFilePath(projectRootPath, relativePath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, Buffer.from(base64, 'base64'));
+
+  return { relativePath: toRelativePath(projectRootPath, filePath) };
 }
 
 export async function createLocalProjectFolder(projectRootPath, relativePath) {

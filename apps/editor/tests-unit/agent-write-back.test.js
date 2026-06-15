@@ -36,6 +36,42 @@ describe('buildQuickActionInstruction 写回引导', () => {
   it('未知动作兜底到压缩，仍带写回引导', () => {
     expect(buildQuickActionInstruction('天马行空')).toContain('write_active_doc');
   });
+
+  it('改语气：改写类，带写回引导', () => {
+    expect(buildQuickActionInstruction('tone')).toContain('write_active_doc');
+    expect(buildQuickActionInstruction('改语气')).toContain('write_active_doc');
+  });
+
+  it('提炼要点 / 小标题：不改正文，不引导写回', () => {
+    expect(buildQuickActionInstruction('key_points')).not.toContain('write_active_doc');
+    expect(buildQuickActionInstruction('subheadings')).not.toContain('write_active_doc');
+  });
+
+  it('续写：追加类，引导读全文后追加到末尾再写回', () => {
+    const instruction = buildQuickActionInstruction('continue');
+    expect(instruction).toContain('write_active_doc');
+    expect(instruction).toContain('追加');
+  });
+
+  it('改写类带选区：只改这段，并把原文嵌进指令', () => {
+    const instruction = buildQuickActionInstruction('polish', { selectionText: '这段选中文本' });
+    expect(instruction).toContain('这段选中文本');
+    expect(instruction).toContain('replace');
+    expect(instruction).toContain('write_active_doc');
+  });
+
+  it('不改正文类动作忽略选区，维持整篇行为', () => {
+    const instruction = buildQuickActionInstruction('title', { selectionText: '这段选中文本' });
+    expect(instruction).not.toContain('这段选中文本');
+    expect(instruction).not.toContain('write_active_doc');
+  });
+
+  it('提纲：不改正文，给3种提纲且不引导写回', () => {
+    const instruction = buildQuickActionInstruction('outline');
+    expect(instruction).not.toContain('write_active_doc');
+    expect(instruction).toContain('3 种');
+    expect(buildQuickActionInstruction('提纲')).not.toContain('write_active_doc');
+  });
 });
 
 describe('runAgent 写回路径', () => {

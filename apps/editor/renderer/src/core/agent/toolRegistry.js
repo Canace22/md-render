@@ -12,8 +12,12 @@
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
  */
 
+import { extractRecallKeywords, rankRelatedDocs } from './contextRecall.js';
+
 const MAX_SEARCH_RESULTS = 8;
 const MAX_SNIPPET_CHARS = 200;
+const MAX_RECALL_RESULTS = 5; // 主动召回返回的相关旧文条数
+const MAX_RECALL_KEYWORDS = 6; // 用于召回搜索的关键词条数
 
 /** OpenAI 工具定义（纯数据，无副作用） */
 export const TOOL_DEFINITIONS = Object.freeze([
@@ -53,6 +57,15 @@ export const TOOL_DEFINITIONS = Object.freeze([
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'recall_related_docs',
+      description:
+        '根据当前文档（标题 + 正文）主动召回工作区里相关的旧文，供写作引用参考。当用户问「有没有相关旧文」「帮我找参考」，或你需要补充上下文 / 引用既有内容时调用。无需传参，会自动读当前文档并按关键词相关度排序返回。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
 ]);
 
 const truncate = (text, max) => {
@@ -67,6 +80,19 @@ const parseArgs = (raw) => {
   } catch {
     return {};
   }
+};
+
+/** 多关键词分别搜工作区，按 id（无 id 退化用标题）合并去重 */
+const collectCandidates = async (host, keywords) => {
+  const byKey = new Map();
+  for (const kw of keywords) {
+    const hits = (await host.searchDocs(kw)) || [];
+    hits.forEach((hit) => {
+      const key = hit?.id ?? hit?.title;
+      if (key != null && !byKey.has(key)) byKey.set(key, hit);
+    });
+  }
+  return [...byKey.values()];
 };
 
 /** 工具执行器：name -> async (args, host) => 结果字符串 */
@@ -98,6 +124,31 @@ const EXECUTORS = {
     }));
     return JSON.stringify(top);
   },
+
+  recall_related_docs: async (_args, host) => {
+    const doc = await host.readActiveDoc();
+    if (!doc || !String(doc.content ?? '').trim()) {
+      return '当前文档为空，无法据此召回相关旧文。';
+    }
+    const keywords = extractRecallKeywords(doc, { max: MAX_RECALL_KEYWORDS });
+    if (!keywords.length) return '未能从当前文档提取到关键词。';
+
+    // 多个关键词分别搜，再按 id/标题合并去重，得到候选集
+    const candidates = await collectCandidates(host, keywords);
+    // 候选叠加 snippet 作为内容参与重合度排序，排除当前文档自身
+    const ranked = rankRelatedDocs(doc, candidates, {
+      limit: MAX_RECALL_RESULTS,
+      keywords,
+    });
+    if (!ranked.length) return '工作区里没有与当前文档明显相关的旧文。';
+
+    const top = ranked.map((r) => ({
+      id: r.id ?? null,
+      title: r.title ?? '未命名',
+      snippet: truncate(r.snippet ?? r.content ?? '', MAX_SNIPPET_CHARS),
+    }));
+    return JSON.stringify(top);
+  },
 };
 
 /**
@@ -123,6 +174,7 @@ export const TOOL_LABELS = Object.freeze({
   read_active_doc: '读取当前文档',
   write_active_doc: '写入当前文档',
   search_docs: '搜索工作区',
+  recall_related_docs: '召回相关旧文',
 });
 
 export const getToolLabel = (name) => TOOL_LABELS[name] || name;

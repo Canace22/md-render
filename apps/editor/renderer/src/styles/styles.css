@@ -2675,7 +2675,9 @@ a.sidebar-rail-btn:hover {
     color: #999999;
 }
 
-#markdown-output img {
+/* 仅作用于预览/导出的图片；编辑器内的图片(.bn-visual-media)由 BlockNote 控制宽度，
+   不能被全局规则覆盖，否则拖拽调整大小失效 */
+#markdown-output img:not(.bn-visual-media) {
     max-width: 100%;
     height: auto;
     border-radius: 4px;
@@ -4319,6 +4321,84 @@ body.theme-light #markdown-output code {
 
 .blocknote-paper {
     min-height: calc(100vh - 224px);
+}
+
+/* 编辑器内图片：提示可点击放大 */
+.blocknote-editor .bn-visual-media {
+    cursor: zoom-in;
+}
+
+/* 图片放大查看器（lightbox） */
+.image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.82);
+    user-select: none;
+    overflow: hidden;
+}
+
+.image-lightbox__img {
+    max-width: 92vw;
+    max-height: 92vh;
+    transform-origin: center center;
+    transition: transform 0.05s linear;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.image-lightbox__close,
+.image-lightbox__nav {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 0.15s ease;
+}
+
+.image-lightbox__close:hover,
+.image-lightbox__nav:hover {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.image-lightbox__close {
+    top: 20px;
+    right: 24px;
+    width: 40px;
+    height: 40px;
+    font-size: 26px;
+    line-height: 1;
+}
+
+.image-lightbox__nav {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
+    font-size: 34px;
+    line-height: 1;
+}
+
+.image-lightbox__nav--prev { left: 24px; }
+.image-lightbox__nav--next { right: 24px; }
+
+.image-lightbox__counter {
+    position: absolute;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 4px 12px;
+    border-radius: 999px;
 }
 
 .blocknote-editor {
@@ -7888,11 +7968,189 @@ body.theme-dark .file-preview-iframe {
   font-weight: var(--font-weight-medium);
 }
 
+.agent-panel__doc-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__doc-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.agent-panel__doc-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-panel__doc-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.agent-panel__doc-fields {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.agent-panel__doc-field {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.agent-panel__doc-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.agent-panel__context {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__context-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--easing);
+}
+
+.agent-panel__context-head:hover {
+  background: var(--color-bg-active);
+}
+
+.agent-panel__context-body {
+  padding: 0 12px 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 .agent-panel__quick-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__group-label {
+  font-size: var(--font-size-s);
+  color: var(--color-text-muted);
+}
+
+/* 快捷操作移到输入框上方：用上边框做分隔，下方紧挨平台版本/输入框，不再画下边框 */
+.agent-panel__quick-actions--bottom {
+  border-bottom: none;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__quick-actions--bottom + .agent-panel__platform-actions {
+  border-bottom: none;
+}
+
+/* 参考上下文：头部行（折叠按钮 + 刷新） */
+.agent-panel__context-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.agent-panel__context-refresh {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-icon-neutral);
+  cursor: pointer;
+}
+
+.agent-panel__context-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-panel__context-hint {
+  color: var(--color-text-muted);
+}
+
+/* 召回的相关旧文条目 */
+.agent-panel__ref {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.agent-panel__ref:first-of-type {
+  border-top: none;
+}
+
+.agent-panel__ref-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-panel__ref-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+}
+
+.agent-panel__ref-snippet {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.agent-panel__ref-insert {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-l);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.agent-panel__ref-insert:hover {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
 }
 
 .agent-panel__quick-btn {
