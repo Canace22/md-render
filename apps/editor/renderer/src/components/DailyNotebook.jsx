@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Empty, Input, Tag } from 'antd';
 import {
   CalendarClock,
@@ -53,6 +53,12 @@ function DailySection({
   draftValue,
   onDraftChange,
   onSubmit,
+  editingItemId,
+  editingDraftValue,
+  onStartEdit,
+  onEditDraftChange,
+  onSaveEdit,
+  onCancelEdit,
   onToggleTask,
   onMoveTaskToTodo,
   onDeleteItem,
@@ -81,34 +87,75 @@ function DailySection({
 
       {items.length ? (
         <div className="daily-notebook-list">
-          {items.map((item) => (
-            <div key={item.id} className={`daily-notebook-item ${item.done ? 'is-done' : ''}`}>
-              <div className="daily-notebook-item-main">
-                <div className="daily-notebook-item-text-row">
-                  {section.type === 'task' && (
-                    <button
-                      type="button"
-                      className={`daily-notebook-check ${item.done ? 'is-done' : ''}`}
-                      onClick={() => onToggleTask(item.id)}
-                      aria-label={item.done ? '标记为未完成' : '标记为已完成'}
-                    >
-                      {item.done && <Check size={13} strokeWidth={2.4} />}
-                    </button>
-                  )}
-                  <span className="daily-notebook-item-text">{item.text}</span>
-                </div>
-              </div>
+          {items.map((item) => {
+            const isEditing = editingItemId === item.id;
+            const canSaveEdit = Boolean(editingDraftValue?.trim());
 
-              <div className="daily-notebook-item-actions">
-                {section.type === 'task' && !item.done && (
-                  <Button type="text" size="small" onClick={() => onMoveTaskToTodo(item.id)}>
-                    移到待办
-                  </Button>
+            return (
+              <div key={item.id} className={`daily-notebook-item ${item.done ? 'is-done' : ''}`}>
+                <div className="daily-notebook-item-main">
+                  <div className="daily-notebook-item-text-row">
+                    {section.type === 'task' && (
+                      <button
+                        type="button"
+                        className={`daily-notebook-check ${item.done ? 'is-done' : ''}`}
+                        onClick={() => onToggleTask(item.id)}
+                        aria-label={item.done ? '标记为未完成' : '标记为已完成'}
+                      >
+                        {item.done && <Check size={13} strokeWidth={2.4} />}
+                      </button>
+                    )}
+                    {isEditing ? (
+                      <div className="daily-notebook-item-editor">
+                        <Input
+                          autoFocus
+                          value={editingDraftValue}
+                          placeholder={section.placeholder}
+                          onChange={(event) => onEditDraftChange(event.target.value)}
+                          onPressEnter={() => {
+                            if (canSaveEdit) onSaveEdit();
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              onCancelEdit();
+                            }
+                          }}
+                        />
+                        <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
+                          保存
+                        </Button>
+                        <Button size="small" onClick={onCancelEdit}>
+                          取消
+                        </Button>
+                      </div>
+                    ) : (
+                      <span
+                        className="daily-notebook-item-text"
+                        onDoubleClick={() => onStartEdit(item)}
+                      >
+                        {item.text}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {!isEditing && (
+                  <div className="daily-notebook-item-actions">
+                    <Button type="text" size="small" onClick={() => onStartEdit(item)}>
+                      编辑
+                    </Button>
+                    {section.type === 'task' && !item.done && (
+                      <Button type="text" size="small" onClick={() => onMoveTaskToTodo(item.id)}>
+                        移到待办
+                      </Button>
+                    )}
+                    <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onDeleteItem(item.id)} />
+                  </div>
                 )}
-                <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onDeleteItem(item.id)} />
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={section.emptyText} />
@@ -123,12 +170,14 @@ function DailyNotebook({
   onAddItem,
   onToggleTaskDone,
   onDeleteItem,
+  onUpdateItem,
   onMoveTaskToTodo,
   onAddTodo,
   onPromoteTodo,
   onRemoveTodo,
 }) {
   const [drafts, setDrafts] = useState({ task: '', event: '', note: '', todo: '' });
+  const [editingItem, setEditingItem] = useState(null);
   const currentDate = dailyWorkspace?.currentDate || getTodayDateKey();
   const todayKey = getTodayDateKey();
   const dailyEntry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
@@ -172,6 +221,29 @@ function DailyNotebook({
     onAddTodo(nextValue);
     setDrafts((current) => ({ ...current, todo: '' }));
   };
+
+  const handleStartEdit = (item) => {
+    setEditingItem({ id: item.id, value: item.text });
+  };
+
+  const handleEditDraftChange = (value) => {
+    setEditingItem((current) => (current ? { ...current, value } : current));
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItem(null);
+  };
+
+  const handleSaveEdit = () => {
+    const nextValue = editingItem?.value?.trim();
+    if (!editingItem?.id || !nextValue) return;
+    onUpdateItem(currentDate, editingItem.id, nextValue);
+    setEditingItem(null);
+  };
+
+  useEffect(() => {
+    setEditingItem(null);
+  }, [currentDate]);
 
   return (
     <div className="daily-notebook" data-testid="daily-surface">
@@ -219,6 +291,12 @@ function DailyNotebook({
               draftValue={drafts[section.type]}
               onDraftChange={handleDraftChange}
               onSubmit={handleSubmit}
+              editingItemId={editingItem?.id ?? null}
+              editingDraftValue={editingItem?.value ?? ''}
+              onStartEdit={handleStartEdit}
+              onEditDraftChange={handleEditDraftChange}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={handleCancelEdit}
               onToggleTask={(itemId) => onToggleTaskDone(currentDate, itemId)}
               onMoveTaskToTodo={(itemId) => onMoveTaskToTodo(currentDate, itemId)}
               onDeleteItem={(itemId) => onDeleteItem(currentDate, itemId)}

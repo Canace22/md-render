@@ -116,6 +116,28 @@ export async function ensureMdRenderWorkspace() {
   return window.electronAPI.ensureMdRenderWorkspace();
 }
 
+export async function readDailyWorkspaceBackup(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.readDailyWorkspaceBackup === 'function') {
+    const result = await window.electronAPI.readDailyWorkspaceBackup(payload);
+    if (result?.ok === false) {
+      throw new Error(result.error || '读取 Daily 备份失败');
+    }
+    return result?.dailyWorkspace ?? null;
+  }
+  return null;
+}
+
+export async function saveDailyWorkspaceBackup(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.saveDailyWorkspaceBackup === 'function') {
+    const result = await window.electronAPI.saveDailyWorkspaceBackup(payload);
+    if (result?.ok === false) {
+      throw new Error(result.error || '保存 Daily 备份失败');
+    }
+    return result;
+  }
+  return null;
+}
+
 export async function createLocalProjectFileOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFile === 'function') {
     return window.electronAPI.createLocalProjectFile(payload);

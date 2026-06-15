@@ -29,6 +29,8 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const LOCAL_PROJECT_META_DIR_NAME = '.md-render';
 const LOCAL_PROJECT_META_SIDECAR_SUFFIX = '.md-render-meta.json';
 const LOCAL_PROJECT_META_VERSION = 1;
+const DAILY_WORKSPACE_FILENAME = 'daily-workspace.json';
+const DAILY_WORKSPACE_VERSION = 1;
 const DEFAULT_NODE_TYPE = 'document';
 const BOOKMARK_FETCH_TIMEOUT_MS = 15000;
 const BOOKMARK_FETCH_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -88,6 +90,14 @@ const buildLegacyMetadataSidecarPath = (filePath) => {
 
 const buildMetadataDirectoryPath = (filePath) => {
   return path.join(path.dirname(filePath), LOCAL_PROJECT_META_DIR_NAME);
+};
+
+const buildWorkspaceMetaDirectoryPath = (projectRootPath) => {
+  return path.join(projectRootPath, LOCAL_PROJECT_META_DIR_NAME);
+};
+
+const buildDailyWorkspaceFilePath = (projectRootPath) => {
+  return path.join(buildWorkspaceMetaDirectoryPath(projectRootPath), DAILY_WORKSPACE_FILENAME);
 };
 
 const buildMetadataSidecarPath = (filePath) => {
@@ -367,6 +377,40 @@ export async function ensureMdRenderDirectories() {
     MD_RENDER_SUBDIRS.map((dirName) => fs.mkdir(path.join(rootPath, dirName), { recursive: true })),
   );
   return rootPath;
+}
+
+export async function readDailyWorkspaceBackup(projectRootPath) {
+  if (!projectRootPath) return null;
+  const filePath = buildDailyWorkspaceFilePath(projectRootPath);
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const payload = parsed?.dailyWorkspace && typeof parsed.dailyWorkspace === 'object'
+      ? parsed.dailyWorkspace
+      : parsed;
+    return payload && typeof payload === 'object' ? payload : null;
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null;
+    }
+    console.warn('[localProject] 读取 daily workspace 备份失败:', filePath, error);
+    return null;
+  }
+}
+
+export async function saveDailyWorkspaceBackup(projectRootPath, dailyWorkspace) {
+  if (!projectRootPath) {
+    throw new Error('缺少项目根路径');
+  }
+  const filePath = buildDailyWorkspaceFilePath(projectRootPath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify({
+    version: DAILY_WORKSPACE_VERSION,
+    dailyWorkspace: dailyWorkspace ?? null,
+  }, null, 2)}\n`, 'utf8');
+  return {
+    relativePath: toRelativePath(projectRootPath, filePath),
+  };
 }
 
 export async function createLocalProjectFile(projectRootPath, relativePath, content = '') {

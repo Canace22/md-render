@@ -355,10 +355,12 @@ function MarkdownEditor() {
     addDailyItem,
     toggleDailyTaskDone,
     deleteDailyItem,
+    updateDailyItem,
     moveDailyTaskToTodo,
     addTodoItem,
     promoteTodoToDaily,
     removeTodoItem,
+    hydrateDailyWorkspaceFromDisk,
     setWorkspaceCanvas,
     setNotionToken,
     setNotionDatabaseId,
@@ -671,6 +673,7 @@ function MarkdownEditor() {
   const titleEditing = useTitleEditing(selectedFile, performRename);
   const { handleExport, handleImport } = useWorkspaceActions({
     workspace,
+    dailyWorkspace,
     selectedId,
     applyRename,
     deleteNode,
@@ -1138,8 +1141,9 @@ function MarkdownEditor() {
     if (!result?.projectRootPath) return null;
 
     hydrateProjectsWorkspace(result);
+    hydrateDailyWorkspaceFromDisk(result.projectRootPath);
     return result.projectRootPath;
-  }, [localProjectSupported, hydrateProjectsWorkspace]);
+  }, [localProjectSupported, hydrateProjectsWorkspace, hydrateDailyWorkspaceFromDisk]);
 
   const handleImportMarkdown = useCallback((event) => {
     const file = event?.target?.files?.[0];
@@ -1936,6 +1940,7 @@ function MarkdownEditor() {
         const result = await ensureMdRenderWorkspace();
         if (cancelled || !result?.projectRootPath) return;
         useEditorStore.getState().hydrateProjectsWorkspace(result);
+        useEditorStore.getState().hydrateDailyWorkspaceFromDisk(result.projectRootPath);
       } catch (error) {
         console.error('初始化 MdRender 本地目录失败:', error);
       }
@@ -2226,6 +2231,7 @@ function MarkdownEditor() {
             onAddItem={addDailyItem}
             onToggleTaskDone={toggleDailyTaskDone}
             onDeleteItem={deleteDailyItem}
+            onUpdateItem={updateDailyItem}
             onMoveTaskToTodo={moveDailyTaskToTodo}
             onAddTodo={addTodoItem}
             onPromoteTodo={promoteTodoToDaily}

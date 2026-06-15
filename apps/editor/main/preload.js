@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
   saveLocalProjectMetadata: (payload) => ipcRenderer.invoke('save-local-project-metadata', payload),
   ensureMdRenderWorkspace: () => ipcRenderer.invoke('ensure-md-render-workspace'),
+  readDailyWorkspaceBackup: (payload) => ipcRenderer.invoke('read-daily-workspace-backup', payload),
+  saveDailyWorkspaceBackup: (payload) => ipcRenderer.invoke('save-daily-workspace-backup', payload),
   createLocalProjectFile: (payload) => ipcRenderer.invoke('create-local-project-file', payload),
   createLocalProjectFolder: (payload) => ipcRenderer.invoke('create-local-project-folder', payload),
   saveBinaryAsset: (payload) => ipcRenderer.invoke('save-binary-asset', payload),

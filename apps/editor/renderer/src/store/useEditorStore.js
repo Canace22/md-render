@@ -38,18 +38,23 @@ import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
 import {
   createLocalProjectFileOnDisk,
+  ensureMdRenderWorkspace,
+  readDailyWorkspaceBackup,
+  saveDailyWorkspaceBackup,
   saveLocalProjectMetadata,
 } from '../utils/localProjectBridge.js';
 import {
   addDailyEntryItem,
   addTodoPoolItem,
   carryOverIncompleteTasks,
+  mergeDailyWorkspaces,
   normalizeDailyWorkspace,
   promoteTodoToDaily,
   removeDailyEntryItem,
   removeTodoPoolItem,
   sendDailyEntryTaskToTodo,
   toggleDailyEntryTaskDone,
+  updateDailyEntryItem,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import {
@@ -349,7 +354,12 @@ const editorStorage = {
         // 已迁移：从 SQLite 加载
         const res = await window.electronAPI.db.load();
         if (res.ok && res.state && res.state.workspace_json) {
-          return buildStateFromDb(res.state);
+          const localFallbackState = buildStateFromLocalStorage();
+          const localFallbackMap = buildStateMap(localFallbackState.state);
+          return buildStateFromDb({
+            ...localFallbackMap,
+            ...res.state,
+          });
         }
         // SQLite 无数据时回退到 localStorage
         return buildStateFromLocalStorage();
@@ -652,6 +662,25 @@ const persistLocalProjectMetadata = (node) => {
   });
 };
 
+const resolveDailyWorkspaceBackupRoot = async (projectRootPath) => {
+  if (projectRootPath) return projectRootPath;
+  const result = await ensureMdRenderWorkspace();
+  return result?.projectRootPath ?? '';
+};
+
+const persistDailyWorkspaceBackup = async (dailyWorkspace, projectRootPath = '') => {
+  try {
+    const rootPath = await resolveDailyWorkspaceBackupRoot(projectRootPath);
+    if (!rootPath) return;
+    await saveDailyWorkspaceBackup({
+      projectRootPath: rootPath,
+      dailyWorkspace: normalizeDailyWorkspace(dailyWorkspace, null),
+    });
+  } catch (error) {
+    console.error('[store] Daily 备份保存失败:', error);
+  }
+};
+
 const createLocalProjectNodeId = (projectRootPath, suffix = '') => {
   return `project:${projectRootPath}${suffix}`;
 };
@@ -897,46 +926,86 @@ export const useEditorStore = create(
         set({ publishingPlatforms: sanitizePublishingPlatforms(publishingPlatforms) });
       },
       setSurface: (surface) => set({ surface: normalizeSurface(surface, 'overview') }),
-      setDailyCurrentDate: (dateKey) => set((state) => ({
-        dailyWorkspace: carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-      })),
-      addDailyItem: (dateKey, type, text) => set((state) => ({
-        dailyWorkspace: addDailyEntryItem(
+      hydrateDailyWorkspaceFromDisk: async (projectRootPath = '') => {
+        try {
+          const rootPath = await resolveDailyWorkspaceBackupRoot(projectRootPath || get().projectRootPath);
+          if (!rootPath) return false;
+          const backup = await readDailyWorkspaceBackup({ projectRootPath: rootPath });
+          const merged = mergeDailyWorkspaces(get().dailyWorkspace, backup, null);
+          set({ dailyWorkspace: merged });
+          await persistDailyWorkspaceBackup(merged, rootPath);
+          return true;
+        } catch (error) {
+          console.error('[store] Daily 备份读取失败:', error);
+          return false;
+        }
+      },
+      setDailyCurrentDate: (dateKey) => set((state) => {
+        const nextDailyWorkspace = carryOverIncompleteTasks(state.dailyWorkspace, dateKey);
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      addDailyItem: (dateKey, type, text) => set((state) => {
+        const nextDailyWorkspace = addDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
           { type, text },
-        ),
-      })),
-      toggleDailyTaskDone: (dateKey, itemId) => set((state) => ({
-        dailyWorkspace: toggleDailyEntryTaskDone(
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      toggleDailyTaskDone: (dateKey, itemId) => set((state) => {
+        const nextDailyWorkspace = toggleDailyEntryTaskDone(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
           itemId,
-        ),
-      })),
-      deleteDailyItem: (dateKey, itemId) => set((state) => ({
-        dailyWorkspace: removeDailyEntryItem(
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      deleteDailyItem: (dateKey, itemId) => set((state) => {
+        const nextDailyWorkspace = removeDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
           itemId,
-        ),
-      })),
-      moveDailyTaskToTodo: (dateKey, itemId) => set((state) => ({
-        dailyWorkspace: sendDailyEntryTaskToTodo(
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      updateDailyItem: (dateKey, itemId, text) => set((state) => {
+        const nextDailyWorkspace = updateDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
           itemId,
-        ),
-      })),
-      addTodoItem: (text) => set((state) => ({
-        dailyWorkspace: addTodoPoolItem(state.dailyWorkspace, text),
-      })),
-      promoteTodoToDaily: (todoId, dateKey) => set((state) => ({
-        dailyWorkspace: promoteTodoToDaily(state.dailyWorkspace, todoId, dateKey),
-      })),
-      removeTodoItem: (todoId) => set((state) => ({
-        dailyWorkspace: removeTodoPoolItem(state.dailyWorkspace, todoId),
-      })),
+          text,
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      moveDailyTaskToTodo: (dateKey, itemId) => set((state) => {
+        const nextDailyWorkspace = sendDailyEntryTaskToTodo(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          itemId,
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      addTodoItem: (text) => set((state) => {
+        const nextDailyWorkspace = addTodoPoolItem(state.dailyWorkspace, text);
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      promoteTodoToDaily: (todoId, dateKey) => set((state) => {
+        const nextDailyWorkspace = promoteTodoToDaily(state.dailyWorkspace, todoId, dateKey);
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      removeTodoItem: (todoId) => set((state) => {
+        const nextDailyWorkspace = removeTodoPoolItem(state.dailyWorkspace, todoId);
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
       setWorkspaceCanvas: (canvasState) => {
         const { workspace } = get();
         if (areCanvasStatesEqual(workspace?.canvasState, canvasState)) {
@@ -1622,13 +1691,22 @@ export const useEditorStore = create(
       },
 
       importWorkspace: (imported) => {
-        const normalized = ensureKnowledgeFields(imported);
+        const importedWorkspace = imported?.workspace ?? imported;
+        const importedDailyWorkspace = imported?.dailyWorkspace ?? null;
+        const normalized = ensureKnowledgeFields(importedWorkspace);
         const firstFileId = findFirstFileId(normalized);
         const initialId = firstFileId ?? normalized?.id ?? 'root';
         const node = findNodeById(normalized, initialId);
+        const nextDailyWorkspace = mergeDailyWorkspaces(
+          normalizeDailyWorkspace(importedDailyWorkspace, null),
+          null,
+          null,
+        );
         persistWorkspace(normalized);
+        persistDailyWorkspaceBackup(nextDailyWorkspace);
         set({
           workspace: normalized,
+          dailyWorkspace: nextDailyWorkspace,
           selectedId: initialId,
           markdown: node?.type === 'file' ? (node.content ?? '') : '',
           storageMode: 'local',

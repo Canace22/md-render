@@ -502,11 +502,13 @@ export default function AgentPanel() {
       </div>
 
       {!isWelcomeMode && (
-        <AgentDocMeta
-          document={activeFile}
-          onRecall={handleRecall}
-          onInsertReference={handleInsertReference}
-        />
+        <div hidden>
+          <AgentDocMeta
+            document={activeFile}
+            onRecall={handleRecall}
+            onInsertReference={handleInsertReference}
+          />
+        </div>
       )}
 
       {showSessions && (

@@ -9190,6 +9190,15 @@ body.theme-dark .file-preview-iframe {
   word-break: break-word;
 }
 
+.daily-notebook-item-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .daily-notebook-item.is-done .daily-notebook-item-text {
   text-decoration: line-through;
   color: var(--color-text-secondary);
@@ -9229,6 +9238,10 @@ body.theme-dark .file-preview-iframe {
   }
 
   .daily-notebook-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-notebook-item-editor {
     grid-template-columns: 1fr;
   }
 }

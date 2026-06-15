@@ -146,6 +146,58 @@ export const normalizeDailyWorkspace = (raw, baseDate) => {
   };
 };
 
+const pickLatestByTimestamp = (current, incoming) => {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  const currentUpdatedAt = createTimestamp(current.updatedAt ?? current.createdAt);
+  const incomingUpdatedAt = createTimestamp(incoming.updatedAt ?? incoming.createdAt);
+  return incomingUpdatedAt >= currentUpdatedAt ? incoming : current;
+};
+
+const mergeItemLists = (preferredItems, fallbackItems, sorter) => {
+  const mergedById = new Map();
+  for (const item of fallbackItems) {
+    mergedById.set(item.id, item);
+  }
+  for (const item of preferredItems) {
+    mergedById.set(item.id, pickLatestByTimestamp(mergedById.get(item.id), item));
+  }
+  return [...mergedById.values()].sort(sorter);
+};
+
+export const mergeDailyWorkspaces = (preferred, fallback, baseDate) => {
+  const primary = normalizeDailyWorkspace(preferred, baseDate);
+  const secondary = normalizeDailyWorkspace(fallback, primary.currentDate);
+  const allDateKeys = new Set([
+    ...Object.keys(secondary.entries),
+    ...Object.keys(primary.entries),
+  ]);
+  const entries = {};
+
+  for (const dateKey of allDateKeys) {
+    const primaryEntry = primary.entries[dateKey] ?? createEmptyDailyEntry(dateKey);
+    const secondaryEntry = secondary.entries[dateKey] ?? createEmptyDailyEntry(dateKey);
+    entries[dateKey] = {
+      date: dateKey,
+      items: mergeItemLists(
+        primaryEntry.items,
+        secondaryEntry.items,
+        (left, right) => left.createdAt - right.createdAt || left.updatedAt - right.updatedAt,
+      ),
+    };
+  }
+
+  return {
+    currentDate: primary.currentDate || secondary.currentDate,
+    entries,
+    todoPool: mergeItemLists(
+      primary.todoPool,
+      secondary.todoPool,
+      (left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt,
+    ),
+  };
+};
+
 const buildTodoDedupKey = (text, sourceDate) => {
   return `${normalizeText(text)}::${sourceDate}`;
 };
@@ -253,6 +305,23 @@ export const removeDailyEntryItem = (dailyWorkspace, dateKey, itemId) => {
   return updateEntry(dailyWorkspace, dateKey, (entry) => ({
     ...entry,
     items: entry.items.filter((item) => item.id !== itemId),
+  }));
+};
+
+export const updateDailyEntryItem = (dailyWorkspace, dateKey, itemId, text) => {
+  const nextText = normalizeText(text);
+  if (!nextText) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
+
+  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
+    ...entry,
+    items: entry.items.map((item) => {
+      if (item.id !== itemId) return item;
+      return {
+        ...item,
+        text: nextText,
+        updatedAt: Date.now(),
+      };
+    }),
   }));
 };
 

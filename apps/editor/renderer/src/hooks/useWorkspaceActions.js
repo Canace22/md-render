@@ -7,6 +7,7 @@ import { findNodeById } from '../store/workspaceUtils.js';
  */
 export function useWorkspaceActions({
   workspace,
+  dailyWorkspace,
   selectedId,
   applyRename,
   deleteNode,
@@ -46,7 +47,7 @@ export function useWorkspaceActions({
   );
 
   const handleExport = useCallback(() => {
-    const json = exportWorkspaceToJSON(workspace);
+    const json = exportWorkspaceToJSON(workspace, dailyWorkspace);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -54,7 +55,7 @@ export function useWorkspaceActions({
     a.download = `workspace-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [workspace]);
+  }, [workspace, dailyWorkspace]);
 
   const handleImport = useCallback(
     (event) => {
@@ -62,14 +63,14 @@ export function useWorkspaceActions({
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const { workspace: imported, error } = parseWorkspaceFromJSON(reader.result);
+        const { workspace: imported, dailyWorkspace: importedDailyWorkspace, error } = parseWorkspaceFromJSON(reader.result);
         if (error) {
           alert(error);
           return;
         }
         const confirmed = window.confirm('导入将替换当前工作区，是否继续？');
         if (!confirmed) return;
-        importWorkspace(imported);
+        importWorkspace({ workspace: imported, dailyWorkspace: importedDailyWorkspace });
       };
       reader.readAsText(file, 'UTF-8');
       event.target.value = '';

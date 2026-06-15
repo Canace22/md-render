@@ -9,6 +9,8 @@ import {
   saveLocalProjectFile,
   saveLocalProjectMetadata,
   ensureMdRenderWorkspaceData,
+  readDailyWorkspaceBackup,
+  saveDailyWorkspaceBackup,
   fetchBookmarkPageSnapshot,
   createLocalProjectFile,
   createLocalProjectFolder,
@@ -269,6 +271,23 @@ ipcMain.handle('ensure-md-render-workspace', async () => {
   const result = await ensureMdRenderWorkspaceData();
   startWatchingLocalProject(result.projectRootPath);
   return result;
+});
+
+ipcMain.handle('read-daily-workspace-backup', async (_event, payload = {}) => {
+  const { projectRootPath } = payload;
+  return {
+    ok: true,
+    dailyWorkspace: await readDailyWorkspaceBackup(projectRootPath),
+  };
+});
+
+ipcMain.handle('save-daily-workspace-backup', async (_event, payload = {}) => {
+  const { projectRootPath, dailyWorkspace } = payload;
+  const result = await saveDailyWorkspaceBackup(projectRootPath, dailyWorkspace);
+  if (result?.relativePath) {
+    markSavedLocalFileIgnored(projectRootPath, result.relativePath);
+  }
+  return { ok: true, ...result };
 });
 
 ipcMain.handle('create-local-project-file', async (_event, payload = {}) => {

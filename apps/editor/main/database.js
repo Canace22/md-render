@@ -114,11 +114,14 @@ const STATE_KEYS = [
   'theme',
   'copy_style',
   'surface',
+  'publishing_platforms',
+  'daily_workspace_json',
   'storage_mode',
   'project_root_path',
   'notion_token',
   'notion_file_pages',
   'notion_database_id',
+  'notion_proxy_base',
 ];
 
 export function loadEditorState() {
