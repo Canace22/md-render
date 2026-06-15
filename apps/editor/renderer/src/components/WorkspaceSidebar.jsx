@@ -28,6 +28,7 @@ import {
   PinOff,
   RefreshCw,
   ChevronDown,
+  CalendarDays,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -419,6 +420,7 @@ const WorkspaceSidebar = ({
   collapsed,
   onToggleCollapse,
   surface,
+  onOpenDaily,
   onOpenOverview,
   onOpenCanvas,
   onOpenSearch,
@@ -581,6 +583,15 @@ const WorkspaceSidebar = ({
 
           {/* 视图导航 */}
           <nav className="sidebar-rail-nav" aria-label="创作与知识视图">
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'daily' ? 'active' : ''}`}
+              onClick={onOpenDaily}
+              title="今日速记"
+              aria-label="今日速记"
+            >
+              <CalendarDays size={18} strokeWidth={1.6} />
+            </button>
             <button
               type="button"
               className={`sidebar-rail-btn ${surface === 'overview' ? 'active' : ''}`}

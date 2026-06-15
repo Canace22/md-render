@@ -36,7 +36,21 @@ import {
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
-import { saveLocalProjectMetadata } from '../utils/localProjectBridge.js';
+import {
+  createLocalProjectFileOnDisk,
+  saveLocalProjectMetadata,
+} from '../utils/localProjectBridge.js';
+import {
+  addDailyEntryItem,
+  addTodoPoolItem,
+  carryOverIncompleteTasks,
+  normalizeDailyWorkspace,
+  promoteTodoToDaily,
+  removeDailyEntryItem,
+  removeTodoPoolItem,
+  sendDailyEntryTaskToTodo,
+  toggleDailyEntryTaskDone,
+} from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import {
   createSession,
@@ -54,12 +68,14 @@ const PUBLISHING_PLATFORMS_STORAGE_KEY = 'md-renderer-publishing-platforms';
 const KNOWLEDGE_HOME_MIGRATION_KEY = 'md-renderer-knowledge-home-v1';
 const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
 const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
+const DAILY_WORKSPACE_STORAGE_KEY = 'md-renderer-daily-workspace';
 const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
 const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
 // 与 notionService.js 中同名常量保持一致：服务层直接从这个 key 读运行时反代地址
 const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
+const MARKDOWN_FILE_EXTENSION = '.md';
 
 /** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
 const hasElectronDb = () =>
@@ -76,6 +92,7 @@ const safeParseJSON = (value, fallback) => {
 
 const VALID_SURFACES = new Set([
   'overview',
+  'daily',
   'canvas',
   'creation-board',
   'publishing',
@@ -90,6 +107,17 @@ const VALID_SURFACES = new Set([
 
 const normalizeSurface = (surface, fallback = 'overview') => {
   return VALID_SURFACES.has(surface) ? surface : fallback;
+};
+
+const sanitizeGeneratedFileBaseName = (name, fallback = 'AI 生成') => {
+  const trimmed = String(name ?? '').trim().replace(/[\\/]+/g, ' ');
+  const withoutExtension = trimmed.replace(/\.md$/i, '').trim();
+  return withoutExtension || fallback;
+};
+
+const buildGeneratedFileName = (folder, desiredName, fallbackBase = 'AI 生成') => {
+  const baseName = sanitizeGeneratedFileBaseName(desiredName, fallbackBase);
+  return buildUniqueNameInFolder(folder, baseName, MARKDOWN_FILE_EXTENSION);
 };
 
 /** 避免启动时用空 Notion 配置覆盖 localStorage 中已有值 */
@@ -155,6 +183,7 @@ const buildStateFromLocalStorage = () => {
   const copyStyle = window.localStorage.getItem(COPY_STYLE_STORAGE_KEY);
   const surface = window.localStorage.getItem(SURFACE_STORAGE_KEY);
   const publishingPlatformsRaw = window.localStorage.getItem(PUBLISHING_PLATFORMS_STORAGE_KEY);
+  const dailyWorkspaceRaw = window.localStorage.getItem(DAILY_WORKSPACE_STORAGE_KEY);
   const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
   const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
   const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
@@ -175,6 +204,7 @@ const buildStateFromLocalStorage = () => {
   const publishingPlatforms = sanitizePublishingPlatforms(
     safeParseJSON(publishingPlatformsRaw, null),
   );
+  const dailyWorkspace = normalizeDailyWorkspace(safeParseJSON(dailyWorkspaceRaw, null));
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -189,6 +219,7 @@ const buildStateFromLocalStorage = () => {
       projectRootPath,
       surface: migratedSurface,
       publishingPlatforms,
+      dailyWorkspace,
       ...notionSnapshot,
     },
     version: 0,
@@ -208,6 +239,9 @@ const buildStateFromDb = (raw) => {
   const publishingPlatforms = sanitizePublishingPlatforms(
     safeParseJSON(raw.publishing_platforms, null),
   );
+  const dailyWorkspace = normalizeDailyWorkspace(
+    safeParseJSON(raw.daily_workspace_json, null),
+  );
   return {
     state: {
       workspace: ws,
@@ -222,6 +256,7 @@ const buildStateFromDb = (raw) => {
       projectRootPath: raw.project_root_path ?? '',
       surface: normalizeSurface(raw.surface, 'overview'),
       publishingPlatforms,
+      dailyWorkspace,
       notionToken: typeof raw.notion_token === 'string' ? raw.notion_token : '',
       notionFilePages:
         notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
@@ -246,6 +281,9 @@ const buildStateMap = (state) => {
     map.publishing_platforms = JSON.stringify(
       sanitizePublishingPlatforms(state.publishingPlatforms),
     );
+  }
+  if (state.dailyWorkspace != null) {
+    map.daily_workspace_json = JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace));
   }
   if (state.storageMode) map.storage_mode = state.storageMode;
   if (state.projectRootPath != null) map.project_root_path = state.projectRootPath;
@@ -338,6 +376,7 @@ const editorStorage = {
           projectRootPath: '',
           surface: 'overview',
           publishingPlatforms: sanitizePublishingPlatforms([]),
+          dailyWorkspace: normalizeDailyWorkspace(null),
           ...notionSnapshot,
         },
         version: 0,
@@ -366,6 +405,12 @@ const editorStorage = {
           window.localStorage.setItem(
             PUBLISHING_PLATFORMS_STORAGE_KEY,
             JSON.stringify(sanitizePublishingPlatforms(state.publishingPlatforms)),
+          );
+        }
+        if (state.dailyWorkspace != null) {
+          window.localStorage.setItem(
+            DAILY_WORKSPACE_STORAGE_KEY,
+            JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
           );
         }
       } catch { /* ignore */ }
@@ -402,6 +447,12 @@ const editorStorage = {
           JSON.stringify(sanitizePublishingPlatforms(state.publishingPlatforms)),
         );
       }
+      if (state.dailyWorkspace != null) {
+        window.localStorage.setItem(
+          DAILY_WORKSPACE_STORAGE_KEY,
+          JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -426,6 +477,7 @@ const persistConfig = {
     projectRootPath: state.projectRootPath,
     surface: state.surface,
     publishingPlatforms: state.publishingPlatforms,
+    dailyWorkspace: state.dailyWorkspace,
     notionToken: state.notionToken,
     notionFilePages: state.notionFilePages,
     notionDatabaseId: state.notionDatabaseId,
@@ -682,6 +734,7 @@ export const useEditorStore = create(
       storageMode: 'local',
       projectRootPath: '',
       publishingPlatforms: sanitizePublishingPlatforms([]),
+      dailyWorkspace: normalizeDailyWorkspace(null),
       /** 正在等待 debounce 写入磁盘的文件 id */
       diskSavePendingFileIds: {},
       /** 磁盘外部变更触发编辑器重载（递增） */
@@ -844,6 +897,46 @@ export const useEditorStore = create(
         set({ publishingPlatforms: sanitizePublishingPlatforms(publishingPlatforms) });
       },
       setSurface: (surface) => set({ surface: normalizeSurface(surface, 'overview') }),
+      setDailyCurrentDate: (dateKey) => set((state) => ({
+        dailyWorkspace: carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+      })),
+      addDailyItem: (dateKey, type, text) => set((state) => ({
+        dailyWorkspace: addDailyEntryItem(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          { type, text },
+        ),
+      })),
+      toggleDailyTaskDone: (dateKey, itemId) => set((state) => ({
+        dailyWorkspace: toggleDailyEntryTaskDone(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          itemId,
+        ),
+      })),
+      deleteDailyItem: (dateKey, itemId) => set((state) => ({
+        dailyWorkspace: removeDailyEntryItem(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          itemId,
+        ),
+      })),
+      moveDailyTaskToTodo: (dateKey, itemId) => set((state) => ({
+        dailyWorkspace: sendDailyEntryTaskToTodo(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          itemId,
+        ),
+      })),
+      addTodoItem: (text) => set((state) => ({
+        dailyWorkspace: addTodoPoolItem(state.dailyWorkspace, text),
+      })),
+      promoteTodoToDaily: (todoId, dateKey) => set((state) => ({
+        dailyWorkspace: promoteTodoToDaily(state.dailyWorkspace, todoId, dateKey),
+      })),
+      removeTodoItem: (todoId) => set((state) => ({
+        dailyWorkspace: removeTodoPoolItem(state.dailyWorkspace, todoId),
+      })),
       setWorkspaceCanvas: (canvasState) => {
         const { workspace } = get();
         if (areCanvasStatesEqual(workspace?.canvasState, canvasState)) {
@@ -1306,6 +1399,97 @@ export const useEditorStore = create(
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: fileId, markdown: '', surface: 'paper' });
         return true;
+      },
+
+      createGeneratedFile: async ({
+        name = '',
+        content = '',
+        contextNodeId,
+        meta = {},
+      } = {}) => {
+        const { workspace, selectedId, openTabs } = get();
+        const targetNodeId = contextNodeId ?? selectedId;
+        const currentFile = findNodeById(workspace, selectedId);
+        const fallbackBaseName = sanitizeGeneratedFileBaseName(currentFile?.name, 'AI 生成');
+        const normalizedContent = normalizeMarkdown(String(content ?? ''));
+        const targetFolderId = resolveTargetFolderId(workspace, targetNodeId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+
+        if (!targetFolder || targetFolder.type !== 'folder') {
+          return { ok: false, error: '无法定位目标文件夹。' };
+        }
+
+        if (targetFolder.projectRootPath) {
+          const target = resolveLocalProjectCreateTarget(
+            workspace,
+            targetNodeId,
+            targetFolder.projectRootPath,
+          );
+          if (!target) {
+            return { ok: false, error: '无法定位本地项目目录。' };
+          }
+
+          const finalName = buildGeneratedFileName(target.parentFolder, name, fallbackBaseName);
+          const relativePath = target.parentRelativePath
+            ? `${target.parentRelativePath}/${finalName}`
+            : finalName;
+
+          try {
+            const result = await createLocalProjectFileOnDisk({
+              projectRootPath: target.projectRootPath,
+              relativePath,
+              content: normalizedContent,
+            });
+            const node = {
+              ...createLocalProjectFileNode(
+                target.projectRootPath,
+                result.relativePath,
+                finalName,
+                normalizedContent,
+              ),
+              ...createDefaultKnowledgeFields(meta),
+              updatedAt: result.updatedAt ?? Date.now(),
+            };
+            const nextWorkspace = addChildNode(workspace, target.parentFolderId, node, true);
+            persistWorkspace(nextWorkspace);
+            set({
+              workspace: nextWorkspace,
+              selectedId: node.id,
+              markdown: normalizedContent,
+              surface: 'paper',
+              activeBlockId: null,
+              activeBlockDraft: '',
+              openTabs: [...openTabs, { id: node.id, title: node.name || '未命名' }],
+            });
+            persistLocalProjectMetadata(node);
+            return { ok: true, fileId: node.id, name: finalName };
+          } catch (error) {
+            return { ok: false, error: error?.message || '新建文件失败。' };
+          }
+        }
+
+        const fileId = createId('file');
+        const finalName = buildGeneratedFileName(targetFolder, name, fallbackBaseName);
+        const newFile = {
+          id: fileId,
+          type: 'file',
+          name: finalName,
+          content: normalizedContent,
+          updatedAt: Date.now(),
+          ...createDefaultKnowledgeFields(meta),
+        };
+        const nextWorkspace = addChildNode(workspace, targetFolderId, newFile, true);
+        persistWorkspace(nextWorkspace);
+        set({
+          workspace: nextWorkspace,
+          selectedId: fileId,
+          markdown: normalizedContent,
+          surface: 'paper',
+          activeBlockId: null,
+          activeBlockDraft: '',
+          openTabs: [...openTabs, { id: fileId, title: finalName }],
+        });
+        return { ok: true, fileId, name: finalName };
       },
 
       addFolder: (contextNodeId) => {

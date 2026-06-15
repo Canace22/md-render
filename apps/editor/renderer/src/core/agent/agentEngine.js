@@ -16,12 +16,13 @@ import { TOOL_DEFINITIONS, executeTool, getToolLabel } from './toolRegistry.js';
 const DEFAULT_MAX_STEPS = 8;
 
 const SYSTEM_PROMPT = [
-  '你是 md-render 内容创作工作台里的 AI 助手，能读写用户当前文档、搜索工作区。',
+  '你是 md-render 内容创作工作台里的 AI 助手，能读写用户当前文档、搜索工作区，并按需要新建文档。',
   '工作方式：先用工具了解情况，再动手。',
   '改写或生成正文前，先用 read_active_doc 看清现状，避免覆盖丢失内容。',
   '关键规则：当用户的意图是改动当前正文（如润色、改写、压缩、扩写、整理、续写、翻译、替换某段），',
   '处理完后必须调用 write_active_doc 把结果写回文档，而不是只在对话里输出文字。',
   '写入会先给用户一张 diff 卡片确认，所以放心调用。',
+  '当用户明确要求保留原稿、另存为新文档、生成平台版本但不要覆盖当前文档时，必须调用 create_new_doc，新建文件，不要改写当前文档。',
   '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
   '只有当用户明确是提问、要建议、要标题候选等「不改动正文」的需求时，才直接在对话里回答。',
   '回答用中文，简洁直接，不要解释你调用了哪些工具。',
@@ -40,7 +41,7 @@ const toAssistantMessage = (message) => ({
  * @param {string} params.userInput        用户这轮的输入
  * @param {Array}  [params.history]         之前的对话历史（OpenAI 格式，不含 system）
  * @param {object} params.config           AI 配置 { proxyBase, upstreamHost, apiKey, model }
- * @param {object} params.host             宿主能力 { readActiveDoc, writeActiveDoc, searchDocs }
+ * @param {object} params.host             宿主能力 { readActiveDoc, writeActiveDoc, createNewDoc, searchDocs }
  * @param {function} [params.onEvent]      进度回调，见下方事件类型
  * @param {number} [params.maxSteps]
  * @param {AbortSignal} [params.signal]

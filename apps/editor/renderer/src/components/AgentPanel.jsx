@@ -1,12 +1,28 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Bot, Send, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, Sparkles, MessageSquareQuote, Check, Copy, Share2 } from 'lucide-react';
+import { Dropdown } from 'antd';
+import {
+  ApartmentOutlined,
+  ArrowsAltOutlined,
+  CameraOutlined,
+  CompressOutlined,
+  FileTextOutlined,
+  HighlightOutlined,
+  HistoryOutlined,
+  MoreOutlined,
+  PaperClipOutlined,
+  PlusOutlined,
+  SendOutlined,
+  SettingOutlined as AntdSettingOutlined,
+  WechatOutlined,
+} from '@ant-design/icons';
+import { Bot, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import { findNodeById } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
-import { buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
-import { buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
+import { AI_ACTION_KEYS, buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
+import { PLATFORM_VARIANT_KEYS, buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
 import { extractRecallKeywords, rankRelatedDocs } from '../core/agent/contextRecall.js';
 import {
   isAiConfigured,
@@ -46,21 +62,43 @@ const markLastToolDone = (messages, label) => {
   return next;
 };
 
-// 快捷 AI 动作：key 与 aiActions 别名一致，点一下直接走 AI 助手处理当前文档
-const AI_QUICK_ACTIONS = [
-  { key: 'compress', label: '压缩' },
-  { key: 'expand', label: '扩写' },
-  { key: 'polish', label: '润色' },
-  { key: 'title', label: '标题' },
-  { key: 'tone', label: '改语气' },
-  { key: 'key_points', label: '提炼要点' },
-  { key: 'subheadings', label: '小标题' },
-  { key: 'continue', label: '续写' },
-  { key: 'outline', label: '提纲' },
-];
-
 // 平台版本：同一正文改写成对应平台版（走 AI 助手，让 agent 读当前文档并写回）
 const PLATFORM_VARIANTS = listPlatformVariants();
+const PLATFORM_VARIANT_LABELS = Object.freeze(
+  PLATFORM_VARIANTS.reduce((acc, item) => {
+    acc[item.value] = item.label;
+    return acc;
+  }, {}),
+);
+
+const WELCOME_SUGGESTIONS = Object.freeze([
+  { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '基于当前主题先给我一版可直接动笔的提纲' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '把当前文档润色得更自然、更顺口' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '帮我压缩当前文档，保留核心信息和重点' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼这篇内容的 5 个关键要点' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '给这篇内容想几组更抓人的标题' },
+  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '生成一版适合微信公众号发布的版本' },
+  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '改写成更适合小红书发布的版本' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.CONTINUE, label: '沿着当前内容继续往下写一段' },
+]);
+
+const COMPOSER_SHORTCUTS = Object.freeze([
+  { id: 'summarize', type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '压缩', icon: CompressOutlined, tone: 'amber' },
+  { id: 'expand', type: 'quick', actionKey: AI_ACTION_KEYS.EXPAND, label: '扩写', icon: ArrowsAltOutlined, tone: 'blue' },
+  { id: 'polish', type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '润色', icon: HighlightOutlined, tone: 'rose' },
+  { id: 'outline', type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '提纲', icon: ApartmentOutlined, tone: 'teal' },
+  { id: 'wechat', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '公众号版', icon: WechatOutlined, tone: 'green' },
+]);
+
+const COMPOSER_MORE_ACTIONS = Object.freeze([
+  { id: 'title', type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '标题建议', icon: FileTextOutlined, tone: 'cyan' },
+  { id: 'xiaohongshu', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '小红书版', icon: CameraOutlined, tone: 'magenta' },
+  { id: 'mention', type: 'mention', label: '引用文件', icon: PaperClipOutlined, tone: 'slate' },
+  { id: 'sessions', type: 'sessions', label: '会话列表', icon: HistoryOutlined, tone: 'violet' },
+  { id: 'settings', type: 'settings', label: '设置', icon: AntdSettingOutlined, tone: 'gray' },
+]);
+
+const COMPOSER_MORE_ACTION_MAP = new Map(COMPOSER_MORE_ACTIONS.map((item) => [item.id, item]));
 
 export default function AgentPanel() {
   const markdown = useEditorStore((s) => s.markdown);
@@ -71,6 +109,7 @@ export default function AgentPanel() {
   const stageAgentWrite = useEditorStore((s) => s.stageAgentWrite);
   // 直接写当前文档（插入引用用，无需 diff 确认）
   const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
+  const createGeneratedFile = useEditorStore((s) => s.createGeneratedFile);
 
   // 全局会话状态（切页不丢）
   const sessions = useEditorStore((s) => s.agentSessions);
@@ -122,8 +161,27 @@ export default function AgentPanel() {
   const providers = useMemo(() => listProviders(), []);
   const [providerId, setProviderId] = useState(() => getActiveProviderId());
   const [cfg, setCfg] = useState(() => readProviderConfig());
+  const isWelcomeMode = messages.length === 0 && !showSettings && !showSessions;
+  const isComposerMoreActive = showSessions || showSettings;
 
   const abortRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const isShortcutDisabled = useCallback((item) => {
+    return running && (item.type === 'quick' || item.type === 'platform');
+  }, [running]);
+
+  const composerMoreMenuItems = useMemo(() => {
+    return COMPOSER_MORE_ACTIONS.map((item) => {
+      const Icon = item.icon;
+      return {
+        key: item.id,
+        disabled: isShortcutDisabled(item),
+        label: item.label,
+        icon: <Icon />,
+      };
+    });
+  }, [isShortcutDisabled]);
 
   // 注入给 agent 的宿主能力：读写当前文档 + 搜索工作区
   const host = useMemo(() => ({
@@ -137,6 +195,17 @@ export default function AgentPanel() {
     writeActiveDoc: async (content) => {
       const applied = await stageAgentWrite({ oldText: markdown ?? '', newText: content });
       return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
+    },
+    createNewDoc: async ({ name, content, targetPlatforms } = {}) => {
+      const result = await createGeneratedFile({
+        name,
+        content,
+        contextNodeId: selectedId,
+        meta: { targetPlatforms },
+      });
+      return result?.ok
+        ? `已新建文档「${result.name}」，原文未改动。`
+        : `新建文档失败：${result?.error || '未知错误'}`;
     },
     searchDocs: async (query) => {
       if (hasElectronSearch()) {
@@ -156,7 +225,7 @@ export default function AgentPanel() {
         .filter((f) => `${f.name ?? ''}${f.content ?? ''}`.toLowerCase().includes(q))
         .map((f) => ({ title: f.name ?? '未命名', snippet: String(f.content ?? '').slice(0, 200), id: f.id }));
     },
-  }), [workspace, selectedId, markdown, stageAgentWrite]);
+  }), [workspace, selectedId, markdown, stageAgentWrite, createGeneratedFile]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -220,6 +289,10 @@ export default function AgentPanel() {
 
   const handleRemoveFile = useCallback((fileId) => {
     setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  }, []);
+
+  const focusInput = useCallback(() => {
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
   const handleNewSession = useCallback(() => {
@@ -309,7 +382,7 @@ export default function AgentPanel() {
     if (quotedSelection) clearAiQuotedSelection();
   }, [running, runTurn, quotedSelection, clearAiQuotedSelection]);
 
-  // 平台版本：把当前正文改写成指定平台版（微信/小红书/知乎），走 AI 写回。
+  // 平台版本：把当前正文改写成指定平台版（微信/小红书/知乎），另存为新文件。
   const handlePlatformVariant = useCallback((platformValue, platformLabel) => {
     if (running) return;
     runTurn({
@@ -317,6 +390,50 @@ export default function AgentPanel() {
       displayText: `生成${platformLabel}版本`,
     });
   }, [running, runTurn]);
+
+  const handleInsertMention = useCallback(() => {
+    setInput((prev) => {
+      const next = prev.trimEnd();
+      return next ? `${next} @` : '@';
+    });
+    setFileFilter('');
+    setShowFilePicker(true);
+    focusInput();
+  }, [focusInput]);
+
+  const handleShortcutClick = useCallback((item) => {
+    if (item.type === 'quick') {
+      handleQuickAction(item.actionKey);
+      return;
+    }
+    if (item.type === 'platform') {
+      handlePlatformVariant(
+        item.platformValue,
+        PLATFORM_VARIANT_LABELS[item.platformValue] || item.label,
+      );
+      return;
+    }
+    if (item.type === 'mention') {
+      handleInsertMention();
+      return;
+    }
+    if (item.type === 'sessions') {
+      setShowSessions((v) => !v);
+      return;
+    }
+    if (item.type === 'settings') {
+      setShowSettings((v) => !v);
+    }
+  }, [handleInsertMention, handlePlatformVariant, handleQuickAction]);
+
+  const handleWelcomeSuggestion = useCallback((item) => {
+    handleShortcutClick(item);
+  }, [handleShortcutClick]);
+
+  const handleComposerMoreClick = useCallback(({ key }) => {
+    const item = COMPOSER_MORE_ACTION_MAP.get(key);
+    if (item) handleShortcutClick(item);
+  }, [handleShortcutClick]);
 
   // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
@@ -384,11 +501,13 @@ export default function AgentPanel() {
         </div>
       </div>
 
-      <AgentDocMeta
-        document={activeFile}
-        onRecall={handleRecall}
-        onInsertReference={handleInsertReference}
-      />
+      {!isWelcomeMode && (
+        <AgentDocMeta
+          document={activeFile}
+          onRecall={handleRecall}
+          onInsertReference={handleInsertReference}
+        />
+      )}
 
       {showSessions && (
         <div className="agent-panel__sessions">
@@ -438,11 +557,30 @@ export default function AgentPanel() {
         </div>
       )}
 
-      <div className="agent-panel__messages">
-        {messages.length === 0 && (
+      <div className={`agent-panel__messages${isWelcomeMode ? ' is-welcome' : ''}`}>
+        {isWelcomeMode && (
+          <div className="agent-panel__welcome">
+            <h2 className="agent-panel__welcome-title">有什么我能帮你的吗？</h2>
+            <p className="agent-panel__welcome-subtitle">直接提需求，或者先从下面这些常用动作开始。</p>
+            <div className="agent-panel__welcome-grid">
+              {WELCOME_SUGGESTIONS.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  className="agent-panel__welcome-chip"
+                  disabled={running}
+                  onClick={() => handleWelcomeSuggestion(item)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!isWelcomeMode && messages.length === 0 && (
           <div className="agent-panel__empty">问我点什么，比如「帮我把当前文档压缩到三段」。</div>
         )}
-        {messages.map((m, i) => {
+        {!isWelcomeMode && messages.map((m, i) => {
           if (m.role === 'tool') {
             return (
               <div key={i} className="agent-panel__tool">
@@ -486,100 +624,117 @@ export default function AgentPanel() {
         })}
       </div>
 
-      {showFilePicker && (
-        <div className="agent-panel__file-picker">
-          {filteredFiles.length === 0 ? (
-            <div className="agent-panel__file-empty">没有匹配的 Markdown 文件</div>
-          ) : (
-            filteredFiles.map((f) => (
-              <div key={f.id} className="agent-panel__file-option" onClick={() => handlePickFile(f)}>
-                <FileText size={13} />
-                <span>{f.name}</span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      <div className="agent-panel__composer">
+        {showFilePicker && (
+          <div className="agent-panel__file-picker">
+            {filteredFiles.length === 0 ? (
+              <div className="agent-panel__file-empty">没有匹配的 Markdown 文件</div>
+            ) : (
+              filteredFiles.map((f) => (
+                <div key={f.id} className="agent-panel__file-option" onClick={() => handlePickFile(f)}>
+                  <FileText size={13} />
+                  <span>{f.name}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
-      {quotedSelection && (
-        <div className="agent-panel__attachments">
-          <span className="agent-panel__chip agent-panel__chip--selection" title={quotedSelection}>
-            <MessageSquareQuote size={12} />
-            <span className="agent-panel__chip-name">
-              引用：{quotedSelection.length > 24 ? `${quotedSelection.slice(0, 24)}…` : quotedSelection}
-            </span>
-            <button className="agent-panel__chip-del" title="移除引用" onClick={clearAiQuotedSelection}>
-              <X size={12} />
-            </button>
-          </span>
-        </div>
-      )}
-
-      {attachedFiles.length > 0 && (
-        <div className="agent-panel__attachments">
-          {attachedFiles.map((f) => (
-            <span key={f.id} className="agent-panel__chip">
-              <FileText size={12} />
-              <span className="agent-panel__chip-name">{f.name}</span>
-              <button className="agent-panel__chip-del" title="移除" onClick={() => handleRemoveFile(f.id)}>
+        {quotedSelection && (
+          <div className="agent-panel__attachments">
+            <span className="agent-panel__chip agent-panel__chip--selection" title={quotedSelection}>
+              <MessageSquareQuote size={12} />
+              <span className="agent-panel__chip-name">
+                引用：{quotedSelection.length > 24 ? `${quotedSelection.slice(0, 24)}…` : quotedSelection}
+              </span>
+              <button className="agent-panel__chip-del" title="移除引用" onClick={clearAiQuotedSelection}>
                 <X size={12} />
               </button>
             </span>
-          ))}
-        </div>
-      )}
-
-      <div className="agent-panel__quick-actions agent-panel__quick-actions--bottom">
-        {AI_QUICK_ACTIONS.map((a) => (
-          <button
-            key={a.key}
-            type="button"
-            className="agent-panel__quick-btn"
-            title={`AI ${a.label}（处理当前文档）`}
-            disabled={running}
-            onClick={() => handleQuickAction(a.key)}
-          >
-            <Sparkles size={14} />
-            {a.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="agent-panel__quick-actions agent-panel__platform-actions">
-        <span className="agent-panel__group-label">平台版本</span>
-        {PLATFORM_VARIANTS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            className="agent-panel__quick-btn"
-            title={`生成${p.label}版本（改写当前文档并写回）`}
-            disabled={running}
-            onClick={() => handlePlatformVariant(p.value, p.label)}
-          >
-            <Share2 size={14} />
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="agent-panel__input-row">
-        <textarea
-          className="agent-panel__input"
-          value={input}
-          placeholder="输入需求；输入 @ 可引用工作区文件"
-          rows={2}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        {running ? (
-          <button className="agent-panel__send-btn" onClick={handleStop} title="停止">
-            <Square size={16} />
-          </button>
-        ) : (
-          <button className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
-            <Send size={16} />
-          </button>
+          </div>
         )}
+
+        {attachedFiles.length > 0 && (
+          <div className="agent-panel__attachments">
+            {attachedFiles.map((f) => (
+              <span key={f.id} className="agent-panel__chip">
+                <FileText size={12} />
+                <span className="agent-panel__chip-name">{f.name}</span>
+                <button className="agent-panel__chip-del" title="移除" onClick={() => handleRemoveFile(f.id)}>
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="agent-panel__input-row">
+          <textarea
+            ref={inputRef}
+            className="agent-panel__input"
+            value={input}
+            placeholder="发消息，或输入 @ 引用工作区文件"
+            rows={3}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          {running ? (
+            <button className="agent-panel__send-btn" onClick={handleStop} title="停止">
+              <Square size={16} />
+            </button>
+          ) : (
+            <button className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
+              <SendOutlined />
+            </button>
+          )}
+        </div>
+
+        <div className="agent-panel__composer-tools">
+          <button
+            type="button"
+            className="agent-panel__composer-plus"
+            title="新建会话"
+            onClick={handleNewSession}
+          >
+            <PlusOutlined />
+          </button>
+          {COMPOSER_SHORTCUTS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`agent-panel__tool-btn agent-panel__tool-btn--${item.tone}`}
+                disabled={isShortcutDisabled(item)}
+                onClick={() => handleShortcutClick(item)}
+              >
+                <span className="agent-panel__tool-btn-icon">
+                  <Icon />
+                </span>
+                {item.label}
+              </button>
+            );
+          })}
+          <Dropdown
+            trigger={['click']}
+            placement="topRight"
+            overlayClassName="agent-panel__composer-dropdown"
+            menu={{
+              items: composerMoreMenuItems,
+              onClick: handleComposerMoreClick,
+            }}
+          >
+            <button
+              type="button"
+              className={`agent-panel__tool-btn agent-panel__tool-btn--gray${isComposerMoreActive ? ' is-active' : ''}`}
+            >
+              <span className="agent-panel__tool-btn-icon">
+                <MoreOutlined />
+              </span>
+              更多
+            </button>
+          </Dropdown>
+        </div>
       </div>
     </div>
   );

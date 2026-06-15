@@ -13,6 +13,7 @@ import FolderFileList from './FolderFileList.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
 import CreationBoardPanel from './CreationBoardPanel.jsx';
 import CanvasSurface from './CanvasSurface.jsx';
+import DailyNotebook from './DailyNotebook.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import PublishingQueuePanel from './PublishingQueuePanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -100,6 +101,7 @@ import {
   buildPublishingPlatformLabelMap,
   getDefaultTargetPlatforms,
 } from '../utils/publishingPlatforms.js';
+import { getTodayDateKey } from '../utils/dailyWorkspace.js';
 import { exportDocument } from '../utils/exportService.js';
 import {
   createLocalProjectFileOnDisk,
@@ -339,6 +341,7 @@ function MarkdownEditor() {
     copyStyle,
     storageMode,
     surface,
+    dailyWorkspace,
     publishingPlatforms,
     notionToken,
     notionFilePages,
@@ -348,6 +351,14 @@ function MarkdownEditor() {
     setCopyStyle,
     setPublishingPlatforms,
     setSurface,
+    setDailyCurrentDate,
+    addDailyItem,
+    toggleDailyTaskDone,
+    deleteDailyItem,
+    moveDailyTaskToTodo,
+    addTodoItem,
+    promoteTodoToDaily,
+    removeTodoItem,
     setWorkspaceCanvas,
     setNotionToken,
     setNotionDatabaseId,
@@ -574,6 +585,7 @@ function MarkdownEditor() {
   const markdownImportInputRef = useRef(null);
   const projectSaveTimersRef = useRef(new Map());
   const lastContentSurfaceRef = useRef(surface);
+  const previousSurfaceRef = useRef(null);
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
@@ -931,6 +943,13 @@ function MarkdownEditor() {
       lastContentSurfaceRef.current = surface;
     }
   }, [surface]);
+
+  useEffect(() => {
+    if (surface === 'daily' && previousSurfaceRef.current !== 'daily') {
+      setDailyCurrentDate(getTodayDateKey());
+    }
+    previousSurfaceRef.current = surface;
+  }, [setDailyCurrentDate, surface]);
 
   // 同步页打开时，点左侧目录只更新选中态、保留同步页；
   // 点「返回」后再切到选中目标。其它情况按正常逻辑直接打开。
@@ -2097,6 +2116,10 @@ function MarkdownEditor() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
         surface={surface}
+        onOpenDaily={() => {
+          setDailyCurrentDate(getTodayDateKey());
+          setSurface('daily');
+        }}
         onOpenOverview={() => setSurface('overview')}
         onOpenCanvas={() => setSurface('canvas')}
         onOpenSearch={() => setSurface('search')}
@@ -2151,7 +2174,7 @@ function MarkdownEditor() {
             initialChannel={syncChannel}
             selectedFileName={selectedFile?.name}
             localProjectSupported={localProjectSupported}
-            onClose={() => setSurface(selectedContentSurface)}
+            onClose={() => setSurface(lastContentSurfaceRef.current)}
             notion={{
               canSync: Boolean(selectedFile),
               token: notionToken,
@@ -2195,6 +2218,18 @@ function MarkdownEditor() {
             showSyncButton={canManualSyncLocalProject}
             syncLoading={manualSyncLoading}
             onSyncFromDisk={handleManualSyncLocalProject}
+          />
+        ) : surface === 'daily' ? (
+          <DailyNotebook
+            dailyWorkspace={dailyWorkspace}
+            onSetCurrentDate={setDailyCurrentDate}
+            onAddItem={addDailyItem}
+            onToggleTaskDone={toggleDailyTaskDone}
+            onDeleteItem={deleteDailyItem}
+            onMoveTaskToTodo={moveDailyTaskToTodo}
+            onAddTodo={addTodoItem}
+            onPromoteTodo={promoteTodoToDaily}
+            onRemoveTodo={removeTodoItem}
           />
         ) : surface === 'overview' ? (
           <CreationDashboard

@@ -9,6 +9,7 @@
  *   host.readActiveDoc()            -> { title, content }
  *   host.writeActiveDoc(content)    -> string           （提交一次写入；返回给模型的结果文案，
  *                                                         如「已应用」「用户已放弃」。可异步）
+ *   host.createNewDoc(payload)      -> string           （新建一篇 Markdown 文档；返回创建结果文案）
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
  */
 
@@ -38,6 +39,26 @@ export const TOOL_DEFINITIONS = Object.freeze([
         type: 'object',
         properties: {
           content: { type: 'string', description: '要写入文档的完整 Markdown 正文' },
+        },
+        required: ['content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_new_doc',
+      description: '新建一篇 Markdown 文档，保留当前文档不变。当用户要求另存为新稿、生成平台版本但不要覆盖原文、或拆出独立文档时调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '新文档文件名，建议带平台或用途后缀' },
+          content: { type: 'string', description: '要写入新文档的完整 Markdown 正文' },
+          targetPlatforms: {
+            type: 'array',
+            description: '新文档关联的平台标识列表，如 wechat / xiaohongshu / zhihu',
+            items: { type: 'string' },
+          },
         },
         required: ['content'],
       },
@@ -113,6 +134,17 @@ const EXECUTORS = {
     return typeof result === 'string' ? result : `已提交写入（${content.length} 字）。`;
   },
 
+  create_new_doc: async (args, host) => {
+    const content = String(args?.content ?? '');
+    if (!content.trim()) return '新建失败：内容为空。';
+    const result = await host.createNewDoc({
+      name: args?.name,
+      content,
+      targetPlatforms: args?.targetPlatforms,
+    });
+    return typeof result === 'string' ? result : '已创建新文档。';
+  },
+
   search_docs: async (args, host) => {
     const query = String(args?.query ?? '').trim();
     if (!query) return '搜索失败：关键词为空。';
@@ -173,6 +205,7 @@ export const executeTool = async (toolCall, host) => {
 export const TOOL_LABELS = Object.freeze({
   read_active_doc: '读取当前文档',
   write_active_doc: '写入当前文档',
+  create_new_doc: '新建文档',
   search_docs: '搜索工作区',
   recall_related_docs: '召回相关旧文',
 });

@@ -61,10 +61,10 @@ const resolvePlatformLabel = (platformValue, config) => {
   return config?.label || platformValue;
 };
 
-// 改写类动作的写回引导：让 agent 读整篇 → 改写 → 写回（弹 diff 给用户确认）。
-const buildWriteBackLine = () =>
-  '改写完成后，调用 read_active_doc 拿到整篇正文，'
-    + '把它整体替换成改写后的版本，再调用 write_active_doc 写回（会弹 diff 让用户确认）。';
+// 平台版是衍生稿，不应覆盖原文；引导 agent 新建同级文件保存结果。
+const buildCreateNewDocLine = (label) =>
+  `改写完成后，不要覆盖当前文档。调用 create_new_doc 新建一个 Markdown 文件保存结果，`
+    + `文件名建议用「原文件名 - ${label}.md」，并把 targetPlatforms 设为当前平台。`;
 
 /**
  * 生成「把当前正文改写成某平台版本」的 AI 指令。
@@ -89,7 +89,7 @@ export const buildPlatformVariantInstruction = (platformValue, options = {}) => 
     resolved.task,
     `输出要求：\n${rules}`,
     '保持原文核心观点与事实不变，只调整语气、结构、长度和排版以贴合该平台。',
-    buildWriteBackLine(),
+    buildCreateNewDocLine(label),
   ].join('\n\n');
 };
 

@@ -1,4 +1,10 @@
 import { useMemo } from 'react';
+import { Button, Card, Empty, Typography } from 'antd';
+import { List, PanelRightClose, PanelRightOpen } from 'lucide-react';
+
+const HEADING_SELECTOR =
+  '.paper-content h1, .paper-content h2, .paper-content h3, ' +
+  '.paper-content h4, .paper-content h5, .paper-content h6';
 
 /** 从 markdown 文本提取标题列表 */
 function extractHeadings(markdown) {
@@ -23,59 +29,78 @@ function extractHeadings(markdown) {
 export default function TocPanel({ markdown, collapsed, onToggle }) {
   const headings = useMemo(() => extractHeadings(markdown), [markdown]);
 
-  return (
-    <div className={`toc-panel${collapsed ? ' toc-panel--collapsed' : ''}`}>
-      <button
-        type="button"
-        className="toc-toggle-btn"
-        onClick={onToggle}
-        title={collapsed ? '展开目录' : '收起目录'}
-        aria-label={collapsed ? '展开目录' : '收起目录'}
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-          <rect y="2" width="14" height="1.5" rx="0.75" fill="currentColor" />
-          <rect y="6.25" width="10" height="1.5" rx="0.75" fill="currentColor" />
-          <rect y="10.5" width="12" height="1.5" rx="0.75" fill="currentColor" />
-        </svg>
-        {!collapsed && <span className="toc-toggle-label">目录</span>}
-      </button>
+  const handleHeadingClick = (index) => {
+    const elements = document.querySelectorAll(HEADING_SELECTOR);
+    if (elements[index]) {
+      elements[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
-      {!collapsed && (
+  if (collapsed) {
+    return (
+      <div className="toc-panel toc-panel--collapsed">
+        <Button
+          type="text"
+          className="toc-collapse-btn"
+          icon={<PanelRightOpen size={16} />}
+          onClick={onToggle}
+          title="展开目录"
+          aria-label="展开目录"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="toc-panel">
+      <Card
+        size="small"
+        className="toc-card"
+        title={(
+          <span className="toc-card-title">
+            <List size={14} />
+            <span>目录</span>
+          </span>
+        )}
+        extra={(
+          <Button
+            type="text"
+            size="small"
+            className="toc-card-toggle"
+            icon={<PanelRightClose size={15} />}
+            onClick={onToggle}
+            title="收起目录"
+            aria-label="收起目录"
+          />
+        )}
+      >
         <nav className="toc-nav" aria-label="文档目录">
           {headings.length === 0 ? (
-            <p className="toc-empty">暂无标题</p>
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="暂无标题"
+              className="toc-empty"
+            />
           ) : (
-            <ul className="toc-list">
-              {headings.map((h, i) => (
-                <li
-                  key={i}
-                  className={`toc-item toc-level-${h.level}`}
-                  style={{ paddingLeft: `${(h.level - 1) * 12}px` }}
+            <div className="toc-list">
+              {headings.map((heading, index) => (
+                <Button
+                  key={`${heading.text}-${index}`}
+                  type="text"
+                  block
+                  className={`toc-link toc-level-${heading.level}`}
+                  title={heading.text}
+                  onClick={() => handleHeadingClick(index)}
                 >
-                  <a
-                    href={`#heading-${i}`}
-                    className="toc-link"
-                    title={h.text}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      // 查找编辑器内匹配的标题节点并滚动
-                      const els = document.querySelectorAll(
-                        '.paper-content h1, .paper-content h2, .paper-content h3, ' +
-                        '.paper-content h4, .paper-content h5, .paper-content h6'
-                      );
-                      if (els[i]) {
-                        els[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }
-                    }}
-                  >
-                    {h.text}
-                  </a>
-                </li>
+                  <Typography.Text ellipsis className="toc-link-text">
+                    {heading.text}
+                  </Typography.Text>
+                </Button>
               ))}
-            </ul>
+            </div>
           )}
         </nav>
-      )}
+      </Card>
     </div>
   );
 }
