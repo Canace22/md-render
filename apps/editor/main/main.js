@@ -21,7 +21,7 @@ import {
   resolveProjectFilePath,
   readLocalProjectFileContent,
 } from './localProject.js';
-import { requestChatCompletion } from './aiRequest.js';
+import { requestChatCompletion, requestToolExec, requestToolList } from './aiRequest.js';
 import { listAvailableProviders } from './aiConfig.js';
 import {
   watchLocalProjectRoot,
@@ -393,6 +393,27 @@ ipcMain.handle('ai:chat', async (_event, payload = {}) => {
 // 返回服务端可用 AI provider 列表（不含 key，仅前端展示用）
 ipcMain.handle('ai:getConfig', () => {
   return listAvailableProviders();
+});
+
+// 调用 server 端工具（pdf_to_docx / video_to_audio 等）
+ipcMain.handle('ai:execTool', async (_event, payload = {}) => {
+  try {
+    const aiProxyBase = process.env.AI_PROXY_BASE || 'http://localhost:8788';
+    const result = await requestToolExec({ aiProxyBase, ...payload });
+    return result;
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 获取 server 端注册的工具列表（仅元数据）
+ipcMain.handle('ai:listTools', async () => {
+  try {
+    const aiProxyBase = process.env.AI_PROXY_BASE || 'http://localhost:8788';
+    return await requestToolList({ aiProxyBase });
+  } catch (err) {
+    return { tools: [], error: err.message };
+  }
 });
 
 ipcMain.handle('export-save-file', async (_event, payload = {}) => {

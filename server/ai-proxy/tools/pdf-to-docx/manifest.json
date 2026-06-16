@@ -1,0 +1,40 @@
+{
+  "name": "pdf_to_docx",
+  "label": "PDF 转 Word",
+  "description": "把 PDF 文件转换为 Word (.docx) 文档。支持指定页码范围、批量转换目录、对方正字体乱码的中文标准 PDF 自动修复。返回生成的 docx 文件绝对路径。",
+  "command": "python3",
+  "args": ["{{script}}", "{{input}}", "-o", "{{output}}"],
+  "args_optional": {
+    "start": "--start {{start}}",
+    "end": "--end {{end}}"
+  },
+  "flags": {
+    "no_fix_founder": "--no-fix-founder"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input": {
+        "type": "string",
+        "description": "输入 PDF 文件绝对路径（必须是 macOS 上可访问的路径，比如 /Users/canace/Desktop/xxx.pdf）"
+      },
+      "output": {
+        "type": "string",
+        "description": "输出 .docx 文件绝对路径。留空则自动生成在 PDF 同目录的 xxx.docx"
+      },
+      "start": {
+        "type": "integer",
+        "description": "起始页码（0-based，从 0 开始）。留空则从第一页开始"
+      },
+      "end": {
+        "type": "integer",
+        "description": "结束页码（0-based，包含此页）。留空则转换到最后一页"
+      },
+      "no_fix_founder": {
+        "type": "boolean",
+        "description": "跳过方正字体编码修复（默认会自动修复中文标准 PDF 的乱码）"
+      }
+    },
+    "required": ["input"]
+  }
+}

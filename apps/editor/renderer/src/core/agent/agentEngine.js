@@ -11,7 +11,14 @@
  */
 
 import { callChatCompletion } from './aiClient.js';
-import { TOOL_DEFINITIONS, executeTool, getToolLabel } from './toolRegistry.js';
+import {
+  TOOL_DEFINITIONS,
+  buildAllToolDefinitions,
+  executeTool,
+  getToolLabel,
+  fetchServerTools,
+  registerServerToolLabels,
+} from './toolRegistry.js';
 
 const DEFAULT_MAX_STEPS = 8;
 
@@ -24,6 +31,8 @@ const SYSTEM_PROMPT = [
   '写入会先给用户一张 diff 卡片确认，所以放心调用。',
   '当用户明确要求保留原稿、另存为新文档、生成平台版本但不要覆盖当前文档时，必须调用 create_new_doc，新建文件，不要改写当前文档。',
   '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
+  '你还能调用 server 端注册的脚本工具（如 pdf_to_docx、video_to_audio 等）来处理本地文件操作，',
+  '遇到需要转换文件格式、提取音视频、处理本地资源的任务时优先考虑用工具，而不是给出用户手动操作的步骤。',
   '只有当用户明确是提问、要建议、要标题候选等「不改动正文」的需求时，才直接在对话里回答。',
   '回答用中文，简洁直接，不要解释你调用了哪些工具。',
 ].join('\n');
@@ -62,12 +71,22 @@ export const runAgent = async ({
   onEvent = () => {},
   maxSteps = DEFAULT_MAX_STEPS,
   signal,
+  serverTools = [],
 }) => {
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
     ...history,
     { role: 'user', content: String(userInput ?? '') },
   ];
+
+  // 注册 server 工具标签（用于 UI 显示），合并工具 schema
+  if (serverTools.length) {
+    const labels = Object.fromEntries(
+      serverTools.map((t) => [t.function?.name, t.function?.name]),
+    );
+    registerServerToolLabels(labels);
+  }
+  const allTools = buildAllToolDefinitions(serverTools);
 
   let finalText = '';
 
@@ -76,7 +95,7 @@ export const runAgent = async ({
 
     const message = await callChatCompletion({
       messages,
-      tools: TOOL_DEFINITIONS,
+      tools: allTools,
       config,
       signal,
     });

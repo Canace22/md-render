@@ -22,6 +22,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 // ── 加载 .env ──────────────────────────────────────────────
 function loadDotEnv() {
@@ -69,6 +70,148 @@ function resolveProvider(providerId) {
   const apiKey = process.env[provider.apiKeyEnv] || '';
   if (!apiKey) return null;
   return { ...provider, apiKey };
+}
+
+// ── 本地工具注册（OpenAI tool calling 格式） ──────────────
+//
+// 每个工具是 tools/<tool-name>/ 目录，包含：
+//   manifest.json  工具描述 + 命令模板
+//   *.py / *.sh    实际执行脚本
+//
+// server 自动扫描 tools/ 目录加载所有工具。
+// AI 调用工具时，server 负责 spawn 脚本并把结果返回。
+const TOOLS_DIR = path.join(__dirname, 'tools');
+const TOOL_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟
+
+function loadTools() {
+  const tools = {};
+  if (!fs.existsSync(TOOLS_DIR)) return tools;
+
+  for (const entry of fs.readdirSync(TOOLS_DIR)) {
+    const dir = path.join(TOOLS_DIR, entry);
+    if (!fs.statSync(dir).isDirectory()) continue;
+
+    const manifestPath = path.join(dir, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) continue;
+
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+      if (!manifest.name || !manifest.command) continue;
+
+      // 找执行脚本：manifest.script > 当前目录第一个 .py > 第一个 .sh
+      let script = manifest.script;
+      if (!script) {
+        const files = fs.readdirSync(dir);
+        const pyFile = files.find((f) => f.endsWith('.py'));
+        const shFile = files.find((f) => f.endsWith('.sh'));
+        script = pyFile || shFile;
+        if (script) script = path.join(dir, script);
+      } else {
+        script = path.isAbsolute(script) ? script : path.join(dir, script);
+      }
+
+      tools[manifest.name] = {
+        ...manifest,
+        script,
+        dir,
+      };
+    } catch (err) {
+      console.warn(`[tools] 跳过 ${entry}: ${err.message}`);
+    }
+  }
+  return tools;
+}
+
+const TOOLS = loadTools();
+
+/** 把工具暴露成 OpenAI tool calling schema */
+function toolsToOpenAISchema() {
+  return Object.values(TOOLS).map((t) => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    },
+  }));
+}
+
+/** 渲染命令参数：替换 {{var}} 占位符 */
+function renderTemplate(template, vars) {
+  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    if (!(key in vars)) return '';
+    return String(vars[key] ?? '');
+  });
+}
+
+/** 执行一个工具：spawn 脚本，stdin/stdout 收结果 */
+function executeTool({ toolName, args }) {
+  return new Promise((resolve) => {
+    const tool = TOOLS[toolName];
+    if (!tool) {
+      return resolve({ ok: false, error: `未知工具: ${toolName}` });
+    }
+
+    // 必填参数校验
+    const required = tool.parameters?.required || [];
+    const missing = required.filter((k) => args[k] == null || args[k] === '');
+    if (missing.length) {
+      return resolve({ ok: false, error: `缺少必填参数: ${missing.join(', ')}` });
+    }
+
+    // 渲染命令：必选 args + 可选 args
+    // 自动注入特殊变量：script（工具脚本绝对路径）
+    const renderVars = { script: tool.script, ...args };
+    const cmdArgs = (tool.args || []).map((t) => renderTemplate(t, renderVars));
+    if (tool.args_optional) {
+      for (const [key, tmpl] of Object.entries(tool.args_optional)) {
+        if (args[key] != null && args[key] !== '') {
+          cmdArgs.push(renderTemplate(tmpl, renderVars));
+        }
+      }
+    }
+    // 布尔 flag
+    if (tool.flags) {
+      for (const [key, flag] of Object.entries(tool.flags)) {
+        if (args[key] === true) cmdArgs.push(flag);
+      }
+    }
+
+    const child = spawn(tool.command, cmdArgs, {
+      cwd: tool.dir,
+      env: { ...process.env },
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (c) => { stdout += c.toString('utf-8'); });
+    child.stderr.on('data', (c) => { stderr += c.toString('utf-8'); });
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve({ ok: false, error: '执行超时（>5min）', stdout, stderr });
+    }, TOOL_TIMEOUT_MS);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ ok: false, error: `spawn 失败: ${err.message}`, stdout, stderr });
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve({ ok: true, exitCode: code, stdout: stdout.trim(), stderr: stderr.trim() });
+      } else {
+        resolve({
+          ok: false,
+          exitCode: code,
+          error: `退出码 ${code}`,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+        });
+      }
+    });
+  });
 }
 
 // ── 工具函数 ───────────────────────────────────────────────
@@ -181,6 +324,41 @@ const server = http.createServer((req, res) => {
     return jsonRes(res, 200, { providers: list });
   }
 
+  // ── 工具列表：GET /api/tools ──
+  if (req.method === 'GET' && req.url === '/api/tools') {
+    const list = Object.values(TOOLS).map((t) => ({
+      name: t.name,
+      label: t.label,
+      description: t.description,
+    }));
+    return jsonRes(res, 200, { tools: list });
+  }
+
+  // ── 工具执行：POST /api/tools/exec ──
+  if (req.method === 'POST' && req.url === '/api/tools/exec') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const { toolName, args } = payload;
+        if (!toolName) return jsonRes(res, 400, { error: '缺少 toolName' });
+
+        const result = await executeTool({ toolName, args: args || {} });
+        const status = result.ok ? 200 : 500;
+        return jsonRes(res, status, result);
+      } catch (err) {
+        jsonRes(res, 400, { error: `请求解析失败: ${err.message}` });
+      }
+    });
+    return;
+  }
+
+  // ── 工具 schema（OpenAI 格式）：GET /api/tools/schema ──
+  if (req.method === 'GET' && req.url === '/api/tools/schema') {
+    return jsonRes(res, 200, { tools: toolsToOpenAISchema() });
+  }
+
   // ── 健康检查：GET /api/health ──
   if (req.method === 'GET' && req.url === '/api/health') {
     return jsonRes(res, 200, { ok: true, providers: Object.keys(PROVIDERS) });
@@ -240,4 +418,6 @@ server.listen(PORT, () => {
     .filter(([, cfg]) => process.env[cfg.apiKeyEnv])
     .map(([id]) => id);
   console.log(`   已配置 provider: ${configured.join(', ') || '无'}`);
+  const toolNames = Object.keys(TOOLS);
+  console.log(`   本地工具 (${toolNames.length}): ${toolNames.join(', ') || '无'}`);
 });

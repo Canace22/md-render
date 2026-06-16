@@ -20,7 +20,14 @@ const MAX_SNIPPET_CHARS = 200;
 const MAX_RECALL_RESULTS = 5; // 主动召回返回的相关旧文条数
 const MAX_RECALL_KEYWORDS = 6; // 用于召回搜索的关键词条数
 
-/** OpenAI 工具定义（纯数据，无副作用） */
+/** OpenAI 工具定义（纯数据，无副作用）
+ *
+ * 本地工具（读/写/搜索文档）写死在这里；
+ * server 端注册的脚本工具（pdf_to_docx、video_to_audio 等）通过 fetchServerTools() 动态拉取合并。
+ */
+
+/** 标记这是 server 端工具，需要在 toolRegistry 加载时拉取并合并 */
+const SERVER_TOOL_MARKER = '__server_tool__';
 export const TOOL_DEFINITIONS = Object.freeze([
   {
     type: 'function',
@@ -186,23 +193,29 @@ const EXECUTORS = {
 /**
  * 执行一个工具调用。
  * @param {object} toolCall  OpenAI 的 tool_call 对象 { id, function: { name, arguments } }
- * @param {object} host      宿主能力
+ * @param {object} host      宿主能力（含可选 host.execServerTool 用于 server 工具）
  * @returns {Promise<string>} 工具结果（字符串，回填给模型）
  */
 export const executeTool = async (toolCall, host) => {
   const name = toolCall?.function?.name;
   const executor = EXECUTORS[name];
-  if (!executor) return `未知工具：${name}`;
-  try {
-    const args = parseArgs(toolCall?.function?.arguments);
-    return await executor(args, host);
-  } catch (error) {
-    return `工具「${name}」执行出错：${error?.message ?? String(error)}`;
+  if (executor) {
+    try {
+      const args = parseArgs(toolCall?.function?.arguments);
+      return await executor(args, host);
+    } catch (error) {
+      return `工具「${name}」执行出错：${error?.message ?? String(error)}`;
+    }
   }
+  // 本地 EXECUTORS 找不到 → 走 server 工具执行器
+  return executeServerTool(toolCall, host);
 };
 
-/** 工具名 → 中文标签（给任务清单 UI 显示用） */
-export const TOOL_LABELS = Object.freeze({
+/** 工具名 → 中文标签（给任务清单 UI 显示用）
+ *
+ * 本地标签写死在这里；server 工具通过 registerServerToolLabels 动态注册。
+ */
+const _localToolLabels = Object.freeze({
   read_active_doc: '读取当前文档',
   write_active_doc: '写入当前文档',
   create_new_doc: '新建文档',
@@ -210,4 +223,59 @@ export const TOOL_LABELS = Object.freeze({
   recall_related_docs: '召回相关旧文',
 });
 
-export const getToolLabel = (name) => TOOL_LABELS[name] || name;
+const _serverToolLabels = {};
+export const registerServerToolLabels = (labels) => {
+  for (const [name, label] of Object.entries(labels || {})) {
+    _serverToolLabels[name] = label;
+  }
+};
+
+export const getToolLabel = (name) => _serverToolLabels[name] || _localToolLabels[name] || name;
+
+// ── Server 端脚本工具（动态加载） ──────────────────────────
+//
+// pdf_to_docx、video_to_audio 等由 ai-proxy server 的 tools/ 目录提供。
+// Renderer 启动时从 server 拉 schema，并注册对应的执行器（通过 host.execServerTool）。
+// 这样新工具只需在 server 丢一个 manifest + 脚本，不用改前端代码。
+
+/** server 工具的本地缓存：name -> { definition, label } */
+let _serverToolsCache = null;
+
+/** 拉取 server 工具 schema */
+export const fetchServerTools = async (fetchFn) => {
+  if (_serverToolsCache) return _serverToolsCache;
+  try {
+    const data = await fetchFn('/api/tools/schema');
+    const tools = Array.isArray(data?.tools) ? data.tools : [];
+    _serverToolsCache = tools;
+    return _serverToolsCache;
+  } catch {
+    _serverToolsCache = [];
+    return _serverToolsCache;
+  }
+};
+
+/** 合并本地 + server 工具定义，供 agentEngine 调用 */
+export const buildAllToolDefinitions = (serverTools = []) => {
+  return [...TOOL_DEFINITIONS, ...serverTools];
+};
+
+/**
+ * 执行 server 工具（在 EXECUTORS 表里查不到时走这条路径）。
+ * @param {object} toolCall  OpenAI tool_call
+ * @param {object} host     需实现 host.execServerTool(toolName, args) -> Promise<string>
+ * @returns {Promise<string>}
+ */
+export const executeServerTool = async (toolCall, host) => {
+  const name = toolCall?.function?.name;
+  if (!host?.execServerTool) {
+    return `工具「${name}」不可用：server 工具执行通道未连接。`;
+  }
+  try {
+    const args = JSON.parse(toolCall?.function?.arguments || '{}');
+    const result = await host.execServerTool(name, args);
+    return typeof result === 'string' ? result : JSON.stringify(result);
+  } catch (error) {
+    return `工具「${name}」执行出错：${error?.message ?? String(error)}`;
+  }
+};

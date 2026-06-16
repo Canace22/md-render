@@ -20,6 +20,7 @@ import { useEditorStore } from '../store/useEditorStore.js';
 import { findNodeById } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
+import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import { AI_ACTION_KEYS, buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
 import { PLATFORM_VARIANT_KEYS, buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
@@ -74,14 +75,14 @@ const PLATFORM_VARIANT_LABELS = Object.freeze(
 );
 
 const WELCOME_SUGGESTIONS = Object.freeze([
-  { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '基于当前主题先给我一版可直接动笔的提纲' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '把当前文档润色得更自然、更顺口' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '帮我压缩当前文档，保留核心信息和重点' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼这篇内容的 5 个关键要点' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '给这篇内容想几组更抓人的标题' },
-  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '生成一版适合微信公众号发布的版本' },
-  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '改写成更适合小红书发布的版本' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.CONTINUE, label: '沿着当前内容继续往下写一段' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '润色一下这段文字' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '帮我总结一下' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼关键要点' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '想几个标题' },
+  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '生成公众号版本' },
+  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '生成小红书版本' },
+  { type: 'quick', actionKey: AI_ACTION_KEYS.CONTINUE, label: '继续往下写' },
 ]);
 
 const COMPOSER_SHORTCUTS = Object.freeze([
@@ -102,7 +103,7 @@ const COMPOSER_MORE_ACTIONS = Object.freeze([
 
 const COMPOSER_MORE_ACTION_MAP = new Map(COMPOSER_MORE_ACTIONS.map((item) => [item.id, item]));
 
-export default function AgentPanel() {
+export default function AgentPanel({ onClose }) {
   const markdown = useEditorStore((s) => s.markdown);
   const workspace = useEditorStore((s) => s.workspace);
   const selectedId = useEditorStore((s) => s.selectedId);
@@ -192,6 +193,7 @@ export default function AgentPanel() {
   }, [isShortcutDisabled]);
 
   // 注入给 agent 的宿主能力：读写当前文档 + 搜索工作区
+  // 全局模式：无文档时 readActiveDoc 返回空，writeActiveDoc 为 no-op
   const host = useMemo(() => ({
     readActiveDoc: () => {
       const files = flattenFiles(workspace);
@@ -199,8 +201,9 @@ export default function AgentPanel() {
       return { title: active?.name ?? '', content: markdown ?? '' };
     },
     // 不直接覆盖：暂存成待确认改动，弹 diff 卡片让用户应用/放弃。
-    // 返回结果文案回填给模型，让它知道改动到底有没有生效。
+    // 无文档时返回提示。
     writeActiveDoc: async (content) => {
+      if (!selectedId) return '当前没有打开的文档，无法写入。请先打开一个文档。';
       const applied = await stageAgentWrite({ oldText: markdown ?? '', newText: content });
       return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
     },
@@ -233,7 +236,52 @@ export default function AgentPanel() {
         .filter((f) => `${f.name ?? ''}${f.content ?? ''}`.toLowerCase().includes(q))
         .map((f) => ({ title: f.name ?? '未命名', snippet: String(f.content ?? '').slice(0, 200), id: f.id }));
     },
+    /**
+     * 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等）。
+     * 走 IPC → ai-proxy server → spawn 脚本。
+     * 返回结构化结果给模型，模型可以从中解析出文件路径告诉用户。
+     */
+    execServerTool: async (toolName, args) => {
+      if (!window.electronAPI?.ai?.execTool) {
+        return JSON.stringify({ ok: false, error: 'server 工具通道不可用（需要 Electron 环境）' });
+      }
+      try {
+        const res = await window.electronAPI.ai.execTool({ toolName, args });
+        if (!res) return JSON.stringify({ ok: false, error: 'server 无响应' });
+        // 把 stdout/stderr 合并成一段摘要，避免超长
+        const summary = [];
+        if (res.stdout) summary.push(String(res.stdout).slice(0, 2000));
+        if (res.stderr) summary.push(`[stderr] ${String(res.stderr).slice(0, 500)}`);
+        return JSON.stringify({
+          ok: Boolean(res.ok),
+          exitCode: res.exitCode,
+          error: res.error || null,
+          summary: summary.join('\n'),
+        });
+      } catch (err) {
+        return JSON.stringify({ ok: false, error: err?.message ?? String(err) });
+      }
+    },
   }), [workspace, selectedId, markdown, stageAgentWrite, createGeneratedFile]);
+
+  // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
+  const [serverTools, setServerTools] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!hasAiBridge()) return;
+      try {
+        const tools = await fetchServerTools(async (path) => {
+          const res = await fetch(`${resolveAiServerBase() || 'http://localhost:8788'}${path}`);
+          return res.json();
+        });
+        if (!cancelled) setServerTools(tools);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -341,6 +389,7 @@ export default function AgentPanel() {
         config: readProviderConfig(),
         host,
         signal: controller.signal,
+        serverTools,
         onEvent: (ev) => {
           if (ev.type === 'tool_start') {
             appendAgentMessage(sessionId, { role: 'tool', label: ev.label, status: 'running' });
@@ -358,7 +407,7 @@ export default function AgentPanel() {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory]);
+  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, serverTools]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -506,6 +555,11 @@ export default function AgentPanel() {
           <button className="agent-panel__icon-btn" onClick={() => setShowSettings((v) => !v)} title="设置">
             <Settings size={16} />
           </button>
+          {onClose && (
+            <button className="agent-panel__icon-btn" onClick={onClose} title="关闭">
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
 

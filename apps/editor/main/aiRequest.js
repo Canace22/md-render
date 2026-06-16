@@ -8,6 +8,7 @@
  */
 
 const AI_PROXY_TIMEOUT_MS = 60000;
+const TOOL_EXEC_TIMEOUT_MS = 5 * 60 * 1000; // 工具执行最长 5 分钟
 
 /**
  * 调用 ai-proxy server 的 /api/chat 接口。
@@ -54,4 +55,63 @@ export async function requestChatCompletion({ aiProxyBase, providerId, messages,
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 调用 ai-proxy server 的 /api/tools/exec 执行本地脚本工具。
+ *
+ * @param {object} params
+ * @param {string} params.aiProxyBase  server 地址
+ * @param {string} params.toolName      工具名（如 pdf_to_docx）
+ * @param {object} params.args          工具参数
+ * @returns {Promise<object>} { ok, exitCode, stdout, stderr, error }
+ */
+export async function requestToolExec({ aiProxyBase, toolName, args }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  if (!toolName) throw new Error('未指定 toolName');
+
+  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/tools/exec`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TOOL_EXEC_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toolName, args: args || {} }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      return {
+        ok: false,
+        exitCode: data?.exitCode ?? null,
+        stdout: data?.stdout ?? '',
+        stderr: data?.stderr ?? '',
+        error: data?.error || `server 返回 ${response.status}`,
+      };
+    }
+    return data;
+  } catch (err) {
+    return {
+      ok: false,
+      stdout: '',
+      stderr: '',
+      error: `工具执行失败: ${err.message || String(err)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 获取 server 注册的工具列表（不含 schema，仅摘要）。
+ */
+export async function requestToolList({ aiProxyBase }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/tools`;
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok) throw new Error(`获取工具列表失败 (${res.status})`);
+  return res.json();
 }

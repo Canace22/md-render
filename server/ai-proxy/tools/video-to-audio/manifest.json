@@ -1,0 +1,33 @@
+{
+  "name": "video_to_audio",
+  "label": "视频提取音频",
+  "description": "从视频文件提取音频轨道，输出 mp3 格式。默认采样率 16000Hz，比特率 192k。适合给吉他/舞蹈练习视频去人声留伴奏。返回生成的 mp3 文件绝对路径。",
+  "command": "python3",
+  "args": ["{{script}}", "{{input}}", "-o", "{{output}}"],
+  "args_optional": {
+    "sample_rate": "--sample-rate {{sample_rate}}",
+    "bitrate": "--bitrate {{bitrate}}"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input": {
+        "type": "string",
+        "description": "输入视频文件绝对路径（mp4/mov/mkv/avi/flv/webm/m4v）"
+      },
+      "output": {
+        "type": "string",
+        "description": "输出 .mp3 文件绝对路径。留空则自动生成在视频同目录的 xxx.mp3"
+      },
+      "sample_rate": {
+        "type": "integer",
+        "description": "音频采样率 Hz（默认 16000）。吉他调音器一般用 44100，需要高保真设 44100"
+      },
+      "bitrate": {
+        "type": "string",
+        "description": "音频比特率（默认 192k）。可选 128k / 192k / 320k"
+      }
+    },
+    "required": ["input"]
+  }
+}
