@@ -948,10 +948,22 @@ function MarkdownEditor() {
   }, [surface]);
 
   useEffect(() => {
-    if (surface === 'daily' && previousSurfaceRef.current !== 'daily') {
-      setDailyCurrentDate(getTodayDateKey());
-    }
-    previousSurfaceRef.current = surface;
+    if (surface !== 'daily') return;
+    setDailyCurrentDate(getTodayDateKey());
+
+    // 在凌晨 0 点精确跨天，避免轮询
+    const scheduleMidnightUpdate = () => {
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const msUntilMidnight = tomorrow - now + 1000; // 多等 1 秒确保跨过去
+      return setTimeout(() => {
+        setDailyCurrentDate(getTodayDateKey());
+        timerRef.current = scheduleMidnightUpdate();
+      }, msUntilMidnight);
+    };
+
+    const timerRef = { current: scheduleMidnightUpdate() };
+    return () => clearTimeout(timerRef.current);
   }, [setDailyCurrentDate, surface]);
 
   // 同步页打开时，点左侧目录只更新选中态、保留同步页；

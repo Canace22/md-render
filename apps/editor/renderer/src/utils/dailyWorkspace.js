@@ -205,11 +205,17 @@ const buildTodoDedupKey = (text, sourceDate) => {
 export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
   const normalized = normalizeDailyWorkspace(dailyWorkspace, targetDateKey);
   const currentDate = normalizeDateKey(targetDateKey, normalized.currentDate);
+  const previousDate = shiftDateKey(currentDate, -1);
   const todoPool = [...normalized.todoPool];
   const todoKeys = new Set(
     todoPool.map((item) => buildTodoDedupKey(item.text, item.sourceDate || '')),
   );
   const entries = {};
+
+  // 收集昨天的 note，复制到今天（去重：今天已有相同文本的不重复添加）
+  const previousNotes = (normalized.entries[previousDate]?.items ?? []).filter(
+    (item) => item.type === 'note',
+  );
 
   for (const [dateKey, entry] of Object.entries(normalized.entries)) {
     if (dateKey >= currentDate) {
@@ -236,10 +242,28 @@ export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
       nextItems.push(item);
     }
 
+    // 昨天的 note 从昨天移走（不保留在昨天）
     entries[dateKey] = {
       ...entry,
-      items: nextItems,
+      items: dateKey === previousDate
+        ? nextItems.filter((item) => item.type !== 'note')
+        : nextItems,
     };
+  }
+
+  // 把昨天的笔记移到今天（幂等：已有相同文本的跳过）
+  if (previousNotes.length > 0) {
+    const todayEntry = entries[currentDate] ?? createEmptyDailyEntry(currentDate);
+    const existingNoteTexts = new Set(
+      todayEntry.items.filter((i) => i.type === 'note').map((i) => i.text),
+    );
+    const notesToMove = previousNotes.filter((n) => !existingNoteTexts.has(n.text));
+    if (notesToMove.length > 0) {
+      entries[currentDate] = {
+        ...todayEntry,
+        items: [...todayEntry.items, ...notesToMove],
+      };
+    }
   }
 
   return {
