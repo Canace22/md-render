@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown, message } from 'antd';
 import {
   ApartmentOutlined,
@@ -200,9 +200,9 @@ export default function AgentPanel({ onClose }) {
   const [serverProvidersReady, setServerProvidersReady] = useState(false);
 
   // 启动时从主进程获取内置 provider 列表
-  useState(() => {
+  useEffect(() => {
     fetchServerProviders().then(() => setServerProvidersReady(true));
-  });
+  }, []);
   const isWelcomeMode = messages.length === 0 && !showSettings && !showSessions;
   const isComposerMoreActive = showSessions || showSettings;
 

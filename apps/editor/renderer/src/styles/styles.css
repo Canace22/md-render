@@ -8516,6 +8516,59 @@ body.theme-dark .file-preview-iframe {
   height: 100%;
 }
 
+/* 全局 AI 助手浮动按钮 + overlay：脱离编辑器布局，所有 surface 都可唤起 */
+.agent-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary-btn), var(--color-accent, #6366f1));
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.agent-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(99, 102, 241, 0.45), 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.agent-fab.is-active {
+  background: linear-gradient(135deg, #ef4444, #f59e0b);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4), 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.agent-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.agent-panel-dock--global {
+  width: clamp(440px, 38vw, 720px);
+  height: 100%;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.18);
+  background: var(--color-bg-surface, #fff);
+  animation: agent-panel-slide-in 0.22s ease;
+}
+
+@keyframes agent-panel-slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
 .agent-toggle-btn.is-active {
   background: var(--color-primary-btn);
   color: #fff;

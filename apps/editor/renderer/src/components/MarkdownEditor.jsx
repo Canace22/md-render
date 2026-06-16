@@ -2334,15 +2334,7 @@ function MarkdownEditor() {
               >
                 {editorMode === 'preview' ? '预览' : '编辑'}
               </button>
-              <button
-                type="button"
-                className={`editor-mode-toggle agent-toggle-btn${agentPanelOpen ? ' is-active' : ''}`}
-                onClick={() => setAgentPanelOpen((v) => !v)}
-                title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
-                aria-label="AI 助手"
-              >
-                AI 助手
-              </button>
+              
             </div>
 
             <DocHeader
@@ -2404,11 +2396,7 @@ function MarkdownEditor() {
                 collapsed={tocCollapsed}
                 onToggle={toggleTocCollapsed}
               />
-              {agentPanelOpen && (
-                <div className="agent-panel-dock">
-                  <AgentPanel />
-                </div>
-              )}
+              {/* agent-panel-dock 已废弃：AI 助手改为全局浮动按钮 + overlay 容器，渲染在编辑器根节点外 */}
             </div>
             {/* 底部状态栏 */}
             <StatusBar content={resolvedMarkdown} backlinks={0} />
@@ -2436,6 +2424,24 @@ function MarkdownEditor() {
         onClose={closeLightbox}
         onIndexChange={changeLightboxIndex}
       />
+
+      {/* 全局 AI 助手浮动按钮 + overlay：脱离编辑器布局，所有 surface 都可唤起 */}
+      <button
+        type="button"
+        className={`agent-fab${agentPanelOpen ? ' is-active' : ''}`}
+        onClick={() => setAgentPanelOpen((v) => !v)}
+        title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
+        aria-label="AI 助手"
+      >
+        AI
+      </button>
+      {agentPanelOpen && (
+        <div className="agent-panel-overlay" onClick={() => setAgentPanelOpen(false)}>
+          <div className="agent-panel-dock agent-panel-dock--global" onClick={(e) => e.stopPropagation()}>
+            <AgentPanel onClose={() => setAgentPanelOpen(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
