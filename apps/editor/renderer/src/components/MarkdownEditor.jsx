@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
+import { RobotOutlined } from '@ant-design/icons';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteEditor, createCodeBlockSpec } from '@blocknote/core';
 import { buildSchema } from '@narrative/blocknote-core';
@@ -2433,7 +2434,7 @@ function MarkdownEditor() {
         title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
         aria-label="AI 助手"
       >
-        AI
+        <RobotOutlined style={{ fontSize: 22 }} />
       </button>
       {agentPanelOpen && (
         <div className="agent-panel-overlay" onClick={() => setAgentPanelOpen(false)}>
