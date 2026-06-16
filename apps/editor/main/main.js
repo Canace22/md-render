@@ -844,6 +844,11 @@ process.on('message', (msg) => {
 });
 
 // ---- 生命周期 ----
+// macOS 上 Electron GPU 渲染问题修复：禁用硬件加速，避免 "Unable to auto-detect a suitable renderer" 错误
+if (process.platform === 'darwin') {
+  app.disableHardwareAcceleration();
+}
+
 app.whenReady().then(async () => {
   console.log('[electron] app ready');
 

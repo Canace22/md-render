@@ -7,12 +7,8 @@ import {
   CompressOutlined,
   FileTextOutlined,
   HighlightOutlined,
-  HistoryOutlined,
-  MoreOutlined,
-  PaperClipOutlined,
   PlusOutlined,
   SendOutlined,
-  SettingOutlined as AntdSettingOutlined,
   WechatOutlined,
   FilePdfOutlined,
   PlayCircleOutlined,
@@ -36,6 +32,8 @@ import {
   saveProviderConfig,
   hasBuiltinKey,
   fetchServerProviders,
+  hasAiBridge,
+  resolveAiServerBase,
 } from '../core/agent/aiClient.js';
 
 const hasElectronSearch = () =>
@@ -88,25 +86,19 @@ const WELCOME_SUGGESTIONS = Object.freeze([
 ]);
 
 const COMPOSER_SHORTCUTS = Object.freeze([
-  { id: 'summarize', type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '压缩', icon: CompressOutlined, tone: 'amber' },
+  { id: 'title', type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '标题建议', icon: FileTextOutlined, tone: 'cyan' },
+  { id: 'wechat', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '公众号版', icon: WechatOutlined, tone: 'green' },
+  { id: 'xiaohongshu', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '小红书版', icon: CameraOutlined, tone: 'magenta' },
+]);
+
+const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
+  { id: 'outline', type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '提纲', icon: ApartmentOutlined, tone: 'teal' },
   { id: 'expand', type: 'quick', actionKey: AI_ACTION_KEYS.EXPAND, label: '扩写', icon: ArrowsAltOutlined, tone: 'blue' },
   { id: 'polish', type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '润色', icon: HighlightOutlined, tone: 'rose' },
-  { id: 'outline', type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '提纲', icon: ApartmentOutlined, tone: 'teal' },
-  { id: 'wechat', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '公众号版', icon: WechatOutlined, tone: 'green' },
+  { id: 'summarize', type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '压缩', icon: CompressOutlined, tone: 'amber' },
 ]);
 
-const COMPOSER_MORE_ACTIONS = Object.freeze([
-  { id: 'title', type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '标题建议', icon: FileTextOutlined, tone: 'cyan' },
-  { id: 'xiaohongshu', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '小红书版', icon: CameraOutlined, tone: 'magenta' },
-  { id: 'mention', type: 'mention', label: '引用文件', icon: PaperClipOutlined, tone: 'slate' },
-  { id: 'sessions', type: 'sessions', label: '会话列表', icon: HistoryOutlined, tone: 'violet' },
-  { id: 'settings', type: 'settings', label: '设置', icon: AntdSettingOutlined, tone: 'gray' },
-]);
-
-const COMPOSER_MORE_ACTION_MAP = new Map(COMPOSER_MORE_ACTIONS.map((item) => [item.id, item]));
-
-// 本地脚本工具（不走 AI，直接执行 server 上的脚本）。
-// 放在 AI 快捷按钮之后独立分组，用 visual divider 分隔。
+// 本地脚本工具（不走 AI，直接执行 server 上的脚本），收进 + 下拉菜单。
 const COMPOSER_SCRIPT_TOOLS = Object.freeze([
   {
     id: 'pdf_to_docx',
@@ -179,6 +171,7 @@ export default function AgentPanel({ onClose }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   // @文件：弹出选择器 + 已选文件（{id, name, content}）
   const [showFilePicker, setShowFilePicker] = useState(false);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
   const [attachedFiles, setAttachedFiles] = useState([]);
 
@@ -204,7 +197,6 @@ export default function AgentPanel({ onClose }) {
     fetchServerProviders().then(() => setServerProvidersReady(true));
   }, []);
   const isWelcomeMode = messages.length === 0 && !showSettings && !showSessions;
-  const isComposerMoreActive = showSessions || showSettings;
 
   const abortRef = useRef(null);
   const inputRef = useRef(null);
@@ -213,8 +205,8 @@ export default function AgentPanel({ onClose }) {
     return running && (item.type === 'quick' || item.type === 'platform');
   }, [running]);
 
-  const composerMoreMenuItems = useMemo(() => {
-    return COMPOSER_MORE_ACTIONS.map((item) => {
+  const composerPlusMenuItems = useMemo(() => {
+    const shortcuts = COMPOSER_PLUS_SHORTCUTS.map((item) => {
       const Icon = item.icon;
       return {
         key: item.id,
@@ -223,7 +215,17 @@ export default function AgentPanel({ onClose }) {
         icon: <Icon />,
       };
     });
-  }, [isShortcutDisabled]);
+    const scripts = COMPOSER_SCRIPT_TOOLS.map((tool) => {
+      const Icon = tool.icon;
+      return {
+        key: tool.id,
+        disabled: running,
+        label: tool.label,
+        icon: <Icon />,
+      };
+    });
+    return [...shortcuts, { type: 'divider' }, ...scripts];
+  }, [running, isShortcutDisabled]);
 
   // 注入给 agent 的宿主能力：读写当前文档 + 搜索工作区
   // 全局模式：无文档时 readActiveDoc 返回空，writeActiveDoc 为 no-op
@@ -520,11 +522,6 @@ export default function AgentPanel({ onClose }) {
     handleShortcutClick(item);
   }, [handleShortcutClick]);
 
-  const handleComposerMoreClick = useCallback(({ key }) => {
-    const item = COMPOSER_MORE_ACTION_MAP.get(key);
-    if (item) handleShortcutClick(item);
-  }, [handleShortcutClick]);
-
   // 执行本地脚本工具：弹文件选择 → 调 ai-proxy server → 反馈结果。
   // 不需要 AI、不会进入对话流，结果用 antd message 提示。
   const handleScriptTool = useCallback(async (tool) => {
@@ -567,6 +564,16 @@ export default function AgentPanel({ onClose }) {
       message.error(`${tool.label} 出错：${err?.message ?? String(err)}`);
     }
   }, [running]);
+
+  const handleComposerPlusClick = useCallback(({ key }) => {
+    const shortcut = COMPOSER_PLUS_SHORTCUTS.find((item) => item.id === key);
+    if (shortcut) {
+      handleShortcutClick(shortcut);
+      return;
+    }
+    const tool = COMPOSER_SCRIPT_TOOLS.find((t) => t.id === key);
+    if (tool) handleScriptTool(tool);
+  }, [handleShortcutClick, handleScriptTool]);
 
   // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
@@ -816,7 +823,11 @@ export default function AgentPanel({ onClose }) {
             className="agent-panel__input"
             value={input}
             placeholder="发消息，或输入 @ 引用工作区文件"
-            rows={3}
+            rows={1}
+            onInput={(e) => {
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+            }}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
           />
@@ -832,13 +843,31 @@ export default function AgentPanel({ onClose }) {
         </div>
 
         <div className="agent-panel__composer-tools">
+          <Dropdown
+            trigger={['click']}
+            placement="topLeft"
+            overlayClassName="agent-panel__composer-dropdown"
+            onOpenChange={setPlusMenuOpen}
+            menu={{
+              items: composerPlusMenuItems,
+              onClick: handleComposerPlusClick,
+            }}
+          >
+            <button
+              type="button"
+              className={`agent-panel__composer-plus${plusMenuOpen ? ' is-active' : ''}`}
+              title="更多"
+            >
+              <PlusOutlined />
+            </button>
+          </Dropdown>
           <button
             type="button"
-            className="agent-panel__composer-plus"
-            title="新建会话"
-            onClick={handleNewSession}
+            className={`agent-panel__composer-at${showFilePicker ? ' is-active' : ''}`}
+            title="引用工作区文件"
+            onClick={handleInsertMention}
           >
-            <PlusOutlined />
+            @
           </button>
           {COMPOSER_SHORTCUTS.map((item) => {
             const Icon = item.icon;
@@ -854,44 +883,6 @@ export default function AgentPanel({ onClose }) {
                   <Icon />
                 </span>
                 {item.label}
-              </button>
-            );
-          })}
-          <Dropdown
-            trigger={['click']}
-            placement="topRight"
-            overlayClassName="agent-panel__composer-dropdown"
-            menu={{
-              items: composerMoreMenuItems,
-              onClick: handleComposerMoreClick,
-            }}
-          >
-            <button
-              type="button"
-              className={`agent-panel__tool-btn agent-panel__tool-btn--gray${isComposerMoreActive ? ' is-active' : ''}`}
-            >
-              <span className="agent-panel__tool-btn-icon">
-                <MoreOutlined />
-              </span>
-              更多
-            </button>
-          </Dropdown>
-          <span className="agent-panel__composer-divider" aria-hidden="true" />
-          {COMPOSER_SCRIPT_TOOLS.map((tool) => {
-            const Icon = tool.icon;
-            return (
-              <button
-                key={tool.id}
-                type="button"
-                className={`agent-panel__tool-btn agent-panel__tool-btn--${tool.tone}`}
-                disabled={running}
-                title={tool.label}
-                onClick={() => handleScriptTool(tool)}
-              >
-                <span className="agent-panel__tool-btn-icon">
-                  <Icon />
-                </span>
-                {tool.label}
               </button>
             );
           })}

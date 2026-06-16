@@ -2397,7 +2397,11 @@ function MarkdownEditor() {
                 collapsed={tocCollapsed}
                 onToggle={toggleTocCollapsed}
               />
-              {/* agent-panel-dock 已废弃：AI 助手改为全局浮动按钮 + overlay 容器，渲染在编辑器根节点外 */}
+              {agentPanelOpen && (
+                <div className="agent-panel-dock agent-panel-dock--sidebar">
+                  <AgentPanel onClose={() => setAgentPanelOpen(false)} />
+                </div>
+              )}
             </div>
             {/* 底部状态栏 */}
             <StatusBar content={resolvedMarkdown} backlinks={0} />
@@ -2426,7 +2430,7 @@ function MarkdownEditor() {
         onIndexChange={changeLightboxIndex}
       />
 
-      {/* 全局 AI 助手浮动按钮 + overlay：脱离编辑器布局，所有 surface 都可唤起 */}
+      {/* 全局 AI 助手浮动按钮：点击切换侧边栏 */}
       <button
         type="button"
         className={`agent-fab${agentPanelOpen ? ' is-active' : ''}`}
@@ -2436,13 +2440,6 @@ function MarkdownEditor() {
       >
         <RobotOutlined style={{ fontSize: 22 }} />
       </button>
-      {agentPanelOpen && (
-        <div className="agent-panel-overlay" onClick={() => setAgentPanelOpen(false)}>
-          <div className="agent-panel-dock agent-panel-dock--global" onClick={(e) => e.stopPropagation()}>
-            <AgentPanel onClose={() => setAgentPanelOpen(false)} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
