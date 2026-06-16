@@ -8794,6 +8794,26 @@ body.theme-dark .file-preview-iframe {
   --agent-tool-icon-color: #475569;
 }
 
+.agent-panel__tool-btn--red {
+  --agent-tool-icon-bg: rgba(239, 68, 68, 0.14);
+  --agent-tool-icon-color: #b91c1c;
+}
+
+.agent-panel__tool-btn--purple {
+  --agent-tool-icon-bg: rgba(168, 85, 247, 0.14);
+  --agent-tool-icon-color: #7e22ce;
+}
+
+/* AI 快捷按钮 ↔ 本地脚本按钮分组之间的视觉分隔 */
+.agent-panel__composer-divider {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--color-border-subtle, rgba(15, 23, 42, 0.08));
+  margin: 0 4px;
+  flex: none;
+}
+
 .agent-panel__composer-tools::-webkit-scrollbar {
   display: none;
 }

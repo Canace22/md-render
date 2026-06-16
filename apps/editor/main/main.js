@@ -237,6 +237,38 @@ ipcMain.handle('select-cover-image', async () => {
   return { canceled: false, filePath: result.filePaths[0] };
 });
 
+// 通用文件选择（按 extensions 过滤），返回单文件绝对路径
+ipcMain.handle('pick-file', async (_event, payload = {}) => {
+  const { title = '选择文件', extensions = [] } = payload;
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+    title,
+    properties: ['openFile'],
+    filters: extensions.length
+      ? [{ name: title, extensions }]
+      : undefined,
+  });
+  if (result.canceled || !result.filePaths?.length) {
+    return { canceled: true };
+  }
+  return { canceled: false, filePath: result.filePaths[0] };
+});
+
+// 通用保存文件对话框（用于 PDF→docx 之类指定输出路径）
+ipcMain.handle('pick-save-path', async (_event, payload = {}) => {
+  const { title = '保存文件', defaultName = 'output', extensions = [] } = payload;
+  const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+    title,
+    defaultPath: defaultName,
+    filters: extensions.length
+      ? [{ name: title, extensions }]
+      : undefined,
+  });
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+  return { canceled: false, filePath: result.filePath };
+});
+
 ipcMain.handle('register-local-project-watch', async (_event, payload = {}) => {
   const { projectRootPath } = payload;
   startWatchingLocalProject(projectRootPath);

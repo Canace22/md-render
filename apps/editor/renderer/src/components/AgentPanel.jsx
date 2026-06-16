@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Dropdown } from 'antd';
+import { Dropdown, message } from 'antd';
 import {
   ApartmentOutlined,
   ArrowsAltOutlined,
@@ -14,6 +14,8 @@ import {
   SendOutlined,
   SettingOutlined as AntdSettingOutlined,
   WechatOutlined,
+  FilePdfOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import { Bot, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
@@ -102,6 +104,37 @@ const COMPOSER_MORE_ACTIONS = Object.freeze([
 ]);
 
 const COMPOSER_MORE_ACTION_MAP = new Map(COMPOSER_MORE_ACTIONS.map((item) => [item.id, item]));
+
+// 本地脚本工具（不走 AI，直接执行 server 上的脚本）。
+// 放在 AI 快捷按钮之后独立分组，用 visual divider 分隔。
+const COMPOSER_SCRIPT_TOOLS = Object.freeze([
+  {
+    id: 'pdf_to_docx',
+    label: 'PDF→Word',
+    icon: FilePdfOutlined,
+    tone: 'red',
+    toolName: 'pdf_to_docx',
+    pickInput: { title: '选择 PDF 文件', extensions: ['pdf'] },
+    pickOutput: {
+      title: '保存为 Word 文档',
+      defaultFromInput: (inputPath) => inputPath.replace(/\.pdf$/i, '.docx'),
+      extensions: ['docx'],
+    },
+  },
+  {
+    id: 'video_to_audio',
+    label: '视频→音频',
+    icon: PlayCircleOutlined,
+    tone: 'purple',
+    toolName: 'video_to_audio',
+    pickInput: { title: '选择视频文件', extensions: ['mp4', 'mov', 'mkv', 'avi', 'flv', 'webm', 'm4v'] },
+    pickOutput: {
+      title: '保存为 MP3',
+      defaultFromInput: (inputPath) => inputPath.replace(/\.[^./]+$/, '') + '.mp3',
+      extensions: ['mp3'],
+    },
+  },
+]);
 
 export default function AgentPanel({ onClose }) {
   const markdown = useEditorStore((s) => s.markdown);
@@ -492,6 +525,49 @@ export default function AgentPanel({ onClose }) {
     if (item) handleShortcutClick(item);
   }, [handleShortcutClick]);
 
+  // 执行本地脚本工具：弹文件选择 → 调 ai-proxy server → 反馈结果。
+  // 不需要 AI、不会进入对话流，结果用 antd message 提示。
+  const handleScriptTool = useCallback(async (tool) => {
+    if (!hasAiBridge()) {
+      message.warning('本地脚本工具需要连接 ai-proxy server');
+      return;
+    }
+    if (running) return; // AI 跑任务时不让叠加
+
+    try {
+      // 1) 选输入文件
+      const inputPick = await window.electronAPI.pickFile(tool.pickInput);
+      if (inputPick?.canceled) return;
+      const inputPath = inputPick.filePath;
+
+      // 2) 选输出路径
+      const outputPick = await window.electronAPI.pickSavePath({
+        title: tool.pickOutput.title,
+        defaultName: tool.pickOutput.defaultFromInput(inputPath),
+        extensions: tool.pickOutput.extensions,
+      });
+      if (outputPick?.canceled) return;
+      const outputPath = outputPick.filePath;
+
+      // 3) 执行
+      const hide = message.loading(`正在执行 ${tool.label}...`, 0);
+      const res = await window.electronAPI.ai.execTool({
+        toolName: tool.toolName,
+        args: { input: inputPath, output: outputPath },
+      });
+      hide();
+
+      if (res?.ok) {
+        message.success(`${tool.label} 完成：${outputPath}`, 5);
+      } else {
+        const errMsg = res?.error || `退出码 ${res?.exitCode}`;
+        message.error(`${tool.label} 失败：${errMsg}`, 8);
+      }
+    } catch (err) {
+      message.error(`${tool.label} 出错：${err?.message ?? String(err)}`);
+    }
+  }, [running]);
+
   // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
   const handleRecall = useCallback(async () => {
@@ -800,6 +876,25 @@ export default function AgentPanel({ onClose }) {
               更多
             </button>
           </Dropdown>
+          <span className="agent-panel__composer-divider" aria-hidden="true" />
+          {COMPOSER_SCRIPT_TOOLS.map((tool) => {
+            const Icon = tool.icon;
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                className={`agent-panel__tool-btn agent-panel__tool-btn--${tool.tone}`}
+                disabled={running}
+                title={tool.label}
+                onClick={() => handleScriptTool(tool)}
+              >
+                <span className="agent-panel__tool-btn-icon">
+                  <Icon />
+                </span>
+                {tool.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

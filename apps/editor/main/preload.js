@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   openLocalProject: () => ipcRenderer.invoke('open-local-project'),
   selectCoverImage: () => ipcRenderer.invoke('select-cover-image'),
+  pickFile: (payload) => ipcRenderer.invoke('pick-file', payload),
+  pickSavePath: (payload) => ipcRenderer.invoke('pick-save-path', payload),
   saveLocalProjectFile: (payload) => ipcRenderer.invoke('save-local-project-file', payload),
   saveLocalProjectMetadata: (payload) => ipcRenderer.invoke('save-local-project-metadata', payload),
   ensureMdRenderWorkspace: () => ipcRenderer.invoke('ensure-md-render-workspace'),
