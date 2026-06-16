@@ -81,3 +81,4 @@ flowchart TD
 | `pre-commit-secrets` | 提交/push 前扫描 API key、.env、私钥等敏感信息 |
 | `md-render-external-api-proxy` | 前端调第三方 API（如 Notion）的代理化规范：解决 CORS、避免只在 dev 可用、代理地址可配置 |
 | `md-render-binary-asset` | 二进制媒体存盘与引用：粘贴/拖入图片存进工作区 素材/，配 BlockNote uploadFile + local-media:// 引用 + 二进制写盘 IPC |
+| `md-render-daily` | 今日速记面板：切日期是纯视图变更，破坏性结转（carryOver）只在进入真实今天时跑一次 |

@@ -356,6 +356,8 @@ function MarkdownEditor() {
     toggleDailyTaskDone,
     deleteDailyItem,
     updateDailyItem,
+    moveDailyItem,
+    moveDailyItems,
     moveDailyTaskToTodo,
     addTodoItem,
     promoteTodoToDaily,
@@ -2244,6 +2246,8 @@ function MarkdownEditor() {
             onToggleTaskDone={toggleDailyTaskDone}
             onDeleteItem={deleteDailyItem}
             onUpdateItem={updateDailyItem}
+            onMoveItem={moveDailyItem}
+            onMoveItems={moveDailyItems}
             onMoveTaskToTodo={moveDailyTaskToTodo}
             onAddTodo={addTodoItem}
             onPromoteTodo={promoteTodoToDaily}

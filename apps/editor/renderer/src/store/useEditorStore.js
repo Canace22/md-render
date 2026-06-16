@@ -47,12 +47,15 @@ import {
   addDailyEntryItem,
   addTodoPoolItem,
   carryOverIncompleteTasks,
+  getTodayDateKey,
   mergeDailyWorkspaces,
+  moveDailyEntryItem,
   normalizeDailyWorkspace,
   promoteTodoToDaily,
   removeDailyEntryItem,
   removeTodoPoolItem,
   sendDailyEntryTaskToTodo,
+  setDailyCurrentDate as setDailyWorkspaceCurrentDate,
   toggleDailyEntryTaskDone,
   updateDailyEntryItem,
 } from '../utils/dailyWorkspace.js';
@@ -941,7 +944,11 @@ export const useEditorStore = create(
         }
       },
       setDailyCurrentDate: (dateKey) => set((state) => {
-        const nextDailyWorkspace = carryOverIncompleteTasks(state.dailyWorkspace, dateKey);
+        // 只有切到“真实今天”才做破坏性结转（昨日未完成任务沉到待办池、笔记带到今天）；
+        // 手动翻看其它日期只是纯视图切换，不动数据，避免来回切日期把条目搬走/重置。
+        const nextDailyWorkspace = dateKey === getTodayDateKey()
+          ? carryOverIncompleteTasks(state.dailyWorkspace, dateKey)
+          : setDailyWorkspaceCurrentDate(state.dailyWorkspace, dateKey);
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
@@ -978,6 +985,26 @@ export const useEditorStore = create(
           dateKey,
           itemId,
           text,
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      moveDailyItem: (fromDate, itemId, toDate) => set((state) => {
+        const nextDailyWorkspace = moveDailyEntryItem(
+          carryOverIncompleteTasks(state.dailyWorkspace, fromDate),
+          fromDate,
+          itemId,
+          toDate,
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      moveDailyItems: (fromDate, itemIds, toDate) => set((state) => {
+        // 串行叠加，避免每次只拿旧快照导致后续覆盖前面
+        const base = carryOverIncompleteTasks(state.dailyWorkspace, fromDate);
+        const nextDailyWorkspace = itemIds.reduce(
+          (workspace, itemId) => moveDailyEntryItem(workspace, fromDate, itemId, toDate),
+          base,
         );
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };

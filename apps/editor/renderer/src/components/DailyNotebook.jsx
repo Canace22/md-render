@@ -1,11 +1,12 @@
-import { memo, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Empty, Input, Tag } from 'antd';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, Card, Checkbox, DatePicker, Empty, Input, Tag } from 'antd';
+import dayjs from 'dayjs';
 import {
   CalendarClock,
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   FileText,
   Inbox,
   ListTodo,
@@ -19,6 +20,17 @@ import {
   getTodayDateKey,
   shiftDateKey,
 } from '../utils/dailyWorkspace.js';
+
+function useCopyText() {
+  const [copiedId, setCopiedId] = useState(null);
+  const copy = useCallback((id, text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  }, []);
+  return { copiedId, copy };
+}
 
 const DAILY_SECTIONS = [
   {
@@ -47,9 +59,46 @@ const DAILY_SECTIONS = [
   },
 ];
 
+function useBatchSelect(items) {
+  const [batchMode, setBatchMode] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+
+  const toggleBatchMode = useCallback(() => {
+    setBatchMode((prev) => !prev);
+    setSelected(new Set());
+  }, []);
+
+  const toggleItem = useCallback((id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const allIds = useMemo(() => items.map((item) => item.id), [items]);
+  const isAllSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
+
+  const toggleAll = useCallback(() => {
+    setSelected(isAllSelected ? new Set() : new Set(allIds));
+  }, [allIds, isAllSelected]);
+
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // 切换日期后退出批量模式
+  const exitBatch = useCallback(() => {
+    setBatchMode(false);
+    setSelected(new Set());
+  }, []);
+
+  return { batchMode, selected, toggleBatchMode, toggleItem, isAllSelected, toggleAll, clearSelection, exitBatch };
+}
+
 function DailySection({
   section,
   items,
+  currentDate,
   draftValue,
   onDraftChange,
   onSubmit,
@@ -61,8 +110,25 @@ function DailySection({
   onCancelEdit,
   onToggleTask,
   onMoveTaskToTodo,
+  onMoveItem,
+  onMoveItems,
   onDeleteItem,
+  copiedId,
+  onCopy,
 }) {
+  const isNote = section.type === 'note';
+  const { batchMode, selected, toggleBatchMode, toggleItem, isAllSelected, toggleAll, exitBatch } =
+    useBatchSelect(items);
+  const [batchDate, setBatchDate] = useState(null);
+
+  const handleBatchMove = useCallback(() => {
+    if (!batchDate || selected.size === 0) return;
+    const toDate = batchDate.format('YYYY-MM-DD');
+    onMoveItems([...selected], toDate);
+    setBatchDate(null);
+    exitBatch();
+  }, [batchDate, selected, onMoveItems, exitBatch]);
+
   return (
     <Card className="daily-notebook-card daily-notebook-section">
       <div className="daily-notebook-section-head">
@@ -73,6 +139,11 @@ function DailySection({
           </div>
           <p>{section.description}</p>
         </div>
+        {isNote && items.length > 0 && (
+          <Button size="small" type={batchMode ? 'primary' : 'default'} onClick={toggleBatchMode}>
+            {batchMode ? '取消批量' : '批量改日期'}
+          </Button>
+        )}
       </div>
 
       <div className="daily-notebook-composer">
@@ -86,77 +157,138 @@ function DailySection({
       </div>
 
       {items.length ? (
-        <div className="daily-notebook-list">
-          {items.map((item) => {
-            const isEditing = editingItemId === item.id;
-            const canSaveEdit = Boolean(editingDraftValue?.trim());
+        <>
+          {isNote && batchMode && (
+            <div className="daily-notebook-batch-bar">
+              <Checkbox
+                checked={isAllSelected}
+                indeterminate={selected.size > 0 && !isAllSelected}
+                onChange={toggleAll}
+              >
+                全选
+              </Checkbox>
+              <span className="daily-notebook-batch-count">已选 {selected.size} 条</span>
+              <DatePicker
+                size="small"
+                value={batchDate}
+                format="MM-DD"
+                allowClear={false}
+                placeholder="选择目标日期"
+                onChange={setBatchDate}
+              />
+              <Button
+                type="primary"
+                size="small"
+                disabled={selected.size === 0 || !batchDate}
+                onClick={handleBatchMove}
+              >
+                移到该日期
+              </Button>
+            </div>
+          )}
+          <div className="daily-notebook-list">
+            {items.map((item) => {
+              const isEditing = editingItemId === item.id;
+              const canSaveEdit = Boolean(editingDraftValue?.trim());
 
-            return (
-              <div key={item.id} className={`daily-notebook-item ${item.done ? 'is-done' : ''}`}>
-                <div className="daily-notebook-item-main">
-                  <div className="daily-notebook-item-text-row">
-                    {section.type === 'task' && (
-                      <button
-                        type="button"
-                        className={`daily-notebook-check ${item.done ? 'is-done' : ''}`}
-                        onClick={() => onToggleTask(item.id)}
-                        aria-label={item.done ? '标记为未完成' : '标记为已完成'}
-                      >
-                        {item.done && <Check size={13} strokeWidth={2.4} />}
-                      </button>
-                    )}
-                    {isEditing ? (
-                      <div className="daily-notebook-item-editor">
-                        <Input
-                          autoFocus
-                          value={editingDraftValue}
-                          placeholder={section.placeholder}
-                          onChange={(event) => onEditDraftChange(event.target.value)}
-                          onPressEnter={() => {
-                            if (canSaveEdit) onSaveEdit();
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Escape') {
-                              event.preventDefault();
-                              onCancelEdit();
-                            }
+              return (
+                <div key={item.id} className={`daily-notebook-item ${item.done ? 'is-done' : ''}`}>
+                  <div className="daily-notebook-item-main">
+                    <div className="daily-notebook-item-text-row">
+                      {isNote && batchMode && (
+                        <Checkbox
+                          checked={selected.has(item.id)}
+                          onChange={() => toggleItem(item.id)}
+                          className="daily-notebook-batch-checkbox"
+                        />
+                      )}
+                      {section.type === 'task' && (
+                        <button
+                          type="button"
+                          className={`daily-notebook-check ${item.done ? 'is-done' : ''}`}
+                          onClick={() => onToggleTask(item.id)}
+                          aria-label={item.done ? '标记为未完成' : '标记为已完成'}
+                        >
+                          {item.done && <Check size={13} strokeWidth={2.4} />}
+                        </button>
+                      )}
+                      {isEditing ? (
+                        <div className="daily-notebook-item-editor">
+                          <Input
+                            autoFocus
+                            value={editingDraftValue}
+                            placeholder={section.placeholder}
+                            onChange={(event) => onEditDraftChange(event.target.value)}
+                            onPressEnter={() => {
+                              if (canSaveEdit) onSaveEdit();
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Escape') {
+                                event.preventDefault();
+                                onCancelEdit();
+                              }
+                            }}
+                          />
+                          <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
+                            保存
+                          </Button>
+                          <Button size="small" onClick={onCancelEdit}>
+                            取消
+                          </Button>
+                        </div>
+                      ) : (
+                        <span
+                          className="daily-notebook-item-text"
+                          onDoubleClick={() => onStartEdit(item)}
+                        >
+                          {item.text}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isEditing && !batchMode && (
+                    <div className="daily-notebook-item-actions">
+                      {(section.type === 'note' || section.type === 'task') && (
+                        <DatePicker
+                          size="small"
+                          value={dayjs(currentDate)}
+                          format="MM-DD"
+                          allowClear={false}
+                          suffixIcon={null}
+                          className="daily-notebook-item-date-picker"
+                          onChange={(date) => {
+                            if (date) onMoveItem(item.id, date.format('YYYY-MM-DD'));
                           }}
                         />
-                        <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
-                          保存
-                        </Button>
-                        <Button size="small" onClick={onCancelEdit}>
-                          取消
-                        </Button>
-                      </div>
-                    ) : (
-                      <span
-                        className="daily-notebook-item-text"
-                        onDoubleClick={() => onStartEdit(item)}
-                      >
-                        {item.text}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {!isEditing && (
-                  <div className="daily-notebook-item-actions">
-                    <Button type="text" size="small" onClick={() => onStartEdit(item)}>
-                      编辑
-                    </Button>
-                    {section.type === 'task' && !item.done && (
-                      <Button type="text" size="small" onClick={() => onMoveTaskToTodo(item.id)}>
-                        移到待办
+                      )}
+                      <Button type="text" size="small" onClick={() => onStartEdit(item)}>
+                        编辑
                       </Button>
-                    )}
-                    <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onDeleteItem(item.id)} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      {(section.type === 'task' || section.type === 'note') && (
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={copiedId === item.id
+                            ? <Check size={14} strokeWidth={2.4} />
+                            : <Copy size={14} strokeWidth={1.8} />}
+                          onClick={() => onCopy(item.id, item.text)}
+                          title="复制"
+                        />
+                      )}
+                      {section.type === 'task' && !item.done && (
+                        <Button type="text" size="small" onClick={() => onMoveTaskToTodo(item.id)}>
+                          移到待办
+                        </Button>
+                      )}
+                      <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onDeleteItem(item.id)} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={section.emptyText} />
       )}
@@ -171,6 +303,8 @@ function DailyNotebook({
   onToggleTaskDone,
   onDeleteItem,
   onUpdateItem,
+  onMoveItem,
+  onMoveItems,
   onMoveTaskToTodo,
   onAddTodo,
   onPromoteTodo,
@@ -178,6 +312,7 @@ function DailyNotebook({
 }) {
   const [drafts, setDrafts] = useState({ task: '', event: '', note: '', todo: '' });
   const [editingItem, setEditingItem] = useState(null);
+  const { copiedId, copy: handleCopy } = useCopyText();
   const currentDate = dailyWorkspace?.currentDate || getTodayDateKey();
   const todayKey = getTodayDateKey();
   const dailyEntry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
@@ -260,15 +395,6 @@ function DailyNotebook({
             <Button icon={<ChevronRight size={14} strokeWidth={1.8} />} onClick={() => onSetCurrentDate(shiftDateKey(currentDate, 1))} />
             <Button type={currentDate === todayKey ? 'primary' : 'default'} onClick={() => onSetCurrentDate(todayKey)}>今天</Button>
           </div>
-          <div className="daily-notebook-date-input-row">
-            <CalendarDays size={16} strokeWidth={1.8} />
-            <input
-              className="daily-notebook-date-input"
-              type="date"
-              value={currentDate}
-              onChange={(event) => onSetCurrentDate(event.target.value)}
-            />
-          </div>
         </div>
       </section>
 
@@ -288,6 +414,7 @@ function DailyNotebook({
               key={section.type}
               section={section}
               items={itemsByType[section.type]}
+              currentDate={currentDate}
               draftValue={drafts[section.type]}
               onDraftChange={handleDraftChange}
               onSubmit={handleSubmit}
@@ -299,7 +426,11 @@ function DailyNotebook({
               onCancelEdit={handleCancelEdit}
               onToggleTask={(itemId) => onToggleTaskDone(currentDate, itemId)}
               onMoveTaskToTodo={(itemId) => onMoveTaskToTodo(currentDate, itemId)}
+              onMoveItem={(itemId, toDate) => onMoveItem(currentDate, itemId, toDate)}
+              onMoveItems={(itemIds, toDate) => onMoveItems(currentDate, itemIds, toDate)}
               onDeleteItem={(itemId) => onDeleteItem(currentDate, itemId)}
+              copiedId={copiedId}
+              onCopy={handleCopy}
             />
           ))}
         </div>

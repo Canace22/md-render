@@ -175,16 +175,24 @@ export const mergeDailyWorkspaces = (preferred, fallback, baseDate) => {
   const entries = {};
 
   for (const dateKey of allDateKeys) {
-    const primaryEntry = primary.entries[dateKey] ?? createEmptyDailyEntry(dateKey);
+    const primaryEntry = primary.entries[dateKey];
     const secondaryEntry = secondary.entries[dateKey] ?? createEmptyDailyEntry(dateKey);
-    entries[dateKey] = {
-      date: dateKey,
-      items: mergeItemLists(
+
+    if (primaryEntry) {
+      // preferred 已有此日期的 entry：以 preferred 为准，
+      // 只用 secondary 补充 preferred 里没有的 id（避免已移走/删除的条目复活）
+      const primaryIds = new Set(primaryEntry.items.map((i) => i.id));
+      const secondaryOnlyItems = secondaryEntry.items.filter((i) => !primaryIds.has(i.id));
+      const merged = mergeItemLists(
         primaryEntry.items,
-        secondaryEntry.items,
+        secondaryOnlyItems,
         (left, right) => left.createdAt - right.createdAt || left.updatedAt - right.updatedAt,
-      ),
-    };
+      );
+      entries[dateKey] = { date: dateKey, items: merged };
+    } else {
+      // preferred 没有此日期：直接用 secondary 的数据（跨 session 恢复）
+      entries[dateKey] = { date: dateKey, items: secondaryEntry.items };
+    }
   }
 
   return {
@@ -200,6 +208,16 @@ export const mergeDailyWorkspaces = (preferred, fallback, baseDate) => {
 
 const buildTodoDedupKey = (text, sourceDate) => {
   return `${normalizeText(text)}::${sourceDate}`;
+};
+
+// 纯视图切换：只改 currentDate，不搬运/删除任何条目。
+// 用于用户手动翻日期（前后箭头、点某天），避免每次切换都触发破坏性结转。
+export const setDailyCurrentDate = (dailyWorkspace, dateKey) => {
+  const normalized = normalizeDailyWorkspace(dailyWorkspace, dateKey);
+  return {
+    ...normalized,
+    currentDate: normalizeDateKey(dateKey, normalized.currentDate),
+  };
 };
 
 export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
@@ -329,6 +347,23 @@ export const removeDailyEntryItem = (dailyWorkspace, dateKey, itemId) => {
   return updateEntry(dailyWorkspace, dateKey, (entry) => ({
     ...entry,
     items: entry.items.filter((item) => item.id !== itemId),
+  }));
+};
+
+export const moveDailyEntryItem = (dailyWorkspace, fromDate, itemId, toDate) => {
+  const fromNormalized = normalizeDateKey(fromDate);
+  const toNormalized = normalizeDateKey(toDate);
+  if (!fromNormalized || !toNormalized || fromNormalized === toNormalized) return normalizeDailyWorkspace(dailyWorkspace);
+
+  const normalized = normalizeDailyWorkspace(dailyWorkspace);
+  const fromEntry = normalized.entries?.[fromNormalized];
+  const item = fromEntry?.items?.find((i) => i.id === itemId);
+  if (!item) return normalized;
+
+  const withoutItem = removeDailyEntryItem(normalized, fromNormalized, itemId);
+  return updateEntry(withoutItem, toNormalized, (entry) => ({
+    ...entry,
+    items: [...entry.items, { ...item, updatedAt: Date.now() }],
   }));
 };
 

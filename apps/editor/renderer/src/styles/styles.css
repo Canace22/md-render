@@ -9211,6 +9211,56 @@ body.theme-dark .file-preview-iframe {
   flex-shrink: 0;
 }
 
+/* 日期选择器扁平化：去掉边框和背景，仅在 hover/聚焦时轻微提示 */
+.daily-notebook-item-date-picker.ant-picker {
+  width: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding-inline: 4px;
+  border-radius: 6px;
+}
+
+.daily-notebook-item-date-picker .ant-picker-input {
+  width: auto;
+}
+
+.daily-notebook-item-date-picker.ant-picker:hover,
+.daily-notebook-item-date-picker.ant-picker.ant-picker-focused {
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
+  border: none;
+  box-shadow: none;
+}
+
+/* "MM-DD" 只需约 5 个字符宽 */
+.daily-notebook-item-date-picker .ant-picker-input > input {
+  width: 42px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+/* 批量操作栏 */
+.daily-notebook-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--color-bg-secondary, rgba(0,0,0,0.03));
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.daily-notebook-batch-count {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-right: 4px;
+}
+
+.daily-notebook-batch-checkbox {
+  flex-shrink: 0;
+}
+
 .daily-notebook-todo-column {
   min-height: 0;
 }
