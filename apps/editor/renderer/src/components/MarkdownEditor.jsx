@@ -2203,6 +2203,8 @@ function MarkdownEditor() {
           onOpenExternal={handleOpenBookmarkTabExternal}
         />
 
+        <div className="immersive-main-row">
+          <div className="immersive-main-content">
         {surface === 'settings' ? (
           <SettingsPanel
             selectedFileName={selectedFile?.name}
@@ -2426,16 +2428,18 @@ function MarkdownEditor() {
                 collapsed={tocCollapsed}
                 onToggle={toggleTocCollapsed}
               />
-              {agentPanelOpen && (
-                <div className="agent-panel-dock agent-panel-dock--sidebar">
-                  <AgentPanel onClose={() => setAgentPanelOpen(false)} />
-                </div>
-              )}
             </div>
             {/* 底部状态栏 */}
             <StatusBar content={resolvedMarkdown} backlinks={0} />
           </>
         )}
+          </div>
+          {agentPanelOpen && (
+            <div className="agent-panel-dock agent-panel-dock--sidebar">
+              <AgentPanel onClose={() => setAgentPanelOpen(false)} />
+            </div>
+          )}
+        </div>
       </div>
 
       <WechatPreviewModal
