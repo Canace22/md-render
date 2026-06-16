@@ -1,106 +1,243 @@
 /**
- * AI API 转发服务（OpenAI 兼容，零依赖，单文件）
+ * AI 代理服务（OpenAI 兼容，零依赖，单文件）
  *
- * 作用：浏览器/Electron 前端直连第三方 AI API 会被 CORS 拦截。
- * 本服务部署在你的服务器上，把前端发来的 /v1/* 请求原样转发给
- * 上游 OpenAI 兼容服务（OpenAI、DeepSeek、Moonshot、各类中转站等），
- * 并给响应补上 CORS 头，浏览器即可放行。流式（SSE）原样透传。
+ * 两种模式并存：
  *
- * 设计要点（与 notion-proxy 保持一致的风格）：
- * - 纯透传：API key 由前端在 Authorization 头里携带，本服务不读取、不存储、不打印。
- * - 上游可变：前端用 `X-AI-Upstream` 头指定上游域名（如 api.openai.com）；
- *   没传则用环境变量 AI_UPSTREAM_HOST 的默认值。这样一个代理能服务多家。
- * - 无第三方依赖，Node 18+ 直接运行：`node server.js`
+ * 1. Provider 模式（推荐）—— POST /api/chat
+ *    前端只传 providerId + messages，服务端自动解析 key 并转发给 LLM。
+ *    API Key 存在服务端 .env，前端永远不接触。
  *
- * 环境变量：
- * - PORT             监听端口，默认 8788
- * - ALLOW_ORIGIN     允许的来源，默认 *（自用足够；如需收紧填具体域名）
- * - AI_UPSTREAM_HOST 默认上游域名，默认 api.openai.com
+ * 2. 透明代理模式（兼容）—— /v1/*
+ *    前端自带 key，服务端只做 CORS 透传。
  *
- * 前端对应配置：VITE_AI_PROXY=https://你的服务器:8788/v1
+ * 环境变量（.env）：
+ * - PORT              监听端口，默认 8788
+ * - ALLOW_ORIGIN      允许的来源，默认 *
+ * - AI_UPSTREAM_HOST  透明代理默认上游，默认 api.openai.com
+ * - XIAOMI_API_KEY    小米 MiMo key
+ * - MINIMAX_API_KEY   MiniMax key
  */
 
 const http = require('http');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
+
+// ── 加载 .env ──────────────────────────────────────────────
+function loadDotEnv() {
+  const envPath = path.join(__dirname, '.env');
+  if (!fs.existsSync(envPath)) return;
+  const content = fs.readFileSync(envPath, 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx < 1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+loadDotEnv();
 
 const PORT = process.env.PORT || 8788;
 const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
 const DEFAULT_UPSTREAM_HOST = process.env.AI_UPSTREAM_HOST || 'api.openai.com';
 
-// 透传给上游的请求头白名单（其余一律不转发，避免泄露/干扰）
-const FORWARD_HEADERS = ['authorization', 'content-type', 'accept'];
+// ── Provider 配置（key 从 .env 读取） ──────────────────────
+const PROVIDERS = {
+  'xiaomi-mimo': {
+    label: '小米 MiMo',
+    baseURL: 'https://token-plan-sgp.xiaomimimo.com/v1',
+    defaultModel: 'mimo-v2.5-pro',
+    apiKeyEnv: 'XIAOMI_API_KEY',
+  },
+  'minimax': {
+    label: 'MiniMax',
+    baseURL: 'https://api.minimaxi.com/v1',
+    defaultModel: 'MiniMax-M3',
+    apiKeyEnv: 'MINIMAX_API_KEY',
+  },
+};
 
-// 只允许转发到 OpenAI 兼容的合法域名格式，避免被当成开放代理（SSRF 防护）
-const isValidUpstreamHost = (host) =>
-  /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(host || ''));
+function resolveProvider(providerId) {
+  const provider = PROVIDERS[providerId];
+  if (!provider) return null;
+  const apiKey = process.env[provider.apiKeyEnv] || '';
+  if (!apiKey) return null;
+  return { ...provider, apiKey };
+}
+
+// ── 工具函数 ───────────────────────────────────────────────
+const FORWARD_HEADERS = ['authorization', 'content-type', 'accept'];
+const isValidUpstreamHost = (host) => /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(host || ''));
 
 const corsHeaders = () => ({
   'Access-Control-Allow-Origin': ALLOW_ORIGIN,
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization,Content-Type,Accept,X-AI-Upstream',
+  'Access-Control-Allow-Headers': 'Authorization,Content-Type,Accept,X-AI-Upstream,X-AI-Provider',
   'Access-Control-Max-Age': '86400',
 });
 
+const jsonRes = (res, statusCode, data) => {
+  res.writeHead(statusCode, { ...corsHeaders(), 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
+};
+
+// ── 转发请求到 LLM API ────────────────────────────────────
+function forwardToLLM({ baseURL, apiKey, body, res }) {
+  const url = new URL(`${baseURL}/chat/completions`);
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  const upstream = https.request(
+    {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname,
+      method: 'POST',
+      headers,
+    },
+    (aiRes) => {
+      res.writeHead(aiRes.statusCode, {
+        ...corsHeaders(),
+        'Content-Type': aiRes.headers['content-type'] || 'application/json',
+      });
+      aiRes.pipe(res);
+    },
+  );
+
+  upstream.on('error', (err) => {
+    jsonRes(res, 502, { error: `代理转发失败: ${err.message}` });
+  });
+
+  if (body.length) upstream.write(body);
+  upstream.end();
+}
+
+// ── HTTP Server ────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-  // 预检请求直接放行
+  // 预检请求
   if (req.method === 'OPTIONS') {
     res.writeHead(204, corsHeaders());
     res.end();
     return;
   }
 
-  // 只转发 /v1 下的请求
-  if (!req.url.startsWith('/v1/')) {
-    res.writeHead(404, corsHeaders());
-    res.end('Not Found');
+  // ── Provider 模式：POST /api/chat ──
+  if (req.method === 'POST' && req.url === '/api/chat') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const { providerId, messages, tools, model, temperature, max_tokens } = payload;
+
+        if (!providerId) return jsonRes(res, 400, { error: '缺少 providerId' });
+        if (!messages || !Array.isArray(messages)) return jsonRes(res, 400, { error: '缺少 messages' });
+
+        const provider = resolveProvider(providerId);
+        if (!provider) return jsonRes(res, 400, { error: `未知或未配置的 provider: ${providerId}` });
+
+        const llmBody = {
+          model: model || provider.defaultModel,
+          messages,
+          temperature: temperature ?? 0.3,
+          ...(max_tokens ? { max_tokens } : {}),
+        };
+        if (Array.isArray(tools) && tools.length) {
+          llmBody.tools = tools;
+          llmBody.tool_choice = 'auto';
+        }
+
+        forwardToLLM({
+          baseURL: provider.baseURL,
+          apiKey: provider.apiKey,
+          body: Buffer.from(JSON.stringify(llmBody)),
+          res,
+        });
+      } catch (err) {
+        jsonRes(res, 400, { error: `请求解析失败: ${err.message}` });
+      }
+    });
     return;
   }
 
-  const upstreamHost = req.headers['x-ai-upstream'] || DEFAULT_UPSTREAM_HOST;
-  if (!isValidUpstreamHost(upstreamHost)) {
-    res.writeHead(400, { ...corsHeaders(), 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ message: `非法上游域名: ${upstreamHost}` }));
-    return;
+  // ── Provider 列表：GET /api/providers ──
+  if (req.method === 'GET' && req.url === '/api/providers') {
+    const list = Object.entries(PROVIDERS).map(([id, cfg]) => ({
+      id,
+      label: cfg.label,
+      baseURL: cfg.baseURL,
+      defaultModel: cfg.defaultModel,
+      hasKey: Boolean(process.env[cfg.apiKeyEnv]),
+    }));
+    return jsonRes(res, 200, { providers: list });
   }
 
-  // 收集请求体后转发
-  const chunks = [];
-  req.on('data', (c) => chunks.push(c));
-  req.on('end', () => {
-    const body = Buffer.concat(chunks);
+  // ── 健康检查：GET /api/health ──
+  if (req.method === 'GET' && req.url === '/api/health') {
+    return jsonRes(res, 200, { ok: true, providers: Object.keys(PROVIDERS) });
+  }
 
-    const headers = {};
-    for (const name of FORWARD_HEADERS) {
-      if (req.headers[name]) headers[name] = req.headers[name];
+  // ── 透明代理模式（兼容）：/v1/* ──
+  if (req.url.startsWith('/v1/')) {
+    const upstreamHost = req.headers['x-ai-upstream'] || DEFAULT_UPSTREAM_HOST;
+    if (!isValidUpstreamHost(upstreamHost)) {
+      return jsonRes(res, 400, { error: `非法上游域名: ${upstreamHost}` });
     }
 
-    const upstream = https.request(
-      {
-        hostname: upstreamHost,
-        path: req.url, // 已含 /v1/...，OpenAI 兼容 API 正是 /v1 前缀
-        method: req.method,
-        headers,
-      },
-      (aiRes) => {
-        // 原样透传状态码与内容类型；SSE 流由 pipe 自然透传
-        res.writeHead(aiRes.statusCode, {
-          ...corsHeaders(),
-          'Content-Type': aiRes.headers['content-type'] || 'application/json',
-        });
-        aiRes.pipe(res);
-      },
-    );
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const body = Buffer.concat(chunks);
+      const headers = {};
+      for (const name of FORWARD_HEADERS) {
+        if (req.headers[name]) headers[name] = req.headers[name];
+      }
 
-    upstream.on('error', (err) => {
-      res.writeHead(502, { ...corsHeaders(), 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: `代理转发失败: ${err.message}` }));
+      const upstream = https.request(
+        {
+          hostname: upstreamHost,
+          path: req.url,
+          method: req.method,
+          headers,
+        },
+        (aiRes) => {
+          res.writeHead(aiRes.statusCode, {
+            ...corsHeaders(),
+            'Content-Type': aiRes.headers['content-type'] || 'application/json',
+          });
+          aiRes.pipe(res);
+        },
+      );
+
+      upstream.on('error', (err) => {
+        jsonRes(res, 502, { error: `代理转发失败: ${err.message}` });
+      });
+
+      if (body.length) upstream.write(body);
+      upstream.end();
     });
+    return;
+  }
 
-    if (body.length) upstream.write(body);
-    upstream.end();
-  });
+  // 404
+  jsonRes(res, 404, { error: 'Not Found' });
 });
 
 server.listen(PORT, () => {
-  console.log(`AI 转发服务已启动: http://0.0.0.0:${PORT}/v1  →  https://${DEFAULT_UPSTREAM_HOST}/v1`);
+  console.log(`✅ AI 代理服务已启动: http://0.0.0.0:${PORT}`);
+  console.log(`   Provider 模式: POST /api/chat (key 存服务端)`);
+  console.log(`   透明代理模式:  /v1/* (key 由前端携带)`);
+  const configured = Object.entries(PROVIDERS)
+    .filter(([, cfg]) => process.env[cfg.apiKeyEnv])
+    .map(([id]) => id);
+  console.log(`   已配置 provider: ${configured.join(', ') || '无'}`);
 });

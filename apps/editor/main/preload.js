@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI 请求 IPC（主进程直连，无 CORS，无需代理服务器）
   ai: {
     chat: (payload) => ipcRenderer.invoke('ai:chat', payload),
+    getConfig: () => ipcRenderer.invoke('ai:getConfig'),
   },
 
   // SQLite 数据库 IPC

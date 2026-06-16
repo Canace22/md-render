@@ -22,6 +22,7 @@ import {
   readLocalProjectFileContent,
 } from './localProject.js';
 import { requestChatCompletion } from './aiRequest.js';
+import { listAvailableProviders } from './aiConfig.js';
 import {
   watchLocalProjectRoot,
   markLocalProjectWriteIgnored,
@@ -380,11 +381,18 @@ ipcMain.handle('fetch-bookmark-page-snapshot', async (_event, payload = {}) => {
 
 ipcMain.handle('ai:chat', async (_event, payload = {}) => {
   try {
-    const message = await requestChatCompletion(payload);
+    // aiProxyBase 从环境变量读取，默认本地 ai-proxy server
+    const aiProxyBase = process.env.AI_PROXY_BASE || 'http://localhost:8788';
+    const message = await requestChatCompletion({ ...payload, aiProxyBase });
     return { ok: true, message };
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+// 返回服务端可用 AI provider 列表（不含 key，仅前端展示用）
+ipcMain.handle('ai:getConfig', () => {
+  return listAvailableProviders();
 });
 
 ipcMain.handle('export-save-file', async (_event, payload = {}) => {

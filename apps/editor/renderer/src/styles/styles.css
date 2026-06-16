@@ -8280,6 +8280,12 @@ body.theme-dark .file-preview-iframe {
   background: var(--color-primary-btn-hover);
 }
 
+.agent-panel__builtin-hint {
+  font-size: 13px;
+  color: var(--color-success, #52c41a);
+  padding: 8px 0;
+}
+
 .agent-panel__messages {
   flex: 1;
   overflow-y: auto;

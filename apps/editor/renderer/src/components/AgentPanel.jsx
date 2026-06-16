@@ -31,6 +31,8 @@ import {
   readProviderConfig,
   setActiveProvider,
   saveProviderConfig,
+  hasBuiltinKey,
+  fetchServerProviders,
 } from '../core/agent/aiClient.js';
 
 const hasElectronSearch = () =>
@@ -161,6 +163,12 @@ export default function AgentPanel() {
   const providers = useMemo(() => listProviders(), []);
   const [providerId, setProviderId] = useState(() => getActiveProviderId());
   const [cfg, setCfg] = useState(() => readProviderConfig());
+  const [serverProvidersReady, setServerProvidersReady] = useState(false);
+
+  // 启动时从主进程获取内置 provider 列表
+  useState(() => {
+    fetchServerProviders().then(() => setServerProvidersReady(true));
+  });
   const isWelcomeMode = messages.length === 0 && !showSettings && !showSessions;
   const isComposerMoreActive = showSessions || showSettings;
 
@@ -472,7 +480,7 @@ export default function AgentPanel() {
 
   const handleSaveSettings = useCallback(() => {
     setActiveProvider(providerId);
-    saveProviderConfig(providerId, { apiKey: cfg.apiKey, model: cfg.model, baseURL: cfg.baseURL });
+    saveProviderConfig(providerId, { model: cfg.model });
     setCfg(readProviderConfig(providerId));
     setShowSettings(false);
   }, [providerId, cfg]);
@@ -541,16 +549,18 @@ export default function AgentPanel() {
               ))}
             </select>
           </label>
-          {providerId === 'custom' && (
-            <label>Base URL（OpenAI 兼容，完整基址）
-              <input value={cfg.baseURL} placeholder="https://xxx/v1"
-                onChange={(e) => setCfg({ ...cfg, baseURL: e.target.value })} />
-            </label>
+          {hasBuiltinKey(providerId) ? (
+            <div className="agent-panel__builtin-hint">
+              
+            </div>
+          ) : (
+            <>
+              <label>Base URL
+                <input value={cfg.baseURL} placeholder="https://xxx/v1"
+                  onChange={(e) => setCfg({ ...cfg, baseURL: e.target.value })} />
+              </label>
+            </>
           )}
-          <label>API Key
-            <input type="password" value={cfg.apiKey} placeholder="该服务商的 key"
-              onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })} />
-          </label>
           <label>模型
             <input value={cfg.model} placeholder="默认已填，可改"
               onChange={(e) => setCfg({ ...cfg, model: e.target.value })} />

@@ -1,50 +1,44 @@
 /**
- * 主进程 AI 请求：Node 端直连 OpenAI 兼容接口。
+ * AI 请求：通过 ai-proxy server 发起，不直连 LLM。
  *
- * 走主进程的好处：Node 没有浏览器的 CORS 限制，前端无需部署任何代理服务器。
- * key 由前端通过 IPC 传入，仅用于本次请求的 Authorization 头，不存储、不打印。
+ * 调用链路：Renderer → IPC → Main → ai-proxy server → LLM API
  *
- * baseURL 是各家完整基址（含路径），因为不是所有家都用 /v1：
- * 例如阿里百炼是 .../compatible-mode/v1。请求统一拼 `${baseURL}/chat/completions`。
+ * API Key 存在 ai-proxy server 的 .env 里，Main 进程也不接触 key。
+ * Main 只传 providerId + messages 给 server，server 解析 key 并转发。
  */
 
-const AI_REQUEST_TIMEOUT_MS = 60000;
-
-const isHttpsUrl = (value) => /^https:\/\/[^\s]+$/i.test(String(value || ''));
+const AI_PROXY_TIMEOUT_MS = 60000;
 
 /**
- * 调用一次 chat/completions（非流式，带 tools）。
+ * 调用 ai-proxy server 的 /api/chat 接口。
+ *
  * @param {object} params
- * @param {Array}  params.messages
- * @param {Array}  [params.tools]
- * @param {string} params.apiKey
- * @param {string} params.baseURL   完整基址，如 https://api.deepseek.com/v1
- * @param {string} params.model
+ * @param {string} params.aiProxyBase  server 地址，如 http://localhost:8788
+ * @param {string} params.providerId   预设服务商 id
+ * @param {Array}  params.messages     聊天消息
+ * @param {Array}  [params.tools]      工具定义
+ * @param {string} [params.model]      覆盖默认模型
  * @returns {Promise<object>} choices[0].message
  */
-export async function requestChatCompletion({ messages, tools, apiKey, baseURL, model }) {
-  if (!apiKey) throw new Error('未配置 API key');
-  if (!model) throw new Error('未配置模型名称');
-  const base = String(baseURL ?? '').trim().replace(/\/+$/, '');
-  if (!isHttpsUrl(base)) throw new Error(`非法 Base URL: ${baseURL}`);
+export async function requestChatCompletion({ aiProxyBase, providerId, messages, tools, model }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  if (!providerId) throw new Error('未指定 providerId');
+  if (!messages || !messages.length) throw new Error('消息不能为空');
 
-  const payload = { model, messages, temperature: 0.3 };
-  if (Array.isArray(tools) && tools.length) {
-    payload.tools = tools;
-    payload.tool_choice = 'auto';
-  }
+  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/chat`;
+
+  const payload = { providerId, messages };
+  if (model) payload.model = model;
+  if (Array.isArray(tools) && tools.length) payload.tools = tools;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), AI_PROXY_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${base}/chat/completions`, {
+    const response = await fetch(url, {
       method: 'POST',
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
