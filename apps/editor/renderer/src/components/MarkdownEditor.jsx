@@ -256,6 +256,14 @@ const BLANK_CANVAS_CARD_NODE_TYPE = 'blank-card';
 const BLANK_CANVAS_CARD_TITLE = '空白卡片';
 const BLANK_CANVAS_CARD_TYPE_LABEL = '卡片';
 const BLANK_CANVAS_CARD_META = '自由记录';
+const AGENT_FAB_SIZE = 40;
+const AGENT_FAB_MARGIN = 16;
+const AGENT_FAB_DRAG_THRESHOLD = 4;
+
+const getDefaultAgentFabPos = () => ({
+  left: window.innerWidth - AGENT_FAB_SIZE - AGENT_FAB_MARGIN,
+  top: window.innerHeight - AGENT_FAB_SIZE - AGENT_FAB_MARGIN,
+});
 
 const stripMarkdownExtension = (name = '') => String(name).replace(/\.md$/i, '');
 const truncateInlineText = (value, maxLength = 96) => {
@@ -740,6 +748,16 @@ function MarkdownEditor() {
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const [agentFabPos, setAgentFabPos] = useState(getDefaultAgentFabPos);
+  const [agentFabDragging, setAgentFabDragging] = useState(false);
+  const agentFabDragRef = useRef({
+    active: false,
+    moved: false,
+    startX: 0,
+    startY: 0,
+    originLeft: 0,
+    originTop: 0,
+  });
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const [notionMessage, setNotionMessage] = useState('');
@@ -755,6 +773,17 @@ function MarkdownEditor() {
     selectedFile?.needsConversion
       || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
   );
+
+  useEffect(() => {
+    const onResize = () => {
+      setAgentFabPos((pos) => ({
+        left: Math.min(pos.left, window.innerWidth - AGENT_FAB_SIZE),
+        top: Math.min(pos.top, window.innerHeight - AGENT_FAB_SIZE),
+      }));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [previewData, setPreviewData] = useState({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
   const [previewLoading, setPreviewLoading] = useState(false);
   // 图片放大查看器：lightbox.index < 0 表示关闭
@@ -2430,15 +2459,55 @@ function MarkdownEditor() {
         onIndexChange={changeLightboxIndex}
       />
 
-      {/* 全局 AI 助手浮动按钮：点击切换侧边栏 */}
+      {/* 全局 AI 助手浮动按钮：拖动调位置，点击切换侧边栏 */}
       <button
         type="button"
-        className={`agent-fab${agentPanelOpen ? ' is-active' : ''}`}
-        onClick={() => setAgentPanelOpen((v) => !v)}
+        className={`agent-fab${agentPanelOpen ? ' is-active' : ''}${agentFabDragging ? ' is-dragging' : ''}`}
+        style={{ left: agentFabPos.left, top: agentFabPos.top }}
         title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
         aria-label="AI 助手"
+        onPointerDown={(e) => {
+          agentFabDragRef.current = {
+            active: true,
+            moved: false,
+            startX: e.clientX,
+            startY: e.clientY,
+            originLeft: agentFabPos.left,
+            originTop: agentFabPos.top,
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          if (!agentFabDragRef.current.active) return;
+          const dx = e.clientX - agentFabDragRef.current.startX;
+          const dy = e.clientY - agentFabDragRef.current.startY;
+          if (Math.abs(dx) <= AGENT_FAB_DRAG_THRESHOLD && Math.abs(dy) <= AGENT_FAB_DRAG_THRESHOLD) return;
+          agentFabDragRef.current.moved = true;
+          setAgentFabDragging(true);
+          const maxLeft = window.innerWidth - AGENT_FAB_SIZE;
+          const maxTop = window.innerHeight - AGENT_FAB_SIZE;
+          setAgentFabPos({
+            left: Math.max(0, Math.min(maxLeft, agentFabDragRef.current.originLeft + dx)),
+            top: Math.max(0, Math.min(maxTop, agentFabDragRef.current.originTop + dy)),
+          });
+        }}
+        onPointerUp={(e) => {
+          if (!agentFabDragRef.current.active) return;
+          agentFabDragRef.current.active = false;
+          setAgentFabDragging(false);
+          e.currentTarget.releasePointerCapture(e.pointerId);
+          if (!agentFabDragRef.current.moved) {
+            setAgentPanelOpen((v) => !v);
+          }
+        }}
+        onPointerCancel={(e) => {
+          if (!agentFabDragRef.current.active) return;
+          agentFabDragRef.current.active = false;
+          setAgentFabDragging(false);
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
       >
-        <RobotOutlined style={{ fontSize: 22 }} />
+        <RobotOutlined style={{ fontSize: 18 }} />
       </button>
     </div>
   );
