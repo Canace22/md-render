@@ -19,6 +19,7 @@ const MAX_SEARCH_RESULTS = 8;
 const MAX_SNIPPET_CHARS = 200;
 const MAX_RECALL_RESULTS = 5; // 主动召回返回的相关旧文条数
 const MAX_RECALL_KEYWORDS = 6; // 用于召回搜索的关键词条数
+const MAX_RECENT_DOCS = 6;
 
 /** OpenAI 工具定义（纯数据，无副作用）
  *
@@ -35,6 +36,48 @@ export const TOOL_DEFINITIONS = Object.freeze([
       name: 'read_active_doc',
       description: '读取当前正在编辑的文档的标题和正文。当你需要了解用户当前文档内容时调用。',
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_active_doc_meta',
+      description: '读取当前文档的标题、摘要、状态、标签、平台等元数据，不返回全文。当你要先理解当前稿件处于什么阶段时调用。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_daily_entry',
+      description: '向今日速记 / Daily 面板添加一条任务、事件或笔记。适合处理“加个今天待办”“记个今天的会议”“补一条今日记录”这类请求。',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            description: '条目类型：task、event 或 note',
+            enum: ['task', 'event', 'note'],
+          },
+          text: { type: 'string', description: '条目内容' },
+          dateKey: { type: 'string', description: '可选，目标日期，格式 YYYY-MM-DD；不传则默认当前 Daily 日期/今天' },
+        },
+        required: ['type', 'text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_todo_entry',
+      description: '往 Daily 的待办池添加一条待办。适合处理“先记个待办，稍后再安排到哪天”这类请求。',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: '待办内容' },
+        },
+        required: ['text'],
+      },
     },
   },
   {
@@ -74,6 +117,46 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     type: 'function',
     function: {
+      name: 'create_content_entry',
+      description: '新建一个内容条目，用于开选题、开稿、建资料单或建待发布稿。会创建一篇新的 Markdown 文档，并写入对应的稿件状态元数据。',
+      parameters: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            description: '条目类型：topic=选题，draft=稿件，material=资料单，ready=待发布稿',
+            enum: ['topic', 'draft', 'material', 'ready'],
+          },
+          name: { type: 'string', description: '可选，文档名称' },
+          summary: { type: 'string', description: '可选，摘要/一句话说明' },
+          content: { type: 'string', description: '可选，初始 Markdown 正文' },
+          targetPlatforms: {
+            type: 'array',
+            description: '可选，目标平台标识列表，如 wechat / xiaohongshu / zhihu',
+            items: { type: 'string' },
+          },
+        },
+        required: ['kind'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_doc_by_id',
+      description: '按文档 id 精确读取工作区里的某篇文档全文和元数据。当你已经知道要看哪一篇时调用，避免盲搜。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '文档 id' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search_docs',
       description: '在工作区的所有文档中全文搜索关键词，返回匹配的文档标题和摘要。当你需要查找其他文档作为参考或上下文时调用。',
       parameters: {
@@ -83,6 +166,28 @@ export const TOOL_DEFINITIONS = Object.freeze([
         },
         required: ['query'],
       },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_recent_docs',
+      description: '列出最近活跃的几篇文档及其简要元数据。当你需要快速判断近期工作上下文时调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: '返回条数，默认 4，最大 6' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_workspace_brief',
+      description: '获取当前工作区的简报，包括文档总数、高频标签和最近文档。适合先快速了解整个工作区概况。',
+      parameters: { type: 'object', properties: {}, required: [] },
     },
   },
   {
@@ -133,6 +238,31 @@ const EXECUTORS = {
     return JSON.stringify({ title: doc.title ?? '', content: doc.content ?? '' });
   },
 
+  get_active_doc_meta: async (_args, host) => {
+    const doc = await host.getActiveDocMeta?.();
+    if (!doc?.title) return '当前没有打开的文档。';
+    return JSON.stringify(doc);
+  },
+
+  add_daily_entry: async (args, host) => {
+    const type = String(args?.type ?? '').trim();
+    const text = String(args?.text ?? '').trim();
+    if (!type || !text) return '添加失败：条目类型或内容为空。';
+    const result = await host.addDailyEntry?.({
+      type,
+      text,
+      dateKey: args?.dateKey,
+    });
+    return typeof result === 'string' ? result : '已添加到今日速记。';
+  },
+
+  add_todo_entry: async (args, host) => {
+    const text = String(args?.text ?? '').trim();
+    if (!text) return '添加失败：待办内容为空。';
+    const result = await host.addTodoEntry?.({ text });
+    return typeof result === 'string' ? result : '已加入待办池。';
+  },
+
   write_active_doc: async (args, host) => {
     const content = String(args?.content ?? '');
     if (!content.trim()) return '写入失败：内容为空。';
@@ -152,6 +282,27 @@ const EXECUTORS = {
     return typeof result === 'string' ? result : '已创建新文档。';
   },
 
+  create_content_entry: async (args, host) => {
+    const kind = String(args?.kind ?? '').trim();
+    if (!kind) return '创建失败：条目类型为空。';
+    const result = await host.createContentEntry?.({
+      kind,
+      name: args?.name,
+      summary: args?.summary,
+      content: args?.content,
+      targetPlatforms: args?.targetPlatforms,
+    });
+    return typeof result === 'string' ? result : '已创建内容条目。';
+  },
+
+  read_doc_by_id: async (args, host) => {
+    const id = String(args?.id ?? '').trim();
+    if (!id) return '读取失败：文档 id 为空。';
+    const doc = await host.readDocById?.(id);
+    if (!doc) return `未找到 id 为「${id}」的文档。`;
+    return JSON.stringify(doc);
+  },
+
   search_docs: async (args, host) => {
     const query = String(args?.query ?? '').trim();
     if (!query) return '搜索失败：关键词为空。';
@@ -162,6 +313,22 @@ const EXECUTORS = {
       snippet: truncate(r.snippet ?? '', MAX_SNIPPET_CHARS),
     }));
     return JSON.stringify(top);
+  },
+
+  list_recent_docs: async (args, host) => {
+    const rawLimit = Number(args?.limit);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.max(1, Math.min(MAX_RECENT_DOCS, Math.floor(rawLimit)))
+      : 4;
+    const results = (await host.listRecentDocs?.(limit)) || [];
+    if (!results.length) return '当前工作区里还没有最近文档。';
+    return JSON.stringify(results.slice(0, limit));
+  },
+
+  get_workspace_brief: async (_args, host) => {
+    const brief = await host.getWorkspaceBrief?.();
+    if (!brief) return '当前工作区不可用。';
+    return JSON.stringify(brief);
   },
 
   recall_related_docs: async (_args, host) => {
@@ -217,9 +384,16 @@ export const executeTool = async (toolCall, host) => {
  */
 const _localToolLabels = Object.freeze({
   read_active_doc: '读取当前文档',
+  get_active_doc_meta: '读取稿件元数据',
+  add_daily_entry: '添加今日条目',
+  add_todo_entry: '添加待办',
   write_active_doc: '写入当前文档',
   create_new_doc: '新建文档',
+  create_content_entry: '创建内容条目',
+  read_doc_by_id: '读取指定文档',
   search_docs: '搜索工作区',
+  list_recent_docs: '查看最近文档',
+  get_workspace_brief: '查看工作区简报',
   recall_related_docs: '召回相关旧文',
 });
 

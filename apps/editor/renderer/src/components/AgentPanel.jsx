@@ -15,14 +15,26 @@ import {
 } from '@ant-design/icons';
 import { Bot, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
-import { findNodeById } from '../store/workspaceUtils.js';
+import {
+  collectFiles,
+  findNodeById,
+} from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
+import {
+  buildActiveDocMeta,
+  buildPinnedContext,
+  buildRecentDocPointers,
+  buildTaskContextPacket,
+  buildWorkspaceToolBrief,
+  buildWorkspaceBrief,
+} from '../core/agent/taskContext.js';
 import { AI_ACTION_KEYS, buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
 import { PLATFORM_VARIANT_KEYS, buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
 import { extractRecallKeywords, rankRelatedDocs } from '../core/agent/contextRecall.js';
+import { getTodayDateKey, normalizeDateKey } from '../utils/dailyWorkspace.js';
 import {
   isAiConfigured,
   listProviders,
@@ -53,6 +65,12 @@ const isMarkdownFile = (node) =>
   && /\.md$/i.test(node.name ?? '')
   && typeof node.content === 'string';
 
+const buildRefReason = (ref, keywords) => {
+  const haystack = `${ref?.title ?? ''}\n${ref?.snippet ?? ''}`.toLowerCase();
+  const hits = keywords.filter((kw) => haystack.includes(kw)).slice(0, 3);
+  return hits.length ? `关键词：${hits.join('、')}` : '与当前稿件主题相关';
+};
+
 /** 把 tool 消息里最后一条 running 改成 done */
 const markLastToolDone = (messages, label) => {
   const next = [...messages];
@@ -64,6 +82,52 @@ const markLastToolDone = (messages, label) => {
   }
   return next;
 };
+
+const recallDocsForContext = async ({
+  doc,
+  selectedId,
+  searchDocs,
+  limit = 5,
+}) => {
+  const keywords = extractRecallKeywords({ title: doc?.title, content: doc?.content });
+  if (keywords.length === 0) return [];
+
+  const seen = new Map();
+  for (const kw of keywords) {
+    const hits = await searchDocs(kw);
+    hits.forEach((hit) => {
+      if (hit?.id != null && !seen.has(hit.id)) seen.set(hit.id, hit);
+    });
+  }
+
+  return rankRelatedDocs(
+    { id: selectedId, title: doc?.title, content: doc?.content },
+    [...seen.values()],
+    { limit, keywords },
+  ).map((ref) => ({
+    ...ref,
+    reason: buildRefReason(ref, keywords),
+  }));
+};
+
+const CONTENT_ENTRY_PRESETS = Object.freeze({
+  topic: {
+    draftStatus: 'idea',
+    fallbackName: '新选题',
+  },
+  draft: {
+    draftStatus: 'drafting',
+    fallbackName: '新稿件',
+  },
+  material: {
+    draftStatus: 'collecting',
+    fallbackName: '新资料单',
+  },
+  ready: {
+    draftStatus: 'ready',
+    fallbackName: '待发布稿',
+  },
+});
 
 // 平台版本：同一正文改写成对应平台版（走 AI 助手，让 agent 读当前文档并写回）
 const PLATFORM_VARIANTS = listPlatformVariants();
@@ -132,12 +196,17 @@ export default function AgentPanel({ onClose }) {
   const markdown = useEditorStore((s) => s.markdown);
   const workspace = useEditorStore((s) => s.workspace);
   const selectedId = useEditorStore((s) => s.selectedId);
+  const dailyWorkspace = useEditorStore((s) => s.dailyWorkspace);
 
   // AI 待确认写入：stage 暂存改动；diff 对比与应用/放弃由预览区的 DiffOverlay 负责
   const stageAgentWrite = useEditorStore((s) => s.stageAgentWrite);
   // 直接写当前文档（插入引用用，无需 diff 确认）
   const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
   const createGeneratedFile = useEditorStore((s) => s.createGeneratedFile);
+  const addDailyItem = useEditorStore((s) => s.addDailyItem);
+  const addTodoItem = useEditorStore((s) => s.addTodoItem);
+  const setDailyCurrentDate = useEditorStore((s) => s.setDailyCurrentDate);
+  const setSurface = useEditorStore((s) => s.setSurface);
 
   // 全局会话状态（切页不丢）
   const sessions = useEditorStore((s) => s.agentSessions);
@@ -174,6 +243,7 @@ export default function AgentPanel({ onClose }) {
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
   const [attachedFiles, setAttachedFiles] = useState([]);
+  const [lastContextPacket, setLastContextPacket] = useState(null);
 
   // 工作区里所有 Markdown 文件（供 @ 选择）
   const mdFiles = useMemo(
@@ -196,6 +266,9 @@ export default function AgentPanel({ onClose }) {
   useEffect(() => {
     fetchServerProviders().then(() => setServerProvidersReady(true));
   }, []);
+  useEffect(() => {
+    setLastContextPacket(null);
+  }, [activeSessionId]);
   const isWelcomeMode = messages.length === 0 && !showSettings && !showSessions;
 
   const abortRef = useRef(null);
@@ -231,9 +304,14 @@ export default function AgentPanel({ onClose }) {
   // 全局模式：无文档时 readActiveDoc 返回空，writeActiveDoc 为 no-op
   const host = useMemo(() => ({
     readActiveDoc: () => {
-      const files = flattenFiles(workspace);
+      const files = collectFiles(workspace);
       const active = files.find((f) => f.id === selectedId);
       return { title: active?.name ?? '', content: markdown ?? '' };
+    },
+    getActiveDocMeta: () => {
+      const files = collectFiles(workspace);
+      const active = files.find((f) => f.id === selectedId);
+      return buildActiveDocMeta(active, markdown ?? '');
     },
     // 不直接覆盖：暂存成待确认改动，弹 diff 卡片让用户应用/放弃。
     // 无文档时返回提示。
@@ -253,6 +331,64 @@ export default function AgentPanel({ onClose }) {
         ? `已新建文档「${result.name}」，原文未改动。`
         : `新建文档失败：${result?.error || '未知错误'}`;
     },
+    addDailyEntry: async ({ type = 'task', text = '', dateKey = '' } = {}) => {
+      const cleanText = String(text ?? '').trim();
+      if (!cleanText) return '添加失败：内容为空。';
+      const targetDateKey = normalizeDateKey(
+        dateKey || dailyWorkspace?.currentDate || getTodayDateKey(),
+      );
+      addDailyItem(targetDateKey, type, cleanText);
+      setDailyCurrentDate(targetDateKey);
+      setSurface('daily');
+      return `已添加到 ${targetDateKey}：${type}「${cleanText}」。`;
+    },
+    addTodoEntry: async ({ text = '' } = {}) => {
+      const cleanText = String(text ?? '').trim();
+      if (!cleanText) return '添加失败：待办内容为空。';
+      addTodoItem(cleanText);
+      setSurface('daily');
+      return `已加入待办池：${cleanText}。`;
+    },
+    createContentEntry: async ({
+      kind = 'topic',
+      name = '',
+      summary = '',
+      content = '',
+      targetPlatforms = [],
+    } = {}) => {
+      const preset = CONTENT_ENTRY_PRESETS[kind] || CONTENT_ENTRY_PRESETS.topic;
+      const finalContent = String(content ?? '').trim()
+        || (String(summary ?? '').trim() ? `# ${name || preset.fallbackName}\n\n${String(summary ?? '').trim()}\n` : '');
+      const result = await createGeneratedFile({
+        name: name || preset.fallbackName,
+        content: finalContent,
+        contextNodeId: selectedId,
+        meta: {
+          draftStatus: preset.draftStatus,
+          summary,
+          targetPlatforms,
+        },
+      });
+      return result?.ok
+        ? `已创建${kind === 'topic' ? '选题' : '内容条目'}「${result.name}」。`
+        : `创建失败：${result?.error || '未知错误'}`;
+    },
+    readDocById: async (docId) => {
+      const targetId = String(docId ?? '').trim();
+      if (!targetId) return null;
+      const file = collectFiles(workspace).find((item) => item?.id === targetId);
+      if (!file) return null;
+      return {
+        ...buildActiveDocMeta(file, file.content ?? ''),
+        content: file.content ?? '',
+      };
+    },
+    listRecentDocs: async (limit = 4) => {
+      return buildRecentDocPointers(workspace, selectedId, limit);
+    },
+    getWorkspaceBrief: async () => {
+      return buildWorkspaceToolBrief(workspace, selectedId);
+    },
     searchDocs: async (query) => {
       if (hasElectronSearch()) {
         try {
@@ -267,7 +403,7 @@ export default function AgentPanel({ onClose }) {
         }
       }
       const q = String(query).toLowerCase();
-      return flattenFiles(workspace)
+      return collectFiles(workspace)
         .filter((f) => `${f.name ?? ''}${f.content ?? ''}`.toLowerCase().includes(q))
         .map((f) => ({ title: f.name ?? '未命名', snippet: String(f.content ?? '').slice(0, 200), id: f.id }));
     },
@@ -297,7 +433,18 @@ export default function AgentPanel({ onClose }) {
         return JSON.stringify({ ok: false, error: err?.message ?? String(err) });
       }
     },
-  }), [workspace, selectedId, markdown, stageAgentWrite, createGeneratedFile]);
+  }), [
+    workspace,
+    selectedId,
+    markdown,
+    stageAgentWrite,
+    createGeneratedFile,
+    dailyWorkspace,
+    addDailyItem,
+    addTodoItem,
+    setDailyCurrentDate,
+    setSurface,
+  ]);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
   const [serverTools, setServerTools] = useState([]);
@@ -401,9 +548,39 @@ export default function AgentPanel({ onClose }) {
     setShowSessions(false);
   }, [switchAgentSession]);
 
+  const buildTurnContext = useCallback(async ({
+    selectionText = '',
+    pinnedFiles = [],
+  } = {}) => {
+    const activeDoc = host.getActiveDocMeta?.();
+    const workspaceBrief = buildWorkspaceBrief(workspace, selectedId);
+    const relatedRefs = activeDoc?.title
+      ? await recallDocsForContext({
+        doc: { title: activeDoc.title, content: markdown ?? '' },
+        selectedId,
+        searchDocs: host.searchDocs,
+        limit: 3,
+      })
+      : [];
+
+    return buildTaskContextPacket({
+      activeDoc,
+      selectionText,
+      workspaceBrief,
+      relatedRefs,
+      userPinnedContext: buildPinnedContext(pinnedFiles),
+    });
+  }, [host, workspace, selectedId, markdown]);
+
   // 跑一个 agent 回合：UI 展示 displayText，实际发给模型 promptText。
   // handleSend 和快捷动作共用，避免重复一整套 runAgent 流程。
-  const runTurn = useCallback(async ({ promptText, displayText, fileNames = [] }) => {
+  const runTurn = useCallback(async ({
+    promptText,
+    displayText,
+    fileNames = [],
+    selectionText = '',
+    pinnedFiles = [],
+  }) => {
     if (running) return;
     if (!isAiConfigured()) {
       setShowSettings(true);
@@ -418,6 +595,8 @@ export default function AgentPanel({ onClose }) {
     abortRef.current = controller;
 
     try {
+      const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
+      setLastContextPacket(taskContext);
       const { history } = await runAgent({
         userInput: promptText,
         history: activeSession?.history ?? [],
@@ -425,6 +604,7 @@ export default function AgentPanel({ onClose }) {
         host,
         signal: controller.signal,
         serverTools,
+        taskContext,
         onEvent: (ev) => {
           if (ev.type === 'tool_start') {
             appendAgentMessage(sessionId, { role: 'tool', label: ev.label, status: 'running' });
@@ -442,7 +622,7 @@ export default function AgentPanel({ onClose }) {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, serverTools]);
+  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, serverTools, buildTurnContext]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -460,7 +640,13 @@ export default function AgentPanel({ onClose }) {
     setInput('');
     setAttachedFiles([]);
     clearAiQuotedSelection();
-    await runTurn({ promptText, displayText: text, fileNames });
+    await runTurn({
+      promptText,
+      displayText: text,
+      fileNames,
+      selectionText: quotedSelection,
+      pinnedFiles: attachedFiles,
+    });
   }, [input, running, attachedFiles, quotedSelection, clearAiQuotedSelection, runTurn]);
 
   // 快捷动作：直接走 AI 助手，让 agent 读当前文档并处理。
@@ -470,6 +656,7 @@ export default function AgentPanel({ onClose }) {
     runTurn({
       promptText: buildQuickActionInstruction(actionKey, { selectionText: quotedSelection }),
       displayText: getAiActionLabel(actionKey),
+      selectionText: quotedSelection,
     });
     if (quotedSelection) clearAiQuotedSelection();
   }, [running, runTurn, quotedSelection, clearAiQuotedSelection]);
@@ -579,18 +766,12 @@ export default function AgentPanel({ onClose }) {
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
   const handleRecall = useCallback(async () => {
     const doc = host.readActiveDoc();
-    const keywords = extractRecallKeywords({ title: doc.title, content: doc.content });
-    if (keywords.length === 0) return [];
-    const seen = new Map();
-    for (const kw of keywords) {
-      const hits = await host.searchDocs(kw);
-      hits.forEach((h) => { if (h?.id != null && !seen.has(h.id)) seen.set(h.id, h); });
-    }
-    return rankRelatedDocs(
-      { id: selectedId, title: doc.title, content: doc.content },
-      [...seen.values()],
-      { limit: 5 },
-    );
+    return recallDocsForContext({
+      doc,
+      selectedId,
+      searchDocs: host.searchDocs,
+      limit: 5,
+    });
   }, [host, selectedId]);
 
   // 一键插入引用：把选中的相关旧文以 Markdown 引用块追加到当前文档末尾。
@@ -647,9 +828,10 @@ export default function AgentPanel({ onClose }) {
       </div>
 
       {!isWelcomeMode && (
-        <div hidden>
+        <div>
           <AgentDocMeta
             document={activeFile}
+            contextPacket={lastContextPacket}
             onRecall={handleRecall}
             onInsertReference={handleInsertReference}
           />

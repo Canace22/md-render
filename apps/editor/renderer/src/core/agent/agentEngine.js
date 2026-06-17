@@ -12,17 +12,16 @@
 
 import { callChatCompletion } from './aiClient.js';
 import {
-  TOOL_DEFINITIONS,
   buildAllToolDefinitions,
   executeTool,
   getToolLabel,
-  fetchServerTools,
   registerServerToolLabels,
 } from './toolRegistry.js';
+import { formatTaskContextPacket } from './taskContext.js';
 
 const DEFAULT_MAX_STEPS = 8;
 
-const SYSTEM_PROMPT = [
+const ROLE_RULES = [
   '你是 md-render 内容创作工作台里的 AI 助手，能读写用户当前文档、搜索工作区，并按需要新建文档。',
   '工作方式：先用工具了解情况，再动手。',
   '改写或生成正文前，先用 read_active_doc 看清现状，避免覆盖丢失内容。',
@@ -30,12 +29,29 @@ const SYSTEM_PROMPT = [
   '处理完后必须调用 write_active_doc 把结果写回文档，而不是只在对话里输出文字。',
   '写入会先给用户一张 diff 卡片确认，所以放心调用。',
   '当用户明确要求保留原稿、另存为新文档、生成平台版本但不要覆盖当前文档时，必须调用 create_new_doc，新建文件，不要改写当前文档。',
+  '当用户要求添加今日任务、事件、今日记录或待办时，优先调用 add_daily_entry 或 add_todo_entry，直接落到 Daily 面板。',
+  '当用户要求开选题、开稿、建资料单或建待发布稿时，优先调用 create_content_entry，而不是只给建议。',
   '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
   '你还能调用 server 端注册的脚本工具（如 pdf_to_docx、video_to_audio 等）来处理本地文件操作，',
   '遇到需要转换文件格式、提取音视频、处理本地资源的任务时优先考虑用工具，而不是给出用户手动操作的步骤。',
   '只有当用户明确是提问、要建议、要标题候选等「不改动正文」的需求时，才直接在对话里回答。',
   '回答用中文，简洁直接，不要解释你调用了哪些工具。',
 ].join('\n');
+
+const APP_BRIEF = [
+  '产品知识：md-render 是本地优先的内容创作工作台，不是通用聊天框。',
+  '核心对象：当前稿件、工作区知识库、相关旧文、平台版本、Daily 速记、新生成文档。',
+  '核心任务：写作、改写、引用旧文、生成平台版本、整理知识库内容、记录今日事项、创建选题与稿件。',
+  '行为边界：知识库搜索结果不等于当前正文；没有明确要求时不要覆盖原文；用户要求保留原稿时优先新建文档。',
+  '取数原则：先看系统给的任务简报，再决定是否调用工具读取全文或更多元数据。',
+].join('\n');
+
+const buildSystemPrompt = (taskContext) => {
+  const sections = [ROLE_RULES, APP_BRIEF];
+  const contextText = formatTaskContextPacket(taskContext);
+  if (contextText) sections.push(contextText);
+  return sections.join('\n\n');
+};
 
 /** 把模型返回的 assistant 消息规整成可追加进历史的对象 */
 const toAssistantMessage = (message) => ({
@@ -54,6 +70,7 @@ const toAssistantMessage = (message) => ({
  * @param {function} [params.onEvent]      进度回调，见下方事件类型
  * @param {number} [params.maxSteps]
  * @param {AbortSignal} [params.signal]
+ * @param {object} [params.taskContext]
  * @returns {Promise<{ finalText: string, history: Array }>}
  *
  * onEvent 事件类型：
@@ -72,9 +89,10 @@ export const runAgent = async ({
   maxSteps = DEFAULT_MAX_STEPS,
   signal,
   serverTools = [],
+  taskContext = null,
 }) => {
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: buildSystemPrompt(taskContext) },
     ...history,
     { role: 'user', content: String(userInput ?? '') },
   ];

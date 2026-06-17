@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FileText, ChevronDown, ChevronRight, Library, Plus, Loader2, RefreshCw } from 'lucide-react';
+import { FileText, ChevronDown, ChevronRight, Library, Plus, Loader2, RefreshCw, MessageSquareQuote } from 'lucide-react';
 import { buildAiContextSummary } from '../utils/aiActions.js';
+import { buildTaskContextPreviewLines } from '../core/agent/taskContext.js';
 
 /**
  * AI 助手面板顶部「稿件信息区」+「参考上下文」区。
@@ -10,10 +11,11 @@ import { buildAiContextSummary } from '../utils/aiActions.js';
  *
  * @param {object} props
  * @param {object|null} props.document          当前选中的文件对象（含元数据）
+ * @param {object|null} [props.contextPacket]   上次发送给 agent 的上下文包摘要
  * @param {() => Promise<Array>} [props.onRecall]            触发召回，返回 [{id,title,snippet}]
  * @param {(ref: object) => void} [props.onInsertReference]  把某条旧文作为引用插入文档
  */
-export default function AgentDocMeta({ document, onRecall, onInsertReference }) {
+export default function AgentDocMeta({ document, contextPacket = null, onRecall, onInsertReference }) {
   const [contextOpen, setContextOpen] = useState(false);
   const [recalling, setRecalling] = useState(false);
   const [refs, setRefs] = useState([]);
@@ -26,6 +28,10 @@ export default function AgentDocMeta({ document, onRecall, onInsertReference }) 
   );
   const metadataLines = summary.metadataLines ?? [];
   const hasMeta = metadataLines.length > 0;
+  const contextLines = useMemo(
+    () => buildTaskContextPreviewLines(contextPacket),
+    [contextPacket],
+  );
 
   const runRecall = useCallback(async () => {
     if (!onRecall || recalling) return;
@@ -68,6 +74,20 @@ export default function AgentDocMeta({ document, onRecall, onInsertReference }) 
           <p className="agent-panel__doc-empty">未设置稿件信息</p>
         )}
       </section>
+
+      {contextLines.length > 0 && (
+        <section className="agent-panel__doc-meta">
+          <div className="agent-panel__doc-title">
+            <MessageSquareQuote size={14} />
+            <span className="agent-panel__doc-title-text">本轮上下文</span>
+          </div>
+          <ul className="agent-panel__doc-fields">
+            {contextLines.map((line) => (
+              <li key={line} className="agent-panel__doc-field">{line}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="agent-panel__context">
         <div className="agent-panel__context-head-row">
