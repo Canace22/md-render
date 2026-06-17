@@ -365,6 +365,7 @@ function MarkdownEditor() {
     toggleDailyTaskDone,
     deleteDailyItem,
     updateDailyItem,
+    updateDailyItemPriority,
     moveDailyItem,
     moveDailyItems,
     moveDailyTaskToTodo,
@@ -2284,6 +2285,7 @@ function MarkdownEditor() {
             onAddTodo={addTodoItem}
             onPromoteTodo={promoteTodoToDaily}
             onRemoveTodo={removeTodoItem}
+            onUpdateItemPriority={updateDailyItemPriority}
           />
         ) : surface === 'overview' ? (
           <CreationDashboard

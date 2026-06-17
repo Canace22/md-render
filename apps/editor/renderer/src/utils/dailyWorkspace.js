@@ -1,4 +1,5 @@
 const DAILY_ITEM_TYPES = new Set(['task', 'event', 'note']);
+const DAILY_PRIORITIES = new Set(['high', 'medium', 'low']);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const padNumber = (value) => String(value).padStart(2, '0');
@@ -29,12 +30,14 @@ const normalizeDailyItem = (item, dateKey, index) => {
   if (!text) return null;
 
   const type = DAILY_ITEM_TYPES.has(item?.type) ? item.type : 'note';
+  const priority = DAILY_PRIORITIES.has(item?.priority) ? item.priority : 'medium';
   const createdAt = createTimestamp(item?.createdAt);
 
   return {
     id: typeof item?.id === 'string' && item.id.trim() ? item.id : `${dateKey}-${type}-${index}`,
     type,
     text,
+    priority,
     done: type === 'task' ? Boolean(item?.done) : false,
     createdAt,
     updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
@@ -310,6 +313,7 @@ const updateEntry = (dailyWorkspace, dateKey, updater) => {
 
 export const addDailyEntryItem = (dailyWorkspace, dateKey, payload) => {
   const type = DAILY_ITEM_TYPES.has(payload?.type) ? payload.type : 'note';
+  const priority = DAILY_PRIORITIES.has(payload?.priority) ? payload.priority : 'medium';
   const text = normalizeText(payload?.text);
   if (!text) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
 
@@ -321,6 +325,7 @@ export const addDailyEntryItem = (dailyWorkspace, dateKey, payload) => {
         id: createDailyId(type),
         type,
         text,
+        priority,
         done: false,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -378,6 +383,21 @@ export const updateDailyEntryItem = (dailyWorkspace, dateKey, itemId, text) => {
       return {
         ...item,
         text: nextText,
+        updatedAt: Date.now(),
+      };
+    }),
+  }));
+};
+
+export const updateDailyEntryItemPriority = (dailyWorkspace, dateKey, itemId, priority) => {
+  const nextPriority = DAILY_PRIORITIES.has(priority) ? priority : 'medium';
+  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
+    ...entry,
+    items: entry.items.map((item) => {
+      if (item.id !== itemId) return item;
+      return {
+        ...item,
+        priority: nextPriority,
         updatedAt: Date.now(),
       };
     }),

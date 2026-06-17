@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Checkbox, DatePicker, Empty, Input, Tag } from 'antd';
+import { Button, Card, Checkbox, DatePicker, Dropdown, Empty, Input, Tag } from 'antd';
 import dayjs from 'dayjs';
 import {
   CalendarClock,
@@ -12,6 +12,9 @@ import {
   ListTodo,
   RotateCcw,
   Trash2,
+  Pencil,
+  Plus,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   formatDailyHeading,
@@ -20,6 +23,20 @@ import {
   getTodayDateKey,
   shiftDateKey,
 } from '../utils/dailyWorkspace.js';
+
+const PRIORITY_OPTIONS = [
+  { value: 'high', label: '高', color: '#ef4444' },
+  { value: 'medium', label: '中', color: '#f59e0b' },
+  { value: 'low', label: '低', color: '#22c55e' },
+];
+
+const getPriorityColor = (priority) => {
+  return PRIORITY_OPTIONS.find((opt) => opt.value === priority)?.color ?? '#f59e0b';
+};
+
+const PRIORITY_CYCLE = { high: 'medium', medium: 'low', low: 'high' };
+
+const cyclePriority = (current) => PRIORITY_CYCLE[current] ?? 'medium';
 
 function useCopyText() {
   const [copiedId, setCopiedId] = useState(null);
@@ -113,6 +130,7 @@ function DailySection({
   onMoveItem,
   onMoveItems,
   onDeleteItem,
+  onUpdatePriority,
   copiedId,
   onCopy,
 }) {
@@ -153,7 +171,7 @@ function DailySection({
           onChange={(event) => onDraftChange(section.type, event.target.value)}
           onPressEnter={() => onSubmit(section.type)}
         />
-        <Button type="primary" onClick={() => onSubmit(section.type)}>添加</Button>
+        <Button type="primary" onClick={() => onSubmit(section.type)} icon={<Plus size={14} strokeWidth={2} />} />
       </div>
 
       {items.length ? (
@@ -203,14 +221,22 @@ function DailySection({
                         />
                       )}
                       {section.type === 'task' && (
-                        <button
-                          type="button"
-                          className={`daily-notebook-check ${item.done ? 'is-done' : ''}`}
-                          onClick={() => onToggleTask(item.id)}
-                          aria-label={item.done ? '标记为未完成' : '标记为已完成'}
-                        >
-                          {item.done && <Check size={13} strokeWidth={2.4} />}
-                        </button>
+                        <div className="daily-notebook-item-priority-wrapper">
+                          <button
+                            type="button"
+                            className={`daily-notebook-check ${item.done ? 'is-done' : ''}`}
+                            onClick={() => onToggleTask(item.id)}
+                            aria-label={item.done ? '标记为未完成' : '标记为已完成'}
+                          >
+                            {item.done && <Check size={13} strokeWidth={2.4} />}
+                          </button>
+                          <div
+                            className="daily-notebook-priority-dot clickable"
+                            style={{ backgroundColor: getPriorityColor(item.priority) }}
+                            title={`点击切换优先级 (当前: ${PRIORITY_OPTIONS.find((opt) => opt.value === item.priority)?.label ?? '中'})`}
+                            onClick={() => onUpdatePriority(item.id, cyclePriority(item.priority))}
+                          />
+                        </div>
                       )}
                       {isEditing ? (
                         <div className="daily-notebook-item-editor">
@@ -262,26 +288,55 @@ function DailySection({
                           }}
                         />
                       )}
-                      <Button type="text" size="small" onClick={() => onStartEdit(item)}>
-                        编辑
-                      </Button>
-                      {(section.type === 'task' || section.type === 'note') && (
+                      <Dropdown
+                        menu={{
+                          items: [
+                            {
+                              key: 'edit',
+                              label: '编辑',
+                              icon: <Pencil size={14} strokeWidth={1.8} />,
+                              onClick: () => onStartEdit(item),
+                            },
+                            ...(section.type === 'task' || section.type === 'note'
+                              ? [
+                                  {
+                                    key: 'copy',
+                                    label: copiedId === item.id ? '已复制' : '复制',
+                                    icon: copiedId === item.id
+                                      ? <Check size={14} strokeWidth={2.4} />
+                                      : <Copy size={14} strokeWidth={1.8} />,
+                                    onClick: () => onCopy(item.id, item.text),
+                                  },
+                                ]
+                              : []),
+                            ...(section.type === 'task' && !item.done
+                              ? [
+                                  {
+                                    key: 'toTodo',
+                                    label: '移到待办',
+                                    icon: <RotateCcw size={14} strokeWidth={1.8} />,
+                                    onClick: () => onMoveTaskToTodo(item.id),
+                                  },
+                                ]
+                              : []),
+                            { type: 'divider' },
+                            {
+                              key: 'delete',
+                              label: '删除',
+                              danger: true,
+                              icon: <Trash2 size={14} strokeWidth={1.8} />,
+                              onClick: () => onDeleteItem(item.id),
+                            },
+                          ],
+                        }}
+                        trigger={['click']}
+                      >
                         <Button
                           type="text"
                           size="small"
-                          icon={copiedId === item.id
-                            ? <Check size={14} strokeWidth={2.4} />
-                            : <Copy size={14} strokeWidth={1.8} />}
-                          onClick={() => onCopy(item.id, item.text)}
-                          title="复制"
+                          icon={<MoreHorizontal size={16} strokeWidth={1.8} />}
                         />
-                      )}
-                      {section.type === 'task' && !item.done && (
-                        <Button type="text" size="small" onClick={() => onMoveTaskToTodo(item.id)}>
-                          移到待办
-                        </Button>
-                      )}
-                      <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onDeleteItem(item.id)} />
+                      </Dropdown>
                     </div>
                   )}
                 </div>
@@ -309,6 +364,7 @@ function DailyNotebook({
   onAddTodo,
   onPromoteTodo,
   onRemoveTodo,
+  onUpdateItemPriority,
 }) {
   const [drafts, setDrafts] = useState({ task: '', event: '', note: '', todo: '' });
   const [editingItem, setEditingItem] = useState(null);
@@ -325,7 +381,11 @@ function DailyNotebook({
     for (const item of dailyEntry.items) {
       grouped[item.type]?.push(item);
     }
-    grouped.task.sort((left, right) => Number(left.done) - Number(right.done));
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    grouped.task.sort((left, right) => {
+      if (left.done !== right.done) return Number(left.done) - Number(right.done);
+      return (priorityOrder[left.priority] ?? 1) - (priorityOrder[right.priority] ?? 1);
+    });
     return grouped;
   }, [dailyEntry.items]);
 
@@ -429,6 +489,7 @@ function DailyNotebook({
               onMoveItem={(itemId, toDate) => onMoveItem(currentDate, itemId, toDate)}
               onMoveItems={(itemIds, toDate) => onMoveItems(currentDate, itemIds, toDate)}
               onDeleteItem={(itemId) => onDeleteItem(currentDate, itemId)}
+              onUpdatePriority={(itemId, priority) => onUpdateItemPriority(currentDate, itemId, priority)}
               copiedId={copiedId}
               onCopy={handleCopy}
             />
@@ -454,7 +515,7 @@ function DailyNotebook({
               onChange={(event) => handleDraftChange('todo', event.target.value)}
               onPressEnter={handleSubmitTodo}
             />
-            <Button onClick={handleSubmitTodo}>加入</Button>
+            <Button type="primary" onClick={handleSubmitTodo} icon={<Plus size={14} strokeWidth={2} />} />
           </div>
 
           {todoPool.length ? (
@@ -468,12 +529,8 @@ function DailyNotebook({
                     </div>
                   </div>
                   <div className="daily-notebook-item-actions">
-                    <Button type="text" size="small" icon={<RotateCcw size={14} strokeWidth={1.8} />} onClick={() => onPromoteTodo(item.id, currentDate)}>
-                      加入今天
-                    </Button>
-                    <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onRemoveTodo(item.id)}>
-                      完成
-                    </Button>
+                    <Button type="text" size="small" icon={<RotateCcw size={14} strokeWidth={1.8} />} onClick={() => onPromoteTodo(item.id, currentDate)} title="加入今天" />
+                    <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onRemoveTodo(item.id)} title="完成并移除" />
                   </div>
                 </div>
               ))}

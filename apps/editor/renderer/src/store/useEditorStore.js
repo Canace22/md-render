@@ -58,6 +58,7 @@ import {
   setDailyCurrentDate as setDailyWorkspaceCurrentDate,
   toggleDailyEntryTaskDone,
   updateDailyEntryItem,
+  updateDailyEntryItemPriority,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import {
@@ -985,6 +986,16 @@ export const useEditorStore = create(
           dateKey,
           itemId,
           text,
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      updateDailyItemPriority: (dateKey, itemId, priority) => set((state) => {
+        const nextDailyWorkspace = updateDailyEntryItemPriority(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          itemId,
+          priority,
         );
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
