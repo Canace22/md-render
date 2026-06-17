@@ -27,6 +27,8 @@ AI_PORT="${AI_PROXY_PORT:-8788}"
 INSTALL_DEPS="${INSTALL_DEPS:-0}"
 SKIP_FIREWALL="${SKIP_FIREWALL:-0}"
 SKIP_PYTHON="${SKIP_PYTHON:-0}"
+MIN_PYTHON_MAJOR=3
+MIN_PYTHON_MINOR=9
 
 # ── 颜色输出 ────────────────────────────────────────────
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
@@ -46,6 +48,12 @@ usage() {
   --skip-firewall   跳过 firewalld / ufw 放行端口
   --skip-python     跳过 ai-proxy 的 Python venv 与工具依赖
   --help            显示本帮助
+
+说明:
+  pdf-to-docx 依赖 PyMuPDF 1.26.x，需要 Python 3.9+。
+  若系统默认 python3 过旧（如 CentOS 7 的 3.6），请用:
+    sudo bash deploy.sh --install-deps
+  或手动安装 python3.11 / python3.9 后重跑 deploy.sh。
 
 环境变量:
   NOTION_PROXY_PORT   notion-proxy 端口（默认 8787）
@@ -102,6 +110,63 @@ service_health_expect() {
   esac
 }
 
+# ── Python 3.9+（pdf-to-docx / PyMuPDF） ───────────────
+python_version_ok() {
+  local py="$1"
+  [ -n "$py" ] && [ -x "$py" ] || return 1
+  "$py" -c "import sys; raise SystemExit(0 if sys.version_info >= (${MIN_PYTHON_MAJOR}, ${MIN_PYTHON_MINOR}) else 1)" 2>/dev/null
+}
+
+find_python3() {
+  local candidate py
+  local -a candidates=(
+    python3.13 python3.12 python3.11 python3.10 python3.9 python3
+    /usr/bin/python3.13 /usr/bin/python3.12 /usr/bin/python3.11
+    /usr/bin/python3.10 /usr/bin/python3.9
+    /opt/rh/rh-python39/root/usr/bin/python3
+    /usr/local/bin/python3.12 /usr/local/bin/python3.11 /usr/local/bin/python3.10
+  )
+
+  for candidate in "${candidates[@]}"; do
+    if python_version_ok "$candidate"; then
+      command -v "$candidate" >/dev/null 2>&1 && py="$(command -v "$candidate")" || py="$candidate"
+      echo "$py"
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_newer_python() {
+  local py
+  step "安装 Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+（pdf-to-docx 需要）"
+
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y python3.11 python3.11-pip 2>/dev/null || \
+      dnf install -y python3.9 python3.9-pip 2>/dev/null || true
+  elif command -v yum >/dev/null 2>&1; then
+    if yum install -y python3.11 python3.11-pip 2>/dev/null; then
+      :
+    elif yum install -y python39 python39-pip 2>/dev/null; then
+      :
+    else
+      yum install -y centos-release-scl 2>/dev/null || true
+      yum install -y rh-python39 rh-python39-python-pip 2>/dev/null || true
+    fi
+  elif command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq
+    apt-get install -y python3.11 python3.11-venv python3.11-pip 2>/dev/null || \
+      apt-get install -y python3.10 python3.10-venv python3.10-pip 2>/dev/null || \
+      apt-get install -y python3.9 python3.9-venv python3.9-pip 2>/dev/null || true
+  fi
+
+  if py="$(find_python3)"; then
+    green "  Python $($py --version 2>&1 | awk '{print $2}') 已就绪"
+  else
+    yellow "  未能自动安装 Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+，请手动安装后重跑 deploy.sh"
+  fi
+}
+
 # ── 系统依赖安装（可选） ───────────────────────────────
 install_system_deps() {
   if [ "$INSTALL_DEPS" != "1" ]; then
@@ -127,6 +192,10 @@ install_system_deps() {
     apt-get install -y curl nodejs npm python3 python3-venv python3-pip ffmpeg
   else
     yellow "  未识别包管理器，请手动安装: node(>=18) python3 pip ffmpeg"
+  fi
+
+  if ! find_python3 >/dev/null; then
+    install_newer_python
   fi
 
   if ! command -v pm2 >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
@@ -194,14 +263,24 @@ setup_python_tools() {
   step "安装 ai-proxy Python 工具依赖"
   local venv_dir="$SCRIPT_DIR/ai-proxy/.venv"
   local req_file="$SCRIPT_DIR/ai-proxy/tools/pdf-to-docx/requirements-pdf-docx.txt"
+  local python_bin
 
-  if ! command -v python3 >/dev/null 2>&1; then
-    yellow "  未找到 python3，跳过 venv（pdf_to_docx 工具将不可用）"
+  if ! python_bin="$(find_python3)"; then
+    yellow "  未找到 Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+，跳过 venv（pdf_to_docx 工具将不可用）"
+    yellow "  PyMuPDF 1.26.x 需要 Python >= 3.9；系统 python3 若为 3.6/3.7 会装不上。"
+    yellow "  修复: sudo bash deploy.sh --install-deps  或手动安装 python3.11 后重跑"
     return 0
   fi
 
+  green "  使用 $($python_bin --version 2>&1)"
+
+  if [ -d "$venv_dir" ] && ! python_version_ok "$venv_dir/bin/python"; then
+    yellow "  现有 venv Python 版本过低，正在重建..."
+    rm -rf "$venv_dir"
+  fi
+
   if [ ! -d "$venv_dir" ]; then
-    python3 -m venv "$venv_dir"
+    "$python_bin" -m venv "$venv_dir"
     green "  已创建 venv: ai-proxy/.venv"
   fi
 
@@ -210,7 +289,13 @@ setup_python_tools() {
 
   pip install -q --upgrade pip
   if [ -f "$req_file" ]; then
-    pip install -q -r "$req_file"
+    if ! pip install -q -r "$req_file"; then
+      red "  Python 依赖安装失败（常见原因: Python < 3.9 或 pip 源无对应 wheel）"
+      red "  当前: $(python --version 2>&1)"
+      red "  请执行: sudo bash deploy.sh --install-deps"
+      deactivate 2>/dev/null || true
+      exit 1
+    fi
     green "  已安装 pdf-to-docx 依赖"
   fi
 

@@ -20,7 +20,7 @@ bash deploy.sh
 
 1. 扫描所有含 `server.js` 的子目录并注册为服务
 2. 用 **PM2** 启动/更新 `notion-proxy`、`ai-proxy`
-3. 创建 `ai-proxy/.venv` 并安装 pdf-to-docx 等 Python 依赖
+3. 创建 `ai-proxy/.venv` 并安装 pdf-to-docx 等 Python 依赖（**需 Python 3.9+**，PyMuPDF 1.26.x 不支持系统自带的 3.6）
 4. 尝试放行 firewalld / ufw 端口
 5. curl 自检两个服务
 
