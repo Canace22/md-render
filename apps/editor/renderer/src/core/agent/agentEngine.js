@@ -31,6 +31,8 @@ const ROLE_RULES = [
   '当用户明确要求保留原稿、另存为新文档、生成平台版本但不要覆盖当前文档时，必须调用 create_new_doc，新建文件，不要改写当前文档。',
   '当用户要求添加今日任务、事件、今日记录或待办时，优先调用 add_daily_entry 或 add_todo_entry，直接落到 Daily 面板。',
   '当用户要求开选题、开稿、建资料单或建待发布稿时，优先调用 create_content_entry，而不是只给建议。',
+  '当用户要求打开白板、往白板加卡片、在灵感白板上画流程/关系图时，优先调用 open_canvas、append_canvas_cards、replace_canvas 或 clear_canvas。',
+  '如果用户明确要“画到白板上”“操作白板”，不要只返回 Mermaid 或文字步骤，要直接调用白板工具落到页面。',
   '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
   '你还能调用 server 端注册的脚本工具（如 pdf_to_docx、video_to_audio 等）来处理本地文件操作，',
   '遇到需要转换文件格式、提取音视频、处理本地资源的任务时优先考虑用工具，而不是给出用户手动操作的步骤。',

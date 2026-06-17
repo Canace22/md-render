@@ -11,6 +11,8 @@ const DEFAULT_FILL = '#ffffff';
 const DEFAULT_ARROW = '#475569';
 const TEXT_PREVIEW_LENGTH = 96;
 export const EXCALIDRAW_CARD_ID_PREFIX = 'md-card-';
+const AGENT_CARD_ID_PREFIX = 'agent-card-';
+const AGENT_EDGE_ID_PREFIX = 'agent-edge-';
 const EXCALIDRAW_APP_STATE_FIELDS = [
   'viewBackgroundColor',
   'theme',
@@ -66,6 +68,29 @@ const getElementCenter = (element) => {
   };
 };
 
+const getDirectionalAnchorPoint = (source, target, isSource = true) => {
+  const sourceCenter = getElementCenter(source);
+  const targetCenter = getElementCenter(target);
+  const width = Number(source?.width ?? CARD_WIDTH);
+  const height = Number(source?.height ?? CARD_HEIGHT);
+  const dx = targetCenter.x - sourceCenter.x;
+  const dy = targetCenter.y - sourceCenter.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return {
+      x: sourceCenter.x + (dx >= 0 ? width / 2 : -width / 2),
+      y: sourceCenter.y,
+      side: dx >= 0 ? (isSource ? 'right' : 'left') : (isSource ? 'left' : 'right'),
+    };
+  }
+
+  return {
+    x: sourceCenter.x,
+    y: sourceCenter.y + (dy >= 0 ? height / 2 : -height / 2),
+    side: dy >= 0 ? (isSource ? 'bottom' : 'top') : (isSource ? 'top' : 'bottom'),
+  };
+};
+
 const getExcalidrawElements = (canvasState = {}) => {
   return Array.isArray(canvasState?.excalidraw?.elements)
     ? canvasState.excalidraw.elements
@@ -115,6 +140,82 @@ export const buildExcalidrawElementsFromItems = (items = [], options = {}) => {
   return convertToExcalidrawElements(skeletons);
 };
 
+const toAgentCardId = (card = {}, index = 0) => {
+  const explicitId = trimText(card?.id);
+  return explicitId || `${AGENT_CARD_ID_PREFIX}${index + 1}`;
+};
+
+export const buildCanvasItemsFromAgentCards = (cards = [], options = {}) => {
+  const startIndex = Number.isFinite(Number(options.startIndex))
+    ? Math.max(0, Math.floor(Number(options.startIndex)))
+    : 0;
+
+  return (Array.isArray(cards) ? cards : []).map((card, index) => {
+    const finalIndex = startIndex + index;
+    const sourceId = toAgentCardId(card, finalIndex);
+    const title = trimText(card?.title) || `卡片 ${finalIndex + 1}`;
+    const summary = trimText(card?.summary ?? card?.content ?? card?.text);
+    const typeLabel = trimText(card?.typeLabel) || '卡片';
+    const nodeType = trimText(card?.nodeType) || 'agent-card';
+    const x = Number(card?.x);
+    const y = Number(card?.y);
+
+    return {
+      id: sourceId,
+      sourceId,
+      title,
+      summary,
+      content: summary,
+      typeLabel,
+      nodeType,
+      ...(Number.isFinite(x) && Number.isFinite(y)
+        ? { position: { x, y } }
+        : {}),
+    };
+  });
+};
+
+const buildAgentCardAliasMap = (cards = [], items = []) => {
+  const aliases = new Map();
+  cards.forEach((card, index) => {
+    const item = items[index];
+    if (!item?.sourceId) return;
+    const normalizedSourceId = String(item.sourceId);
+    const rawId = trimText(card?.id);
+    const rawTitle = trimText(card?.title);
+
+    aliases.set(normalizedSourceId, normalizedSourceId);
+    if (rawId && !aliases.has(rawId)) aliases.set(rawId, normalizedSourceId);
+    if (rawTitle && !aliases.has(rawTitle)) aliases.set(rawTitle, normalizedSourceId);
+  });
+  return aliases;
+};
+
+const normalizeAgentEdges = (edges = [], aliases = new Map()) => {
+  return (Array.isArray(edges) ? edges : []).map((edge, index) => {
+    const sourceKey = trimText(edge?.source);
+    const targetKey = trimText(edge?.target);
+    const source = aliases.get(sourceKey) || sourceKey;
+    const target = aliases.get(targetKey) || targetKey;
+    if (!source || !target || source === target) return null;
+    if (!aliases.has(source) || !aliases.has(target)) return null;
+
+    const label = trimText(edge?.label);
+    return {
+      id: trimText(edge?.id) || `${AGENT_EDGE_ID_PREFIX}${index + 1}`,
+      source,
+      target,
+      ...(label ? { label } : {}),
+    };
+  }).filter(Boolean);
+};
+
+export const countRenderableCanvasCards = (elements = []) => {
+  return (Array.isArray(elements) ? elements : []).filter((element) => {
+    return !element?.isDeleted && Boolean(getCanvasSourceIdFromElement(element));
+  }).length;
+};
+
 export const getCanvasSourceIdFromElement = (element) => {
   if (!element || typeof element !== 'object') return '';
 
@@ -157,16 +258,28 @@ export const buildInitialExcalidrawData = (canvasState = {}, items = [], edges =
       const target = elementsBySourceId.get(targetId);
       if (!source || !target || sourceId === targetId) return null;
 
-      const sourceCenter = getElementCenter(source);
-      const targetCenter = getElementCenter(target);
+      const sourceAnchor = getDirectionalAnchorPoint(source, target, true);
+      const targetAnchor = getDirectionalAnchorPoint(target, source, false);
       return {
         type: 'arrow',
         id: `md-edge-${edge?.id ?? `${sourceId}-${targetId}-${index}`}`,
-        x: sourceCenter.x,
-        y: sourceCenter.y,
+        x: sourceAnchor.x,
+        y: sourceAnchor.y,
+        start: {
+          id: source.id,
+          type: source.type,
+          x: sourceAnchor.x,
+          y: sourceAnchor.y,
+        },
+        end: {
+          id: target.id,
+          type: target.type,
+          x: targetAnchor.x,
+          y: targetAnchor.y,
+        },
         points: [
           [0, 0],
-          [targetCenter.x - sourceCenter.x, targetCenter.y - sourceCenter.y],
+          [targetAnchor.x - sourceAnchor.x, targetAnchor.y - sourceAnchor.y],
         ],
         strokeColor: DEFAULT_ARROW,
         endArrowhead: 'arrow',
@@ -186,6 +299,27 @@ export const buildInitialExcalidrawData = (canvasState = {}, items = [], edges =
     files: {},
     scrollToContent: true,
   };
+};
+
+export const buildCanvasSceneFromAgentGraph = ({
+  cards = [],
+  edges = [],
+  appState = {},
+  files = {},
+} = {}) => {
+  const items = buildCanvasItemsFromAgentCards(cards);
+  const aliases = buildAgentCardAliasMap(cards, items);
+  const normalizedEdges = normalizeAgentEdges(edges, aliases);
+  const initialData = buildInitialExcalidrawData({}, items, normalizedEdges);
+
+  return buildExcalidrawCanvasState({
+    elements: initialData.elements,
+    appState: {
+      ...initialData.appState,
+      ...appState,
+    },
+    files,
+  });
 };
 
 export const pickPersistentExcalidrawAppState = (appState = {}) => {

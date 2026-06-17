@@ -11,6 +11,11 @@
  *                                                         如「已应用」「用户已放弃」。可异步）
  *   host.createNewDoc(payload)      -> string           （新建一篇 Markdown 文档；返回创建结果文案）
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
+ *   host.getDailyOverview(args)     -> { ... }          （读取 Daily / 待办概况）
+ *   host.openCanvas()               -> string           （切到灵感白板）
+ *   host.appendCanvasCards(args)    -> string           （往灵感白板追加卡片）
+ *   host.replaceCanvas(args)        -> string           （整体替换灵感白板内容）
+ *   host.clearCanvas()              -> string           （清空灵感白板）
  */
 
 import { extractRecallKeywords, rankRelatedDocs } from './contextRecall.js';
@@ -30,6 +35,96 @@ const MAX_RECENT_DOCS = 6;
 /** 标记这是 server 端工具，需要在 toolRegistry 加载时拉取并合并 */
 const SERVER_TOOL_MARKER = '__server_tool__';
 export const TOOL_DEFINITIONS = Object.freeze([
+  {
+    type: 'function',
+    function: {
+      name: 'open_canvas',
+      description: '切换到灵感白板页面。适合处理“打开白板”“切到白板”这类请求。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'append_canvas_cards',
+      description: '往灵感白板追加几张卡片，不清空已有内容。适合处理“往白板加几个点子/卡片”这类请求。',
+      parameters: {
+        type: 'object',
+        properties: {
+          cards: {
+            type: 'array',
+            description: '要追加到白板上的卡片列表。',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: '可选，卡片 id。后续关系连线可引用它。' },
+                title: { type: 'string', description: '卡片标题' },
+                summary: { type: 'string', description: '卡片正文/备注' },
+                typeLabel: { type: 'string', description: '卡片类型标签，如 节点/问题/结论' },
+                nodeType: { type: 'string', description: '内部节点类型标记，可选' },
+                x: { type: 'number', description: '可选，卡片横坐标' },
+                y: { type: 'number', description: '可选，卡片纵坐标' },
+              },
+              required: [],
+            },
+          },
+        },
+        required: ['cards'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'replace_canvas',
+      description: '用一组卡片和箭头整体替换当前灵感白板。适合画流程图、关系图、脑图骨架等。会清空白板旧内容后重建。',
+      parameters: {
+        type: 'object',
+        properties: {
+          cards: {
+            type: 'array',
+            description: '白板上的卡片列表；如果后面有 edges，建议给每张卡片显式 id。',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: '卡片 id，供 edges 的 source/target 引用' },
+                title: { type: 'string', description: '卡片标题' },
+                summary: { type: 'string', description: '卡片正文/备注' },
+                typeLabel: { type: 'string', description: '卡片类型标签，如 开始/步骤/分支' },
+                nodeType: { type: 'string', description: '内部节点类型标记，可选' },
+                x: { type: 'number', description: '可选，卡片横坐标' },
+                y: { type: 'number', description: '可选，卡片纵坐标' },
+              },
+              required: [],
+            },
+          },
+          edges: {
+            type: 'array',
+            description: '卡片之间的连线；source/target 填卡片 id，或直接填卡片标题。',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: '可选，连线 id' },
+                source: { type: 'string', description: '起点卡片 id 或标题' },
+                target: { type: 'string', description: '终点卡片 id 或标题' },
+                label: { type: 'string', description: '可选，箭头上的文字' },
+              },
+              required: ['source', 'target'],
+            },
+          },
+        },
+        required: ['cards'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'clear_canvas',
+      description: '清空灵感白板的当前内容。适合处理“清空白板”“重来一张空白板”这类请求。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
   {
     type: 'function',
     function: {
@@ -230,6 +325,31 @@ const collectCandidates = async (host, keywords) => {
 
 /** 工具执行器：name -> async (args, host) => 结果字符串 */
 const EXECUTORS = {
+  open_canvas: async (_args, host) => {
+    const result = await host.openCanvas?.();
+    return typeof result === 'string' ? result : '已打开灵感白板。';
+  },
+
+  append_canvas_cards: async (args, host) => {
+    const cards = Array.isArray(args?.cards) ? args.cards : [];
+    if (!cards.length) return '添加失败：没有可添加的卡片。';
+    const result = await host.appendCanvasCards?.({ cards });
+    return typeof result === 'string' ? result : `已添加 ${cards.length} 张白板卡片。`;
+  },
+
+  replace_canvas: async (args, host) => {
+    const cards = Array.isArray(args?.cards) ? args.cards : [];
+    const edges = Array.isArray(args?.edges) ? args.edges : [];
+    if (!cards.length) return '绘制失败：没有可用的白板卡片。';
+    const result = await host.replaceCanvas?.({ cards, edges });
+    return typeof result === 'string' ? result : `已重建白板，包含 ${cards.length} 张卡片。`;
+  },
+
+  clear_canvas: async (_args, host) => {
+    const result = await host.clearCanvas?.();
+    return typeof result === 'string' ? result : '已清空灵感白板。';
+  },
+
   read_active_doc: async (_args, host) => {
     const doc = await host.readActiveDoc();
     if (!doc || !String(doc.content ?? '').trim()) {
@@ -383,10 +503,15 @@ export const executeTool = async (toolCall, host) => {
  * 本地标签写死在这里；server 工具通过 registerServerToolLabels 动态注册。
  */
 const _localToolLabels = Object.freeze({
+  open_canvas: '打开灵感白板',
+  append_canvas_cards: '追加白板卡片',
+  replace_canvas: '重建白板图',
+  clear_canvas: '清空灵感白板',
   read_active_doc: '读取当前文档',
   get_active_doc_meta: '读取稿件元数据',
   add_daily_entry: '添加今日条目',
   add_todo_entry: '添加待办',
+  get_daily_overview: '查看 Daily 概况',
   write_active_doc: '写入当前文档',
   create_new_doc: '新建文档',
   create_content_entry: '创建内容条目',

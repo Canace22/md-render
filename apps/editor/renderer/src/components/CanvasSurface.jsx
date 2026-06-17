@@ -18,6 +18,13 @@ const LIBRARY_PREVIEW_LENGTH = 96;
 const BLANK_CARD_TITLE = '空白卡片';
 
 const trimText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+const hasVisibleElements = (elements = []) => {
+  return Boolean((Array.isArray(elements) ? elements : []).some((element) => !element?.isDeleted));
+};
+
+const buildSceneSignature = ({ elements = [], appState = {}, files = {} } = {}) => {
+  return JSON.stringify(buildExcalidrawCanvasState({ elements, appState, files }).excalidraw ?? null);
+};
 
 const getItemId = (item, index) => {
   return String(item?.sourceId ?? item?.fileId ?? item?.id ?? `library-${index}`);
@@ -73,7 +80,7 @@ export default function CanvasSurface({
     return buildInitialExcalidrawData(canvasState, sourceItems, edges);
   }, [canvasState, edges, sourceItems]);
   const [sceneHasContent, setSceneHasContent] = useState(() => {
-    return Boolean(initialData.elements?.some((element) => !element?.isDeleted));
+    return hasVisibleElements(initialData.elements);
   });
 
   const filteredLibraryItems = useMemo(() => {
@@ -89,7 +96,7 @@ export default function CanvasSurface({
   }, [libraryItems]);
 
   useEffect(() => {
-    setSceneHasContent(Boolean(initialData.elements?.some((element) => !element?.isDeleted)));
+    setSceneHasContent(hasVisibleElements(initialData.elements));
   }, [initialData]);
 
   useEffect(() => {
@@ -108,6 +115,48 @@ export default function CanvasSurface({
     latestSceneRef.current = null;
   }, [onChange]);
 
+  const syncSceneFromProps = useCallback(() => {
+    const api = excalidrawApiRef.current;
+    if (!api) return;
+
+    const nextElements = Array.isArray(initialData.elements) ? initialData.elements : [];
+    const nextAppState = initialData.appState && typeof initialData.appState === 'object'
+      ? initialData.appState
+      : {};
+    const nextFiles = initialData.files && typeof initialData.files === 'object'
+      ? initialData.files
+      : {};
+    const currentElements = api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements?.() ?? [];
+    const currentAppState = api.getAppState?.() ?? {};
+    const currentFiles = api.getFiles?.() ?? {};
+
+    if (buildSceneSignature({
+      elements: currentElements,
+      appState: currentAppState,
+      files: currentFiles,
+    }) === buildSceneSignature({
+      elements: nextElements,
+      appState: nextAppState,
+      files: nextFiles,
+    })) {
+      setSceneHasContent(hasVisibleElements(nextElements));
+      return;
+    }
+
+    api.updateScene({
+      elements: nextElements,
+      appState: {
+        ...currentAppState,
+        ...nextAppState,
+      },
+      files: nextFiles,
+    });
+    if (nextElements.length) {
+      api.scrollToContent?.(nextElements);
+    }
+    setSceneHasContent(hasVisibleElements(nextElements));
+  }, [initialData]);
+
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
@@ -116,6 +165,10 @@ export default function CanvasSurface({
       flushScene();
     };
   }, [flushScene]);
+
+  useEffect(() => {
+    syncSceneFromProps();
+  }, [syncSceneFromProps]);
 
   const scheduleSceneSave = useCallback((elements, appState, files) => {
     setSceneHasContent(Boolean(elements?.some((element) => !element?.isDeleted)));
@@ -353,6 +406,7 @@ export default function CanvasSurface({
             initialData={initialData}
             excalidrawAPI={(api) => {
               excalidrawApiRef.current = api;
+              syncSceneFromProps();
             }}
             onChange={scheduleSceneSave}
             onLibraryChange={handleLibraryChange}

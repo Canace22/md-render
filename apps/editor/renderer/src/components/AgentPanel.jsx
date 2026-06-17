@@ -34,7 +34,19 @@ import {
 import { AI_ACTION_KEYS, buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
 import { PLATFORM_VARIANT_KEYS, buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
 import { extractRecallKeywords, rankRelatedDocs } from '../core/agent/contextRecall.js';
-import { getTodayDateKey, normalizeDateKey } from '../utils/dailyWorkspace.js';
+import {
+  buildCanvasItemsFromAgentCards,
+  buildCanvasSceneFromAgentGraph,
+  buildExcalidrawCanvasState,
+  buildExcalidrawElementsFromItems,
+  countRenderableCanvasCards,
+} from '../utils/excalidrawCanvas.js';
+import {
+  formatDailyHeading,
+  getDailyEntry,
+  getTodayDateKey,
+  normalizeDateKey,
+} from '../utils/dailyWorkspace.js';
 import {
   isAiConfigured,
   listProviders,
@@ -205,6 +217,7 @@ export default function AgentPanel({ onClose }) {
   const createGeneratedFile = useEditorStore((s) => s.createGeneratedFile);
   const addDailyItem = useEditorStore((s) => s.addDailyItem);
   const addTodoItem = useEditorStore((s) => s.addTodoItem);
+  const setWorkspaceCanvas = useEditorStore((s) => s.setWorkspaceCanvas);
   const setDailyCurrentDate = useEditorStore((s) => s.setDailyCurrentDate);
   const setSurface = useEditorStore((s) => s.setSurface);
 
@@ -349,6 +362,60 @@ export default function AgentPanel({ onClose }) {
       setSurface('daily');
       return `已加入待办池：${cleanText}。`;
     },
+    getDailyOverview: async ({ dateKey = '' } = {}) => {
+      return buildDailyOverview(dailyWorkspace, dateKey);
+    },
+    openCanvas: async () => {
+      setSurface('canvas');
+      return '已切换到灵感白板。';
+    },
+    appendCanvasCards: async ({ cards = [] } = {}) => {
+      const currentCanvasState = workspace?.canvasState ?? {};
+      const currentExcalidraw = currentCanvasState?.excalidraw ?? {};
+      const currentElements = Array.isArray(currentExcalidraw.elements)
+        ? currentExcalidraw.elements
+        : [];
+      const startIndex = countRenderableCanvasCards(currentElements);
+      const items = buildCanvasItemsFromAgentCards(cards, { startIndex });
+      if (!items.length) return '添加失败：没有有效卡片。';
+
+      const nextElements = [
+        ...currentElements,
+        ...buildExcalidrawElementsFromItems(items, { startIndex }),
+      ];
+      setWorkspaceCanvas(buildExcalidrawCanvasState({
+        elements: nextElements,
+        appState: currentExcalidraw.appState ?? {},
+        files: currentExcalidraw.files ?? {},
+      }));
+      setSurface('canvas');
+      return `已在灵感白板添加 ${items.length} 张卡片。`;
+    },
+    replaceCanvas: async ({ cards = [], edges = [] } = {}) => {
+      const currentCanvasState = workspace?.canvasState ?? {};
+      const currentExcalidraw = currentCanvasState?.excalidraw ?? {};
+      const nextCanvasState = buildCanvasSceneFromAgentGraph({
+        cards,
+        edges,
+        appState: currentExcalidraw.appState ?? {},
+        files: currentExcalidraw.files ?? {},
+      });
+      const nextCount = Array.isArray(cards) ? cards.length : 0;
+      if (!nextCount) return '绘制失败：没有有效卡片。';
+      setWorkspaceCanvas(nextCanvasState);
+      setSurface('canvas');
+      return `已重建灵感白板，包含 ${nextCount} 张卡片。`;
+    },
+    clearCanvas: async () => {
+      setWorkspaceCanvas({
+        nodes: [],
+        edges: [],
+        viewport: null,
+        excalidraw: null,
+      });
+      setSurface('canvas');
+      return '已清空灵感白板。';
+    },
     createContentEntry: async ({
       kind = 'topic',
       name = '',
@@ -442,6 +509,7 @@ export default function AgentPanel({ onClose }) {
     dailyWorkspace,
     addDailyItem,
     addTodoItem,
+    setWorkspaceCanvas,
     setDailyCurrentDate,
     setSurface,
   ]);

@@ -78,6 +78,7 @@ describe('runAgent 写回路径', () => {
   const makeHost = () => ({
     readActiveDoc: vi.fn(async () => ({ title: 't', content: '原文' })),
     writeActiveDoc: vi.fn(async () => '改动已应用到当前文档。'),
+    replaceCanvas: vi.fn(async () => '已重建灵感白板，包含 3 张卡片。'),
     searchDocs: vi.fn(async () => []),
   });
 
@@ -106,5 +107,48 @@ describe('runAgent 写回路径', () => {
 
     expect(host.writeActiveDoc).not.toHaveBeenCalled();
     expect(finalText).toBe('这是答案');
+  });
+
+  it('模型调用 replace_canvas 时，host.replaceCanvas 被执行', async () => {
+    callChatCompletion
+      .mockResolvedValueOnce({
+        content: '',
+        tool_calls: [
+          {
+            id: '2',
+            function: {
+              name: 'replace_canvas',
+              arguments: JSON.stringify({
+                cards: [
+                  { id: 'a', title: 'a' },
+                  { id: 'b', title: 'b' },
+                  { id: 'c', title: 'c' },
+                ],
+                edges: [
+                  { source: 'a', target: 'b' },
+                  { source: 'a', target: 'c' },
+                ],
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ content: '画好了', tool_calls: [] });
+
+    const host = makeHost();
+    const { finalText } = await runAgent({ userInput: '在白板画 a 指向 b 和 c', config: {}, host });
+
+    expect(host.replaceCanvas).toHaveBeenCalledWith({
+      cards: [
+        { id: 'a', title: 'a' },
+        { id: 'b', title: 'b' },
+        { id: 'c', title: 'c' },
+      ],
+      edges: [
+        { source: 'a', target: 'b' },
+        { source: 'a', target: 'c' },
+      ],
+    });
+    expect(finalText).toBe('画好了');
   });
 });
