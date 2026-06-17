@@ -53,18 +53,10 @@ const DAILY_SECTIONS = [
   {
     type: 'task',
     title: '今日任务',
-    description: '只放今天准备推进的事，做不完再移去待办池。',
+    description: '只放今天要推进的事，做不完再移去待办池。',
     placeholder: '写下一件今天要推进的事',
     icon: <ListTodo size={16} strokeWidth={1.8} />,
     emptyText: '今天的任务先留白，需要时再加。',
-  },
-  {
-    type: 'event',
-    title: '事件',
-    description: '记录约定、会议、临时插入的安排。',
-    placeholder: '记一条今天发生的事件',
-    icon: <CalendarClock size={16} strokeWidth={1.8} />,
-    emptyText: '今天还没有记录事件。',
   },
   {
     type: 'note',
@@ -73,6 +65,14 @@ const DAILY_SECTIONS = [
     placeholder: '记一条今天的想法或观察',
     icon: <FileText size={16} strokeWidth={1.8} />,
     emptyText: '还没有留下任何笔记。',
+  },
+  {
+    type: 'event',
+    title: '事件',
+    description: '记录约定、会议、临时插入的安排。',
+    placeholder: '记一条今天发生的事件',
+    icon: <CalendarClock size={16} strokeWidth={1.8} />,
+    emptyText: '今天还没有记录事件。',
   },
 ];
 
