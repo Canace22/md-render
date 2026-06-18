@@ -56,25 +56,6 @@ export default function AgentDocMeta({ document, contextPacket = null, onRecall,
 
   return (
     <div className="agent-panel__doc">
-      <section className="agent-panel__doc-meta">
-        <div className="agent-panel__doc-title">
-          <FileText size={14} />
-          <span className="agent-panel__doc-title-text">{summary.title}</span>
-        </div>
-        {summary.summary && (
-          <p className="agent-panel__doc-summary">{summary.summary}</p>
-        )}
-        {hasMeta ? (
-          <ul className="agent-panel__doc-fields">
-            {metadataLines.map((line) => (
-              <li key={line} className="agent-panel__doc-field">{line}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="agent-panel__doc-empty">未设置稿件信息</p>
-        )}
-      </section>
-
       {contextLines.length > 0 && (
         <section className="agent-panel__doc-meta">
           <div className="agent-panel__doc-title">
@@ -91,16 +72,6 @@ export default function AgentDocMeta({ document, contextPacket = null, onRecall,
 
       <section className="agent-panel__context">
         <div className="agent-panel__context-head-row">
-          <button
-            type="button"
-            className="agent-panel__context-head"
-            aria-expanded={contextOpen}
-            onClick={toggleContext}
-          >
-            {contextOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <Library size={14} />
-            <span>参考上下文</span>
-          </button>
           {contextOpen && onRecall && (
             <button
               type="button"

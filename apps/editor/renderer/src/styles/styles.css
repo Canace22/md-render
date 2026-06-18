@@ -8682,6 +8682,78 @@ body.theme-dark .file-preview-iframe {
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
 }
 
+.agent-panel__skill-picker {
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 6px 16px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-bg-surface) 96%, transparent);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.agent-panel__skill-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.agent-panel__skill-option:hover,
+.agent-panel__skill-option.is-active {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.agent-panel__skill-option-icon {
+  --agent-tool-icon-bg: color-mix(in srgb, var(--color-brand-primary) 10%, transparent);
+  --agent-tool-icon-color: var(--color-brand-primary);
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: var(--agent-tool-icon-bg);
+  color: var(--agent-tool-icon-color);
+}
+
+.agent-panel__skill-option-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-panel__skill-option-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.agent-panel__skill-option-desc {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+.agent-panel__skill-option-kind {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg-page) 72%, var(--color-bg-active));
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
 .agent-panel__file-option {
   display: flex;
   align-items: center;

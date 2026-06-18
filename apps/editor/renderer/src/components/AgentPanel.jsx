@@ -149,6 +149,8 @@ const PLATFORM_VARIANT_LABELS = Object.freeze(
     return acc;
   }, {}),
 );
+const MAX_SLASH_SKILL_RESULTS = 8;
+const SLASH_SKILL_PATTERN = /^\s*\/([^\s/]*)$/;
 
 const WELCOME_SUGGESTIONS = Object.freeze([
   { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
@@ -162,16 +164,79 @@ const WELCOME_SUGGESTIONS = Object.freeze([
 ]);
 
 const COMPOSER_SHORTCUTS = Object.freeze([
-  { id: 'title', type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '标题建议', icon: FileTextOutlined, tone: 'cyan' },
-  { id: 'wechat', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '公众号版', icon: WechatOutlined, tone: 'green' },
-  { id: 'xiaohongshu', type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '小红书版', icon: CameraOutlined, tone: 'magenta' },
+  {
+    id: 'title',
+    type: 'quick',
+    actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS,
+    label: '标题建议',
+    icon: FileTextOutlined,
+    tone: 'cyan',
+    description: '给当前内容想几个标题',
+    aliases: ['标题', 'title'],
+  },
+  {
+    id: 'wechat',
+    type: 'platform',
+    platformValue: PLATFORM_VARIANT_KEYS.WECHAT,
+    label: '公众号版',
+    icon: WechatOutlined,
+    tone: 'green',
+    description: '生成公众号版本',
+    aliases: ['微信', '公众号', 'wechat'],
+  },
+  {
+    id: 'xiaohongshu',
+    type: 'platform',
+    platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU,
+    label: '小红书版',
+    icon: CameraOutlined,
+    tone: 'magenta',
+    description: '生成小红书版本',
+    aliases: ['小红书', 'xiaohongshu'],
+  },
 ]);
 
 const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
-  { id: 'outline', type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '提纲', icon: ApartmentOutlined, tone: 'teal' },
-  { id: 'expand', type: 'quick', actionKey: AI_ACTION_KEYS.EXPAND, label: '扩写', icon: ArrowsAltOutlined, tone: 'blue' },
-  { id: 'polish', type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '润色', icon: HighlightOutlined, tone: 'rose' },
-  { id: 'summarize', type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '压缩', icon: CompressOutlined, tone: 'amber' },
+  {
+    id: 'outline',
+    type: 'quick',
+    actionKey: AI_ACTION_KEYS.OUTLINE,
+    label: '提纲',
+    icon: ApartmentOutlined,
+    tone: 'teal',
+    description: '按当前内容整理结构提纲',
+    aliases: ['大纲', 'outline'],
+  },
+  {
+    id: 'expand',
+    type: 'quick',
+    actionKey: AI_ACTION_KEYS.EXPAND,
+    label: '扩写',
+    icon: ArrowsAltOutlined,
+    tone: 'blue',
+    description: '把当前内容扩充展开',
+    aliases: ['展开', '续写', 'expand'],
+  },
+  {
+    id: 'polish',
+    type: 'quick',
+    actionKey: AI_ACTION_KEYS.POLISH,
+    label: '润色',
+    icon: HighlightOutlined,
+    tone: 'rose',
+    description: '优化表达和语气',
+    aliases: ['改写', '优化', 'polish'],
+  },
+  {
+    id: 'summarize',
+    type: 'quick',
+    actionKey: AI_ACTION_KEYS.SUMMARIZE,
+    label: '压缩',
+    icon: CompressOutlined,
+    tone: 'amber',
+    description: '压缩成更短版本',
+    aliases: ['总结', '摘要', 'summarize'],
+  },
 ]);
 
 // 本地脚本工具（不走 AI，直接执行 server 上的脚本），收进 + 下拉菜单。
@@ -188,6 +253,8 @@ const COMPOSER_SCRIPT_TOOLS = Object.freeze([
       defaultFromInput: (inputPath) => inputPath.replace(/\.pdf$/i, '.docx'),
       extensions: ['docx'],
     },
+    description: '把 PDF 转成 Word 文档',
+    aliases: ['pdf', 'word', 'docx'],
   },
   {
     id: 'video_to_audio',
@@ -201,7 +268,185 @@ const COMPOSER_SCRIPT_TOOLS = Object.freeze([
       defaultFromInput: (inputPath) => inputPath.replace(/\.[^./]+$/, '') + '.mp3',
       extensions: ['mp3'],
     },
+    description: '把视频提取成 MP3',
+    aliases: ['视频', '音频', 'mp3'],
   },
+]);
+
+const EXTRA_PLATFORM_SLASH_SKILLS = Object.freeze([
+  {
+    id: 'zhihu',
+    type: 'platform',
+    platformValue: PLATFORM_VARIANT_KEYS.ZHIHU,
+    label: '知乎版',
+    icon: FileTextOutlined,
+    tone: 'slate',
+    description: '生成知乎版本',
+    aliases: ['知乎', 'zhihu'],
+  },
+]);
+
+const PROJECT_SLASH_SKILLS = Object.freeze([
+  {
+    id: 'topic-entry',
+    type: 'insert',
+    label: '选题',
+    icon: ApartmentOutlined,
+    tone: 'teal',
+    category: '项目 skill',
+    description: '新建一个选题条目',
+    aliases: ['topic', 'idea', '选题库'],
+    insertText: '帮我新建一个选题：',
+  },
+  {
+    id: 'draft-entry',
+    type: 'insert',
+    label: '新稿件',
+    icon: FileTextOutlined,
+    tone: 'blue',
+    category: '项目 skill',
+    description: '新建一篇稿件',
+    aliases: ['draft', '稿件', '文章'],
+    insertText: '帮我新建一篇稿件：',
+  },
+  {
+    id: 'material-entry',
+    type: 'insert',
+    label: '资料单',
+    icon: FileTextOutlined,
+    tone: 'amber',
+    category: '项目 skill',
+    description: '新建一个资料单',
+    aliases: ['material', '资料', '素材'],
+    insertText: '帮我新建一个资料单：',
+  },
+  {
+    id: 'ready-entry',
+    type: 'insert',
+    label: '待发布稿',
+    icon: FileTextOutlined,
+    tone: 'green',
+    category: '项目 skill',
+    description: '新建一篇待发布稿',
+    aliases: ['ready', '发布', '平台稿'],
+    insertText: '帮我新建一篇待发布稿：',
+  },
+  {
+    id: 'daily-task',
+    type: 'insert',
+    label: '今日任务',
+    icon: Check,
+    tone: 'cyan',
+    category: '项目 skill',
+    description: '往今日速记添加一条任务',
+    aliases: ['daily', 'task', '待办'],
+    insertText: '帮我在今日速记里加一条任务：',
+  },
+  {
+    id: 'daily-note',
+    type: 'insert',
+    label: '今日笔记',
+    icon: MessageSquareQuote,
+    tone: 'slate',
+    category: '项目 skill',
+    description: '往今日速记添加一条笔记',
+    aliases: ['daily', 'note', '速记'],
+    insertText: '帮我在今日速记里记一条笔记：',
+  },
+  {
+    id: 'todo-pool',
+    type: 'insert',
+    label: '待办池',
+    icon: Check,
+    tone: 'violet',
+    category: '项目 skill',
+    description: '往待办池添加一条待办',
+    aliases: ['todo', 'pool', '稍后处理'],
+    insertText: '帮我往待办池加一条待办：',
+  },
+  {
+    id: 'canvas-flow',
+    type: 'insert',
+    label: '白板流程图',
+    icon: ArrowsAltOutlined,
+    tone: 'rose',
+    category: '项目 skill',
+    description: '切到白板并生成流程图',
+    aliases: ['白板', '流程图', 'canvas', 'flow'],
+    insertText: '请切到灵感白板，并画一个流程图：',
+  },
+  {
+    id: 'canvas-cards',
+    type: 'insert',
+    label: '白板卡片',
+    icon: PlusOutlined,
+    tone: 'teal',
+    category: '项目 skill',
+    description: '往白板追加几张卡片',
+    aliases: ['卡片', '点子', 'brainstorm'],
+    insertText: '请切到灵感白板，并追加几张卡片：',
+  },
+  {
+    id: 'related-docs',
+    type: 'insert',
+    label: '相关旧文',
+    icon: FileText,
+    tone: 'slate',
+    category: '项目 skill',
+    description: '召回和当前文档相关的旧文',
+    aliases: ['参考', '召回', '旧文', 'related'],
+    insertText: '帮我找和当前文档相关的旧文参考',
+  },
+  {
+    id: 'workspace-brief',
+    type: 'insert',
+    label: '工作区概览',
+    icon: Bot,
+    tone: 'gray',
+    category: '项目 skill',
+    description: '先概览当前工作区再继续',
+    aliases: ['workspace', 'overview', '概览'],
+    insertText: '先帮我概览一下当前工作区，然后再继续：',
+  },
+  {
+    id: 'new-folder',
+    type: 'insert',
+    label: '新建文件夹',
+    icon: Plus,
+    tone: 'purple',
+    category: '项目 skill',
+    description: '在当前位置新建文件夹',
+    aliases: ['folder', '目录', '整理'],
+    insertText: '帮我在当前位置新建一个文件夹，名字叫：',
+  },
+]);
+
+const SLASH_SKILLS = Object.freeze([
+  ...COMPOSER_SHORTCUTS.map((item) => ({
+    ...item,
+    category: item.type === 'platform' ? '平台版本' : '快捷动作',
+    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+  })),
+  ...COMPOSER_PLUS_SHORTCUTS.map((item) => ({
+    ...item,
+    category: '快捷动作',
+    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+  })),
+  ...EXTRA_PLATFORM_SLASH_SKILLS.map((item) => ({
+    ...item,
+    category: '平台版本',
+    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+  })),
+  ...PROJECT_SLASH_SKILLS.map((item) => ({
+    ...item,
+    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+  })),
+  ...COMPOSER_SCRIPT_TOOLS.map((item) => ({
+    ...item,
+    type: 'script',
+    category: '本地工具',
+    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+  })),
 ]);
 
 const SURFACE_LABELS = Object.freeze({
@@ -278,8 +523,11 @@ export default function AgentPanel({ onClose }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   // @文件：弹出选择器 + 已选文件（{id, name, content}）
   const [showFilePicker, setShowFilePicker] = useState(false);
+  const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
+  const [skillFilter, setSkillFilter] = useState('');
+  const [activeSkillIndex, setActiveSkillIndex] = useState(0);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [lastContextPacket, setLastContextPacket] = useState(null);
 
@@ -293,6 +541,11 @@ export default function AgentPanel({ onClose }) {
     const list = q ? mdFiles.filter((f) => (f.name ?? '').toLowerCase().includes(q)) : mdFiles;
     return list.slice(0, 20);
   }, [mdFiles, fileFilter]);
+  const filteredSkills = useMemo(() => {
+    const q = skillFilter.trim().toLowerCase();
+    const list = q ? SLASH_SKILLS.filter((item) => item.searchText.includes(q)) : SLASH_SKILLS;
+    return list.slice(0, MAX_SLASH_SKILL_RESULTS);
+  }, [skillFilter]);
   const [showSessions, setShowSessions] = useState(false);
   const [showSettings, setShowSettings] = useState(() => !isAiConfigured());
   const providers = useMemo(() => listProviders(), []);
@@ -630,12 +883,19 @@ export default function AgentPanel({ onClose }) {
   // 输入变化：检测末尾的 @关键词 → 打开文件选择器并带过滤词
   const handleInputChange = useCallback((value) => {
     setInput(value);
-    const match = /(?:^|\s)@([^\s@]*)$/.exec(value);
-    if (match) {
-      setFileFilter(match[1]);
+    const mentionMatch = /(?:^|\s)@([^\s@]*)$/.exec(value);
+    const skillMatch = SLASH_SKILL_PATTERN.exec(value);
+    if (mentionMatch) {
+      setFileFilter(mentionMatch[1]);
       setShowFilePicker(true);
+      setShowSkillPicker(false);
+    } else if (skillMatch) {
+      setSkillFilter(skillMatch[1]);
+      setShowSkillPicker(true);
+      setShowFilePicker(false);
     } else {
       setShowFilePicker(false);
+      setShowSkillPicker(false);
     }
   }, []);
 
@@ -650,6 +910,12 @@ export default function AgentPanel({ onClose }) {
 
   const handleRemoveFile = useCallback((fileId) => {
     setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  }, []);
+
+  const closeSkillPicker = useCallback(() => {
+    setShowSkillPicker(false);
+    setSkillFilter('');
+    setActiveSkillIndex(0);
   }, []);
 
   const focusInput = useCallback(() => {
@@ -877,6 +1143,33 @@ export default function AgentPanel({ onClose }) {
     }
   }, [running]);
 
+  const handlePickSkill = useCallback((item) => {
+    closeSkillPicker();
+    if (item.type === 'insert') {
+      setInput(item.insertText ?? '');
+      focusInput();
+      return;
+    }
+
+    setInput('');
+    focusInput();
+
+    if (item.type === 'quick') {
+      handleQuickAction(item.actionKey);
+      return;
+    }
+    if (item.type === 'platform') {
+      handlePlatformVariant(
+        item.platformValue,
+        PLATFORM_VARIANT_LABELS[item.platformValue] || item.label,
+      );
+      return;
+    }
+    if (item.type === 'script') {
+      handleScriptTool(item);
+    }
+  }, [closeSkillPicker, focusInput, handlePlatformVariant, handleQuickAction, handleScriptTool]);
+
   const handleComposerPlusClick = useCallback(({ key }) => {
     const shortcut = COMPOSER_PLUS_SHORTCUTS.find((item) => item.id === key);
     if (shortcut) {
@@ -924,11 +1217,41 @@ export default function AgentPanel({ onClose }) {
   }, [providerId, cfg]);
 
   const handleKeyDown = useCallback((e) => {
+    if (showSkillPicker && filteredSkills.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveSkillIndex((prev) => (prev + 1) % filteredSkills.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveSkillIndex((prev) => (prev - 1 + filteredSkills.length) % filteredSkills.length);
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handlePickSkill(filteredSkills[activeSkillIndex] || filteredSkills[0]);
+        return;
+      }
+    }
+    if (showSkillPicker && e.key === 'Escape') {
+      e.preventDefault();
+      closeSkillPicker();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  }, [handleSend]);
+  }, [showSkillPicker, filteredSkills, activeSkillIndex, handlePickSkill, closeSkillPicker, handleSend]);
+
+  useEffect(() => {
+    if (!showSkillPicker) {
+      setActiveSkillIndex(0);
+      return;
+    }
+    setActiveSkillIndex((prev) => Math.min(prev, Math.max(filteredSkills.length - 1, 0)));
+  }, [showSkillPicker, filteredSkills]);
 
   return (
     <div className="agent-panel">
@@ -1081,6 +1404,36 @@ export default function AgentPanel({ onClose }) {
       </div>
 
       <div className="agent-panel__composer">
+        {showSkillPicker && (
+          <div className="agent-panel__skill-picker">
+            {filteredSkills.length === 0 ? (
+              <div className="agent-panel__file-empty">没有匹配的 skill</div>
+            ) : (
+              filteredSkills.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`agent-panel__skill-option${index === activeSkillIndex ? ' is-active' : ''}`}
+                    onMouseEnter={() => setActiveSkillIndex(index)}
+                    onClick={() => handlePickSkill(item)}
+                  >
+                    <span className={`agent-panel__skill-option-icon agent-panel__tool-btn--${item.tone}`}>
+                      <Icon />
+                    </span>
+                    <span className="agent-panel__skill-option-main">
+                      <span className="agent-panel__skill-option-label">{item.label}</span>
+                      <span className="agent-panel__skill-option-desc">{item.description}</span>
+                    </span>
+                    <span className="agent-panel__skill-option-kind">{item.category}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {showFilePicker && (
           <div className="agent-panel__file-picker">
             {filteredFiles.length === 0 ? (
@@ -1129,7 +1482,7 @@ export default function AgentPanel({ onClose }) {
             ref={inputRef}
             className="agent-panel__input"
             value={input}
-            placeholder="发消息，或输入 @ 引用工作区文件"
+            placeholder="发消息，输入 / 选 skill，或输入 @ 引用工作区文件"
             rows={1}
             onInput={(e) => {
               e.target.style.height = 'auto';
@@ -1176,23 +1529,6 @@ export default function AgentPanel({ onClose }) {
           >
             @
           </button>
-          {COMPOSER_SHORTCUTS.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`agent-panel__tool-btn agent-panel__tool-btn--${item.tone}`}
-                disabled={isShortcutDisabled(item)}
-                onClick={() => handleShortcutClick(item)}
-              >
-                <span className="agent-panel__tool-btn-icon">
-                  <Icon />
-                </span>
-                {item.label}
-              </button>
-            );
-          })}
         </div>
       </div>
     </div>
