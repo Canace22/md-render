@@ -649,14 +649,15 @@ function MarkdownEditor() {
     const state = useEditorStore.getState();
     const node = findNodeById(state.workspace, targetId);
     if (!node) return false;
+    const normalizedName = node.type === 'file'
+      ? ensureRenameFileName(trimmed, node.name)
+      : trimmed;
 
     if (node.projectRootPath && node.relativePath && localProjectSupported) {
       const parentId = findParentId(state.workspace, targetId) ?? state.workspace.id;
       const parent = findNodeById(state.workspace, parentId) ?? state.workspace;
 
-      const diskName = node.type === 'file'
-        ? ensureRenameFileName(trimmed, node.name)
-        : trimmed;
+      const diskName = normalizedName;
       if (nameExistsAmongSiblings(parent, diskName, targetId)) return false;
       const newRelativePath = replaceRelativePathBasename(node.relativePath, diskName);
 
@@ -679,7 +680,7 @@ function MarkdownEditor() {
       }
     }
 
-    return useEditorStore.getState().applyRename(targetId, trimmed);
+    return useEditorStore.getState().applyRename(targetId, normalizedName);
   }, [localProjectSupported]);
 
   const titleEditing = useTitleEditing(selectedFile, performRename);
@@ -1190,6 +1191,18 @@ function MarkdownEditor() {
     return result.projectRootPath;
   }, [localProjectSupported, hydrateProjectsWorkspace, hydrateDailyWorkspaceFromDisk]);
 
+  const resolveLocalCreateTarget = useCallback(async (contextNodeId) => {
+    const state = useEditorStore.getState();
+    const targetNode = findNodeById(state.workspace, contextNodeId ?? state.selectedId);
+    const projectRootPath = targetNode?.projectRootPath || await ensureLocalMdRenderWorkspace();
+    if (!projectRootPath) return null;
+    return resolveLocalProjectCreateTarget(
+      state.workspace,
+      contextNodeId ?? state.selectedId,
+      projectRootPath,
+    );
+  }, [ensureLocalMdRenderWorkspace]);
+
   const handleImportMarkdown = useCallback((event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
@@ -1205,13 +1218,7 @@ function MarkdownEditor() {
         const stem = file.name.replace(/\.[^.]+$/, '').trim() || '导入';
 
         if (localProjectSupported) {
-          const projectRootPath = await ensureLocalMdRenderWorkspace();
-          if (!projectRootPath) {
-            message.error('无法初始化本地 Projects 目录，请稍后重试。');
-            return;
-          }
-          const state = useEditorStore.getState();
-          const target = resolveLocalProjectCreateTarget(state.workspace, state.selectedId, projectRootPath);
+          const target = await resolveLocalCreateTarget();
           if (!target) {
             message.error('无法定位本地 Projects 目录，请稍后重试。');
             return;
@@ -1257,25 +1264,15 @@ function MarkdownEditor() {
       reader.readAsText(file, 'UTF-8');
     }
     event.target.value = '';
-  }, [localProjectSupported, insertLocalProjectNode, ensureLocalMdRenderWorkspace]);
+  }, [localProjectSupported, insertLocalProjectNode, resolveLocalCreateTarget]);
 
   const handleAddFile = useCallback(async (contextNodeId) => {
     if (localProjectSupported) {
       try {
-        const projectRootPath = await ensureLocalMdRenderWorkspace();
-        if (!projectRootPath) {
-          message.error('无法初始化本地 Projects 目录，请稍后重试。');
-          return;
-        }
-        const state = useEditorStore.getState();
-        const target = resolveLocalProjectCreateTarget(
-          state.workspace,
-          contextNodeId ?? state.selectedId,
-          projectRootPath,
-        );
+        const target = await resolveLocalCreateTarget(contextNodeId);
         if (!target) {
           message.error('无法定位本地 Projects 目录，请稍后重试。');
-          return;
+          return { ok: false };
         }
         const name = buildUniqueNameInFolder(target.parentFolder, '未命名', '.md');
         const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
@@ -1288,36 +1285,37 @@ function MarkdownEditor() {
         node.updatedAt = result.updatedAt;
         insertLocalProjectNode(target.parentFolderId, node);
         setContentResetKey((k) => k + 1);
-        message.success(`已新建「${name}」`);
+        return {
+          ok: true,
+          nodeId: node.id,
+          name: node.name,
+          type: node.type,
+        };
       } catch (error) {
         console.error('新建本地文件失败:', error);
         message.error(error?.message || '新建本地文件失败');
+        return { ok: false };
       }
-      return;
     }
 
     if (!addFile(contextNodeId)) {
       message.error('本地项目目录暂不支持新建文件，请先在磁盘目录中创建文件后重新打开项目。');
+      return { ok: false };
     }
-  }, [localProjectSupported, ensureLocalMdRenderWorkspace, addFile, insertLocalProjectNode]);
+    const state = useEditorStore.getState();
+    const node = findNodeById(state.workspace, state.selectedId);
+    return node
+      ? { ok: true, nodeId: node.id, name: node.name, type: node.type }
+      : { ok: false };
+  }, [localProjectSupported, resolveLocalCreateTarget, addFile, insertLocalProjectNode]);
 
   const handleAddFolder = useCallback(async (contextNodeId) => {
     if (localProjectSupported) {
       try {
-        const projectRootPath = await ensureLocalMdRenderWorkspace();
-        if (!projectRootPath) {
-          message.error('无法初始化本地 Projects 目录，请稍后重试。');
-          return;
-        }
-        const state = useEditorStore.getState();
-        const target = resolveLocalProjectCreateTarget(
-          state.workspace,
-          contextNodeId ?? state.selectedId,
-          projectRootPath,
-        );
+        const target = await resolveLocalCreateTarget(contextNodeId);
         if (!target) {
           message.error('无法定位本地 Projects 目录，请稍后重试。');
-          return;
+          return { ok: false };
         }
         const name = buildUniqueNameInFolder(target.parentFolder, '新建文件夹');
         const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
@@ -1328,18 +1326,29 @@ function MarkdownEditor() {
         const node = createLocalProjectFolderNode(target.projectRootPath, result.relativePath, name);
         insertLocalProjectNode(target.parentFolderId, node);
         setContentResetKey((k) => k + 1);
-        message.success(`已新建文件夹「${name}」`);
+        return {
+          ok: true,
+          nodeId: node.id,
+          name: node.name,
+          type: node.type,
+        };
       } catch (error) {
         console.error('新建本地文件夹失败:', error);
         message.error(error?.message || '新建本地文件夹失败');
+        return { ok: false };
       }
-      return;
     }
 
     if (!addFolder(contextNodeId)) {
       message.error('本地项目目录暂不支持新建文件夹，请先在磁盘目录中创建文件夹后重新打开项目。');
+      return { ok: false };
     }
-  }, [localProjectSupported, ensureLocalMdRenderWorkspace, addFolder, insertLocalProjectNode]);
+    const state = useEditorStore.getState();
+    const node = findNodeById(state.workspace, state.selectedId);
+    return node
+      ? { ok: true, nodeId: node.id, name: node.name, type: node.type }
+      : { ok: false };
+  }, [localProjectSupported, resolveLocalCreateTarget, addFolder, insertLocalProjectNode]);
 
   const handleCreateDraftFromDashboard = useCallback(async (actionKey) => {
     if (actionKey === 'material') {
@@ -2075,10 +2084,7 @@ function MarkdownEditor() {
       const stem = selectedFile.name.replace(/\.[^.]+$/, '').trim() || '转换';
 
       if (localProjectSupported) {
-        const projectRootPath = await ensureLocalMdRenderWorkspace();
-        if (!projectRootPath) { alert('无法初始化本地 Projects 目录'); return; }
-        const state = useEditorStore.getState();
-        const target = resolveLocalProjectCreateTarget(state.workspace, state.selectedId, projectRootPath);
+        const target = await resolveLocalCreateTarget();
         if (!target) { alert('无法定位本地 Projects 目录'); return; }
         const name = buildUniqueNameInFolder(target.parentFolder, stem, '.md');
         const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
@@ -2103,7 +2109,7 @@ function MarkdownEditor() {
       console.error('转换为 Markdown 失败:', error);
       alert(error?.message || '转换失败');
     }
-  }, [selectedFile, previewData, localProjectSupported, insertLocalProjectNode, ensureLocalMdRenderWorkspace]);
+  }, [selectedFile, previewData, localProjectSupported, insertLocalProjectNode, resolveLocalCreateTarget]);
 
   useEffect(() => {
     syncMarkdownFromSelectedFile();

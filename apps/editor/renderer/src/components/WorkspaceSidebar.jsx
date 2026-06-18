@@ -35,7 +35,9 @@ import {
   collectRecentFiles,
   collectTags,
   filterWorkspaceByTag,
+  findNodeById,
   getFolderChannelLabel,
+  resolveTargetFolderId,
 } from '../store/workspaceUtils.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
@@ -81,6 +83,13 @@ const EXPORT_OPTIONS = [
   { key: 'docx', label: 'Word (.docx)' },
 ];
 
+const getRenameDraftValue = (node, fallbackName = '') => {
+  const name = String(node?.name ?? fallbackName ?? '');
+  if (node?.type !== 'file') return name;
+  const next = name.replace(/(\.[^./\\]+)$/u, '');
+  return next || name;
+};
+
 const TreeNode = ({
   node,
   selectedId,
@@ -112,7 +121,8 @@ const TreeNode = ({
   const isRoot = node.id === 'root';
   const isLocalProjectRoot = Boolean(node.localProjectRoot);
   const channelLabel = getFolderChannelLabel(node);
-  const showStructureActions = allowStructureActions && !isLocalProjectRoot;
+  const showCreateActions = allowStructureActions && isFolder;
+  const showNodeActions = allowStructureActions && !isRoot && !isLocalProjectRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
@@ -130,7 +140,7 @@ const TreeNode = ({
   const menuRef = useRef(null);
   const renameInputRef = useRef(null);
   const isRenaming = renamingNodeId === node.id;
-  const isMenuTarget = contextMenu?.nodeId === node.id;
+  const isMenuTarget = contextMenu?.kind === 'node' && contextMenu.nodeId === node.id;
 
   const indentPx = depth * 12 + 8;
   const indentStyle = { paddingLeft: `${indentPx}px`, '--indent-guide-left': `${(depth - 1) * 12 + 8 + 4}px` };
@@ -173,7 +183,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showStructureActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager) return;
+    if (!showCreateActions && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -214,7 +224,7 @@ const TreeNode = ({
     }
   };
 
-  const sharedProps = allowStructureActions && !isRoot ? {
+  const sharedProps = allowStructureActions && !isRoot && !node.projectRootPath ? {
     draggable: true,
     onDragStart: handleDragStart,
     onDragOver: handleDragOver,
@@ -294,10 +304,10 @@ const TreeNode = ({
               <button type="button" onClick={runAndClose(() => onRevealLocalProjectEntry(node.id))}>
                 <FolderOpen size={14} strokeWidth={1.5} /> 在{FILE_MANAGER_LABEL}中查看
               </button>
-              {(showStructureActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
+              {(showCreateActions || showNodeActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
             </>
           )}
-          {showStructureActions && isFolder && (
+          {showCreateActions && (
             <>
               <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
                 <File size={14} strokeWidth={1.5} /> 新建文件
@@ -308,7 +318,7 @@ const TreeNode = ({
               <div className="tree-context-menu-divider" />
             </>
           )}
-          {showStructureActions && !isRoot && (
+          {showNodeActions && (
             <>
               <button type="button" onClick={runAndClose(() => onPinNode?.(node.id))}>
                 {node.pinned
@@ -439,7 +449,7 @@ const WorkspaceSidebar = ({
   const [resizing, setResizing] = useState(false);
   const [renamingNodeId, setRenamingNodeId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
-  const [contextMenu, setContextMenu] = useState(null); // { nodeId, x, y }
+  const [contextMenu, setContextMenu] = useState(null); // { kind, nodeId, x, y }
   // undefined = 不强制（用户自由展开/收起），true = 全部展开，false = 全部收起
   const [forceOpen, setForceOpen] = useState(undefined);
 
@@ -452,8 +462,9 @@ const WorkspaceSidebar = ({
   const allowStructureActions = true;
 
   const handleStartRename = (nodeId, currentName) => {
+    const node = findNodeById(workspace, nodeId);
     setRenamingNodeId(nodeId);
-    setRenameDraft(currentName);
+    setRenameDraft(getRenameDraftValue(node, currentName));
   };
 
   const handleCancelRename = () => {
@@ -493,6 +504,68 @@ const WorkspaceSidebar = ({
   // 搜索或筛标签时隐藏「最近」区，专注结果
   const recentFiles = isSearching || activeTag ? [] : collectRecentFiles(workspace, 5);
   const allTags = collectTags(workspace);
+  const selectedNode = findNodeById(workspace, selectedId);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handlePointerDown = (event) => {
+      if (event.target.closest('.tree-node-context-menu')) return;
+      closeContextMenu();
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [closeContextMenu, contextMenu]);
+
+  const handleCreateFromSidebar = useCallback(async (kind, contextNodeId) => {
+    const create = kind === 'folder' ? onAddFolder : onAddFile;
+    const result = await create?.(contextNodeId);
+    if (result?.ok && result.nodeId) {
+      handleStartRename(result.nodeId, result.name);
+      closeContextMenu();
+    }
+  }, [closeContextMenu, onAddFile, onAddFolder, workspace]);
+
+  const handleTreeBackgroundContextMenu = useCallback((event) => {
+    if (event.target.closest('.tree-node-row') || event.target.closest('.tree-node-context-menu')) {
+      return;
+    }
+    event.preventDefault();
+    const targetNodeId = resolveTargetFolderId(workspace, selectedId);
+    setContextMenu({
+      kind: 'workspace',
+      nodeId: targetNodeId ?? workspace?.id ?? 'root',
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }, [selectedId, workspace]);
+
+  const handleTreeKeyDown = useCallback((event) => {
+    if (renamingNodeId) return;
+    if (!selectedNode || selectedNode.id === 'root') return;
+
+    if (selectedNode.localProjectRoot) {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        onRemoveLocalProject?.(selectedNode.id);
+      }
+      return;
+    }
+
+    if (event.key === 'F2') {
+      event.preventDefault();
+      handleStartRename(selectedNode.id, selectedNode.name);
+      return;
+    }
+
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      onDelete?.(selectedNode.id);
+    }
+  }, [onDelete, onRemoveLocalProject, renamingNodeId, selectedNode, workspace]);
 
   const handleSearchChange = (value) => {
     onSearchQueryChange?.(value);
@@ -764,7 +837,7 @@ const WorkspaceSidebar = ({
                 <button
                   type="button"
                   className="sidebar-add-icon"
-                  onClick={onAddFile}
+                  onClick={() => handleCreateFromSidebar('file')}
                   title="新建文件"
                   aria-label="新建文件"
                 >
@@ -775,7 +848,7 @@ const WorkspaceSidebar = ({
                 <button
                   type="button"
                   className="sidebar-add-icon"
-                  onClick={onAddFolder}
+                  onClick={() => handleCreateFromSidebar('folder')}
                   title="新建文件夹"
                   aria-label="新建文件夹"
                 >
@@ -829,11 +902,16 @@ const WorkspaceSidebar = ({
           </div>
 
           {/* 文件树 */}
-          <div className="workspace-tree">
+          <div
+            className="workspace-tree"
+            tabIndex={0}
+            onKeyDown={handleTreeKeyDown}
+            onContextMenu={handleTreeBackgroundContextMenu}
+          >
             {filteredWorkspace
               ? renderTree(filteredWorkspace, selectedId, onSelect, {
-                  onAddFile,
-                  onAddFolder,
+                  onAddFile: (nodeId) => handleCreateFromSidebar('file', nodeId),
+                  onAddFolder: (nodeId) => handleCreateFromSidebar('folder', nodeId),
                   onRename,
                   onDelete,
                   onMoveNode,
@@ -845,8 +923,8 @@ const WorkspaceSidebar = ({
                   ...renameHandlers,
                 },
                 contextMenu,
-                (nodeId, x, y) => setContextMenu({ nodeId, x, y }),
-                () => setContextMenu(null),
+                (nodeId, x, y) => setContextMenu({ kind: 'node', nodeId, x, y }),
+                closeContextMenu,
                 forceOpen,
               )
               : (
@@ -856,6 +934,21 @@ const WorkspaceSidebar = ({
                     : `没有带「${activeTag}」标签的笔记`}
                 </div>
               )}
+
+            {contextMenu?.kind === 'workspace' && (
+              <div
+                className="tree-node-context-menu"
+                style={{ left: contextMenu.x, top: contextMenu.y }}
+                data-testid="tree-workspace-context-menu"
+              >
+                <button type="button" onClick={() => handleCreateFromSidebar('file', contextMenu.nodeId)}>
+                  <File size={14} strokeWidth={1.5} /> 新建文件
+                </button>
+                <button type="button" onClick={() => handleCreateFromSidebar('folder', contextMenu.nodeId)}>
+                  <Folder size={14} strokeWidth={1.5} /> 新建文件夹
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -544,19 +544,21 @@ export function collectLocalProjectRootPaths(workspace, mdRenderRootPath = '') {
  * 解析磁盘新建目标：默认落在 MdRender/Projects，选中用户目录则在其下创建。
  */
 export function resolveLocalProjectCreateTarget(workspace, contextNodeId, projectRootPath) {
-  if (!projectRootPath || !workspace) return null;
+  if (!workspace) return null;
 
   const folderId = resolveTargetFolderId(workspace, contextNodeId);
   const folder = findNodeById(workspace, folderId);
 
-  if (folder?.projectRootPath === projectRootPath && folder.type === 'folder' && folder.id !== 'root') {
+  if (folder?.projectRootPath && folder.type === 'folder' && folder.id !== 'root') {
     return {
       parentFolderId: folder.id,
-      projectRootPath,
-      parentRelativePath: folder.relativePath ?? 'Projects',
+      projectRootPath: folder.projectRootPath,
+      parentRelativePath: folder.relativePath ?? '',
       parentFolder: folder,
     };
   }
+
+  if (!projectRootPath) return null;
 
   const root = findNodeById(workspace, workspace.id) ?? workspace;
   return {
