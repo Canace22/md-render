@@ -105,6 +105,10 @@ import {
 import { getTodayDateKey } from '../utils/dailyWorkspace.js';
 import { exportDocument } from '../utils/exportService.js';
 import {
+  fetchCloudWorkspaceSnapshot,
+  uploadCloudWorkspaceSnapshot,
+} from '../utils/cloudSyncService.js';
+import {
   createLocalProjectFileOnDisk,
   createLocalProjectFolderOnDisk,
   deleteLocalProjectEntryOnDisk,
@@ -356,6 +360,10 @@ function MarkdownEditor() {
     notionFilePages,
     notionDatabaseId,
     notionProxyBase,
+    cloudSyncBaseUrl,
+    cloudWorkspaceId,
+    cloudLastSyncedRevision,
+    cloudLastSyncedAt,
     setTheme,
     setCopyStyle,
     setPublishingPlatforms,
@@ -378,6 +386,11 @@ function MarkdownEditor() {
     setNotionDatabaseId,
     setNotionProxyBase,
     setFileNotionPageId,
+    setCloudSyncBaseUrl,
+    setCloudWorkspaceId,
+    buildCloudSyncPayload,
+    markCloudSyncSuccess,
+    applyCloudWorkspacePayload,
     setFileTags,
     setFileKnowledgeMeta,
     mergeNotionFilePages,
@@ -422,6 +435,7 @@ function MarkdownEditor() {
   );
 
   const selectedFile = useSelectedFile();
+  const selectedReadOnly = Boolean(selectedFile?.readOnly);
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
@@ -771,6 +785,10 @@ function MarkdownEditor() {
   const [incrementalPullLoading, setIncrementalPullLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
+  const [cloudSyncLoading, setCloudSyncLoading] = useState(false);
+  const [cloudSyncMessage, setCloudSyncMessage] = useState('');
+  const [cloudSyncError, setCloudSyncError] = useState('');
+  const [cloudSyncConflict, setCloudSyncConflict] = useState(null);
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
       || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
@@ -1039,6 +1057,7 @@ function MarkdownEditor() {
   }, [editor]);
 
   const handleEditorChange = () => {
+    if (selectedReadOnly) return;
     tryConvertTypedMarkdownCodeFence();
 
     // content 字段存 BlockNote JSON（保留颜色等富文本样式）
@@ -1538,6 +1557,109 @@ function MarkdownEditor() {
     setDiskSavePending,
     workspace,
   ]);
+
+  const handleCloudUpload = useCallback(async ({ baseRevision } = {}) => {
+    setCloudSyncLoading(true);
+    setCloudSyncMessage('');
+    setCloudSyncError('');
+    setCloudSyncConflict(null);
+    try {
+      const state = useEditorStore.getState();
+      const { payload, hash } = state.buildCloudSyncPayload();
+      const result = await uploadCloudWorkspaceSnapshot({
+        baseUrl: state.cloudSyncBaseUrl,
+        workspaceId: state.cloudWorkspaceId,
+        payload,
+        baseRevision: baseRevision ?? state.cloudLastSyncedRevision,
+        clientId: state.cloudClientId,
+      });
+      const nextRevision = result.revision ?? result.snapshot?.revision ?? state.cloudLastSyncedRevision + 1;
+      const updatedAt = result.updatedAt ?? result.snapshot?.updatedAt ?? new Date().toISOString();
+      state.markCloudSyncSuccess({ revision: nextRevision, updatedAt, hash });
+      setCloudSyncMessage(`已上传到云端，revision ${nextRevision}。`);
+      message.success('已上传到云端');
+    } catch (error) {
+      if (error?.status === 409) {
+        const remoteRevision = error.body?.revision ?? error.body?.snapshot?.revision ?? error.body?.remoteRevision;
+        setCloudSyncConflict({
+          type: 'upload',
+          remoteRevision,
+          remoteSnapshot: error.body?.snapshot ?? error.body,
+        });
+        setCloudSyncError('云端已有更新，已阻止覆盖。请选择使用云端版本或覆盖云端。');
+      } else {
+        console.error('上传云端工作区失败:', error);
+        setCloudSyncError(error?.message || '上传失败');
+      }
+    } finally {
+      setCloudSyncLoading(false);
+    }
+  }, []);
+
+  const applyRemoteCloudSnapshot = useCallback((snapshot) => {
+    const payload = snapshot?.payload ?? snapshot?.workspace?.payload;
+    const revision = snapshot?.revision ?? snapshot?.workspace?.revision ?? 0;
+    const updatedAt = snapshot?.updatedAt ?? snapshot?.workspace?.updatedAt ?? '';
+    const result = applyCloudWorkspacePayload(payload, { revision, updatedAt });
+    setContentResetKey((k) => k + 1);
+    setCloudSyncConflict(null);
+    setCloudSyncMessage(`已从云端拉取，revision ${revision}。`);
+    message.success('已从云端拉取');
+    return result;
+  }, [applyCloudWorkspacePayload]);
+
+  const handleCloudPull = useCallback(async ({ force = false } = {}) => {
+    setCloudSyncLoading(true);
+    setCloudSyncMessage('');
+    setCloudSyncError('');
+    if (!force) setCloudSyncConflict(null);
+    try {
+      const state = useEditorStore.getState();
+      const snapshot = await fetchCloudWorkspaceSnapshot({
+        baseUrl: state.cloudSyncBaseUrl,
+        workspaceId: state.cloudWorkspaceId,
+      });
+      const remoteRevision = snapshot?.revision ?? snapshot?.workspace?.revision ?? 0;
+      const { hash } = state.buildCloudSyncPayload();
+      const hasLocalChanges = Boolean(state.cloudLastSyncedHash && hash !== state.cloudLastSyncedHash);
+      if (!force && hasLocalChanges) {
+        setCloudSyncConflict({
+          type: 'pull',
+          remoteRevision,
+          remoteSnapshot: snapshot,
+        });
+        setCloudSyncError('本地有未上传改动，已阻止云端覆盖。请选择使用云端版本或先上传本地版本。');
+        return;
+      }
+      applyRemoteCloudSnapshot(snapshot);
+    } catch (error) {
+      console.error('拉取云端工作区失败:', error);
+      setCloudSyncError(error?.message || '拉取失败');
+    } finally {
+      setCloudSyncLoading(false);
+    }
+  }, [applyRemoteCloudSnapshot]);
+
+  const handleCloudUseRemote = useCallback(() => {
+    if (!cloudSyncConflict?.remoteSnapshot) return;
+    try {
+      applyRemoteCloudSnapshot(cloudSyncConflict.remoteSnapshot);
+    } catch (error) {
+      console.error('应用云端工作区失败:', error);
+      setCloudSyncError(error?.message || '应用云端版本失败');
+    }
+  }, [applyRemoteCloudSnapshot, cloudSyncConflict]);
+
+  const handleCloudForceUpload = useCallback(() => {
+    const remoteRevision = cloudSyncConflict?.remoteRevision;
+    if (!Number.isFinite(Number(remoteRevision))) {
+      setCloudSyncError('缺少云端 revision，无法确认覆盖。');
+      return;
+    }
+    const confirmed = window.confirm(`确定用本地快照覆盖云端 revision ${remoteRevision} 吗？`);
+    if (!confirmed) return;
+    handleCloudUpload({ baseRevision: remoteRevision });
+  }, [cloudSyncConflict, handleCloudUpload]);
 
   const handleRemoveLocalProject = useCallback((nodeId) => {
     const node = findNodeById(workspace, nodeId);
@@ -2256,6 +2378,22 @@ function MarkdownEditor() {
               message: notionMessage,
               error: notionError,
             }}
+            cloud={{
+              baseUrl: cloudSyncBaseUrl,
+              workspaceId: cloudWorkspaceId,
+              lastSyncedRevision: cloudLastSyncedRevision,
+              lastSyncedAt: cloudLastSyncedAt,
+              loading: cloudSyncLoading,
+              message: cloudSyncMessage,
+              error: cloudSyncError,
+              conflict: cloudSyncConflict,
+              onBaseUrlChange: setCloudSyncBaseUrl,
+              onWorkspaceIdChange: setCloudWorkspaceId,
+              onUpload: handleCloudUpload,
+              onPull: handleCloudPull,
+              onForceUpload: handleCloudForceUpload,
+              onUseRemote: handleCloudUseRemote,
+            }}
             local={{
               localProjectSupported,
               canSyncFromDisk: canSyncWorkspaceFromDisk,
@@ -2416,7 +2554,7 @@ function MarkdownEditor() {
                           className="blocknote-editor"
                           data-testid="blocknote-editor"
                           theme={resolvedTheme}
-                          editable={Boolean(selectedFile)}
+                          editable={Boolean(selectedFile) && !selectedReadOnly}
                           formattingToolbar
                           linkToolbar
                           slashMenu

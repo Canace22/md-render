@@ -10,7 +10,10 @@
  *   host.writeActiveDoc(content)    -> string           （提交一次写入；返回给模型的结果文案，
  *                                                         如「已应用」「用户已放弃」。可异步）
  *   host.createNewDoc(payload)      -> string           （新建一篇 Markdown 文档；返回创建结果文案）
+ *   host.createFolder(payload)      -> string           （新建文件夹；返回创建结果文案）
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
+ *   host.openSurface(args)          -> string           （切换 app 主界面）
+ *   host.openWorkspaceItem(args)    -> string           （打开工作区里的文档或文件夹）
  *   host.getDailyOverview(args)     -> { ... }          （读取 Daily / 待办概况）
  *   host.openCanvas()               -> string           （切到灵感白板）
  *   host.appendCanvasCards(args)    -> string           （往灵感白板追加卡片）
@@ -25,6 +28,18 @@ const MAX_SNIPPET_CHARS = 200;
 const MAX_RECALL_RESULTS = 5; // 主动召回返回的相关旧文条数
 const MAX_RECALL_KEYWORDS = 6; // 用于召回搜索的关键词条数
 const MAX_RECENT_DOCS = 6;
+const OPENABLE_SURFACES = new Set([
+  'overview',
+  'paper',
+  'daily',
+  'canvas',
+  'creation-board',
+  'publishing',
+  'search',
+  'graph',
+  'sync',
+  'settings',
+]);
 
 /** OpenAI 工具定义（纯数据，无副作用）
  *
@@ -35,6 +50,23 @@ const MAX_RECENT_DOCS = 6;
 /** 标记这是 server 端工具，需要在 toolRegistry 加载时拉取并合并 */
 const SERVER_TOOL_MARKER = '__server_tool__';
 export const TOOL_DEFINITIONS = Object.freeze([
+  {
+    type: 'function',
+    function: {
+      name: 'open_surface',
+      description: '切换 app 主界面。可用于打开总览、文档工作区、今日速记、灵感白板、创作看板、发布队列、知识库搜索、关系图谱、同步中心或设置。',
+      parameters: {
+        type: 'object',
+        properties: {
+          surface: {
+            type: 'string',
+            description: '目标界面：overview、paper、daily、canvas、creation-board、publishing、search、graph、sync、settings',
+          },
+        },
+        required: ['surface'],
+      },
+    },
+  },
   {
     type: 'function',
     function: {
@@ -212,6 +244,20 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     type: 'function',
     function: {
+      name: 'create_folder',
+      description: '在当前工作区位置新建一个文件夹。适合处理“建个文件夹”“新建目录整理资料”这类请求。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '可选，文件夹名称' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'create_content_entry',
       description: '新建一个内容条目，用于开选题、开稿、建资料单或建待发布稿。会创建一篇新的 Markdown 文档，并写入对应的稿件状态元数据。',
       parameters: {
@@ -232,6 +278,20 @@ export const TOOL_DEFINITIONS = Object.freeze([
           },
         },
         required: ['kind'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'open_workspace_item',
+      description: '按 id 打开工作区里的文档或文件夹。通常先用 search_docs、list_recent_docs 或 get_workspace_brief 拿到 id，再调用它。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '工作区条目 id' },
+        },
+        required: ['id'],
       },
     },
   },
@@ -325,6 +385,16 @@ const collectCandidates = async (host, keywords) => {
 
 /** 工具执行器：name -> async (args, host) => 结果字符串 */
 const EXECUTORS = {
+  open_surface: async (args, host) => {
+    const surface = String(args?.surface ?? '').trim();
+    if (!surface) return '切换失败：目标界面为空。';
+    if (!OPENABLE_SURFACES.has(surface)) {
+      return `切换失败：不支持界面「${surface}」。`;
+    }
+    const result = await host.openSurface?.({ surface });
+    return typeof result === 'string' ? result : `已切换到${surface}。`;
+  },
+
   open_canvas: async (_args, host) => {
     const result = await host.openCanvas?.();
     return typeof result === 'string' ? result : '已打开灵感白板。';
@@ -402,6 +472,13 @@ const EXECUTORS = {
     return typeof result === 'string' ? result : '已创建新文档。';
   },
 
+  create_folder: async (args, host) => {
+    const result = await host.createFolder?.({
+      name: args?.name,
+    });
+    return typeof result === 'string' ? result : '已创建文件夹。';
+  },
+
   create_content_entry: async (args, host) => {
     const kind = String(args?.kind ?? '').trim();
     if (!kind) return '创建失败：条目类型为空。';
@@ -423,12 +500,20 @@ const EXECUTORS = {
     return JSON.stringify(doc);
   },
 
+  open_workspace_item: async (args, host) => {
+    const id = String(args?.id ?? '').trim();
+    if (!id) return '打开失败：条目 id 为空。';
+    const result = await host.openWorkspaceItem?.({ id });
+    return typeof result === 'string' ? result : '已打开工作区条目。';
+  },
+
   search_docs: async (args, host) => {
     const query = String(args?.query ?? '').trim();
     if (!query) return '搜索失败：关键词为空。';
     const results = (await host.searchDocs(query)) || [];
     if (!results.length) return `未找到与「${query}」相关的文档。`;
     const top = results.slice(0, MAX_SEARCH_RESULTS).map((r) => ({
+      id: r.id ?? '',
       title: r.title ?? '未命名',
       snippet: truncate(r.snippet ?? '', MAX_SNIPPET_CHARS),
     }));
@@ -503,6 +588,7 @@ export const executeTool = async (toolCall, host) => {
  * 本地标签写死在这里；server 工具通过 registerServerToolLabels 动态注册。
  */
 const _localToolLabels = Object.freeze({
+  open_surface: '切换界面',
   open_canvas: '打开灵感白板',
   append_canvas_cards: '追加白板卡片',
   replace_canvas: '重建白板图',
@@ -514,7 +600,9 @@ const _localToolLabels = Object.freeze({
   get_daily_overview: '查看 Daily 概况',
   write_active_doc: '写入当前文档',
   create_new_doc: '新建文档',
+  create_folder: '新建文件夹',
   create_content_entry: '创建内容条目',
+  open_workspace_item: '打开工作区条目',
   read_doc_by_id: '读取指定文档',
   search_docs: '搜索工作区',
   list_recent_docs: '查看最近文档',

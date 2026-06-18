@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import {
   ArrowLeft, Cloud, CloudUpload, Database, Download, FileText,
-  Loader2, Link2, MessageSquare, Upload,
+  Loader2, Link2, Upload,
 } from 'lucide-react';
 import { isNotionAvailable } from '../utils/notionService.js';
+import CloudSyncChannel from './CloudSyncChannel.jsx';
 
 /**
  * 统一同步页：把 Notion / 本地项目 / 导入导出 三个渠道
@@ -12,6 +13,7 @@ import { isNotionAvailable } from '../utils/notionService.js';
  */
 
 const CHANNELS = [
+  { id: 'cloud', label: '云端', icon: Cloud },
   { id: 'notion', label: 'Notion', icon: Cloud },
   { id: 'local', label: '本地项目', icon: FileText },
   { id: 'workspace', label: '导入导出', icon: Download },
@@ -158,49 +160,6 @@ function NotionChannel(props) {
   );
 }
 
-function WechatChannel({ canCopy, copyStyleName, onCopyWeChat, onCopyRichText, onPreviewWeChat }) {
-  return (
-    <div className="settings-group">
-      <div className="settings-group-title">公众号格式化复制</div>
-      <p className="notion-hint">
-        把当前文档按所选排版风格转成公众号可直接粘贴的富文本。当前风格：{copyStyleName}。
-      </p>
-      {!canCopy && (
-        <p className="notion-hint small">请先在文稿中选中一个文档，再进行复制。</p>
-      )}
-      <div className="notion-action-row">
-        <button
-          type="button"
-          className="notion-primary-btn"
-          onClick={onCopyWeChat}
-          disabled={!canCopy}
-        >
-          <MessageSquare size={18} strokeWidth={1.6} />
-          <span>复制到公众号</span>
-        </button>
-        <button
-          type="button"
-          className="notion-primary-btn"
-          onClick={onCopyRichText}
-          disabled={!canCopy}
-        >
-          <CloudUpload size={18} strokeWidth={1.6} />
-          <span>复制富文本</span>
-        </button>
-        <button
-          type="button"
-          className="notion-primary-btn"
-          onClick={onPreviewWeChat}
-          disabled={!canCopy}
-        >
-          <FileText size={18} strokeWidth={1.6} />
-          <span>预览公众号样式</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // 仅在 localProjectSupported 为真时渲染（渠道标签同样会被隐藏）。
 function LocalChannel({ canSyncFromDisk, syncLoading, onOpenLocalProject, onSyncFromDisk }) {
   return (
@@ -260,6 +219,7 @@ export default function SyncPanel({
   localProjectSupported = false,
   onClose,
   notion,
+  cloud,
   local,
   workspace,
 }) {
@@ -302,6 +262,7 @@ export default function SyncPanel({
       </div>
 
       <div className="sync-channel-body">
+        {activeChannel === 'cloud' && <CloudSyncChannel {...cloud} />}
         {activeChannel === 'notion' && <NotionChannel selectedFileName={selectedFileName} {...notion} />}
         {activeChannel === 'local' && <LocalChannel {...local} />}
         {activeChannel === 'workspace' && <WorkspaceChannel {...workspace} />}

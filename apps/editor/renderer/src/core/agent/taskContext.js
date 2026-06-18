@@ -106,6 +106,7 @@ export const buildPinnedContext = (attachedFiles = []) => {
 
 export const buildTaskContextPacket = ({
   activeDoc = null,
+  currentSurface = '',
   selectionText = '',
   workspaceBrief = null,
   relatedRefs = [],
@@ -113,6 +114,7 @@ export const buildTaskContextPacket = ({
 } = {}) => {
   return {
     activeDoc,
+    currentSurface: String(currentSurface ?? '').trim(),
     selection: truncate(selectionText, MAX_SELECTION_CHARS),
     workspace: workspaceBrief
       ? {
@@ -140,6 +142,10 @@ export const formatTaskContextPacket = (packet) => {
     lines.push(docLine);
   } else {
     lines.push('当前稿件：暂无打开文档。');
+  }
+
+  if (packet.currentSurface) {
+    lines.push(`当前界面：${packet.currentSurface}`);
   }
 
   if (packet.activeDoc?.summary) lines.push(`稿件摘要：${packet.activeDoc.summary}`);

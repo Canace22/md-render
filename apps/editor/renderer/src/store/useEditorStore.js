@@ -62,6 +62,12 @@ import {
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import {
+  buildCloudWorkspacePayload,
+  getDefaultCloudSyncBaseUrl,
+  getCloudPayloadHash,
+  normalizeCloudSyncBaseUrl,
+} from '../utils/cloudSyncService.js';
+import {
   createSession,
   deriveTitle,
   mapSession,
@@ -83,6 +89,12 @@ const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
 // 与 notionService.js 中同名常量保持一致：服务层直接从这个 key 读运行时反代地址
 const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
+const CLOUD_SYNC_BASE_URL_STORAGE_KEY = 'md-renderer-cloud-sync-base-url';
+const CLOUD_WORKSPACE_ID_STORAGE_KEY = 'md-renderer-cloud-workspace-id';
+const CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY = 'md-renderer-cloud-last-synced-revision';
+const CLOUD_LAST_SYNCED_AT_STORAGE_KEY = 'md-renderer-cloud-last-synced-at';
+const CLOUD_CLIENT_ID_STORAGE_KEY = 'md-renderer-cloud-client-id';
+const CLOUD_LAST_SYNCED_HASH_STORAGE_KEY = 'md-renderer-cloud-last-synced-hash';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 
@@ -97,6 +109,26 @@ const safeParseJSON = (value, fallback) => {
   } catch (error) {
     return fallback;
   }
+};
+
+const readPersistedString = (key) => {
+  try {
+    return window.localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+};
+
+const createCloudClientId = () => {
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+    return `md-render-${window.crypto.randomUUID()}`;
+  }
+  return `md-render-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+};
+
+const sanitizeCloudRevision = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 };
 
 const VALID_SURFACES = new Set([
@@ -196,6 +228,7 @@ const buildStateFromLocalStorage = () => {
   const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
   const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
   const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
+  const cloudClientId = readPersistedString(CLOUD_CLIENT_ID_STORAGE_KEY) || createCloudClientId();
 
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
@@ -229,6 +262,14 @@ const buildStateFromLocalStorage = () => {
       surface: migratedSurface,
       publishingPlatforms,
       dailyWorkspace,
+      cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(
+        readPersistedString(CLOUD_SYNC_BASE_URL_STORAGE_KEY) || getDefaultCloudSyncBaseUrl(),
+      ),
+      cloudWorkspaceId: readPersistedString(CLOUD_WORKSPACE_ID_STORAGE_KEY).trim(),
+      cloudLastSyncedRevision: sanitizeCloudRevision(readPersistedString(CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY)),
+      cloudLastSyncedAt: readPersistedString(CLOUD_LAST_SYNCED_AT_STORAGE_KEY),
+      cloudClientId,
+      cloudLastSyncedHash: readPersistedString(CLOUD_LAST_SYNCED_HASH_STORAGE_KEY),
       ...notionSnapshot,
     },
     version: 0,
@@ -251,6 +292,10 @@ const buildStateFromDb = (raw) => {
   const dailyWorkspace = normalizeDailyWorkspace(
     safeParseJSON(raw.daily_workspace_json, null),
   );
+  const cloudClientId =
+    typeof raw.cloud_client_id === 'string' && raw.cloud_client_id.trim()
+      ? raw.cloud_client_id
+      : createCloudClientId();
   return {
     state: {
       workspace: ws,
@@ -266,6 +311,12 @@ const buildStateFromDb = (raw) => {
       surface: normalizeSurface(raw.surface, 'overview'),
       publishingPlatforms,
       dailyWorkspace,
+      cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(raw.cloud_sync_base_url || getDefaultCloudSyncBaseUrl()),
+      cloudWorkspaceId: typeof raw.cloud_workspace_id === 'string' ? raw.cloud_workspace_id : '',
+      cloudLastSyncedRevision: sanitizeCloudRevision(raw.cloud_last_synced_revision),
+      cloudLastSyncedAt: typeof raw.cloud_last_synced_at === 'string' ? raw.cloud_last_synced_at : '',
+      cloudClientId,
+      cloudLastSyncedHash: typeof raw.cloud_last_synced_hash === 'string' ? raw.cloud_last_synced_hash : '',
       notionToken: typeof raw.notion_token === 'string' ? raw.notion_token : '',
       notionFilePages:
         notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
@@ -300,6 +351,14 @@ const buildStateMap = (state) => {
   if (state.notionFilePages != null) map.notion_file_pages = JSON.stringify(state.notionFilePages);
   if (state.notionDatabaseId != null) map.notion_database_id = state.notionDatabaseId;
   if (state.notionProxyBase != null) map.notion_proxy_base = state.notionProxyBase;
+  if (state.cloudSyncBaseUrl != null) map.cloud_sync_base_url = normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl);
+  if (state.cloudWorkspaceId != null) map.cloud_workspace_id = String(state.cloudWorkspaceId);
+  if (state.cloudLastSyncedRevision != null) {
+    map.cloud_last_synced_revision = String(sanitizeCloudRevision(state.cloudLastSyncedRevision));
+  }
+  if (state.cloudLastSyncedAt != null) map.cloud_last_synced_at = String(state.cloudLastSyncedAt);
+  if (state.cloudClientId != null) map.cloud_client_id = String(state.cloudClientId);
+  if (state.cloudLastSyncedHash != null) map.cloud_last_synced_hash = String(state.cloudLastSyncedHash);
   return map;
 };
 
@@ -391,6 +450,12 @@ const editorStorage = {
           surface: 'overview',
           publishingPlatforms: sanitizePublishingPlatforms([]),
           dailyWorkspace: normalizeDailyWorkspace(null),
+          cloudSyncBaseUrl: getDefaultCloudSyncBaseUrl(),
+          cloudWorkspaceId: '',
+          cloudLastSyncedRevision: 0,
+          cloudLastSyncedAt: '',
+          cloudClientId: createCloudClientId(),
+          cloudLastSyncedHash: '',
           ...notionSnapshot,
         },
         version: 0,
@@ -426,6 +491,30 @@ const editorStorage = {
             DAILY_WORKSPACE_STORAGE_KEY,
             JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
           );
+        }
+        if (state.cloudSyncBaseUrl != null) {
+          window.localStorage.setItem(
+            CLOUD_SYNC_BASE_URL_STORAGE_KEY,
+            normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl),
+          );
+        }
+        if (state.cloudWorkspaceId != null) {
+          window.localStorage.setItem(CLOUD_WORKSPACE_ID_STORAGE_KEY, String(state.cloudWorkspaceId));
+        }
+        if (state.cloudLastSyncedRevision != null) {
+          window.localStorage.setItem(
+            CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY,
+            String(sanitizeCloudRevision(state.cloudLastSyncedRevision)),
+          );
+        }
+        if (state.cloudLastSyncedAt != null) {
+          window.localStorage.setItem(CLOUD_LAST_SYNCED_AT_STORAGE_KEY, String(state.cloudLastSyncedAt));
+        }
+        if (state.cloudClientId != null) {
+          window.localStorage.setItem(CLOUD_CLIENT_ID_STORAGE_KEY, String(state.cloudClientId));
+        }
+        if (state.cloudLastSyncedHash != null) {
+          window.localStorage.setItem(CLOUD_LAST_SYNCED_HASH_STORAGE_KEY, String(state.cloudLastSyncedHash));
         }
       } catch { /* ignore */ }
       return;
@@ -467,6 +556,30 @@ const editorStorage = {
           JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
         );
       }
+      if (state.cloudSyncBaseUrl != null) {
+        window.localStorage.setItem(
+          CLOUD_SYNC_BASE_URL_STORAGE_KEY,
+          normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl),
+        );
+      }
+      if (state.cloudWorkspaceId != null) {
+        window.localStorage.setItem(CLOUD_WORKSPACE_ID_STORAGE_KEY, String(state.cloudWorkspaceId));
+      }
+      if (state.cloudLastSyncedRevision != null) {
+        window.localStorage.setItem(
+          CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY,
+          String(sanitizeCloudRevision(state.cloudLastSyncedRevision)),
+        );
+      }
+      if (state.cloudLastSyncedAt != null) {
+        window.localStorage.setItem(CLOUD_LAST_SYNCED_AT_STORAGE_KEY, String(state.cloudLastSyncedAt));
+      }
+      if (state.cloudClientId != null) {
+        window.localStorage.setItem(CLOUD_CLIENT_ID_STORAGE_KEY, String(state.cloudClientId));
+      }
+      if (state.cloudLastSyncedHash != null) {
+        window.localStorage.setItem(CLOUD_LAST_SYNCED_HASH_STORAGE_KEY, String(state.cloudLastSyncedHash));
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -492,6 +605,12 @@ const persistConfig = {
     surface: state.surface,
     publishingPlatforms: state.publishingPlatforms,
     dailyWorkspace: state.dailyWorkspace,
+    cloudSyncBaseUrl: state.cloudSyncBaseUrl,
+    cloudWorkspaceId: state.cloudWorkspaceId,
+    cloudLastSyncedRevision: state.cloudLastSyncedRevision,
+    cloudLastSyncedAt: state.cloudLastSyncedAt,
+    cloudClientId: state.cloudClientId,
+    cloudLastSyncedHash: state.cloudLastSyncedHash,
     notionToken: state.notionToken,
     notionFilePages: state.notionFilePages,
     notionDatabaseId: state.notionDatabaseId,
@@ -787,6 +906,12 @@ export const useEditorStore = create(
       notionDatabaseId: '',
       // Notion 反代地址（运行时可配，不打进构建产物）。空 = 未配置，走 dev 回退。
       notionProxyBase: '',
+      cloudSyncBaseUrl: getDefaultCloudSyncBaseUrl(),
+      cloudWorkspaceId: '',
+      cloudLastSyncedRevision: 0,
+      cloudLastSyncedAt: '',
+      cloudClientId: createCloudClientId(),
+      cloudLastSyncedHash: '',
       activeBlockId: null,
       activeBlockDraft: '',
 
@@ -909,6 +1034,67 @@ export const useEditorStore = create(
         set((state) => ({
           notionFilePages: { ...(state.notionFilePages ?? {}), ...newMappings },
         })),
+
+      setCloudSyncBaseUrl: (cloudSyncBaseUrl) => set({
+        cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(cloudSyncBaseUrl) || getDefaultCloudSyncBaseUrl(),
+      }),
+      setCloudWorkspaceId: (cloudWorkspaceId) => set({
+        cloudWorkspaceId: String(cloudWorkspaceId ?? '').trim(),
+      }),
+      buildCloudSyncPayload: () => {
+        const state = get();
+        const payload = buildCloudWorkspacePayload({
+          workspace: state.workspace,
+          dailyWorkspace: state.dailyWorkspace,
+          publishingPlatforms: state.publishingPlatforms,
+          selectedId: state.selectedId,
+        });
+        return { payload, hash: getCloudPayloadHash(payload) };
+      },
+      markCloudSyncSuccess: ({ revision, updatedAt, hash } = {}) => set((state) => ({
+        cloudLastSyncedRevision: sanitizeCloudRevision(revision),
+        cloudLastSyncedAt: updatedAt ? String(updatedAt) : new Date().toISOString(),
+        cloudLastSyncedHash: hash ?? state.cloudLastSyncedHash,
+      })),
+      applyCloudWorkspacePayload: (payload, meta = {}) => {
+        if (!payload || payload.schemaVersion !== 1 || !payload.workspace) {
+          throw new Error('云端工作区快照格式不受支持。');
+        }
+
+        const normalizedWorkspace = ensureFileTimestamps(ensureKnowledgeFields(payload.workspace));
+        const nextDailyWorkspace = normalizeDailyWorkspace(payload.dailyWorkspace, null);
+        const nextPublishingPlatforms = sanitizePublishingPlatforms(payload.publishingPlatforms);
+        const preferredId = payload.selectedId || meta.selectedId;
+        const initialId = findNodeById(normalizedWorkspace, preferredId)
+          ? preferredId
+          : (findFirstFileId(normalizedWorkspace) ?? normalizedWorkspace.id);
+        const selectedNode = findNodeById(normalizedWorkspace, initialId);
+        const hash = getCloudPayloadHash(buildCloudWorkspacePayload({
+          workspace: normalizedWorkspace,
+          dailyWorkspace: nextDailyWorkspace,
+          publishingPlatforms: nextPublishingPlatforms,
+          selectedId: initialId,
+        }));
+
+        persistWorkspace(normalizedWorkspace);
+        persistDailyWorkspaceBackup(nextDailyWorkspace);
+        set({
+          workspace: normalizedWorkspace,
+          dailyWorkspace: nextDailyWorkspace,
+          publishingPlatforms: nextPublishingPlatforms,
+          selectedId: initialId,
+          markdown: selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '',
+          storageMode: 'local',
+          projectRootPath: '',
+          surface: selectedNode?.type === 'folder' ? 'folder' : 'paper',
+          activeBlockId: null,
+          activeBlockDraft: '',
+          cloudLastSyncedRevision: sanitizeCloudRevision(meta.revision),
+          cloudLastSyncedAt: meta.updatedAt ? String(meta.updatedAt) : new Date().toISOString(),
+          cloudLastSyncedHash: hash,
+        });
+        return { hash };
+      },
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

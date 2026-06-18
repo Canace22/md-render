@@ -204,10 +204,32 @@ const COMPOSER_SCRIPT_TOOLS = Object.freeze([
   },
 ]);
 
+const SURFACE_LABELS = Object.freeze({
+  overview: '总览',
+  daily: '今日速记',
+  canvas: '灵感白板',
+  'creation-board': '创作看板',
+  publishing: '发布队列',
+  search: '知识库搜索',
+  graph: '关系图谱',
+  sync: '同步中心',
+  settings: '设置',
+  paper: '文档工作区',
+  folder: '文件夹',
+});
+
+const getSurfaceLabel = (surface, selectedNode) => {
+  if (surface === 'paper') {
+    return selectedNode?.type === 'folder' ? '文件夹' : '文档工作区';
+  }
+  return SURFACE_LABELS[surface] || '当前界面';
+};
+
 export default function AgentPanel({ onClose }) {
   const markdown = useEditorStore((s) => s.markdown);
   const workspace = useEditorStore((s) => s.workspace);
   const selectedId = useEditorStore((s) => s.selectedId);
+  const surface = useEditorStore((s) => s.surface);
   const dailyWorkspace = useEditorStore((s) => s.dailyWorkspace);
 
   // AI 待确认写入：stage 暂存改动；diff 对比与应用/放弃由预览区的 DiffOverlay 负责
@@ -220,6 +242,9 @@ export default function AgentPanel({ onClose }) {
   const setWorkspaceCanvas = useEditorStore((s) => s.setWorkspaceCanvas);
   const setDailyCurrentDate = useEditorStore((s) => s.setDailyCurrentDate);
   const setSurface = useEditorStore((s) => s.setSurface);
+  const selectNode = useEditorStore((s) => s.selectNode);
+  const addFolder = useEditorStore((s) => s.addFolder);
+  const applyRename = useEditorStore((s) => s.applyRename);
 
   // 全局会话状态（切页不丢）
   const sessions = useEditorStore((s) => s.agentSessions);
@@ -369,6 +394,12 @@ export default function AgentPanel({ onClose }) {
       setSurface('canvas');
       return '已切换到灵感白板。';
     },
+    openSurface: async ({ surface: nextSurface = '' } = {}) => {
+      const cleanSurface = String(nextSurface ?? '').trim();
+      if (!cleanSurface) return '切换失败：目标界面为空。';
+      setSurface(cleanSurface);
+      return `已切换到${getSurfaceLabel(cleanSurface, activeFile)}。`;
+    },
     appendCanvasCards: async ({ cards = [] } = {}) => {
       const currentCanvasState = workspace?.canvasState ?? {};
       const currentExcalidraw = currentCanvasState?.excalidraw ?? {};
@@ -449,6 +480,30 @@ export default function AgentPanel({ onClose }) {
         ...buildActiveDocMeta(file, file.content ?? ''),
         content: file.content ?? '',
       };
+    },
+    openWorkspaceItem: async ({ id = '' } = {}) => {
+      const targetId = String(id ?? '').trim();
+      if (!targetId) return '打开失败：条目 id 为空。';
+      const node = findNodeById(workspace, targetId);
+      if (!node) return `打开失败：未找到 id 为「${targetId}」的条目。`;
+      selectNode(targetId);
+      return node.type === 'folder'
+        ? `已打开文件夹「${node.name || '未命名'}」。`
+        : `已打开文档「${node.name || '未命名'}」。`;
+    },
+    createFolder: async ({ name = '' } = {}) => {
+      const ok = addFolder(selectedId);
+      if (!ok) return '新建失败：当前位置不支持创建文件夹。';
+      const nextState = useEditorStore.getState();
+      const folder = findNodeById(nextState.workspace, nextState.selectedId);
+      const desiredName = String(name ?? '').trim();
+      if (desiredName && folder?.id) {
+        const renamed = applyRename(folder.id, desiredName);
+        if (renamed) {
+          return `已创建文件夹「${desiredName}」。`;
+        }
+      }
+      return `已创建文件夹「${folder?.name || '新建文件夹'}」。`;
     },
     listRecentDocs: async (limit = 4) => {
       return buildRecentDocPointers(workspace, selectedId, limit);
@@ -620,7 +675,8 @@ export default function AgentPanel({ onClose }) {
     selectionText = '',
     pinnedFiles = [],
   } = {}) => {
-    const activeDoc = host.getActiveDocMeta?.();
+    const inDocumentSurface = surface === 'paper';
+    const activeDoc = inDocumentSurface ? host.getActiveDocMeta?.() : null;
     const workspaceBrief = buildWorkspaceBrief(workspace, selectedId);
     const relatedRefs = activeDoc?.title
       ? await recallDocsForContext({
@@ -633,12 +689,13 @@ export default function AgentPanel({ onClose }) {
 
     return buildTaskContextPacket({
       activeDoc,
+      currentSurface: getSurfaceLabel(surface, activeFile),
       selectionText,
       workspaceBrief,
       relatedRefs,
       userPinnedContext: buildPinnedContext(pinnedFiles),
     });
-  }, [host, workspace, selectedId, markdown]);
+  }, [host, workspace, selectedId, markdown, surface, activeFile]);
 
   // 跑一个 agent 回合：UI 展示 displayText，实际发给模型 promptText。
   // handleSend 和快捷动作共用，避免重复一整套 runAgent 流程。

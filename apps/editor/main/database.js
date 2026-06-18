@@ -122,6 +122,12 @@ const STATE_KEYS = [
   'notion_file_pages',
   'notion_database_id',
   'notion_proxy_base',
+  'cloud_sync_base_url',
+  'cloud_workspace_id',
+  'cloud_last_synced_revision',
+  'cloud_last_synced_at',
+  'cloud_client_id',
+  'cloud_last_synced_hash',
 ];
 
 export function loadEditorState() {
