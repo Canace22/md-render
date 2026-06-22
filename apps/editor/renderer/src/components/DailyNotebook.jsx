@@ -389,16 +389,6 @@ function DailyNotebook({
     return grouped;
   }, [dailyEntry.items]);
 
-  const stats = useMemo(() => {
-    const tasks = itemsByType.task;
-    return [
-      { key: 'open', label: '未完成', value: tasks.filter((item) => !item.done).length },
-      { key: 'done', label: '已完成', value: tasks.filter((item) => item.done).length },
-      { key: 'notes', label: '今日记录', value: dailyEntry.items.length },
-      { key: 'todo', label: '待办池', value: todoPool.length },
-    ];
-  }, [dailyEntry.items.length, itemsByType.task, todoPool.length]);
-
   const handleDraftChange = (type, value) => {
     setDrafts((current) => ({ ...current, [type]: value }));
   };
@@ -456,15 +446,6 @@ function DailyNotebook({
             <Button type={currentDate === todayKey ? 'primary' : 'default'} onClick={() => onSetCurrentDate(todayKey)}>今天</Button>
           </div>
         </div>
-      </section>
-
-      <section className="daily-notebook-stats">
-        {stats.map((item) => (
-          <div key={item.key} className="daily-notebook-stat">
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </div>
-        ))}
       </section>
 
       <section className="daily-notebook-grid">

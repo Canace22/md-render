@@ -9199,7 +9199,6 @@ body.theme-dark .file-preview-iframe {
 
 .daily-notebook-hero-copy,
 .daily-notebook-date-panel,
-.daily-notebook-stat,
 .daily-notebook-card {
   border: 1px solid var(--color-border);
   border-radius: 18px;
@@ -9265,29 +9264,6 @@ body.theme-dark .file-preview-iframe {
   color: var(--color-text-primary);
   font: inherit;
   outline: none;
-}
-
-.daily-notebook-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.daily-notebook-stat {
-  padding: 16px 18px;
-}
-
-.daily-notebook-stat span {
-  display: block;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.daily-notebook-stat strong {
-  display: block;
-  margin-top: 10px;
-  font-size: 28px;
-  line-height: 1;
 }
 
 .daily-notebook-grid {
@@ -9522,10 +9498,6 @@ body.theme-dark .file-preview-iframe {
 @media (max-width: 820px) {
   .daily-notebook {
     padding: 16px;
-  }
-
-  .daily-notebook-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .daily-notebook-composer {
