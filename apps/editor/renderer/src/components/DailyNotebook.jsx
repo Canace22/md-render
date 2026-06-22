@@ -370,7 +370,6 @@ function DailyNotebook({
   const [editingItem, setEditingItem] = useState(null);
   const { copiedId, copy: handleCopy } = useCopyText();
   const currentDate = dailyWorkspace?.currentDate || getTodayDateKey();
-  const todayKey = getTodayDateKey();
   const dailyEntry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
   const todoPool = useMemo(() => {
     return [...(dailyWorkspace?.todoPool ?? [])].sort((left, right) => right.updatedAt - left.updatedAt);
@@ -434,7 +433,6 @@ function DailyNotebook({
     <div className="daily-notebook" data-testid="daily-surface">
       <section className="daily-notebook-hero">
         <div className="daily-notebook-hero-copy">
-          <span className="daily-notebook-eyebrow">Daily Scratchpad</span>
           <h1>{formatDailyHeading(currentDate)}</h1>
           <p>把今天真正要处理的任务、事件和笔记放在一页里；做不完的再沉到待办池，明天手动带回来。</p>
         </div>
@@ -442,8 +440,16 @@ function DailyNotebook({
         <div className="daily-notebook-date-panel">
           <div className="daily-notebook-date-actions">
             <Button icon={<ChevronLeft size={14} strokeWidth={1.8} />} onClick={() => onSetCurrentDate(shiftDateKey(currentDate, -1))} />
+            <DatePicker
+              value={dayjs(currentDate)}
+              format="YYYY-MM-DD"
+              allowClear={false}
+              className="daily-notebook-date-picker"
+              onChange={(date) => {
+                if (date) onSetCurrentDate(date.format('YYYY-MM-DD'));
+              }}
+            />
             <Button icon={<ChevronRight size={14} strokeWidth={1.8} />} onClick={() => onSetCurrentDate(shiftDateKey(currentDate, 1))} />
-            <Button type={currentDate === todayKey ? 'primary' : 'default'} onClick={() => onSetCurrentDate(todayKey)}>今天</Button>
           </div>
         </div>
       </section>

@@ -9250,6 +9250,10 @@ body.theme-dark .file-preview-iframe {
   gap: 10px;
 }
 
+.daily-notebook-date-picker {
+  flex: 1;
+}
+
 .daily-notebook-date-input-row {
   padding: 12px 14px;
   border-radius: 14px;
