@@ -102,4 +102,41 @@ describe('carryOverIncompleteTasks (进入今天才结转)', () => {
     expect(next.todoPool).toHaveLength(0);
     expect(Object.keys(next.entries)).toHaveLength(0);
   });
+
+  it('case11: 跨多天（含中间空档）的历史笔记都汇聚到今天，原日期不再保留', () => {
+    let ws = { currentDate: '2026-06-15', entries: {}, todoPool: [] };
+    // 6/15、6/18 都有笔记，6/16、6/17 空着；今天是 6/22（中间断链）
+    ws = addDailyEntryItem(ws, '2026-06-15', { type: 'note', text: '6/15 的想法' });
+    ws = addDailyEntryItem(ws, '2026-06-18', { type: 'note', text: '6/18 的想法' });
+    const next = carryOverIncompleteTasks(ws, '2026-06-22');
+    const todayNotes = getDailyEntry(next, '2026-06-22').items
+      .filter((i) => i.type === 'note')
+      .map((i) => i.text);
+    expect(todayNotes).toEqual(['6/15 的想法', '6/18 的想法']);
+    // 历史日期的 note 被移走
+    expect(getDailyEntry(next, '2026-06-15').items.filter((i) => i.type === 'note')).toHaveLength(0);
+    expect(getDailyEntry(next, '2026-06-18').items.filter((i) => i.type === 'note')).toHaveLength(0);
+  });
+
+  it('case12: 历史 event 不被带到今天，留在原日期', () => {
+    let ws = { currentDate: YESTERDAY, entries: {}, todoPool: [] };
+    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'event', text: '昨天的会议' });
+    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'note', text: '昨天的笔记' });
+    const next = carryOverIncompleteTasks(ws, TODAY);
+    expect(getDailyEntry(next, YESTERDAY).items.map((i) => i.text)).toEqual(['昨天的会议']);
+    expect(getDailyEntry(next, TODAY).items.filter((i) => i.type === 'note')).toHaveLength(1);
+  });
+
+  it('case13: 多天历史笔记重复结转保持幂等（不重复、不复活）', () => {
+    let ws = { currentDate: '2026-06-15', entries: {}, todoPool: [] };
+    ws = addDailyEntryItem(ws, '2026-06-15', { type: 'note', text: 'A' });
+    ws = addDailyEntryItem(ws, '2026-06-18', { type: 'note', text: 'B' });
+    let next = carryOverIncompleteTasks(ws, '2026-06-22');
+    next = carryOverIncompleteTasks(next, '2026-06-22');
+    next = carryOverIncompleteTasks(next, '2026-06-22');
+    const todayNotes = getDailyEntry(next, '2026-06-22').items
+      .filter((i) => i.type === 'note')
+      .map((i) => i.text);
+    expect(todayNotes).toEqual(['A', 'B']);
+  });
 });

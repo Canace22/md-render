@@ -226,17 +226,14 @@ export const setDailyCurrentDate = (dailyWorkspace, dateKey) => {
 export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
   const normalized = normalizeDailyWorkspace(dailyWorkspace, targetDateKey);
   const currentDate = normalizeDateKey(targetDateKey, normalized.currentDate);
-  const previousDate = shiftDateKey(currentDate, -1);
   const todoPool = [...normalized.todoPool];
   const todoKeys = new Set(
     todoPool.map((item) => buildTodoDedupKey(item.text, item.sourceDate || '')),
   );
   const entries = {};
-
-  // 收集昨天的 note，复制到今天（去重：今天已有相同文本的不重复添加）
-  const previousNotes = (normalized.entries[previousDate]?.items ?? []).filter(
-    (item) => item.type === 'note',
-  );
+  // 收集所有早于今天、未删除的 note，统一汇聚到今天；不再只看昨天一天，
+  // 这样即使中间跳过几天（断链）或重装后没逐天打开，历史笔记也都会带过来。
+  const carriedNotes = [];
 
   for (const [dateKey, entry] of Object.entries(normalized.entries)) {
     if (dateKey >= currentDate) {
@@ -260,25 +257,29 @@ export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
         }
         continue;
       }
+      // 历史日期的 note 全部收走带到今天；已完成任务、event 留在原日期不动。
+      if (item.type === 'note') {
+        carriedNotes.push(item);
+        continue;
+      }
       nextItems.push(item);
     }
 
-    // 昨天的 note 从昨天移走（不保留在昨天）
-    entries[dateKey] = {
-      ...entry,
-      items: dateKey === previousDate
-        ? nextItems.filter((item) => item.type !== 'note')
-        : nextItems,
-    };
+    entries[dateKey] = { ...entry, items: nextItems };
   }
 
-  // 把昨天的笔记移到今天（幂等：已有相同文本的跳过）
-  if (previousNotes.length > 0) {
+  // 把收集到的历史笔记移到今天（幂等：按文本去重，今天已有相同文本的跳过；按创建时间先后排序）
+  if (carriedNotes.length > 0) {
     const todayEntry = entries[currentDate] ?? createEmptyDailyEntry(currentDate);
-    const existingNoteTexts = new Set(
+    const seenTexts = new Set(
       todayEntry.items.filter((i) => i.type === 'note').map((i) => i.text),
     );
-    const notesToMove = previousNotes.filter((n) => !existingNoteTexts.has(n.text));
+    const notesToMove = [];
+    for (const note of [...carriedNotes].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))) {
+      if (seenTexts.has(note.text)) continue;
+      seenTexts.add(note.text);
+      notesToMove.push(note);
+    }
     if (notesToMove.length > 0) {
       entries[currentDate] = {
         ...todayEntry,
