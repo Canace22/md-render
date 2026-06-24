@@ -22,6 +22,7 @@ const ws = {
       draftStatus: 'drafting',
       nodeType: 'document',
       targetPlatforms: ['wechat'],
+      tags: ['react', '前端'],
     },
     {
       id: 'd',
@@ -36,6 +37,7 @@ const ws = {
           draftStatus: 'ready',
           nodeType: 'concept',
           targetPlatforms: ['juejin'],
+          tags: ['react'],
         },
         {
           id: 'c',
@@ -76,6 +78,12 @@ describe('fileMatchesMetaFilters', () => {
     expect(fileMatchesMetaFilters(file, { status: META_FILTER_STATUS_NONE })).toBe(true);
     expect(fileMatchesMetaFilters(ws.children[0], { status: META_FILTER_STATUS_NONE })).toBe(false);
   });
+
+  it('matches tag', () => {
+    const file = ws.children[0];
+    expect(fileMatchesMetaFilters(file, { tag: 'react' })).toBe(true);
+    expect(fileMatchesMetaFilters(file, { tag: 'vue' })).toBe(false);
+  });
 });
 
 describe('filterWorkspaceByMeta', () => {
@@ -89,6 +97,11 @@ describe('filterWorkspaceByMeta', () => {
 
   it('filters by node type', () => {
     expect(fileNames(filterWorkspaceByMeta(ws, { nodeType: 'bookmark' }))).toEqual(['C']);
+  });
+
+  it('filters by tag', () => {
+    expect(fileNames(filterWorkspaceByMeta(ws, { tag: 'react' }))).toEqual(['A', 'B']);
+    expect(fileNames(filterWorkspaceByMeta(ws, { tag: '前端' }))).toEqual(['A']);
   });
 
   it('combines filters with AND logic', () => {
@@ -121,5 +134,7 @@ describe('collectMetaFilterCounts', () => {
     ]);
     expect(counts.platforms.map((item) => item.value)).toEqual(['juejin', 'wechat']);
     expect(counts.nodeTypes.map((item) => item.value)).toEqual(['concept', 'document', 'bookmark']);
+    expect(counts.tags.map((item) => item.value)).toEqual(['react', '前端']);
+    expect(counts.tags.find((item) => item.value === 'react')?.count).toBe(2);
   });
 });

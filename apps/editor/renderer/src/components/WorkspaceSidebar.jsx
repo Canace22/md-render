@@ -56,11 +56,11 @@ const FILE_MANAGER_LABEL = typeof window !== 'undefined' && window.electronAPI?.
   ? '访达'
   : '文件管理器';
 
-const EMPTY_META_FILTERS = { status: null, platform: null, nodeType: null };
+const EMPTY_META_FILTERS = { status: null, platform: null, nodeType: null, tag: null };
 const META_FILTER_ALL = '__all__';
 
 const hasActiveMetaFilters = (filters) =>
-  Boolean(filters?.status || filters?.platform || filters?.nodeType);
+  Boolean(filters?.status || filters?.platform || filters?.nodeType || filters?.tag);
 
 const buildMetaFilterEmptyMessage = (filters, labelMaps) => {
   const parts = [];
@@ -75,6 +75,9 @@ const buildMetaFilterEmptyMessage = (filters, labelMaps) => {
   }
   if (filters.nodeType) {
     parts.push(`类型「${labelMaps.nodeType.get(filters.nodeType) ?? filters.nodeType}」`);
+  }
+  if (filters.tag) {
+    parts.push(`标签「${filters.tag}」`);
   }
   return parts.length > 0 ? `没有匹配${parts.join('、')}的笔记` : '没有匹配的笔记';
 };
@@ -565,7 +568,8 @@ const WorkspaceSidebar = ({
   const hasMetaFilterSection = !isSearching
     && (metaFilterCounts.statuses.length > 0
       || metaFilterCounts.platforms.length > 0
-      || metaFilterCounts.nodeTypes.length > 0);
+      || metaFilterCounts.nodeTypes.length > 0
+      || metaFilterCounts.tags.length > 0);
   const selectedNode = findNodeById(workspace, selectedId);
 
   const closeContextMenu = useCallback(() => {
@@ -906,6 +910,20 @@ const WorkspaceSidebar = ({
                           />
                         </label>
                       )}
+                      {metaFilterCounts.tags.length > 0 && (
+                        <label className="notebook-filter-field">
+                          <span className="notebook-filter-field-label">标签</span>
+                          <Select
+                            size="small"
+                            className="notebook-filter-select"
+                            popupClassName="notebook-filter-select-popup"
+                            value={metaFilters.tag ?? META_FILTER_ALL}
+                            onChange={(value) => toggleMetaFilter('tag', value)}
+                            options={buildMetaFilterSelectOptions(metaFilterCounts.tags)}
+                            data-testid="tag-filter-select"
+                          />
+                        </label>
+                      )}
                       {isMetaFiltering && (
                         <button
                           type="button"
@@ -922,7 +940,7 @@ const WorkspaceSidebar = ({
                   <button
                     type="button"
                     className={`notebook-search-filter-btn${isMetaFiltering ? ' active' : ''}`}
-                    title="按状态、平台、文档类型筛选"
+                    title="按状态、平台、文档类型、标签筛选"
                     aria-label="筛选"
                     data-testid="meta-filters-trigger"
                   >

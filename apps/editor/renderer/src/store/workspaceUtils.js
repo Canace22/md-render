@@ -857,7 +857,7 @@ export function getFileTargetPlatforms(file) {
 export function fileMatchesMetaFilters(file, filters = {}) {
   if (!file || file.type !== 'file') return false;
 
-  const { status, platform, nodeType } = filters;
+  const { status, platform, nodeType, tag } = filters;
   if (status) {
     const docStatus = getDocumentStatus(file);
     if (status === META_FILTER_STATUS_NONE) {
@@ -868,6 +868,7 @@ export function fileMatchesMetaFilters(file, filters = {}) {
   }
   if (platform && !getFileTargetPlatforms(file).includes(platform)) return false;
   if (nodeType && normalizeNodeType(file.nodeType) !== nodeType) return false;
+  if (tag && !(file.tags ?? []).includes(tag)) return false;
   return true;
 }
 
@@ -876,7 +877,7 @@ export function fileMatchesMetaFilters(file, filters = {}) {
  * filters 各字段为空时不参与筛选。
  */
 export function filterWorkspaceByMeta(node, filters = {}) {
-  const hasFilter = Boolean(filters.status || filters.platform || filters.nodeType);
+  const hasFilter = Boolean(filters.status || filters.platform || filters.nodeType || filters.tag);
   if (!node) return null;
   if (!hasFilter) return node;
 
@@ -942,6 +943,11 @@ export function collectMetaFilterCounts(
     statuses,
     platforms: withCounts(platformOptions, platformCounts),
     nodeTypes: withCounts(nodeTypeOptions, nodeTypeCounts),
+    tags: collectTags(workspace).map(({ tag, count }) => ({
+      value: tag,
+      label: tag,
+      count,
+    })),
   };
 }
 
