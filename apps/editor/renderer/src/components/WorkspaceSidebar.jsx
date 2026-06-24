@@ -42,6 +42,7 @@ import {
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
 const DEFAULT_SIDEBAR_WIDTH = 320;
+const SIDEBAR_RAIL_WIDTH = 48;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
@@ -460,6 +461,7 @@ const WorkspaceSidebar = ({
   const searchKeyword = searchQuery ?? '';
   const isSearching = Boolean(searchKeyword.trim());
   const allowStructureActions = true;
+  const showWorkspaceTree = surface === 'paper' || surface === 'folder';
 
   const handleStartRename = (nodeId, currentName) => {
     const node = findNodeById(workspace, nodeId);
@@ -570,9 +572,6 @@ const WorkspaceSidebar = ({
   const handleSearchChange = (value) => {
     onSearchQueryChange?.(value);
     if (value.trim()) setActiveTag(null); // 搜索时清除标签筛选
-    if (value.trim()) {
-      onOpenSearch?.();
-    }
   };
 
   const toggleTag = (tag) => {
@@ -638,7 +637,9 @@ const WorkspaceSidebar = ({
   return (
     <div
       className={`workspace-panel ${collapsed ? 'collapsed' : ''}${resizing ? ' resizing' : ''}`}
-      style={collapsed ? undefined : { width: `${sidebarWidth}px` }}
+      style={collapsed
+        ? undefined
+        : { width: `${showWorkspaceTree ? sidebarWidth : SIDEBAR_RAIL_WIDTH}px` }}
     >
       {/* ===== 左侧 icon rail：视图导航 + 底部工具 ===== */}
       <div className="sidebar-rail">
@@ -779,7 +780,7 @@ const WorkspaceSidebar = ({
       </div>
 
       {/* ===== 右侧主内容区 ===== */}
-      {!collapsed && (
+      {!collapsed && showWorkspaceTree && (
         <div className="sidebar-main">
           {/* 搜索框 */}
           <div className="notebook-search">
@@ -953,7 +954,7 @@ const WorkspaceSidebar = ({
         </div>
       )}
 
-      {!collapsed && (
+      {!collapsed && showWorkspaceTree && (
         <div
           className="workspace-resize-handle"
           role="separator"
