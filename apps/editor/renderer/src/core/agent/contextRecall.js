@@ -15,6 +15,7 @@
 
 // 召回相关常量
 const DEFAULT_LIMIT = 5; // 默认返回相关旧文条数
+export const RELATED_DOC_SEARCH_LIMIT = 20; // 关联文档选择器下拉条数上限
 const DEFAULT_MAX_KEYWORDS = 8; // 默认提取关键词上限
 const CONTENT_HEAD_LINES = 12; // 正文只看前若干行，抓住主题即可
 const MIN_TOKEN_LEN = 2; // 词最短长度（过滤单字噪声）
@@ -117,4 +118,78 @@ export const rankRelatedDocs = (currentDoc, candidates = [], { limit = DEFAULT_L
     .filter((c) => c._score > 0)
     .sort((a, b) => b._score - a._score)
     .slice(0, limit);
+};
+
+const stripMdSuffix = (name) => String(name ?? '').replace(/\.md$/i, '');
+
+/** 把工作区文件转成 rankRelatedDocs 可用的候选形状 */
+const toRelatedCandidate = (file) => ({
+  id: file.id,
+  title: stripMdSuffix(file.name),
+  content: file.content ?? '',
+  snippet: file.summary ?? '',
+  _name: file.name ?? stripMdSuffix(file.name) ?? '未命名',
+});
+
+const sortByName = (items) =>
+  [...items].sort((a, b) => (a._name ?? '').localeCompare(b._name ?? '', 'zh-CN'));
+
+/** 搜索词子串匹配：优先前缀命中，再按名称排序 */
+const filterByNameSubstring = (candidates, query, limit) => {
+  const lowerQuery = query.toLowerCase();
+  return candidates
+    .filter((c) => (c._name ?? c.title ?? '').toLowerCase().includes(lowerQuery))
+    .sort((a, b) => {
+      const aName = (a._name ?? '').toLowerCase();
+      const bName = (b._name ?? '').toLowerCase();
+      const aStarts = aName.startsWith(lowerQuery) ? 1 : 0;
+      const bStarts = bName.startsWith(lowerQuery) ? 1 : 0;
+      if (bStarts !== aStarts) return bStarts - aStarts;
+      return aName.localeCompare(bName, 'zh-CN');
+    })
+    .slice(0, limit);
+};
+
+/**
+ * 关联文档选择器：按搜索词或当前文档相似度排序候选。
+ * @param {object} currentFile 当前文档 { id, name, content, summary, relatedIds }
+ * @param {Array}  allFiles 工作区全部文件
+ * @param {object} [opts] { searchQuery, limit }
+ * @returns {Array} 候选（含 id / _name / _score）
+ */
+export const searchRelatedDocCandidates = (
+  currentFile,
+  allFiles = [],
+  { searchQuery = '', limit = RELATED_DOC_SEARCH_LIMIT } = {},
+) => {
+  const query = String(searchQuery ?? '').trim();
+  const relatedIds = new Set(currentFile?.relatedIds ?? []);
+  const available = (allFiles ?? [])
+    .filter((file) => file?.id && file.id !== currentFile?.id && !relatedIds.has(file.id))
+    .map(toRelatedCandidate);
+
+  if (!available.length) return [];
+
+  if (query) {
+    const keywords = extractRecallKeywords({ title: query, content: query });
+    if (keywords.length) {
+      const ranked = rankRelatedDocs(
+        { id: '__search__', title: query, content: query },
+        available,
+        { limit, keywords },
+      );
+      if (ranked.length) return ranked;
+    }
+    return filterByNameSubstring(available, query, limit);
+  }
+
+  const currentDoc = {
+    id: currentFile.id,
+    title: stripMdSuffix(currentFile.name),
+    content: currentFile.content ?? '',
+  };
+  const ranked = rankRelatedDocs(currentDoc, available, { limit });
+  if (ranked.length) return ranked;
+
+  return sortByName(available).slice(0, limit);
 };

@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Select } from 'antd';
 import {
   ArrowLeft, CalendarClock, Clock, FileText, GitBranch,
-  Image, Link, Link2, PackageSearch, Plus, X,
+  Image, Link, Link2, PackageSearch, X,
 } from 'lucide-react';
 import {
   KNOWLEDGE_NODE_TYPE_OPTIONS,
 } from '../store/workspaceUtils.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
+import RelatedDocPicker from './RelatedDocPicker.jsx';
 
 /* ── constants ─────────────────────────────────────────────── */
 
@@ -120,7 +121,6 @@ export default function DocMetaPanel({
   const [publishAtDraft, setPublishAtDraft] = useState('');
   const [coverDraft, setCoverDraft] = useState('');
   const [coverError, setCoverError] = useState(false);
-  const [relatedDraft, setRelatedDraft] = useState('');
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
   const [restoringVersionId, setRestoringVersionId] = useState(null);
@@ -131,7 +131,6 @@ export default function DocMetaPanel({
     setPublishAtDraft(selectedFile?.scheduledPublishAt ?? selectedFile?.publishAt ?? '');
     setCoverDraft(selectedFile?.cover ?? '');
     setCoverError(false);
-    setRelatedDraft('');
   }, [selectedFile]);
 
   useEffect(() => {
@@ -156,7 +155,6 @@ export default function DocMetaPanel({
   );
   const sourceMaterials = useMemo(() => normalizeSourceMaterials(selectedFile, filesById), [selectedFile, filesById]);
   const relatedDocs = (selectedFile?.relatedIds ?? []).map((id) => filesById.get(id)).filter(Boolean);
-  const availableRelatedDocs = (allFiles ?? []).filter((f) => f.id !== selectedFile?.id && !(selectedFile?.relatedIds ?? []).includes(f.id));
   const reusableTags = useMemo(
     () => collectReusableTags(allFiles).map((item) => ({ label: item.tag, value: item.tag })),
     [allFiles],
@@ -210,10 +208,9 @@ export default function DocMetaPanel({
     onMetaChange?.(selectedFile.id, { targetPlatforms: buildPlatformPatch(currentPlatforms, value) });
   };
 
-  const addRelatedDoc = () => {
-    if (!selectedFile || !relatedDraft) return;
-    onMetaChange?.(selectedFile.id, { relatedIds: [...(selectedFile.relatedIds ?? []), relatedDraft] });
-    setRelatedDraft('');
+  const addRelatedDoc = (targetId) => {
+    if (!selectedFile || !targetId) return;
+    onMetaChange?.(selectedFile.id, { relatedIds: [...(selectedFile.relatedIds ?? []), targetId] });
   };
 
   const removeRelatedDoc = (targetId) => {
@@ -435,15 +432,13 @@ export default function DocMetaPanel({
             <button type="button" className="doc-meta-action" onClick={() => onManageRelatedDocs(selectedFile.id)} disabled={disabled}>管理</button>
           )}
         </div>
-        <div className="doc-meta-related-controls">
-          <select value={relatedDraft} onChange={(e) => setRelatedDraft(e.target.value)} disabled={disabled}>
-            <option value="">选择文档…</option>
-            {availableRelatedDocs.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-          <button type="button" onClick={addRelatedDoc} disabled={!relatedDraft || disabled}>
-            <Plus size={13} strokeWidth={1.8} />
-          </button>
-        </div>
+        <RelatedDocPicker
+          key={selectedFile.id}
+          selectedFile={selectedFile}
+          allFiles={allFiles}
+          onAdd={addRelatedDoc}
+          disabled={disabled}
+        />
         {relatedDocs.length > 0 && (
           <div className="doc-meta-chip-list">
             {relatedDocs.map((file) => (

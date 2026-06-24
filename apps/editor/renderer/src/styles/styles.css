@@ -787,7 +787,8 @@ a.sidebar-rail-btn:hover {
     gap: 8px;
 }
 
-.knowledge-related-controls select {
+.knowledge-related-controls select,
+.knowledge-related-controls .doc-meta-related-select {
     flex: 1;
     min-width: 0;
 }
@@ -1190,6 +1191,30 @@ a.sidebar-rail-btn:hover {
 }
 
 .doc-meta-tag-select-dropdown .ant-select-item {
+    font-size: 12px;
+}
+
+.doc-meta-related-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.doc-meta-related-select .ant-select-selector {
+    border: 1px solid rgba(148, 163, 184, 0.22) !important;
+    border-radius: 8px !important;
+    background: rgba(248, 250, 252, 0.86) !important;
+    box-shadow: none !important;
+    min-height: 32px !important;
+    padding: 0 8px !important;
+}
+
+.doc-meta-related-select .ant-select-selection-placeholder,
+.doc-meta-related-select .ant-select-selection-search-input,
+.doc-meta-related-select .ant-select-selection-item {
+    font-size: 12px;
+}
+
+.doc-meta-related-select-dropdown .ant-select-item {
     font-size: 12px;
 }
 
@@ -5759,7 +5784,9 @@ body.theme-dark .doc-meta-version-row {
 }
 
 body.theme-dark .doc-meta-tag-select .ant-select-selector,
-body.theme-dark .doc-meta-tag-select-dropdown {
+body.theme-dark .doc-meta-tag-select-dropdown,
+body.theme-dark .doc-meta-related-select .ant-select-selector,
+body.theme-dark .doc-meta-related-select-dropdown {
     background: rgba(15, 23, 42, 0.82) !important;
     border-color: rgba(71, 85, 105, 0.42) !important;
 }
@@ -5768,7 +5795,12 @@ body.theme-dark .doc-meta-tag-select .ant-select-selection-placeholder,
 body.theme-dark .doc-meta-tag-select .ant-select-selection-search-input,
 body.theme-dark .doc-meta-tag-select .ant-select-selection-item,
 body.theme-dark .doc-meta-tag-select-dropdown .ant-select-item,
-body.theme-dark .doc-meta-tag-select-dropdown .ant-select-item-option-content {
+body.theme-dark .doc-meta-tag-select-dropdown .ant-select-item-option-content,
+body.theme-dark .doc-meta-related-select .ant-select-selection-placeholder,
+body.theme-dark .doc-meta-related-select .ant-select-selection-search-input,
+body.theme-dark .doc-meta-related-select .ant-select-selection-item,
+body.theme-dark .doc-meta-related-select-dropdown .ant-select-item,
+body.theme-dark .doc-meta-related-select-dropdown .ant-select-item-option-content {
     color: var(--color-text-primary) !important;
 }
 

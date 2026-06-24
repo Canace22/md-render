@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Clock, FileText, GitBranch, Link, Plus, Shapes, Sparkles, Tag, X } from 'lucide-react';
+import { ArrowLeft, Clock, FileText, GitBranch, Link, Shapes, Sparkles, Tag, X } from 'lucide-react';
+import RelatedDocPicker from './RelatedDocPicker.jsx';
 import {
   getKnowledgeNodeTypeLabel,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
@@ -27,7 +28,6 @@ export default function KnowledgeMetaPanel({
 }) {
   const [summaryDraft, setSummaryDraft] = useState('');
   const [aliasDraft, setAliasDraft] = useState('');
-  const [relatedDraft, setRelatedDraft] = useState('');
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
   const [restoringVersionId, setRestoringVersionId] = useState(null);
@@ -35,7 +35,6 @@ export default function KnowledgeMetaPanel({
   useEffect(() => {
     setSummaryDraft(selectedFile?.summary ?? '');
     setAliasDraft('');
-    setRelatedDraft('');
   }, [selectedFile]);
 
   useEffect(() => {
@@ -79,9 +78,12 @@ export default function KnowledgeMetaPanel({
     .map((id) => filesById.get(id))
     .filter(Boolean);
 
-  const availableRelatedDocs = (allFiles ?? []).filter((file) => {
-    return file.id !== selectedFile?.id && !(selectedFile?.relatedIds ?? []).includes(file.id);
-  });
+  const addRelatedDoc = (targetId) => {
+    if (!selectedFile || !targetId) return;
+    onKnowledgeMetaChange?.(selectedFile.id, {
+      relatedIds: [...(selectedFile.relatedIds ?? []), targetId],
+    });
+  };
 
   const commitSummary = () => {
     if (!selectedFile) return;
@@ -109,14 +111,6 @@ export default function KnowledgeMetaPanel({
     onKnowledgeMetaChange?.(selectedFile.id, {
       aliases: (selectedFile.aliases ?? []).filter((alias) => alias !== targetAlias),
     });
-  };
-
-  const addRelatedDoc = () => {
-    if (!selectedFile || !relatedDraft) return;
-    onKnowledgeMetaChange?.(selectedFile.id, {
-      relatedIds: [...(selectedFile.relatedIds ?? []), relatedDraft],
-    });
-    setRelatedDraft('');
   };
 
   const removeRelatedDoc = (targetId) => {
@@ -198,21 +192,15 @@ export default function KnowledgeMetaPanel({
 
         <div className="knowledge-meta-field">
           <span className="knowledge-meta-label">关联文档</span>
-          <div className="knowledge-related-controls">
-            <select
-              value={relatedDraft}
-              onChange={(event) => setRelatedDraft(event.target.value)}
-            >
-              <option value="">选择一篇文档</option>
-              {availableRelatedDocs.map((file) => (
-                <option key={file.id} value={file.id}>{file.name}</option>
-              ))}
-            </select>
-            <button type="button" onClick={addRelatedDoc} disabled={!relatedDraft}>
-              <Plus size={14} strokeWidth={1.8} />
-              <span>关联</span>
-            </button>
-          </div>
+          <RelatedDocPicker
+            key={selectedFile.id}
+            selectedFile={selectedFile}
+            allFiles={allFiles}
+            onAdd={addRelatedDoc}
+            controlsClassName="knowledge-related-controls"
+            selectClassName="doc-meta-related-select"
+            placeholder="搜索或选择文档…"
+          />
           {relatedDocs.length > 0 ? (
             <div className="knowledge-chip-list">
               {relatedDocs.map((file) => (

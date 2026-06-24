@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractRecallKeywords, rankRelatedDocs } from '../renderer/src/core/agent/contextRecall.js';
+import {
+  extractRecallKeywords,
+  rankRelatedDocs,
+  searchRelatedDocCandidates,
+} from '../renderer/src/core/agent/contextRecall.js';
 
 describe('extractRecallKeywords 关键词提取', () => {
   it('从标题和正文里提取关键词，去停用词', () => {
@@ -110,5 +114,54 @@ describe('rankRelatedDocs 相关旧文排序', () => {
     const ranked = rankRelatedDocs(currentDoc, candidates, { keywords: ['咖啡'] });
     expect(ranked).toHaveLength(1);
     expect(ranked[0].id).toBe('1');
+  });
+});
+
+describe('searchRelatedDocCandidates 关联文档搜索', () => {
+  const currentFile = {
+    id: 'cur',
+    name: '微信排版技巧.md',
+    content: '微信公众号排版样式',
+    relatedIds: ['linked'],
+  };
+  const allFiles = [
+    currentFile,
+    { id: 'linked', name: '已关联.md', content: '已关联内容' },
+    { id: '2', name: '微信排版进阶.md', content: '排版样式优化' },
+    { id: '3', name: '微信入门.md', content: '微信基础' },
+    { id: '4', name: '红烧肉.md', content: '做法' },
+  ];
+
+  it('无搜索词时按与当前文档相似度排序', () => {
+    const results = searchRelatedDocCandidates(currentFile, allFiles);
+    expect(results.map((item) => item.id)).toEqual(['2', '3']);
+  });
+
+  it('排除自身与已关联文档', () => {
+    const results = searchRelatedDocCandidates(currentFile, allFiles);
+    expect(results.map((item) => item.id)).not.toContain('cur');
+    expect(results.map((item) => item.id)).not.toContain('linked');
+  });
+
+  it('有搜索词时按搜索词相似度排序', () => {
+    const results = searchRelatedDocCandidates(currentFile, allFiles, { searchQuery: '排版样式' });
+    expect(results[0]?.id).toBe('2');
+  });
+
+  it('搜索词无相似命中时回退到文件名子串匹配', () => {
+    const results = searchRelatedDocCandidates(currentFile, allFiles, { searchQuery: '红烧' });
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('4');
+  });
+
+  it('当前文档无关键词且无搜索词时按名称排序', () => {
+    const emptyCurrent = { id: 'empty', name: '空文档.md', content: '', relatedIds: [] };
+    const files = [
+      emptyCurrent,
+      { id: 'b', name: 'B.md', content: '' },
+      { id: 'a', name: 'A.md', content: '' },
+    ];
+    const results = searchRelatedDocCandidates(emptyCurrent, files);
+    expect(results.map((item) => item.id)).toEqual(['a', 'b']);
   });
 });
