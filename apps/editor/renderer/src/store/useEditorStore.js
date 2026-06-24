@@ -1633,6 +1633,7 @@ export const useEditorStore = create(
             name: buildUniqueName(workspace, BOOKMARK_FOLDER_NAME),
             bookmarkFolder: true,
             children: [],
+            createdAt: Date.now(),
           };
           nextWorkspace = addChildNode(workspace, workspace.id, newFolder, true);
         }
@@ -1678,11 +1679,14 @@ export const useEditorStore = create(
         const { workspace, selectedId } = get();
         const fileId = createId('file');
         const name = buildUniqueName(workspace, '未命名', '.md');
+        const now = Date.now();
         const newFile = {
           id: fileId,
           type: 'file',
           name,
           content: '',
+          createdAt: now,
+          updatedAt: now,
           ...createDefaultKnowledgeFields(),
         };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
@@ -1768,6 +1772,7 @@ export const useEditorStore = create(
           type: 'file',
           name: finalName,
           content: normalizedContent,
+          createdAt: Date.now(),
           updatedAt: Date.now(),
           ...createDefaultKnowledgeFields(meta),
         };
@@ -1789,7 +1794,14 @@ export const useEditorStore = create(
         const { workspace, selectedId } = get();
         const folderId = createId('folder');
         const folderName = buildUniqueName(workspace, '新建文件夹');
-        const newFolder = { id: folderId, type: 'folder', name: folderName, children: [] };
+        const now = Date.now();
+        const newFolder = {
+          id: folderId,
+          type: 'folder',
+          name: folderName,
+          children: [],
+          createdAt: now,
+        };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
         if (targetFolder?.projectRootPath) return false;

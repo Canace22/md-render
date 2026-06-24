@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
-import { THEME_OPTIONS } from '../utils/themeUtils';
 import { TEMPLATES } from '../utils/wechatTemplates';
 
 export default function SettingsPanel({
   selectedFileName,
-  theme,
   copyStyle,
   publishingPlatforms = [],
   storageMode,
   projectRootPath,
   notionProxyBase = '',
   onNotionProxyBaseChange,
-  onThemeChange,
   onCopyStyleChange,
   onPublishingPlatformsChange,
   onClose,
@@ -90,27 +87,6 @@ export default function SettingsPanel({
               ? `当前项目：${projectRootPath || '未命名项目'}`
               : '当前模式：临时工作区'}
           </p>
-        </div>
-      </div>
-
-      <div className="settings-group">
-        <div className="settings-group-title">主题</div>
-        <div className="settings-option-grid">
-          {THEME_OPTIONS.map((option) => {
-            const Icon = option.icon;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                className={`settings-option-card ${theme === option.id ? 'active' : ''}`}
-                onClick={() => onThemeChange(option.id)}
-                aria-label={`切换到${option.label}`}
-              >
-                <Icon size={18} strokeWidth={1.6} />
-                <span>{option.label}</span>
-              </button>
-            );
-          })}
         </div>
       </div>
 

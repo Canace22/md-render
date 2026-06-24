@@ -21,6 +21,7 @@ export default function TabBar({
   onCloseOthers,
   onCloseToTheRight,
   onOpenExternal,
+  trailing = null,
 }) {
   const activeRef = useRef(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, tabId }
@@ -52,7 +53,7 @@ export default function TabBar({
     setContextMenu(null);
   }, []);
 
-  if (!tabs.length) return null;
+  if (!tabs.length && !trailing) return null;
 
   const ctxTabIdx = contextMenu ? tabs.findIndex((t) => t.id === contextMenu.tabId) : -1;
   const hasRight = ctxTabIdx >= 0 && ctxTabIdx < tabs.length - 1;
@@ -92,6 +93,12 @@ export default function TabBar({
           );
         })}
       </div>
+
+      {trailing ? (
+        <div className="tab-bar-trailing">
+          {trailing}
+        </div>
+      ) : null}
 
       {/* 右键菜单 */}
       {contextMenu && (

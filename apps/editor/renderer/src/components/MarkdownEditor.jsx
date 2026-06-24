@@ -29,6 +29,7 @@ import TocPanel from './TocPanel.jsx';
 import AgentPanel from './AgentPanel.jsx';
 import DiffOverlay from './DiffOverlay.jsx';
 import TabBar from './TabBar.jsx';
+import ThemeToggleButton from './ThemeToggleButton.jsx';
 import Breadcrumb from './Breadcrumb.jsx';
 import StatusBar from './StatusBar.jsx';
 import UpdateNotifier from './UpdateNotifier.jsx';
@@ -2254,6 +2255,21 @@ function MarkdownEditor() {
     };
   }, [setAiQuotedSelection]);
 
+  const showObsidianHeaderBar = (
+    surface !== 'settings'
+    && surface !== 'sync'
+    && !(surface === 'folder' && selectedFolder)
+    && surface !== 'daily'
+    && surface !== 'overview'
+    && surface !== 'canvas'
+    && surface !== 'creation-board'
+    && surface !== 'publishing'
+    && surface !== 'search'
+    && surface !== 'graph'
+    && !selectedUsesBookmarkCard
+    && !selectedNeedsConversion
+  );
+
   return (
     <div className={`container immersive-shell${macWindowed ? ' mac-windowed' : ''}`}>
       <input
@@ -2330,6 +2346,9 @@ function MarkdownEditor() {
           onCloseOthers={closeOtherTabs}
           onCloseToTheRight={closeTabsToTheRight}
           onOpenExternal={handleOpenBookmarkTabExternal}
+          trailing={!showObsidianHeaderBar ? (
+            <ThemeToggleButton theme={theme} onThemeChange={setTheme} />
+          ) : null}
         />
 
         <div className="immersive-main-row">
@@ -2337,14 +2356,12 @@ function MarkdownEditor() {
         {surface === 'settings' ? (
           <SettingsPanel
             selectedFileName={selectedFile?.name}
-            theme={theme}
             copyStyle={copyStyle}
             publishingPlatforms={publishingPlatforms}
             storageMode={visibleStorageMode}
             projectRootPath={visibleProjectRootPath}
             notionProxyBase={notionProxyBase}
             onNotionProxyBaseChange={setNotionProxyBase}
-            onThemeChange={setTheme}
             onCopyStyleChange={setCopyStyle}
             onPublishingPlatformsChange={setPublishingPlatforms}
             onClose={() => setSurface(lastContentSurfaceRef.current)}
@@ -2503,16 +2520,18 @@ function MarkdownEditor() {
             {/* 面包屑 + 编辑/预览切换 */}
             <div className="obsidian-header-bar">
               <Breadcrumb workspace={workspace} selectedId={selectedId} onNavigate={selectNode} />
-              <button
-                type="button"
-                className={`editor-mode-toggle${editorMode === 'preview' ? ' is-preview' : ''}`}
-                onClick={toggleEditorMode}
-                title={editorMode === 'preview' ? '切换到编辑模式' : '切换到预览模式'}
-                aria-label={editorMode === 'preview' ? '编辑模式' : '预览模式'}
-              >
-                {editorMode === 'preview' ? '预览' : '编辑'}
-              </button>
-              
+              <div className="obsidian-header-actions">
+                <ThemeToggleButton theme={theme} onThemeChange={setTheme} />
+                <button
+                  type="button"
+                  className={`editor-mode-toggle${editorMode === 'preview' ? ' is-preview' : ''}`}
+                  onClick={toggleEditorMode}
+                  title={editorMode === 'preview' ? '切换到编辑模式' : '切换到预览模式'}
+                  aria-label={editorMode === 'preview' ? '编辑模式' : '预览模式'}
+                >
+                  {editorMode === 'preview' ? '预览' : '编辑'}
+                </button>
+              </div>
             </div>
 
             <DocHeader

@@ -9,6 +9,11 @@ export const THEME_OPTIONS = [
   { id: 'dark', label: '深色', icon: Moon },
 ];
 
+/** @param {'light' | 'dark'} currentTheme */
+export const getNextTheme = (currentTheme) => (
+  currentTheme === 'light' ? 'dark' : 'light'
+);
+
 /**
  * 将主题应用到 body 的 class
  * @param {'light' | 'dark'} nextTheme

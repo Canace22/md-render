@@ -576,6 +576,7 @@ export function resolveLocalProjectCreateTarget(workspace, contextNodeId, projec
 }
 
 export function createLocalProjectFileNode(projectRootPath, relativePath, name, content = '') {
+  const now = Date.now();
   return {
     id: `project:${projectRootPath}:file:${relativePath}`,
     name,
@@ -584,7 +585,8 @@ export function createLocalProjectFileNode(projectRootPath, relativePath, name, 
     projectRootPath,
     content,
     diskContentSnapshot: content,
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
     ...createDefaultKnowledgeFields(),
   };
 }
@@ -597,6 +599,7 @@ export function createLocalProjectFolderNode(projectRootPath, relativePath, name
     relativePath,
     projectRootPath,
     children: [],
+    createdAt: Date.now(),
   };
 }
 
@@ -780,33 +783,74 @@ export function collectRecentFiles(workspace, limit = 5) {
     .slice(0, limit);
 }
 
+const TIMESTAMP_BACKFILL_STEP_MS = 60000;
+
+const toValidTimestamp = (value) => {
+  const ts = Number(value);
+  return Number.isFinite(ts) && ts > 0 ? ts : null;
+};
+
+/** 目录树排序用时间：优先 updatedAt（最近活跃），缺失时回退 createdAt */
+export function getNodeSortTime(node) {
+  return toValidTimestamp(node?.updatedAt) ?? toValidTimestamp(node?.createdAt) ?? 0;
+}
+
 /**
- * 给缺少 updatedAt 的老文件补初始时间戳（纯函数，返回新树）。
- * 用一个基准时间逐个递减，保证老笔记之间有稳定顺序、且都早于本次会话的新编辑。
- * 已有 updatedAt 的文件保持不变。
+ * 给缺少 createdAt / updatedAt 的节点补时间戳（纯函数，返回新树）。
+ * 用一个基准时间逐个递减，保证老节点之间有稳定顺序、且都早于本次会话的新编辑。
+ * 已有时间戳的节点保持不变。
  */
 export function ensureFileTimestamps(node, baseTime = Date.now()) {
   let counter = 0;
+  const nextSyntheticTime = () => {
+    counter += 1;
+    return baseTime - counter * TIMESTAMP_BACKFILL_STEP_MS;
+  };
+
   const walk = (current) => {
     if (!current) return current;
+
     if (current.type === 'file') {
-      if (current.updatedAt) return current;
-      counter += 1;
-      // 依次往前推 1 分钟，越靠前遍历到的越「新」一点
-      return { ...current, updatedAt: baseTime - counter * 60000 };
+      const existingCreated = toValidTimestamp(current.createdAt);
+      const existingUpdated = toValidTimestamp(current.updatedAt);
+      if (existingCreated && existingUpdated) return current;
+
+      let createdAt = existingCreated;
+      let updatedAt = existingUpdated;
+      if (!existingCreated && !existingUpdated) {
+        const ts = nextSyntheticTime();
+        createdAt = ts;
+        updatedAt = ts;
+      } else if (!existingCreated) {
+        createdAt = existingUpdated;
+      } else {
+        updatedAt = existingCreated;
+      }
+      return { ...current, createdAt, updatedAt };
     }
-    if (current.type === 'folder' && Array.isArray(current.children)) {
-      let changed = false;
-      const nextChildren = current.children.map((child) => {
-        const next = walk(child);
-        if (next !== child) changed = true;
-        return next;
+
+    if (current.type === 'folder') {
+      const existingCreated = toValidTimestamp(current.createdAt);
+      const children = Array.isArray(current.children) ? current.children : [];
+      let childrenChanged = false;
+      const nextChildren = children.map((child) => {
+        const walked = walk(child);
+        if (walked !== child) childrenChanged = true;
+        return walked;
       });
-      // 没有任何子节点被补，则原样返回，便于上层判断是否需要落盘
-      return changed ? { ...current, children: nextChildren } : current;
+
+      const needsCreated = !existingCreated;
+      if (!needsCreated && !childrenChanged) return current;
+
+      const patch = {};
+      if (needsCreated) patch.createdAt = nextSyntheticTime();
+      if (childrenChanged) patch.children = nextChildren;
+      return { ...current, ...patch };
     }
+
     return current;
   };
+
   return walk(node);
 }
 

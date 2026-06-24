@@ -41,6 +41,7 @@ import {
   KNOWLEDGE_NODE_TYPE_OPTIONS,
   META_FILTER_STATUS_NONE,
   META_FILTER_STATUS_NONE_LABEL,
+  getNodeSortTime,
 } from '../store/workspaceUtils.js';
 import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
@@ -136,6 +137,20 @@ const getRenameDraftValue = (node, fallbackName = '') => {
   if (node?.type !== 'file') return name;
   const next = name.replace(/(\.[^./\\]+)$/u, '');
   return next || name;
+};
+
+/** 置顶节点优先，同组内按 updatedAt（最近活跃，缺失时用 createdAt）降序 */
+const sortTreeChildren = (children) => {
+  if (!Array.isArray(children) || children.length <= 1) return children ?? [];
+  const indexed = children.map((child, index) => ({ child, index }));
+  const byActivityDesc = (a, b) => {
+    const diff = getNodeSortTime(b.child) - getNodeSortTime(a.child);
+    if (diff !== 0) return diff;
+    return a.index - b.index;
+  };
+  const pinned = indexed.filter(({ child }) => child.pinned).sort(byActivityDesc);
+  const unpinned = indexed.filter(({ child }) => !child.pinned).sort(byActivityDesc);
+  return [...pinned, ...unpinned].map(({ child }) => child);
 };
 
 const TreeNode = ({
@@ -400,7 +415,7 @@ const TreeNode = ({
 
       {isFolder && folderOpen && Array.isArray(node.children) && node.children.length > 0 && (
         <div className="tree-node-children">
-          {node.children.map((child) => (
+          {sortTreeChildren(node.children).map((child) => (
             <TreeNode
               key={child.id}
               node={child}
@@ -440,8 +455,7 @@ const renderTree = (workspace, selectedId, onSelect, handlers, contextMenu, onCo
   const children = workspace?.type === 'folder' && Array.isArray(workspace.children)
     ? workspace.children
     : [];
-  // 置顶节点排在最前（渲染层兜底，store 层已处理，这里保险起见）
-  const sorted = [...children.filter((c) => c.pinned), ...children.filter((c) => !c.pinned)];
+  const sorted = sortTreeChildren(children);
   return sorted.map((child) => (
     <TreeNode
       key={child.id}

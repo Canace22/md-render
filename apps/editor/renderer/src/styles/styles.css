@@ -4805,6 +4805,38 @@ body.theme-light #markdown-output code {
     width: min(760px, 100%);
 }
 
+.theme-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--color-icon-neutral);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--easing), color var(--duration-fast) var(--easing);
+}
+
+.theme-toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--color-text-primary);
+}
+
+.obsidian-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.container.mac-windowed .tab-bar-trailing .theme-toggle-btn {
+    -webkit-app-region: no-drag;
+}
+
 .settings-back-btn {
     width: fit-content;
     display: inline-flex;
@@ -5946,6 +5978,11 @@ body.theme-dark .settings-group,
 body.theme-dark .settings-back-btn {
     background: rgba(15, 23, 42, 0.9);
     border-color: rgba(71, 85, 105, 0.5);
+    color: #e5e7eb;
+}
+
+body.theme-dark .theme-toggle-btn:hover {
+    background: rgba(148, 163, 184, 0.12);
     color: #e5e7eb;
 }
 
@@ -7176,6 +7213,14 @@ body.theme-dark .local-project-conflict-btn.danger {
     flex: 1;
     min-width: 0;
     scrollbar-width: none;
+}
+
+.tab-bar-trailing {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 0 10px;
+    border-left: 1px solid var(--color-border);
 }
 
 .tab-bar-scroller::-webkit-scrollbar {

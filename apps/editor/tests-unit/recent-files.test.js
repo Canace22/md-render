@@ -76,12 +76,25 @@ describe('ensureFileTimestamps', () => {
   it('fills missing timestamps and keeps existing ones', () => {
     const out = ensureFileTimestamps(tree, 1000000);
     const flat = {};
-    const walk = (n) => n.type === 'file' ? (flat[n.id] = n.updatedAt) : n.children.forEach(walk);
+    const walk = (n) => {
+      if (n.type === 'file') {
+        flat[n.id] = { updatedAt: n.updatedAt, createdAt: n.createdAt };
+        return;
+      }
+      if (n.type === 'folder') {
+        if (n.id !== 'r') flat[`folder:${n.id}`] = n.createdAt;
+        (n.children ?? []).forEach(walk);
+      }
+    };
     walk(out);
-    expect(flat.a).toBeGreaterThan(0);
-    expect(flat.c).toBeGreaterThan(0);
-    expect(flat.b).toBe(999); // 已有不变
-    expect(flat.a).toBeGreaterThan(flat.c); // 先遍历的更新
+    expect(flat.a.updatedAt).toBeGreaterThan(0);
+    expect(flat.a.createdAt).toBe(flat.a.updatedAt);
+    expect(flat.c.updatedAt).toBeGreaterThan(0);
+    expect(flat.c.createdAt).toBe(flat.c.updatedAt);
+    expect(flat.b.updatedAt).toBe(999);
+    expect(flat.b.createdAt).toBe(999);
+    expect(flat.a.updatedAt).toBeGreaterThan(flat.c.updatedAt);
+    expect(flat['folder:d']).toBeGreaterThan(0);
   });
 
   it('is idempotent: returns same reference when nothing to fill', () => {
