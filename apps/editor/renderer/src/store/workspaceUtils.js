@@ -2,8 +2,14 @@
  * 工作区树结构工具函数（纯函数）
  */
 
+import { getDocumentStatus } from './creationUtils.js';
+
 const DEFAULT_FILE_ID = 'file-default';
 const DEFAULT_NODE_TYPE = 'document';
+
+/** 侧边栏状态筛选：匹配未设置创作状态的文档 */
+export const META_FILTER_STATUS_NONE = '__no_status__';
+export const META_FILTER_STATUS_NONE_LABEL = '没状态';
 
 export const KNOWLEDGE_NODE_TYPE_OPTIONS = [
   { value: 'concept', label: '概念' },
@@ -838,6 +844,105 @@ export function filterWorkspaceByTag(node, tag) {
     .filter(Boolean);
 
   return filteredChildren.length > 0 ? { ...node, children: filteredChildren } : null;
+}
+
+export function getFileTargetPlatforms(file) {
+  return sanitizeStringList([
+    ...(file?.targetPlatforms ?? []),
+    ...(file?.platforms ?? []),
+    ...(file?.publishPlatforms ?? []),
+  ]);
+}
+
+export function fileMatchesMetaFilters(file, filters = {}) {
+  if (!file || file.type !== 'file') return false;
+
+  const { status, platform, nodeType } = filters;
+  if (status) {
+    const docStatus = getDocumentStatus(file);
+    if (status === META_FILTER_STATUS_NONE) {
+      if (docStatus !== null) return false;
+    } else if (docStatus !== status) {
+      return false;
+    }
+  }
+  if (platform && !getFileTargetPlatforms(file).includes(platform)) return false;
+  if (nodeType && normalizeNodeType(file.nodeType) !== nodeType) return false;
+  return true;
+}
+
+/**
+ * 按文档元数据筛选工作区树（纯函数）：状态、平台、文档类型可组合（AND）。
+ * filters 各字段为空时不参与筛选。
+ */
+export function filterWorkspaceByMeta(node, filters = {}) {
+  const hasFilter = Boolean(filters.status || filters.platform || filters.nodeType);
+  if (!node) return null;
+  if (!hasFilter) return node;
+
+  if (node.type === 'file') {
+    return fileMatchesMetaFilters(node, filters) ? node : null;
+  }
+
+  const children = Array.isArray(node.children) ? node.children : [];
+  const filteredChildren = children
+    .map((child) => filterWorkspaceByMeta(child, filters))
+    .filter(Boolean);
+
+  return filteredChildren.length > 0 ? { ...node, children: filteredChildren } : null;
+}
+
+/**
+ * 统计各筛选项在工作区中的使用次数，仅返回 count > 0 的项。
+ */
+export function collectMetaFilterCounts(
+  workspace,
+  { statusOptions = [], platformOptions = [], nodeTypeOptions = [] } = {},
+) {
+  const statusCounts = new Map();
+  const platformCounts = new Map();
+  const nodeTypeCounts = new Map();
+  let noStatusCount = 0;
+
+  collectFiles(workspace).forEach((file) => {
+    const status = getDocumentStatus(file);
+    if (status) {
+      statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
+    } else {
+      noStatusCount += 1;
+    }
+
+    getFileTargetPlatforms(file).forEach((platform) => {
+      platformCounts.set(platform, (platformCounts.get(platform) ?? 0) + 1);
+    });
+
+    const nodeType = normalizeNodeType(file.nodeType);
+    nodeTypeCounts.set(nodeType, (nodeTypeCounts.get(nodeType) ?? 0) + 1);
+  });
+
+  const withCounts = (options, counts) =>
+    options
+      .map((option) => ({
+        value: option.value,
+        label: option.label,
+        count: counts.get(option.value) ?? 0,
+      }))
+      .filter((item) => item.count > 0);
+
+  const statuses = withCounts(statusOptions, statusCounts);
+  if (noStatusCount > 0) {
+    statuses.push({
+      value: META_FILTER_STATUS_NONE,
+      label: META_FILTER_STATUS_NONE_LABEL,
+      count: noStatusCount,
+    });
+  }
+
+  return {
+    statuses,
+    platforms: withCounts(platformOptions, platformCounts),
+    nodeTypes: withCounts(nodeTypeOptions, nodeTypeCounts),
+  };
 }
 
 export function resolveTargetFolderId(workspace, selectedId) {

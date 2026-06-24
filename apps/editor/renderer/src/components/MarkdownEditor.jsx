@@ -2317,6 +2317,7 @@ function MarkdownEditor() {
         settingsActive={surface === 'settings'}
         syncActive={surface === 'sync'}
         localProjectSupported={localProjectSupported}
+        platformOptions={publishingPlatforms}
       />
       <div className="right-area immersive-main">
         <UpdateNotifier />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Dropdown } from 'antd';
+import { Dropdown, Popover, Select } from 'antd';
 import logoUrl from '../assets/logo.png';
 import {
   File,
@@ -23,22 +23,27 @@ import {
   Upload,
   FileOutput,
   Search,
-  Tag,
   Pin,
   PinOff,
   RefreshCw,
   ChevronDown,
   CalendarDays,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   filterWorkspace,
   collectRecentFiles,
-  collectTags,
-  filterWorkspaceByTag,
+  filterWorkspaceByMeta,
+  collectMetaFilterCounts,
   findNodeById,
   getFolderChannelLabel,
   resolveTargetFolderId,
+  KNOWLEDGE_NODE_TYPE_OPTIONS,
+  META_FILTER_STATUS_NONE,
+  META_FILTER_STATUS_NONE_LABEL,
 } from '../store/workspaceUtils.js';
+import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
+import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
 const DEFAULT_SIDEBAR_WIDTH = 320;
@@ -51,8 +56,47 @@ const FILE_MANAGER_LABEL = typeof window !== 'undefined' && window.electronAPI?.
   ? '访达'
   : '文件管理器';
 
+const EMPTY_META_FILTERS = { status: null, platform: null, nodeType: null };
+const META_FILTER_ALL = '__all__';
+
+const hasActiveMetaFilters = (filters) =>
+  Boolean(filters?.status || filters?.platform || filters?.nodeType);
+
+const buildMetaFilterEmptyMessage = (filters, labelMaps) => {
+  const parts = [];
+  if (filters.status) {
+    const statusLabel = filters.status === META_FILTER_STATUS_NONE
+      ? META_FILTER_STATUS_NONE_LABEL
+      : (labelMaps.status.get(filters.status) ?? filters.status);
+    parts.push(`状态「${statusLabel}」`);
+  }
+  if (filters.platform) {
+    parts.push(`平台「${labelMaps.platform.get(filters.platform) ?? filters.platform}」`);
+  }
+  if (filters.nodeType) {
+    parts.push(`类型「${labelMaps.nodeType.get(filters.nodeType) ?? filters.nodeType}」`);
+  }
+  return parts.length > 0 ? `没有匹配${parts.join('、')}的笔记` : '没有匹配的笔记';
+};
+
 const clampSidebarWidth = (width) => {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
+};
+
+const buildFilterSelectOptions = (items) =>
+  items.map(({ value, label, count }) => ({
+    value,
+    label: `${label} (${count})`,
+  }));
+
+const buildMetaFilterSelectOptions = (items) => [
+  { value: META_FILTER_ALL, label: '全部' },
+  ...buildFilterSelectOptions(items),
+];
+
+const resolveMetaFilterChange = (value) => {
+  if (value === META_FILTER_ALL || value == null) return null;
+  return value;
 };
 
 /** 根据文件扩展名返回对应图标组件 */
@@ -444,8 +488,9 @@ const WorkspaceSidebar = ({
   settingsActive,
   syncActive,
   localProjectSupported = false,
+  platformOptions = PUBLISHING_PLATFORM_OPTIONS,
 }) => {
-  const [activeTag, setActiveTag] = useState(null);
+  const [metaFilters, setMetaFilters] = useState(EMPTY_META_FILTERS);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [resizing, setResizing] = useState(false);
   const [renamingNodeId, setRenamingNodeId] = useState(null);
@@ -460,6 +505,7 @@ const WorkspaceSidebar = ({
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const searchKeyword = searchQuery ?? '';
   const isSearching = Boolean(searchKeyword.trim());
+  const isMetaFiltering = hasActiveMetaFilters(metaFilters);
   const allowStructureActions = true;
   const showWorkspaceTree = surface === 'paper' || surface === 'folder';
 
@@ -496,16 +542,30 @@ const WorkspaceSidebar = ({
     onCancelRename: handleCancelRename,
   };
 
-  // 视图优先级：搜索 > 标签筛选 > 正常
+  // 视图优先级：搜索 > 元数据筛选 > 正常
   const filteredWorkspace = isSearching
     ? filterWorkspace(workspace, searchKeyword)
-    : activeTag
-      ? filterWorkspaceByTag(workspace, activeTag)
+    : isMetaFiltering
+      ? filterWorkspaceByMeta(workspace, metaFilters)
       : workspace;
 
-  // 搜索或筛标签时隐藏「最近」区，专注结果
-  const recentFiles = isSearching || activeTag ? [] : collectRecentFiles(workspace, 5);
-  const allTags = collectTags(workspace);
+  // 搜索或筛选时隐藏「最近」区，专注结果
+  const recentFiles = isSearching || isMetaFiltering ? [] : collectRecentFiles(workspace, 5);
+  const metaFilterCounts = collectMetaFilterCounts(workspace, {
+    statusOptions: CREATION_STATUS_OPTIONS,
+    platformOptions,
+    nodeTypeOptions: KNOWLEDGE_NODE_TYPE_OPTIONS,
+  });
+  const statusLabelMap = new Map([
+    ...CREATION_STATUS_OPTIONS.map((item) => [item.value, item.label]),
+    [META_FILTER_STATUS_NONE, META_FILTER_STATUS_NONE_LABEL],
+  ]);
+  const platformLabelMap = new Map(platformOptions.map((item) => [item.value, item.label]));
+  const nodeTypeLabelMap = new Map(KNOWLEDGE_NODE_TYPE_OPTIONS.map((item) => [item.value, item.label]));
+  const hasMetaFilterSection = !isSearching
+    && (metaFilterCounts.statuses.length > 0
+      || metaFilterCounts.platforms.length > 0
+      || metaFilterCounts.nodeTypes.length > 0);
   const selectedNode = findNodeById(workspace, selectedId);
 
   const closeContextMenu = useCallback(() => {
@@ -571,12 +631,19 @@ const WorkspaceSidebar = ({
 
   const handleSearchChange = (value) => {
     onSearchQueryChange?.(value);
-    if (value.trim()) setActiveTag(null); // 搜索时清除标签筛选
+    if (value.trim()) setMetaFilters(EMPTY_META_FILTERS);
   };
 
-  const toggleTag = (tag) => {
-    setActiveTag((prev) => (prev === tag ? null : tag));
-    onSearchQueryChange?.(''); // 选标签时清除搜索
+  const toggleMetaFilter = (key, value) => {
+    setMetaFilters((prev) => ({
+      ...prev,
+      [key]: resolveMetaFilterChange(value),
+    }));
+    onSearchQueryChange?.('');
+  };
+
+  const clearMetaFilters = () => {
+    setMetaFilters(EMPTY_META_FILTERS);
   };
 
   useEffect(() => {
@@ -677,6 +744,15 @@ const WorkspaceSidebar = ({
             </button>
             <button
               type="button"
+              className={`sidebar-rail-btn ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
+              onClick={onOpenCurrentContent}
+              title="当前内容"
+              aria-label="当前内容"
+            >
+              <FileText size={18} strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
               className={`sidebar-rail-btn ${surface === 'canvas' ? 'active' : ''}`}
               onClick={onOpenCanvas}
               title="画布工作台"
@@ -686,30 +762,12 @@ const WorkspaceSidebar = ({
             </button>
             <button
               type="button"
-              className={`sidebar-rail-btn ${surface === 'search' ? 'active' : ''}`}
-              onClick={onOpenSearch}
-              title="全局搜索"
-              aria-label="全局搜索"
-            >
-              <Search size={18} strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
               className={`sidebar-rail-btn ${surface === 'graph' ? 'active' : ''}`}
               onClick={onOpenGraph}
               title="图谱视图"
               aria-label="图谱视图"
             >
               <Network size={18} strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
-              className={`sidebar-rail-btn ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
-              onClick={onOpenCurrentContent}
-              title="当前内容"
-              aria-label="当前内容"
-            >
-              <FileText size={18} strokeWidth={1.6} />
             </button>
           </nav>
 
@@ -765,7 +823,7 @@ const WorkspaceSidebar = ({
             <Github size={18} strokeWidth={1.5} />
           </a>
 
-          {!collapsed && (
+          {showWorkspaceTree && !collapsed && (
             <button
               type="button"
               className="sidebar-rail-btn"
@@ -782,42 +840,98 @@ const WorkspaceSidebar = ({
       {/* ===== 右侧主内容区 ===== */}
       {!collapsed && showWorkspaceTree && (
         <div className="sidebar-main">
-          {/* 搜索框 */}
-          <div className="notebook-search">
-            <Search size={15} strokeWidth={1.5} className="notebook-search-icon" aria-hidden />
-            <input
-              type="text"
-              className="notebook-search-input"
-              placeholder="搜索知识库…"
-              value={searchKeyword}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              data-testid="sidebar-search-input"
-              aria-label="搜索知识库"
-            />
-          </div>
-
-          {/* 标签筛选 */}
-          {!isSearching && allTags.length > 0 && (
-            <div className="notebook-tags" data-testid="tags-section">
-              <span className="sidebar-section-title notebook-tags-title">
-                <Tag size={13} strokeWidth={1.5} aria-hidden /> 标签
-              </span>
-              <div className="notebook-tags-list">
-                {allTags.map(({ tag, count }) => (
+          {/* 搜索框 + 筛选 */}
+          <div className="notebook-search-wrap">
+            <div className="notebook-search">
+              <Search size={15} strokeWidth={1.5} className="notebook-search-icon" aria-hidden />
+              <input
+                type="text"
+                className="notebook-search-input"
+                placeholder="搜索知识库…"
+                value={searchKeyword}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                data-testid="sidebar-search-input"
+                aria-label="搜索知识库"
+              />
+              {hasMetaFilterSection && (
+                <Popover
+                  trigger="click"
+                  placement="bottomRight"
+                  arrow={false}
+                  overlayClassName="notebook-filter-popover"
+                  content={
+                    <div
+                      className="notebook-filter-dropdown"
+                      data-testid="meta-filters-section"
+                    >
+                      {metaFilterCounts.statuses.length > 0 && (
+                        <label className="notebook-filter-field">
+                          <span className="notebook-filter-field-label">状态</span>
+                          <Select
+                            size="small"
+                            className="notebook-filter-select"
+                            popupClassName="notebook-filter-select-popup"
+                            value={metaFilters.status ?? META_FILTER_ALL}
+                            onChange={(value) => toggleMetaFilter('status', value)}
+                            options={buildMetaFilterSelectOptions(metaFilterCounts.statuses)}
+                            data-testid="status-filter-select"
+                          />
+                        </label>
+                      )}
+                      {metaFilterCounts.platforms.length > 0 && (
+                        <label className="notebook-filter-field">
+                          <span className="notebook-filter-field-label">平台</span>
+                          <Select
+                            size="small"
+                            className="notebook-filter-select"
+                            popupClassName="notebook-filter-select-popup"
+                            value={metaFilters.platform ?? META_FILTER_ALL}
+                            onChange={(value) => toggleMetaFilter('platform', value)}
+                            options={buildMetaFilterSelectOptions(metaFilterCounts.platforms)}
+                            data-testid="platform-filter-select"
+                          />
+                        </label>
+                      )}
+                      {metaFilterCounts.nodeTypes.length > 0 && (
+                        <label className="notebook-filter-field">
+                          <span className="notebook-filter-field-label">文档类型</span>
+                          <Select
+                            size="small"
+                            className="notebook-filter-select"
+                            popupClassName="notebook-filter-select-popup"
+                            value={metaFilters.nodeType ?? META_FILTER_ALL}
+                            onChange={(value) => toggleMetaFilter('nodeType', value)}
+                            options={buildMetaFilterSelectOptions(metaFilterCounts.nodeTypes)}
+                            data-testid="node-type-filter-select"
+                          />
+                        </label>
+                      )}
+                      {isMetaFiltering && (
+                        <button
+                          type="button"
+                          className="notebook-filter-clear"
+                          onClick={clearMetaFilters}
+                          data-testid="meta-filters-clear"
+                        >
+                          清除筛选
+                        </button>
+                      )}
+                    </div>
+                  }
+                >
                   <button
-                    key={tag}
                     type="button"
-                    className={`notebook-tag-chip ${activeTag === tag ? 'active' : ''}`}
-                    onClick={() => toggleTag(tag)}
-                    data-testid="tag-filter-chip"
+                    className={`notebook-search-filter-btn${isMetaFiltering ? ' active' : ''}`}
+                    title="按状态、平台、文档类型筛选"
+                    aria-label="筛选"
+                    data-testid="meta-filters-trigger"
                   >
-                    {tag}
-                    <span className="notebook-tag-count">{count}</span>
+                    <SlidersHorizontal size={15} strokeWidth={1.5} />
                   </button>
-                ))}
-              </div>
+                </Popover>
+              )}
             </div>
-          )}
+          </div>
 
           {/* 文档目录 + 新建 */}
           <div className="sidebar-docs-header">
@@ -932,7 +1046,11 @@ const WorkspaceSidebar = ({
                 <div className="workspace-tree-empty" data-testid="search-empty">
                   {isSearching
                     ? `没有匹配「${searchKeyword.trim()}」的笔记`
-                    : `没有带「${activeTag}」标签的笔记`}
+                    : buildMetaFilterEmptyMessage(metaFilters, {
+                        status: statusLabelMap,
+                        platform: platformLabelMap,
+                        nodeType: nodeTypeLabelMap,
+                      })}
                 </div>
               )}
 

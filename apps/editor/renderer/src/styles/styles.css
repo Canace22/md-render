@@ -338,12 +338,10 @@ a.sidebar-rail-btn:hover {
     display: flex;
     align-items: center;
     gap: var(--space-xs);
-    margin: var(--space-s) var(--space-m) 0;
     padding: 6px var(--space-s);
     background: var(--color-bg-page);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-s);
-    flex: 0 0 auto;
 }
 
 .notebook-search-icon {
@@ -363,6 +361,74 @@ a.sidebar-rail-btn:hover {
 
 .notebook-search-input::placeholder {
     color: var(--color-text-secondary);
+}
+
+.notebook-search-wrap {
+    flex: 0 0 auto;
+    margin: var(--space-s) var(--space-m) 0;
+}
+
+.notebook-search-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--color-icon-neutral);
+    cursor: pointer;
+}
+
+.notebook-search-filter-btn:hover {
+    color: var(--color-text-active);
+    background: var(--color-bg-hover);
+}
+
+.notebook-search-filter-btn.active {
+    color: var(--color-text-active);
+    background: var(--color-bg-active);
+}
+
+.notebook-filter-dropdown {
+    display: grid;
+    gap: var(--space-s);
+    min-width: 200px;
+}
+
+.notebook-filter-field {
+    display: grid;
+    gap: 4px;
+}
+
+.notebook-filter-field-label {
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+}
+
+.notebook-filter-select {
+    width: 100%;
+}
+
+.notebook-filter-clear {
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption-size);
+    cursor: pointer;
+    text-align: left;
+}
+
+.notebook-filter-clear:hover {
+    color: var(--color-text-active);
+}
+
+.notebook-filter-popover .ant-popover-inner {
+    padding: var(--space-s);
 }
 
 .sidebar-nav-section {
