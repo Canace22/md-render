@@ -2277,7 +2277,6 @@ function MarkdownEditor() {
         workspace={workspace}
         selectedId={selectedId}
         onSelect={handleSidebarSelect}
-        onOpenLocalProject={handleOpenLocalProject}
         onRemoveLocalProject={handleRemoveLocalProject}
         onManualSyncLocalProject={handleManualSyncLocalProject}
         onAddFile={handleAddFile}
@@ -2317,7 +2316,6 @@ function MarkdownEditor() {
         }}
         settingsActive={surface === 'settings'}
         syncActive={surface === 'sync'}
-        localProjectSupported={localProjectSupported}
         platformOptions={publishingPlatforms}
       />
       <div className="right-area immersive-main">

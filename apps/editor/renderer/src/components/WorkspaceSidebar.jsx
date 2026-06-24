@@ -462,7 +462,6 @@ const WorkspaceSidebar = ({
   workspace,
   selectedId,
   onSelect,
-  onOpenLocalProject,
   onRemoveLocalProject,
   onManualSyncLocalProject,
   onAddFile,
@@ -490,7 +489,6 @@ const WorkspaceSidebar = ({
   onOpenSync,
   settingsActive,
   syncActive,
-  localProjectSupported = false,
   platformOptions = PUBLISHING_PLATFORM_OPTIONS,
 }) => {
   const [metaFilters, setMetaFilters] = useState(EMPTY_META_FILTERS);
@@ -774,19 +772,6 @@ const WorkspaceSidebar = ({
               <Network size={18} strokeWidth={1.6} />
             </button>
           </nav>
-
-          {!collapsed && (
-            <button
-              type="button"
-              className="sidebar-rail-btn"
-              onClick={onOpenLocalProject}
-              disabled={!localProjectSupported}
-              title={localProjectSupported ? '导入本地知识目录' : '仅桌面版应用支持'}
-              data-testid="sidebar-open-local-project"
-            >
-              <Upload size={18} strokeWidth={1.5} />
-            </button>
-          )}
         </div>
 
         <div className="sidebar-rail-bottom">
