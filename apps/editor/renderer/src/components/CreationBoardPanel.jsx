@@ -1,20 +1,15 @@
 import { memo, useMemo } from 'react';
 import { Button, Card, Dropdown, Empty, Tag } from 'antd';
-import { CheckCircle2, FolderKanban, Lightbulb, MoreHorizontal, PenLine, Plus, Rocket } from 'lucide-react';
+import { CheckCircle2, FileText, FolderKanban, Lightbulb, MoreHorizontal, PenLine, Plus, Rocket } from 'lucide-react';
+import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { getPublishingPlatformLabel } from '../utils/publishingPlatforms.js';
 
-const DEFAULT_STATUS_OPTIONS = [
-  { value: 'idea', label: '选题中' },
-  { value: 'collecting', label: '收集中' },
-  { value: 'drafting', label: '写作中' },
-  { value: 'revising', label: '修改中' },
-  { value: 'ready', label: '待发布' },
-  { value: 'published', label: '已发布' },
-];
+const DEFAULT_STATUS_OPTIONS = CREATION_STATUS_OPTIONS;
 
 const DEFAULT_LANES = [
   { key: 'idea', title: '选题中', statusValues: ['idea'], createStatus: 'idea', icon: Lightbulb },
   { key: 'collecting', title: '收集中', statusValues: ['collecting'], createStatus: 'collecting', icon: FolderKanban },
+  { key: 'draft', title: '草稿', statusValues: ['draft'], createStatus: 'draft', icon: FileText },
   { key: 'drafting', title: '写作中', statusValues: ['drafting', 'revising'], createStatus: 'drafting', icon: PenLine },
   { key: 'publishing', title: '待发布 / 已发布', statusValues: ['ready', 'published'], createStatus: 'ready', icon: Rocket },
 ];
@@ -29,7 +24,7 @@ const BOARD_STYLES = `
 .creation-board-summary { display:flex; flex-wrap:wrap; gap:8px; }
 .creation-board-summary .ant-tag { margin-inline-end:0; padding-inline:10px; border-radius:999px; }
 .creation-board-scroll { overflow-x:auto; padding-bottom:4px; }
-.creation-board-grid { display:grid; grid-template-columns:repeat(4, minmax(260px, 1fr)); gap:12px; min-width:1088px; }
+.creation-board-grid { display:grid; grid-template-columns:repeat(5, minmax(240px, 1fr)); gap:12px; min-width:1248px; }
 .creation-board-lane { border-radius:16px; border:1px solid var(--color-border, rgba(15, 23, 42, 0.08)); background:var(--color-bg-elevated, rgba(255, 255, 255, 0.94)); box-shadow:0 10px 28px rgba(15, 23, 42, 0.05); }
 .creation-board-lane .ant-card-head { min-height:auto; padding:0 14px; border-bottom:1px solid var(--color-border, rgba(15, 23, 42, 0.08)); }
 .creation-board-lane .ant-card-head-title { padding:12px 0; }
@@ -61,7 +56,7 @@ const BOARD_STYLES = `
 
 const STATUS_ALIAS_MAP = Object.freeze({
   topic: 'idea',
-  draft: 'drafting',
+  draft: 'draft',
   writing: 'drafting',
   revising: 'revising',
   ready_to_publish: 'ready',
@@ -69,6 +64,7 @@ const STATUS_ALIAS_MAP = Object.freeze({
   live: 'published',
   '\u9009\u9898': 'idea',
   '\u6536\u96c6\u4e2d': 'collecting',
+  '\u8349\u7a3f': 'draft',
   '\u5199\u4f5c\u4e2d': 'drafting',
   '\u4fee\u6539\u4e2d': 'revising',
   '\u5f85\u53d1\u5e03': 'ready',

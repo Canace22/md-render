@@ -1427,6 +1427,7 @@ function MarkdownEditor() {
       const nameMap = {
         idea: '新选题',
         collecting: '新资料单',
+        draft: '新草稿',
         drafting: '新稿件',
         revising: '待修改稿',
         ready: '待发布稿',

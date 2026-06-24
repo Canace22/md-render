@@ -10,6 +10,7 @@ import {
 const STATUS_LABEL_MAP = Object.freeze({
   idea: '选题中',
   collecting: '收集中',
+  draft: '草稿',
   drafting: '写作中',
   revising: '修改中',
   ready: '待发布',

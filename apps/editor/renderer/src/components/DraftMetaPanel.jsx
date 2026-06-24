@@ -3,8 +3,13 @@ import { CalendarClock, FileText, Link2, NotebookPen, PackageSearch } from 'luci
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 
 const DEFAULT_STATUS_OPTIONS = [
-  { value: 'idea', label: '选题中' }, { value: 'drafting', label: '写作中' }, { value: 'review', label: '待审阅' },
-  { value: 'scheduled', label: '待发布' }, { value: 'published', label: '已发布' },
+  { value: 'idea', label: '选题中' },
+  { value: 'collecting', label: '收集中' },
+  { value: 'draft', label: '草稿' },
+  { value: 'drafting', label: '写作中' },
+  { value: 'revising', label: '修改中' },
+  { value: 'ready', label: '待发布' },
+  { value: 'published', label: '已发布' },
 ];
 
 const normalizePlatforms = (selectedFile) => {
