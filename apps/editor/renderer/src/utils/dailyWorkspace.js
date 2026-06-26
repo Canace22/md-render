@@ -1,5 +1,16 @@
 const DAILY_ITEM_TYPES = new Set(['task', 'event', 'note']);
 const DAILY_PRIORITIES = new Set(['high', 'medium', 'low']);
+
+export const DAILY_TASK_CATEGORY_OPTIONS = Object.freeze([
+  { value: 'work', label: '工作', color: '#3b82f6' },
+  { value: 'creation', label: '创作', color: '#a855f7' },
+  { value: 'learning', label: '学习', color: '#06b6d4' },
+  { value: 'life', label: '生活', color: '#22c55e' },
+  { value: 'personal', label: '个人', color: '#f97316' },
+]);
+
+const DAILY_TASK_CATEGORIES = new Set(DAILY_TASK_CATEGORY_OPTIONS.map((option) => option.value));
+const DAILY_CATEGORY_ITEM_TYPES = new Set(['task', 'note']);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const padNumber = (value) => String(value).padStart(2, '0');
@@ -31,9 +42,12 @@ const normalizeDailyItem = (item, dateKey, index) => {
 
   const type = DAILY_ITEM_TYPES.has(item?.type) ? item.type : 'note';
   const priority = DAILY_PRIORITIES.has(item?.priority) ? item.priority : 'medium';
+  const category = DAILY_CATEGORY_ITEM_TYPES.has(type) && DAILY_TASK_CATEGORIES.has(item?.category)
+    ? item.category
+    : '';
   const createdAt = createTimestamp(item?.createdAt);
 
-  return {
+  const normalized = {
     id: typeof item?.id === 'string' && item.id.trim() ? item.id : `${dateKey}-${type}-${index}`,
     type,
     text,
@@ -42,6 +56,12 @@ const normalizeDailyItem = (item, dateKey, index) => {
     createdAt,
     updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
   };
+
+  if (DAILY_CATEGORY_ITEM_TYPES.has(type) && category) {
+    normalized.category = category;
+  }
+
+  return normalized;
 };
 
 const normalizeTodoItem = (item, index) => {
@@ -50,14 +70,21 @@ const normalizeTodoItem = (item, index) => {
 
   const createdAt = createTimestamp(item?.createdAt);
   const sourceDate = item?.sourceDate ? normalizeDateKey(item.sourceDate, '') : '';
+  const category = DAILY_TASK_CATEGORIES.has(item?.category) ? item.category : '';
 
-  return {
+  const normalized = {
     id: typeof item?.id === 'string' && item.id.trim() ? item.id : `todo-${index}`,
     text,
     sourceDate,
     createdAt,
     updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
   };
+
+  if (category) {
+    normalized.category = category;
+  }
+
+  return normalized;
 };
 
 export const getTodayDateKey = (baseDate = new Date()) => {
@@ -251,6 +278,7 @@ export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
             id: createDailyId('todo'),
             text: item.text,
             sourceDate: dateKey,
+            ...(item.category ? { category: item.category } : {}),
             createdAt: Date.now(),
             updatedAt: Date.now(),
           });
@@ -315,23 +343,29 @@ const updateEntry = (dailyWorkspace, dateKey, updater) => {
 export const addDailyEntryItem = (dailyWorkspace, dateKey, payload) => {
   const type = DAILY_ITEM_TYPES.has(payload?.type) ? payload.type : 'note';
   const priority = DAILY_PRIORITIES.has(payload?.priority) ? payload.priority : 'medium';
+  const category = DAILY_CATEGORY_ITEM_TYPES.has(type) && DAILY_TASK_CATEGORIES.has(payload?.category)
+    ? payload.category
+    : '';
   const text = normalizeText(payload?.text);
   if (!text) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
 
+  const nextItem = {
+    id: createDailyId(type),
+    type,
+    text,
+    priority,
+    done: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  if (category) {
+    nextItem.category = category;
+  }
+
   return updateEntry(dailyWorkspace, dateKey, (entry) => ({
     ...entry,
-    items: [
-      ...entry.items,
-      {
-        id: createDailyId(type),
-        type,
-        text,
-        priority,
-        done: false,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    ],
+    items: [...entry.items, nextItem],
   }));
 };
 
@@ -405,23 +439,46 @@ export const updateDailyEntryItemPriority = (dailyWorkspace, dateKey, itemId, pr
   }));
 };
 
-export const addTodoPoolItem = (dailyWorkspace, text, sourceDate = '') => {
+export const updateDailyEntryItemCategory = (dailyWorkspace, dateKey, itemId, category) => {
+  const nextCategory = DAILY_TASK_CATEGORIES.has(category) ? category : '';
+  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
+    ...entry,
+    items: entry.items.map((item) => {
+      if (item.id !== itemId || !DAILY_CATEGORY_ITEM_TYPES.has(item.type)) return item;
+      const nextItem = {
+        ...item,
+        updatedAt: Date.now(),
+      };
+      if (nextCategory) {
+        nextItem.category = nextCategory;
+      } else {
+        delete nextItem.category;
+      }
+      return nextItem;
+    }),
+  }));
+};
+
+export const addTodoPoolItem = (dailyWorkspace, text, sourceDate = '', category = '') => {
   const nextText = normalizeText(text);
   if (!nextText) return normalizeDailyWorkspace(dailyWorkspace);
 
   const normalized = normalizeDailyWorkspace(dailyWorkspace);
+  const nextItem = {
+    id: createDailyId('todo'),
+    text: nextText,
+    sourceDate: sourceDate ? normalizeDateKey(sourceDate, '') : '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  if (DAILY_TASK_CATEGORIES.has(category)) {
+    nextItem.category = category;
+  }
+
   return {
     ...normalized,
-    todoPool: [
-      {
-        id: createDailyId('todo'),
-        text: nextText,
-        sourceDate: sourceDate ? normalizeDateKey(sourceDate, '') : '',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-      ...normalized.todoPool,
-    ],
+    todoPool: [nextItem, ...normalized.todoPool],
   };
 };
 
@@ -432,7 +489,7 @@ export const sendDailyEntryTaskToTodo = (dailyWorkspace, dateKey, itemId) => {
   const target = entry.items.find((item) => item.id === itemId && item.type === 'task' && !item.done);
   if (!target) return normalized;
 
-  const withTodo = addTodoPoolItem(normalized, target.text, key);
+  const withTodo = addTodoPoolItem(normalized, target.text, key, target.category);
   return updateEntry(withTodo, key, (currentEntry) => ({
     ...currentEntry,
     items: currentEntry.items.filter((item) => item.id !== itemId),
@@ -449,7 +506,33 @@ export const promoteTodoToDaily = (dailyWorkspace, todoId, dateKey) => {
     todoPool: normalized.todoPool.filter((item) => item.id !== todoId),
   };
 
-  return addDailyEntryItem(withoutTodo, dateKey, { type: 'task', text: todo.text });
+  return addDailyEntryItem(withoutTodo, dateKey, {
+    type: 'task',
+    text: todo.text,
+    category: todo.category,
+  });
+};
+
+export const updateTodoPoolItemCategory = (dailyWorkspace, todoId, category) => {
+  const nextCategory = DAILY_TASK_CATEGORIES.has(category) ? category : '';
+  const normalized = normalizeDailyWorkspace(dailyWorkspace);
+
+  return {
+    ...normalized,
+    todoPool: normalized.todoPool.map((item) => {
+      if (item.id !== todoId) return item;
+      const nextItem = {
+        ...item,
+        updatedAt: Date.now(),
+      };
+      if (nextCategory) {
+        nextItem.category = nextCategory;
+      } else {
+        delete nextItem.category;
+      }
+      return nextItem;
+    }),
+  };
 };
 
 export const removeTodoPoolItem = (dailyWorkspace, todoId) => {

@@ -58,7 +58,9 @@ import {
   setDailyCurrentDate as setDailyWorkspaceCurrentDate,
   toggleDailyEntryTaskDone,
   updateDailyEntryItem,
+  updateDailyEntryItemCategory,
   updateDailyEntryItemPriority,
+  updateTodoPoolItemCategory,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import {
@@ -1139,11 +1141,11 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      addDailyItem: (dateKey, type, text) => set((state) => {
+      addDailyItem: (dateKey, type, text, category) => set((state) => {
         const nextDailyWorkspace = addDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
-          { type, text },
+          { type, text, category },
         );
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
@@ -1186,6 +1188,16 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
+      updateDailyItemCategory: (dateKey, itemId, category) => set((state) => {
+        const nextDailyWorkspace = updateDailyEntryItemCategory(
+          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
+          dateKey,
+          itemId,
+          category,
+        );
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
       moveDailyItem: (fromDate, itemId, toDate) => set((state) => {
         const nextDailyWorkspace = moveDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, fromDate),
@@ -1215,8 +1227,8 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      addTodoItem: (text) => set((state) => {
-        const nextDailyWorkspace = addTodoPoolItem(state.dailyWorkspace, text);
+      addTodoItem: (text, category) => set((state) => {
+        const nextDailyWorkspace = addTodoPoolItem(state.dailyWorkspace, text, '', category);
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
@@ -1227,6 +1239,11 @@ export const useEditorStore = create(
       }),
       removeTodoItem: (todoId) => set((state) => {
         const nextDailyWorkspace = removeTodoPoolItem(state.dailyWorkspace, todoId);
+        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
+        return { dailyWorkspace: nextDailyWorkspace };
+      }),
+      updateTodoItemCategory: (todoId, category) => set((state) => {
+        const nextDailyWorkspace = updateTodoPoolItemCategory(state.dailyWorkspace, todoId, category);
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),

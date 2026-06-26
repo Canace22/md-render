@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Checkbox, DatePicker, Dropdown, Empty, Input, Tag } from 'antd';
+import { Button, Card, Checkbox, DatePicker, Dropdown, Empty, Input, Select, Tag } from 'antd';
 import dayjs from 'dayjs';
 import {
   CalendarClock,
@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import {
+  DAILY_TASK_CATEGORY_OPTIONS,
   formatDailyHeading,
   formatDailyMetaDate,
   getDailyEntry,
@@ -37,6 +38,28 @@ const getPriorityColor = (priority) => {
 const PRIORITY_CYCLE = { high: 'medium', medium: 'low', low: 'high' };
 
 const cyclePriority = (current) => PRIORITY_CYCLE[current] ?? 'medium';
+
+const getCategoryOption = (category) => DAILY_TASK_CATEGORY_OPTIONS.find((opt) => opt.value === category);
+
+const buildCategoryMenuItems = (currentCategory, onSelect) => [
+  {
+    key: 'none',
+    label: '未分类',
+    onClick: () => onSelect(''),
+  },
+  { type: 'divider' },
+  ...DAILY_TASK_CATEGORY_OPTIONS.map((option) => ({
+    key: option.value,
+    label: (
+      <span className="daily-notebook-category-menu-item">
+        <span className="daily-notebook-category-dot" style={{ backgroundColor: option.color }} />
+        {option.label}
+      </span>
+    ),
+    onClick: () => onSelect(option.value),
+    disabled: currentCategory === option.value,
+  })),
+];
 
 function useCopyText() {
   const [copiedId, setCopiedId] = useState(null);
@@ -131,10 +154,14 @@ function DailySection({
   onMoveItems,
   onDeleteItem,
   onUpdatePriority,
+  onUpdateCategory,
+  draftCategory,
+  onDraftCategoryChange,
   copiedId,
   onCopy,
 }) {
   const isNote = section.type === 'note';
+  const supportsCategory = section.type === 'task' || section.type === 'note';
   const { batchMode, selected, toggleBatchMode, toggleItem, isAllSelected, toggleAll, exitBatch } =
     useBatchSelect(items);
   const [batchDate, setBatchDate] = useState(null);
@@ -164,7 +191,27 @@ function DailySection({
         )}
       </div>
 
-      <div className="daily-notebook-composer">
+      <div className={`daily-notebook-composer ${supportsCategory ? 'has-category' : ''}`}>
+        {supportsCategory && (
+          <Select
+            size="small"
+            value={draftCategory || undefined}
+            placeholder="类别"
+            allowClear
+            className="daily-notebook-category-select"
+            popupMatchSelectWidth={false}
+            options={DAILY_TASK_CATEGORY_OPTIONS.map((option) => ({
+              value: option.value,
+              label: (
+                <span className="daily-notebook-category-menu-item">
+                  <span className="daily-notebook-category-dot" style={{ backgroundColor: option.color }} />
+                  {option.label}
+                </span>
+              ),
+            }))}
+            onChange={(value) => onDraftCategoryChange(value ?? '')}
+          />
+        )}
         <Input
           value={draftValue}
           placeholder={section.placeholder}
@@ -263,12 +310,33 @@ function DailySection({
                           </Button>
                         </div>
                       ) : (
-                        <span
-                          className="daily-notebook-item-text"
-                          onDoubleClick={() => onStartEdit(item)}
-                        >
-                          {item.text}
-                        </span>
+                        <>
+                          <span
+                            className="daily-notebook-item-text"
+                            onDoubleClick={() => onStartEdit(item)}
+                          >
+                            {item.text}
+                          </span>
+                          {(section.type === 'task' || section.type === 'note') && (
+                            <Dropdown
+                              menu={{ items: buildCategoryMenuItems(item.category ?? '', (value) => onUpdateCategory(item.id, value)) }}
+                              trigger={['click']}
+                            >
+                              {item.category ? (
+                                <Tag
+                                  className="daily-notebook-category-tag"
+                                  style={{ '--category-color': getCategoryOption(item.category)?.color }}
+                                >
+                                  {getCategoryOption(item.category)?.label}
+                                </Tag>
+                              ) : (
+                                <button type="button" className="daily-notebook-category-placeholder">
+                                  类别
+                                </button>
+                              )}
+                            </Dropdown>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -365,8 +433,13 @@ function DailyNotebook({
   onPromoteTodo,
   onRemoveTodo,
   onUpdateItemPriority,
+  onUpdateItemCategory,
+  onUpdateTodoCategory,
 }) {
   const [drafts, setDrafts] = useState({ task: '', event: '', note: '', todo: '' });
+  const [draftCategory, setDraftCategory] = useState('');
+  const [draftNoteCategory, setDraftNoteCategory] = useState('');
+  const [draftTodoCategory, setDraftTodoCategory] = useState('');
   const [editingItem, setEditingItem] = useState(null);
   const { copiedId, copy: handleCopy } = useCopyText();
   const currentDate = dailyWorkspace?.currentDate || getTodayDateKey();
@@ -395,14 +468,23 @@ function DailyNotebook({
   const handleSubmit = (type) => {
     const nextValue = drafts[type]?.trim();
     if (!nextValue) return;
-    onAddItem(currentDate, type, nextValue);
+    if (type === 'task') {
+      onAddItem(currentDate, type, nextValue, draftCategory || undefined);
+      setDraftCategory('');
+    } else if (type === 'note') {
+      onAddItem(currentDate, type, nextValue, draftNoteCategory || undefined);
+      setDraftNoteCategory('');
+    } else {
+      onAddItem(currentDate, type, nextValue);
+    }
     setDrafts((current) => ({ ...current, [type]: '' }));
   };
 
   const handleSubmitTodo = () => {
     const nextValue = drafts.todo?.trim();
     if (!nextValue) return;
-    onAddTodo(nextValue);
+    onAddTodo(nextValue, draftTodoCategory || undefined);
+    setDraftTodoCategory('');
     setDrafts((current) => ({ ...current, todo: '' }));
   };
 
@@ -477,6 +559,15 @@ function DailyNotebook({
               onMoveItems={(itemIds, toDate) => onMoveItems(currentDate, itemIds, toDate)}
               onDeleteItem={(itemId) => onDeleteItem(currentDate, itemId)}
               onUpdatePriority={(itemId, priority) => onUpdateItemPriority(currentDate, itemId, priority)}
+              onUpdateCategory={(itemId, category) => onUpdateItemCategory(currentDate, itemId, category)}
+              draftCategory={section.type === 'task' ? draftCategory : section.type === 'note' ? draftNoteCategory : ''}
+              onDraftCategoryChange={
+                section.type === 'task'
+                  ? setDraftCategory
+                  : section.type === 'note'
+                    ? setDraftNoteCategory
+                    : () => {}
+              }
               copiedId={copiedId}
               onCopy={handleCopy}
             />
@@ -495,7 +586,25 @@ function DailyNotebook({
             <Tag>{todoPool.length} 条</Tag>
           </div>
 
-          <div className="daily-notebook-composer">
+          <div className="daily-notebook-composer has-category">
+            <Select
+              size="small"
+              value={draftTodoCategory || undefined}
+              placeholder="类别"
+              allowClear
+              className="daily-notebook-category-select"
+              popupMatchSelectWidth={false}
+              options={DAILY_TASK_CATEGORY_OPTIONS.map((option) => ({
+                value: option.value,
+                label: (
+                  <span className="daily-notebook-category-menu-item">
+                    <span className="daily-notebook-category-dot" style={{ backgroundColor: option.color }} />
+                    {option.label}
+                  </span>
+                ),
+              }))}
+              onChange={(value) => setDraftTodoCategory(value ?? '')}
+            />
             <Input
               value={drafts.todo}
               placeholder="手动补一条待办"
@@ -510,7 +619,26 @@ function DailyNotebook({
               {todoPool.map((item) => (
                 <div key={item.id} className="daily-notebook-item">
                   <div className="daily-notebook-item-main">
-                    <span className="daily-notebook-item-text">{item.text}</span>
+                    <div className="daily-notebook-item-text-row">
+                      <span className="daily-notebook-item-text">{item.text}</span>
+                      <Dropdown
+                        menu={{ items: buildCategoryMenuItems(item.category ?? '', (value) => onUpdateTodoCategory(item.id, value)) }}
+                        trigger={['click']}
+                      >
+                        {item.category ? (
+                          <Tag
+                            className="daily-notebook-category-tag"
+                            style={{ '--category-color': getCategoryOption(item.category)?.color }}
+                          >
+                            {getCategoryOption(item.category)?.label}
+                          </Tag>
+                        ) : (
+                          <button type="button" className="daily-notebook-category-placeholder">
+                            类别
+                          </button>
+                        )}
+                      </Dropdown>
+                    </div>
                     <div className="daily-notebook-todo-meta">
                       {item.sourceDate && <Tag>来自 {formatDailyMetaDate(item.sourceDate)}</Tag>}
                     </div>

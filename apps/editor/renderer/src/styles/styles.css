@@ -9464,6 +9464,53 @@ body.theme-dark .file-preview-iframe {
   gap: 10px;
 }
 
+.daily-notebook-composer.has-category {
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+}
+
+.daily-notebook-category-select {
+  width: 100%;
+}
+
+.daily-notebook-category-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-notebook-category-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.daily-notebook-category-tag {
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--category-color) 36%, transparent);
+  background: color-mix(in srgb, var(--category-color) 14%, transparent);
+  color: var(--category-color);
+  cursor: pointer;
+}
+
+.daily-notebook-category-placeholder {
+  flex-shrink: 0;
+  padding: 0 8px;
+  height: 22px;
+  border: 1px dashed var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.daily-notebook-category-placeholder:hover {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
 .daily-notebook-list {
   display: flex;
   flex-direction: column;
@@ -9497,6 +9544,7 @@ body.theme-dark .file-preview-iframe {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .daily-notebook-check {

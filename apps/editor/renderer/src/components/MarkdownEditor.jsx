@@ -375,12 +375,14 @@ function MarkdownEditor() {
     deleteDailyItem,
     updateDailyItem,
     updateDailyItemPriority,
+    updateDailyItemCategory,
     moveDailyItem,
     moveDailyItems,
     moveDailyTaskToTodo,
     addTodoItem,
     promoteTodoToDaily,
     removeTodoItem,
+    updateTodoItemCategory,
     hydrateDailyWorkspaceFromDisk,
     setWorkspaceCanvas,
     setNotionToken,
@@ -2447,6 +2449,8 @@ function MarkdownEditor() {
             onPromoteTodo={promoteTodoToDaily}
             onRemoveTodo={removeTodoItem}
             onUpdateItemPriority={updateDailyItemPriority}
+            onUpdateItemCategory={updateDailyItemCategory}
+            onUpdateTodoCategory={updateTodoItemCategory}
           />
         ) : surface === 'overview' ? (
           <CreationDashboard
