@@ -2,22 +2,36 @@
 
 [English README](./README.md)
 
-**一个本地优先、对中文写作友好的内容创作工作台。**
+**一个本地优先、AI 驱动的中文创作工作台。**
 
-基于 **React + Vite + Electron** 构建，产品定位已经从单纯的 Markdown 渲染器升级为内容创作工作台；底层仍保留自研 CommonMark / GFM Markdown 解析渲染管线（`packages/markdown-core`）、macOS 桌面应用（`apps/editor`），以及可在浏览器或 GitHub Pages 上运行的 Web 版。
+基于 **React + Vite + Electron** 构建。产品已从 Markdown 渲染器演进为围绕「今日安排 → 内容创作 → 知识沉淀 → 多渠道发布」的一体化工作台；底层仍保留自研 CommonMark / GFM 解析渲染管线（`packages/markdown-core`），并提供 macOS 桌面应用（`apps/editor`）与可在浏览器 / GitHub Pages 运行的 Web 版。
 
 | | |
 |---|---|
-| **面向用户** | 公众号 / 博客作者 · 知识型内容创作者 · 长文 / 小说写作者 |
-| **关键词** | 本地优先 · 知识驱动 · 写作优先 · 发布友好 |
-| **当前版本** | `1.0.6` — [发布流程](./docs/release-process.md) |
+| **面向用户** | 公众号 / 博客作者 · 独立内容创作者 · 需要「写 + 管 + 发」的知识工作者 |
+| **关键词** | 本地优先 · AI 驱动 · 今日驱动 · 写作优先 · 发布友好 |
+| **当前版本** | `1.0.12` — [发布流程](./docs/release-process.md) |
 | **产品路线** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 
-产品目标是打通 **选题 → 收集 → 大纲 → 写作 → 改写 → 定稿 → 发布** 这条主路径。底座与 P0 创作工作流已具备，后续重点在 AI 动作、多平台文案与看板 UI — 详见 [后续规划](#后续规划)。
+产品目标是把 **安排 → 收集 → 写作 → 改写 → 定稿 → 发布** 串成一条主路径：今日速记管今天的事，编辑器写长文，AI 助手改稿并直接操作界面，知识库承接沉淀，微信 / Notion 负责对外输出。
 
 ---
 
 ## 已具备能力
+
+### 今日速记
+
+- 按日管理 **任务**、**笔记**、**日程**，以及跨天保留的 **待办池**
+- 任务支持优先级（高 / 中 / 低）与类别标注（工作、创作、学习、生活、个人）
+- 日期切换、跨天结转（carryOver）、内联快速添加
+- 桌面端可同步到本地磁盘（Electron）
+
+### AI 助手
+
+- Cowork 式助手面板：对话中可直接读写文档、切换界面、操作今日速记
+- 段落级写作动作：压缩、扩写、润色、提纲、续写、标题建议、改语气、提炼要点等
+- 平台版本生成：公众号、小红书、知乎等渠道改写
+- 文档工作区偏创作助手；总览、Daily、看板等非文档界面偏工作台助手
 
 ### 写作与预览
 
@@ -26,15 +40,16 @@
 - 代码块 **Shiki** 语法高亮，支持一键复制
 - Mermaid 图表预览与全屏查看
 - 浅色 / 深色 / 跟随系统主题
+- 纸张感编辑体验：界面退后，正文优先（见 [docs/editor-philosophy.md](./docs/editor-philosophy.md)）
 
 ### 工作区与知识库
 
-- 侧栏文件树、Obsidian 风格标签页、多视图切换（总览、文稿、知识库、Notion、设置）
+- 侧栏文件树、Obsidian 风格标签页；多视图：创作首页、当前内容、画布、图谱、搜索等
 - **Web 版：** `localStorage` 持久化
-- **桌面版：** SQLite + FTS5 全文搜索、版本历史、`.md` 磁盘同步、本地目录挂载
+- **桌面版：** SQLite + FTS5 全文搜索、版本历史、`.md` 磁盘同步
 - 双向链接（`[[文档名]]`）、反向链接、关系图谱
 - 书签导入；非 Markdown 文件预览（Office、PDF 等）
-- 工作区导入 / 导出
+- 元数据筛选（状态、平台、文档类型、标签）；工作区导入 / 导出
 
 ### 发布与同步
 
@@ -43,33 +58,33 @@
 - 文档导出为 MD / HTML / PDF / DOCX
 - 通过 GitHub Actions 部署到 GitHub Pages
 
-### 创作工作流（P0 已落地）
+### 创作工作流
 
-- **创作首页** — 展示最近稿件、待办选题、素材收件箱、待发布队列；快捷新建稿件 / 选题、导入素材、跳转发布搜索
-- **稿件元数据** — 六段状态流转（`idea` → `published`）、目标平台（公众号、小红书、知乎等）、摘要、计划发布时间、关联文档与来源素材
-- **选题与素材分类** — 通过元数据（`draftStatus`、`nodeType`、标签）将文档归类为稿件、选题、素材、待发布项
-- **标签与知识元数据** — 标签、节点类型、摘要、别名、关联文档、反向链接；版本历史与恢复（Electron）
-- **书签导入** — 书签作为一等条目，出现在首页素材收件箱与书签卡片视图
-- **文件导入与预览** — 支持 MD / HTML / DOCX / CSV 等导入；Office、PDF、Excel 预览并可转为 Markdown
-- **小说助手** — 实体抽取、提及菜单、BlockNote 富文本编辑
+- **创作首页** — 最近稿件、待办选题、素材收件箱、待发布队列；快捷新建稿件 / 选题、整理素材、跳转发布
+- **选题 / 稿件看板** — 按状态分栏（选题中 → 收集中 → 草稿 → 写作中 → 待发布 / 已发布）
+- **发布队列** — 待发布稿件排期、平台标签、发布前检查清单
+- **灵感画布** — 卡片式白板，整理选题与素材关系
+- **稿件元数据** — 六段状态流转（`idea` → `published`）、目标平台、摘要、计划发布时间、关联文档与来源素材
+- **书签导入** — 书签作为一等条目，出现在素材收件箱
+- **文件导入与预览** — MD / HTML / DOCX / CSV 等；Office、PDF、Excel 预览并可转为 Markdown
 
 ---
 
 ## 后续规划
 
-详见 [内容创作工具规划](./docs/content-creation-roadmap.md)。上述底座已具备，剩余缺口：
+详见 [内容创作工具规划](./docs/content-creation-roadmap.md)。底座与核心创作链路已具备，剩余重点：
 
 | 缺口 | 规划方向 |
 |------|----------|
-| 缺少独立项目 / 看板 UI | 独立选题看板、系列视图、发布批次管理（首页已聚合展示；`creation-board` / `publishing` 视图为占位） |
-| 通用写作未接入 AI | 段落级动作（扩写、压缩、改语气、提纲、续写）— 小说助手已有，通用 AI 层尚未接入 |
-| 发布仍以微信 + 导出为主 | 一稿多渠道文案（小红书 / 知乎版）、标题与摘要变体、发布前检查清单 |
 | Inbox 仍为早期形态 | 统一分拣流：粘贴 / Notion 拉取 → 收件箱 → 挂选题或转草稿 |
-| 审稿层偏薄 | 改稿清单、版本 diff 预览、定稿归档 |
+| AI 动作质量与一致性 | 界面分流更稳、工具调用更可靠（见 [ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md)） |
+| 审稿层偏薄 | 版本 diff 预览、定稿归档 |
+| 云同步 | 多端只读快照与冲突策略（见 [cloud-sync-technical-plan.md](./docs/cloud-sync-technical-plan.md)） |
+| 生态扩展 | Web Clipper、插件体系 |
 
-**近期优先级：** AI 改写动作 + 多平台文案 + 看板 UI — 优先于插件、云同步或通用 AI 聊天面板。
+**近期优先级：** 素材收件箱分拣 + 审稿层 + AI 助手回归质量 — 优先于插件与通用聊天大面板。
 
-完整分阶段计划（P0–P2）、模块落点与 4 周 vNext 范围：[docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md)。
+---
 
 ## 快速上手
 
@@ -133,16 +148,15 @@ pnpm preview
 | 模式 | 数据存放位置 | 适用场景 |
 |------|--------------|----------|
 | 临时工作区（Web） | 浏览器 `localStorage` | 快速记笔记、在线演示 |
-| 桌面应用 | SQLite + 可选磁盘 `.md` 备份 | 大型文库、知识库 |
-| 本地项目（Electron） | 磁盘上的文件夹 | 已有 Markdown 资料库 |
+| 桌面应用 | SQLite + 磁盘 `.md` 备份 | 大型文库、知识库、今日速记 |
 
-在 **设置 → 工作区** 中挂载本地目录，或导入 / 导出工作区数据。
+在 **设置 → 工作区** 中导入 / 导出工作区数据。
 
 ### Notion 同步
 
 1. 打开 **设置 → Notion**，填写集成 Token。
 2. 将文档关联到 Notion 页面，然后推送或拉取块内容。
-3. 可在 Notion 面板中进行批量同步。
+3. 可在 Notion 面板或 **渠道同步** 中进行批量同步。
 
 API 细节见 `apps/editor/renderer/src/utils/notionService.js`。
 
@@ -235,7 +249,8 @@ md-render/
 | Markdown 核心 | 自研 parser / renderer（`packages/markdown-core`） |
 | 代码高亮 | Shiki |
 | 图表 | Mermaid（CDN） |
-| 富文本（小说） | BlockNote |
+| 富文本 | BlockNote |
+| AI | Agent 引擎 + 工具注册表（`core/agent/`） |
 | 存储 | localStorage（Web）· SQLite + FTS5（桌面） |
 
 解析 / 渲染原理详见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
@@ -245,9 +260,11 @@ md-render/
 | 主题 | 文档 |
 |------|------|
 | **内容创作路线图** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
+| 今日速记类别说明 | [docs/daily-notebook-task-category.md](./docs/daily-notebook-task-category.md) |
+| AI 助手验收清单 | [docs/ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md) |
 | 知识库实施进度 | [docs/knowledge-base-progress.md](./docs/knowledge-base-progress.md) |
 | 知识库专项路线 | [docs/knowledge-base-roadmap.md](./docs/knowledge-base-roadmap.md) |
-| 小说模式设计 | [docs/novel-mode-design.md](./docs/novel-mode-design.md) |
+| 编辑器设计哲学 | [docs/editor-philosophy.md](./docs/editor-philosophy.md) |
 | 版本发布流程 | [docs/release-process.md](./docs/release-process.md) |
 | 解析 / 渲染原理 | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | Agent / 开发规范 | [AGENTS.md](./AGENTS.md) |
@@ -291,16 +308,17 @@ pnpm release:tag
 
 ## 变更记录（摘要）
 
-### v1.0.x — 创作工作台底座
+### v1.0.x — AI 驱动的创作工作台
 
-已落地 [content-creation-roadmap.md §3.1](./docs/content-creation-roadmap.md) 基础层，以及 P0 早期能力：
+在创作底座之上，补齐 Daily、AI 助手与创作看板：
 
-- Electron 桌面版：SQLite、FTS5、双向链接、反向链接、图谱、版本历史、本地项目
-- 微信格式化与预览、Notion 同步、书签导入、多格式导出、文件导入 / 预览
-- 创作首页、稿件元数据、选题 / 素材 / 待发布分类
-- 小说助手、Shiki 高亮、标签页 UI
+- **今日速记**：任务 / 笔记 / 待办池、优先级与类别、跨天结转
+- **AI 助手**：段落改写、平台版本、界面切换与工作区操作
+- **创作看板 & 发布队列**：状态分栏、排期与发布前清单
+- **知识库 P1 完成**：SQLite、FTS5、双向链接、反向链接、图谱、版本历史
+- 微信格式化、Notion 同步、书签导入、多格式导出、灵感画布
 
-下一步见 [路线图 §7–§8](./docs/content-creation-roadmap.md)：AI 段落动作、多平台文案、独立看板 UI。
+下一步见 [路线图 §7–§8](./docs/content-creation-roadmap.md)：素材收件箱分拣、审稿层、AI 助手质量回归。
 
 ### v2.1 — 目录与本地存储
 

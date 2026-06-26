@@ -2,22 +2,36 @@
 
 [中文版说明](./README.zh.md)
 
-**A local-first, Chinese-writing-friendly content creation workbench.**
+**A local-first, AI-driven Chinese content creation workbench.**
 
-Built with **React + Vite + Electron**. The product has moved beyond a plain Markdown renderer into a content creation workbench, while still keeping its self-built CommonMark / GFM Markdown pipeline (`packages/markdown-core`), a desktop app for macOS (`apps/editor`), and a web build for browser or GitHub Pages.
+Built with **React + Vite + Electron**. The product has evolved from a Markdown renderer into an integrated workbench for **daily planning → writing → knowledge → multi-channel publishing**, while keeping its self-built CommonMark / GFM pipeline (`packages/markdown-core`), a desktop app for macOS (`apps/editor`), and a web build for browser or GitHub Pages.
 
 | | |
 |---|---|
-| **For** | WeChat / blog authors · knowledge creators · long-form & novel writers |
-| **Keywords** | Local-first · knowledge-driven · writing-first · publish-friendly |
-| **Version** | `1.0.6` — [release process](./docs/release-process.md) |
+| **For** | WeChat / blog authors · solo content creators · knowledge workers who write, organize, and publish |
+| **Keywords** | Local-first · AI-driven · daily-driven · writing-first · publish-friendly |
+| **Version** | `1.0.12` — [release process](./docs/release-process.md) |
 | **Roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 
-The product goal is to connect **topic → collect → outline → write → revise → publish** into one workflow. The foundation and P0 creation workflow are in place; next up are AI actions, multi-platform copy, and board UI — see [What's next](#whats-next).
+The product goal is to connect **plan → collect → write → revise → finalize → publish** into one workflow: Daily handles today's work, the editor handles long-form writing, the AI assistant rewrites and operates the app, the knowledge base holds your library, and WeChat / Notion handle outbound publishing.
 
 ---
 
 ## Available today
+
+### Daily notebook
+
+- Per-day **tasks**, **notes**, **events**, and a cross-day **todo pool**
+- Task priority (high / medium / low) and category tags (work, creation, learning, life, personal)
+- Date navigation, cross-day carryOver, inline quick-add
+- Desktop disk sync (Electron)
+
+### AI assistant
+
+- Cowork-style agent panel: read/write documents, switch surfaces, and manage Daily items from chat
+- Paragraph-level writing actions: compress, expand, polish, outline, continue, title suggestions, tone, key points, and more
+- Platform variants: WeChat Official Account, Xiaohongshu, Zhihu, etc.
+- Document workspace leans creation assistant; overview, Daily, board, and other non-document surfaces lean workbench assistant
 
 ### Write & preview
 
@@ -26,15 +40,16 @@ The product goal is to connect **topic → collect → outline → write → rev
 - Code blocks with **Shiki** highlighting and one-click copy
 - Mermaid diagrams with fullscreen view
 - Light / dark / system theme
+- Paper-like editing: UI stays back, content stays forward (see [docs/editor-philosophy.md](./docs/editor-philosophy.md))
 
 ### Workspace & knowledge base
 
-- Sidebar file tree, Obsidian-style tabs, multi-surface navigation (overview, paper, knowledge base, Notion, settings)
+- Sidebar file tree, Obsidian-style tabs; surfaces include creation home, current content, canvas, graph, search, and more
 - **Web:** `localStorage` persistence
-- **Desktop:** SQLite + FTS5 search, version history, `.md` disk sync, local project mounting
+- **Desktop:** SQLite + FTS5 search, version history, `.md` disk sync
 - Wikilinks (`[[Document Name]]`), backlinks, graph view
 - Bookmark import; preview non-Markdown files (Office, PDF, etc.)
-- Import / export workspace
+- Metadata filters (status, platform, doc type, tags); import / export workspace
 
 ### Publish & sync
 
@@ -43,33 +58,33 @@ The product goal is to connect **topic → collect → outline → write → rev
 - Export current document as MD / HTML / PDF / DOCX
 - GitHub Pages deployment via GitHub Actions
 
-### Creation workflow (P0 — shipped)
+### Creation workflow
 
-- **Creation dashboard** — homepage with recent drafts, active topics, material inbox, and publish queue; quick actions to create a draft, topic, import material, or jump to publish search
-- **Draft metadata** — six-state lifecycle (`idea` → `published`), target platforms (WeChat, Xiaohongshu, Zhihu, etc.), summary, scheduled publish date, related docs, and source materials
-- **Topic & material classification** — documents are grouped by metadata (`draftStatus`, `nodeType`, tags) into drafts, topics, materials, and ready-to-publish items
-- **Tags & knowledge metadata** — tags, node type, summary, aliases, related docs, backlinks; version history with restore (Electron)
-- **Bookmark import** — bookmarks as first-class entries, shown on the dashboard material inbox and as bookmark cards
-- **File import & preview** — import MD / HTML / DOCX / CSV / etc.; preview Office, PDF, Excel and convert to Markdown
-- **Novel assistant** — entity extraction, mentions, BlockNote-based editing
+- **Creation dashboard** — recent drafts, active topics, material inbox, publish queue; quick actions to create drafts/topics, triage materials, or jump to publishing
+- **Topic / draft board** — status lanes from idea → collecting → draft → drafting → ready / published
+- **Publishing queue** — schedule ready drafts, platform tags, pre-publish checklist
+- **Inspiration canvas** — card-based whiteboard for topics and materials
+- **Draft metadata** — six-state lifecycle (`idea` → `published`), target platforms, summary, scheduled publish date, related docs, source materials
+- **Bookmark import** — bookmarks as first-class entries in the material inbox
+- **File import & preview** — MD / HTML / DOCX / CSV / etc.; preview Office, PDF, Excel and convert to Markdown
 
 ---
 
 ## What's next
 
-Per the [content creation roadmap](./docs/content-creation-roadmap.md), the foundation above is in place. Remaining gaps:
+Per the [content creation roadmap](./docs/content-creation-roadmap.md), the foundation and core creation loop are in place. Remaining gaps:
 
 | Gap | Planned direction |
 |-----|-------------------|
-| No dedicated project / board UI | Standalone topic board, series view, publish-batch management (dashboard aggregates today; `creation-board` / `publishing` surfaces are placeholders) |
-| AI not wired into general writing | Paragraph actions (expand, compress, tone, outline, continue) — novel assistant exists, general AI layer does not |
-| Publishing is mostly WeChat + export | One-draft-multi-channel copy (Xiaohongshu / Zhihu variants), title & summary variants, pre-publish checklist |
-| Inbox is early | Unified triage flow: paste / Notion pull → inbox → attach to topic or convert to draft |
+| Inbox is still early | Unified triage: paste / Notion pull → inbox → attach to topic or convert to draft |
+| AI action quality & consistency | More reliable surface routing and tool execution (see [ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md)) |
 | Review layer is thin | Revision checklist, version diff preview, publish archive |
+| Cloud sync | Read-only snapshots and conflict strategy (see [cloud-sync-technical-plan.md](./docs/cloud-sync-technical-plan.md)) |
+| Ecosystem | Web Clipper, plugin system |
 
-**Near-term priority:** AI rewrite actions + multi-platform output + board UI — before plugins, cloud sync, or a generic AI chat panel.
+**Near-term priority:** material inbox triage + review layer + AI assistant regression quality — before plugins or a generic AI chat panel.
 
-Full phased plan (P0–P2), module mapping, and 4-week vNext scope: [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md).
+Full phased plan (P0–P2) and module mapping: [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md).
 
 ## Quick start
 
@@ -133,16 +148,15 @@ Notes:
 | Mode | Where data lives | Best for |
 |------|------------------|----------|
 | Temporary workspace (web) | Browser `localStorage` | Quick notes, online demo |
-| Desktop app | SQLite + optional `.md` artifacts on disk | Large libraries, knowledge base |
-| Local project (Electron) | Your folder on disk | Existing Markdown vaults |
+| Desktop app | SQLite + disk `.md` backups | Large libraries, knowledge base, Daily notebook |
 
-Open **Settings → 工作区** to mount a local folder or import / export workspace data.
+Open **Settings → 工作区** to import / export workspace data.
 
 ### Notion sync
 
 1. Open **Settings → Notion** and enter your integration token.
 2. Link a document to a Notion page, then push or pull blocks.
-3. Batch sync is available from the Notion panel.
+3. Batch sync is available from the Notion panel or **渠道同步**.
 
 See `apps/editor/renderer/src/utils/notionService.js` for API details.
 
@@ -235,7 +249,8 @@ md-render/
 | Markdown core | Self-built parser / renderer (`packages/markdown-core`) |
 | Highlighting | Shiki |
 | Diagrams | Mermaid (CDN) |
-| Rich text (Novel) | BlockNote |
+| Rich text | BlockNote |
+| AI | Agent engine + tool registry (`core/agent/`) |
 | Storage | localStorage (web) · SQLite + FTS5 (desktop) |
 
 For parser / renderer internals, see [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -245,9 +260,11 @@ For parser / renderer internals, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 | Topic | Doc |
 |-------|-----|
 | **Content creation roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
+| Daily notebook categories | [docs/daily-notebook-task-category.md](./docs/daily-notebook-task-category.md) |
+| AI assistant quality checklist | [docs/ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md) |
 | Knowledge base progress | [docs/knowledge-base-progress.md](./docs/knowledge-base-progress.md) |
 | Knowledge base roadmap | [docs/knowledge-base-roadmap.md](./docs/knowledge-base-roadmap.md) |
-| Novel mode design | [docs/novel-mode-design.md](./docs/novel-mode-design.md) |
+| Editor design philosophy | [docs/editor-philosophy.md](./docs/editor-philosophy.md) |
 | Release & tagging | [docs/release-process.md](./docs/release-process.md) |
 | Parser / renderer internals | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | Agent / dev rules | [AGENTS.md](./AGENTS.md) |
@@ -291,16 +308,17 @@ If assets 404 on Pages, ensure CI sets the correct Vite `base` (this repo infers
 
 ## Changelog (highlights)
 
-### v1.0.x — Creation workbench foundation
+### v1.0.x — AI-driven creation workbench
 
-Shipped the base layer in [content-creation-roadmap.md §3.1](./docs/content-creation-roadmap.md), plus early P0:
+Built on the creation foundation with Daily, AI assistant, and board UI:
 
-- Electron desktop: SQLite, FTS5, wikilinks, backlinks, graph, version history, local project
-- WeChat formatting & preview, Notion sync, bookmark import, multi-format export, file import / preview
-- Creation dashboard, draft metadata, topic / material / publish classification
-- Novel assistant, Shiki highlighting, tab bar UI
+- **Daily notebook**: tasks / notes / todo pool, priority & categories, cross-day carryOver
+- **AI assistant**: paragraph rewrites, platform variants, surface switching and workspace actions
+- **Creation board & publishing queue**: status lanes, scheduling, pre-publish checklist
+- **Knowledge base P1 complete**: SQLite, FTS5, wikilinks, backlinks, graph, version history
+- WeChat formatting, Notion sync, bookmark import, multi-format export, inspiration canvas
 
-Next focus per [§7–§8 of the roadmap](./docs/content-creation-roadmap.md): AI paragraph actions, multi-platform copy, dedicated board UI.
+Next focus per [roadmap §7–§8](./docs/content-creation-roadmap.md): material inbox triage, review layer, AI assistant regression quality.
 
 ### v2.1 — Workspace & local storage
 
