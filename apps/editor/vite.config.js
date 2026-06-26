@@ -88,6 +88,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/notion-api/, ''),
       },
+      '/cloud-sync-api': {
+        target: process.env.CLOUD_SYNC_DEV_TARGET || 'http://localhost:8791',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/cloud-sync-api/, ''),
+      },
     },
   },
 });

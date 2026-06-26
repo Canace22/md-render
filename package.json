@@ -15,6 +15,7 @@
     "electron:build": "pnpm --filter @md-render/editor electron:build",
     "electron:build:win": "pnpm --filter @md-render/editor electron:build:win",
     "electron:pack": "pnpm --filter @md-render/editor electron:pack",
+    "cloud-sync:dev": "node server/cloud-sync/server.js",
     "release:tag": "bash scripts/release-tag.sh"
   }
 }

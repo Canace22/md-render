@@ -36,6 +36,9 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Local service data
+server/cloud-sync/data/
+
 # Local caches
 .cache/
 apps/*/.cache/

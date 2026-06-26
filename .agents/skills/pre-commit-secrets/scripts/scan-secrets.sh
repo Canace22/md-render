@@ -83,7 +83,11 @@ scan_content() {
   local scope="$1"
   local content=""
   if [ "$scope" = "staged" ]; then
-    content="$(git diff --cached -U0 -- . ":(exclude)pnpm-lock.yaml" ":(exclude)dist/**" ":(exclude)dist-electron/**" ":(exclude)node_modules/**" 2>/dev/null || true)"
+    content="$(
+      git diff --cached -U0 -- . ":(exclude)pnpm-lock.yaml" ":(exclude)dist/**" ":(exclude)dist-electron/**" ":(exclude)node_modules/**" 2>/dev/null \
+        | grep -E "$(IFS='|'; echo "${PATTERNS[*]}")" \
+        || true
+    )"
   else
     content="$(git grep -n -E "$(IFS='|'; echo "${PATTERNS[*]}")" -- . ":(exclude)pnpm-lock.yaml" ":(exclude)dist/**" ":(exclude)dist-electron/**" ":(exclude)node_modules/**" ":(exclude).agents/skills/pre-commit-secrets/**" 2>/dev/null || true)"
   fi

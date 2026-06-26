@@ -11,12 +11,19 @@ const trimSlash = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 export const normalizeCloudSyncBaseUrl = (value) => trimSlash(value);
 
 export const getDefaultCloudSyncBaseUrl = () => normalizeCloudSyncBaseUrl(
-  import.meta.env?.VITE_CLOUD_SYNC_API || import.meta.env?.VITE_CLOUD_SYNC_BASE_URL,
+  import.meta.env?.VITE_CLOUD_SYNC_API
+    || import.meta.env?.VITE_CLOUD_SYNC_BASE_URL
+    || (import.meta.env?.DEV ? '/cloud-sync-api' : ''),
 );
 
 export const resolveCloudSyncBaseUrl = (runtimeBaseUrl) => (
   normalizeCloudSyncBaseUrl(runtimeBaseUrl) || getDefaultCloudSyncBaseUrl()
 );
+
+const getCloudSyncHeaders = () => {
+  const token = String(import.meta.env?.VITE_CLOUD_SYNC_TOKEN ?? '').trim();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const normalizeWorkspaceId = (workspaceId) => String(workspaceId ?? '').trim();
 
@@ -179,7 +186,7 @@ export async function fetchCloudWorkspaceSnapshot({ baseUrl, workspaceId }) {
   const config = assertCloudConfig({ baseUrl, workspaceId });
   const res = await fetch(
     `${config.baseUrl}/workspaces/${encodeURIComponent(config.workspaceId)}/snapshot`,
-    { headers: { Accept: 'application/json' } },
+    { headers: { Accept: 'application/json', ...getCloudSyncHeaders() } },
   );
   return parseResponse(res);
 }
@@ -199,6 +206,7 @@ export async function uploadCloudWorkspaceSnapshot({
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
+        ...getCloudSyncHeaders(),
       },
       body: JSON.stringify({
         payload,
