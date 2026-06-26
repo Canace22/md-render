@@ -1,0 +1,7 @@
+---
+description: Electron 渲染进程规则（React、Ant Design、Zustand、样式、性能）。引用 apps/editor/renderer/AGENTS.md，不复制正文。
+globs: apps/editor/renderer/**
+alwaysApply: false
+---
+
+@apps/editor/renderer/AGENTS.md

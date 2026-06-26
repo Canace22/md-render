@@ -1,0 +1,7 @@
+---
+description: Electron 主进程规则（IPC、文件系统、preload）。引用 apps/editor/main/AGENTS.md，不复制正文。
+globs: apps/editor/main/**
+alwaysApply: false
+---
+
+@apps/editor/main/AGENTS.md

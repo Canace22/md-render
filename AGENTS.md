@@ -17,6 +17,67 @@
 - 禁止使用魔法数字，使用常量代替。
 - 禁止在 JSX 中使用 `eval()` 或 `Function()`。
 
+## 项目 Skills（`.agents/skills/`）
+
+可复用工作流（改 parser、微信模板、store、跑构建等）的**正文只维护在** [`.agents/skills/`](.agents/skills/)。  
+各 AI 工具通过**适配入口**或工具内置 skill 发现机制引用，**禁止**在 `.cursor/rules/` 等规则文件中复制完整 Skill 正文。
+
+### 何时必须加载
+
+- 用户意图或任务描述**匹配**某 Skill 的触发场景时，**先读取**对应 `.agents/skills/<name>/SKILL.md`，再按其中步骤执行。
+- 不要跳过 Skill 正文，直接用通用推断代替。
+- Skill 优先级：**低于**本文件强制约束，**高于**模型默认行为。
+- 未在 `.agents/skills/` 声明的工作流，不要自行发明 Skill。
+
+### 目录约定
+
+| 路径 | 用途 |
+|------|------|
+| `.agents/skills/<name>/SKILL.md` | Skill 正文（frontmatter、触发词、步骤、约束、示例） |
+| `.agents/skills/<name>/scripts/` | 可选脚本（如 `pre-commit-secrets` 扫描脚本） |
+
+新增 Skill 时：**先写** `.agents/skills/<name>/SKILL.md`，并在下表登记；按 [`skill-harvest`](.agents/skills/skill-harvest/SKILL.md) 规范判断是否值得沉淀。
+
+### Skill 自主进化
+
+每完成一个有实质内容的任务后，主动做一次沉淀判断（走 `skill-harvest` skill），不要等用户开口。
+
+**触发条件（满足任一即评估）：**
+
+- 这类任务**会反复出现**（如又加了一种 Markdown 语法、又加了一个微信模板）
+- 踩到了**不看代码想不到的坑**，并找到了正确做法
+- 走了一套**固定多步、容易漏步**的流程
+- 用到了**项目特有约定**且现有 skill 没覆盖
+
+**自动动作：**
+
+1. 命中触发条件 → 读取并执行 `skill-harvest` skill。
+2. **先查重**：扫 `.agents/skills/`，已有相关 skill 就**更新**它，不新建重复的。
+3. 没有就**新建** `.agents/skills/<name>/SKILL.md`。
+4. 沉淀后用**一句话**告知用户：沉淀/更新了哪个 skill、为什么值得沉淀。
+
+**边界（避免噪音）：** 一次性任务、纯通用常识、本文件已写清的静态规范——不沉淀。拿不准时先问用户一句。
+
+### 现有 Skills
+
+| 名称 | 作用 |
+|------|------|
+| `safe-change-workflow` | 改代码标准流程：定向搜索 → 最小改动 → 10 case |
+| `mermaid-verify` | Mermaid 图自检：语法可渲染、暗黑主题清晰 |
+| `md-render-parser-renderer` | 改 parser/renderer 核心解析渲染逻辑 |
+| `md-render-store` | 改全局状态（zustand） |
+| `md-render-wechat` | 微信公众号格式化 |
+| `md-render-external-api-proxy` | 前端调第三方 API 的代理化（CORS、可配置） |
+| `md-render-binary-asset` | 二进制媒体存盘与 local-media:// 引用 |
+| `md-render-daily` | 今日速记面板（切日期 / carryOver 约定） |
+| `md-render-blocknote-core` | BlockNote 底层接入与避坑 |
+| `md-render-agent` | Agent 工具、引擎、面板 |
+| `md-render-kb-source` | 知识库新增节点类型 / 外部来源 |
+| `skill-harvest` | 判断并生成新 skill（沉淀机制执行器） |
+| `pre-commit-secrets` | 提交/push 前扫描敏感信息 |
+
+> 维护说明：新增或变更 Skill 时，同步更新上表；正文细节以 `.agents/skills/` 为准。
+
 ## 技术栈
 
 - **Vite 5.x** - 构建工具
@@ -122,21 +183,6 @@ import MarkdownEditor from '../components/MarkdownEditor';
 import { SubComponent } from './components/SubComponent';
 ```
 
-## 状态管理
-
-全局状态集中在 `apps/editor/renderer/src/store/useEditorStore.js`（Zustand + persist），**不新建其他全局 store**。
-
-- 持久化通过 zustand `persist` 中间件实现，key 统一在 store 文件顶部定义为常量
-- 页面内临时状态使用 `useState`
-- 禁止直接操作 `localStorage`（统一通过 zustand `persist` 中间件或已有的常量 key 访问）
-
-## 样式规范
-
-- 样式写在 `apps/editor/renderer/src/styles/styles.css`，CSS 变量定义在 `design-tokens.css`
-- 优先使用 CSS class，不写大段内联 style
-- 主题颜色通过 CSS 变量控制，不要硬编码颜色值
-- 需要考虑暗色 / 亮色主题
-
 ## 核心模块约定
 
 ### parser.js / renderer.js
@@ -160,22 +206,10 @@ Notion API 调用统一封装在此文件，组件不直接调用 Notion API。
 - 禁止直接 `fetch`（封装到 `apps/editor/renderer/src/utils/` 下对应模块）
 - 禁止在 JSX 中写复杂的业务逻辑，抽到 hooks 或 utils
 
-## 代码质量约束
-
-- 单一职责：每个函数只做一件事，保持小函数
-- 纯函数优先：工具函数和核心逻辑尽量无副作用
-- 组件超过 300 行考虑拆分
-
-## 错误处理
-
-- 异步操作统一 try/finally 管理 loading
-- 必要时展示错误提示（Ant Design Message）
-- 关键组件使用 ErrorBoundary
-
 ## 验证与测试
 
 - 默认不要主动执行测试命令；只列出建议验证项或测试 case
-- 只有用户明确要求"跑测试""帮我验证""跑单测"等，才执行对应命令
+- 只有用户明确要求「跑测试」「帮我验证」「跑单测」等，才执行对应命令
 - 不要主动运行 Playwright / E2E / 浏览器自动化测试，除非用户明确点名
 - **跑完测试必须清理临时产物**：一旦执行过测试，完成后检查并删除工作区里残留的临时文件，尤其是 `vitest.config.*.timestamp-*.mjs` / `vite.config.*.timestamp-*.mjs`（Vitest 加载配置时生成，进程被超时打断会残留）。不能把这类文件留在工作区污染 git 状态
 
@@ -183,7 +217,7 @@ Notion API 调用统一封装在此文件，组件不直接调用 Notion API。
 
 **每次完成一个独立功能点，必须立即 commit，不允许积累多个未提交改动。**
 
-- **验证前置：功能验证通过后才可提交。** 未验证的改动不算"完成"，不可提交。
+- **验证前置：功能验证通过后才可提交。** 未验证的改动不算「完成」，不可提交。
   - 验证方式：本地编译通过 / 启动成功 / 功能正常运行 / 用户确认 OK
   - 反面教训：AI 助手全局化改动未验证 GPU 渲染问题就提交，导致窗口打不开；提交了无效代码还要回退，浪费时间
 - 触发条件（满足任一即提交）：
@@ -191,10 +225,10 @@ Notion API 调用统一封装在此文件，组件不直接调用 Notion API。
   - 一个 bug 修复完成并**验证修复生效**
   - 一组相关的样式调整结束并**目视确认效果**
   - 一个文件被删除或重命名
-  - 用户明确说"做完一个功能" / "先这样" / "提交一下"
+  - 用户明确说「做完一个功能」 / 「先这样」 / 「提交一下」
 - 提交前检查：`git status` 确认改动范围只覆盖当前功能，不夹带无关文件
-- 提交粒度：一个 commit 只描述一件事，commit message 用一句话说清"做了什么"
-- 提交时机不要等：验证通过后立即提交，不要积攒；也不要为了"完整性"把多个功能堆在一起——丢失比不完美更糟，但提交未验证的代码比不提交更糟
+- 提交粒度：一个 commit 只描述一件事，commit message 用一句话说清「做了什么」
+- 提交时机不要等：验证通过后立即提交，不要积攒；也不要为了「完整性」把多个功能堆在一起——丢失比不完美更糟，但提交未验证的代码比不提交更糟
 - 反面教训：工作区改动未提交，可能被上下文压缩、shell 异常、误操作冲掉，且无法回滚；但反过来，提交未验证的改动也会引入新 bug，两害相权取其轻是验证后立即提交
 
 ## Git 提交规范
