@@ -1141,11 +1141,11 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      addDailyItem: (dateKey, type, text, category) => set((state) => {
+      addDailyItem: (dateKey, type, text, category, priority) => set((state) => {
         const nextDailyWorkspace = addDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
-          { type, text, category },
+          { type, text, category, priority },
         );
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };

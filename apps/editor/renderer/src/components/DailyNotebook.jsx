@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Checkbox, DatePicker, Dropdown, Empty, Input, Select, Tag } from 'antd';
+import { Button, Card, Checkbox, DatePicker, Dropdown, Empty, Input, Tag } from 'antd';
 import dayjs from 'dayjs';
 import {
   CalendarClock,
@@ -31,15 +31,27 @@ const PRIORITY_OPTIONS = [
   { value: 'low', label: '低', color: '#22c55e' },
 ];
 
-const getPriorityColor = (priority) => {
-  return PRIORITY_OPTIONS.find((opt) => opt.value === priority)?.color ?? '#f59e0b';
-};
+const getPriorityOption = (priority) => PRIORITY_OPTIONS.find((opt) => opt.value === priority);
 
-const PRIORITY_CYCLE = { high: 'medium', medium: 'low', low: 'high' };
+const getPriorityColor = (priority) => getPriorityOption(priority)?.color ?? '#f59e0b';
 
-const cyclePriority = (current) => PRIORITY_CYCLE[current] ?? 'medium';
+const createPendingInlineId = () =>
+  `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 const getCategoryOption = (category) => DAILY_TASK_CATEGORY_OPTIONS.find((opt) => opt.value === category);
+
+const buildPriorityMenuItems = (currentPriority, onSelect) =>
+  PRIORITY_OPTIONS.map((option) => ({
+    key: option.value,
+    label: (
+      <span className="daily-notebook-category-menu-item">
+        <span className="daily-notebook-category-dot" style={{ backgroundColor: option.color }} />
+        {option.label}
+      </span>
+    ),
+    onClick: () => onSelect(option.value),
+    disabled: currentPriority === option.value,
+  }));
 
 const buildCategoryMenuItems = (currentCategory, onSelect) => [
   {
@@ -139,9 +151,6 @@ function DailySection({
   section,
   items,
   currentDate,
-  draftValue,
-  onDraftChange,
-  onSubmit,
   editingItemId,
   editingDraftValue,
   onStartEdit,
@@ -155,13 +164,12 @@ function DailySection({
   onDeleteItem,
   onUpdatePriority,
   onUpdateCategory,
-  draftCategory,
-  onDraftCategoryChange,
+  onUpdatePendingItem,
   copiedId,
   onCopy,
+  onStartInlineAdd,
 }) {
   const isNote = section.type === 'note';
-  const supportsCategory = section.type === 'task' || section.type === 'note';
   const { batchMode, selected, toggleBatchMode, toggleItem, isAllSelected, toggleAll, exitBatch } =
     useBatchSelect(items);
   const [batchDate, setBatchDate] = useState(null);
@@ -181,44 +189,25 @@ function DailySection({
           <div className="daily-notebook-section-title">
             <span className="daily-notebook-section-icon">{section.icon}</span>
             <strong>{section.title}</strong>
+            {items.length > 0 && <Tag className="daily-notebook-section-count">{items.length} 条</Tag>}
           </div>
           <p>{section.description}</p>
         </div>
-        {isNote && items.length > 0 && (
-          <Button size="small" type={batchMode ? 'primary' : 'default'} onClick={toggleBatchMode}>
-            {batchMode ? '取消批量' : '批量改日期'}
-          </Button>
-        )}
-      </div>
-
-      <div className={`daily-notebook-composer ${supportsCategory ? 'has-category' : ''}`}>
-        {supportsCategory && (
-          <Select
+        <div className="daily-notebook-section-head-actions">
+          {isNote && items.length > 0 && (
+            <Button size="small" type={batchMode ? 'primary' : 'default'} onClick={toggleBatchMode}>
+              {batchMode ? '取消批量' : '批量改日期'}
+            </Button>
+          )}
+          <Button
+            type="text"
             size="small"
-            value={draftCategory || undefined}
-            placeholder="类别"
-            allowClear
-            className="daily-notebook-category-select"
-            popupMatchSelectWidth={false}
-            options={DAILY_TASK_CATEGORY_OPTIONS.map((option) => ({
-              value: option.value,
-              label: (
-                <span className="daily-notebook-category-menu-item">
-                  <span className="daily-notebook-category-dot" style={{ backgroundColor: option.color }} />
-                  {option.label}
-                </span>
-              ),
-            }))}
-            onChange={(value) => onDraftCategoryChange(value ?? '')}
+            className="daily-notebook-add-trigger"
+            icon={<Plus size={16} strokeWidth={1.8} />}
+            onClick={() => onStartInlineAdd(section.type)}
+            aria-label={`添加${section.title}`}
           />
-        )}
-        <Input
-          value={draftValue}
-          placeholder={section.placeholder}
-          onChange={(event) => onDraftChange(section.type, event.target.value)}
-          onPressEnter={() => onSubmit(section.type)}
-        />
-        <Button type="primary" onClick={() => onSubmit(section.type)} icon={<Plus size={14} strokeWidth={2} />} />
+        </div>
       </div>
 
       {items.length ? (
@@ -255,9 +244,13 @@ function DailySection({
             {items.map((item) => {
               const isEditing = editingItemId === item.id;
               const canSaveEdit = Boolean(editingDraftValue?.trim());
+              const isEmptyItem = !item.text?.trim();
 
               return (
-                <div key={item.id} className={`daily-notebook-item ${item.done ? 'is-done' : ''}`}>
+                <div
+                  key={item.id}
+                  className={`daily-notebook-item ${item.done ? 'is-done' : ''} ${isEmptyItem ? 'is-empty' : ''}`}
+                >
                   <div className="daily-notebook-item-main">
                     <div className="daily-notebook-item-text-row">
                       {isNote && batchMode && (
@@ -277,45 +270,102 @@ function DailySection({
                           >
                             {item.done && <Check size={13} strokeWidth={2.4} />}
                           </button>
-                          <div
-                            className="daily-notebook-priority-dot clickable"
-                            style={{ backgroundColor: getPriorityColor(item.priority) }}
-                            title={`点击切换优先级 (当前: ${PRIORITY_OPTIONS.find((opt) => opt.value === item.priority)?.label ?? '中'})`}
-                            onClick={() => onUpdatePriority(item.id, cyclePriority(item.priority))}
-                          />
+                          {!isEditing && (
+                            <Dropdown
+                              menu={{
+                                items: buildPriorityMenuItems(item.priority, (value) => onUpdatePriority(item.id, value)),
+                              }}
+                              trigger={['click']}
+                            >
+                              <button
+                                type="button"
+                                className="daily-notebook-priority-dot daily-notebook-priority-trigger"
+                                style={{ backgroundColor: getPriorityColor(item.priority) }}
+                                aria-label={`优先级: ${getPriorityOption(item.priority)?.label ?? '中'}`}
+                              />
+                            </Dropdown>
+                          )}
                         </div>
                       )}
                       {isEditing ? (
-                        <div className="daily-notebook-item-editor">
-                          <Input
-                            autoFocus
-                            value={editingDraftValue}
-                            placeholder={section.placeholder}
-                            onChange={(event) => onEditDraftChange(event.target.value)}
-                            onPressEnter={() => {
-                              if (canSaveEdit) onSaveEdit();
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Escape') {
-                                event.preventDefault();
-                                onCancelEdit();
-                              }
-                            }}
-                          />
-                          <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
-                            保存
-                          </Button>
-                          <Button size="small" onClick={onCancelEdit}>
-                            取消
-                          </Button>
+                        <div className={`daily-notebook-item-editor ${section.type === 'task' && item.isPending ? 'has-meta' : ''}`}>
+                          {section.type === 'task' && item.isPending && (
+                            <div className="daily-notebook-item-editor-meta">
+                              <Dropdown
+                                menu={{
+                                  items: buildPriorityMenuItems(item.priority, (value) =>
+                                    onUpdatePendingItem(item.id, { priority: value }),
+                                  ),
+                                }}
+                                trigger={['click']}
+                              >
+                                <button
+                                  type="button"
+                                  className="daily-notebook-priority-dot daily-notebook-priority-trigger"
+                                  style={{ backgroundColor: getPriorityColor(item.priority) }}
+                                  aria-label={`优先级: ${getPriorityOption(item.priority)?.label ?? '中'}`}
+                                />
+                              </Dropdown>
+                              <Dropdown
+                                menu={{
+                                  items: buildCategoryMenuItems(item.category ?? '', (value) =>
+                                    onUpdatePendingItem(item.id, { category: value }),
+                                  ),
+                                }}
+                                trigger={['click']}
+                              >
+                                {item.category ? (
+                                  <Tag
+                                    className="daily-notebook-category-tag"
+                                    style={{ '--category-color': getCategoryOption(item.category)?.color }}
+                                  >
+                                    {getCategoryOption(item.category)?.label}
+                                  </Tag>
+                                ) : (
+                                  <button type="button" className="daily-notebook-category-placeholder">
+                                    类别
+                                  </button>
+                                )}
+                              </Dropdown>
+                            </div>
+                          )}
+                          <div className="daily-notebook-item-editor-row">
+                            <Input
+                              autoFocus
+                              value={editingDraftValue}
+                              placeholder={section.placeholder}
+                              onChange={(event) => onEditDraftChange(event.target.value)}
+                              onPressEnter={() => {
+                                if (canSaveEdit) onSaveEdit();
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Escape') {
+                                  event.preventDefault();
+                                  onCancelEdit();
+                                }
+                              }}
+                            />
+                            <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
+                              save
+                            </Button>
+                            {canSaveEdit ? (
+                              <Button size="small" onClick={onCancelEdit}>
+                                cancel
+                              </Button>
+                            ) : (
+                              <Button size="small" danger onClick={onCancelEdit}>
+                                delete
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <>
                           <span
-                            className="daily-notebook-item-text"
+                            className={`daily-notebook-item-text ${isEmptyItem ? 'is-placeholder' : ''}`}
                             onDoubleClick={() => onStartEdit(item)}
                           >
-                            {item.text}
+                            {item.text || section.placeholder}
                           </span>
                           {(section.type === 'task' || section.type === 'note') && (
                             <Dropdown
@@ -436,11 +486,9 @@ function DailyNotebook({
   onUpdateItemCategory,
   onUpdateTodoCategory,
 }) {
-  const [drafts, setDrafts] = useState({ task: '', event: '', note: '', todo: '' });
-  const [draftCategory, setDraftCategory] = useState('');
-  const [draftNoteCategory, setDraftNoteCategory] = useState('');
-  const [draftTodoCategory, setDraftTodoCategory] = useState('');
   const [editingItem, setEditingItem] = useState(null);
+  const [pendingInlineItems, setPendingInlineItems] = useState([]);
+  const [pendingTodos, setPendingTodos] = useState([]);
   const { copiedId, copy: handleCopy } = useCopyText();
   const currentDate = dailyWorkspace?.currentDate || getTodayDateKey();
   const dailyEntry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
@@ -461,35 +509,56 @@ function DailyNotebook({
     return grouped;
   }, [dailyEntry.items]);
 
-  const handleDraftChange = (type, value) => {
-    setDrafts((current) => ({ ...current, [type]: value }));
-  };
+  const removePendingInline = useCallback((itemId) => {
+    setPendingInlineItems((current) => current.filter((item) => item.id !== itemId));
+  }, []);
 
-  const handleSubmit = (type) => {
-    const nextValue = drafts[type]?.trim();
-    if (!nextValue) return;
-    if (type === 'task') {
-      onAddItem(currentDate, type, nextValue, draftCategory || undefined);
-      setDraftCategory('');
-    } else if (type === 'note') {
-      onAddItem(currentDate, type, nextValue, draftNoteCategory || undefined);
-      setDraftNoteCategory('');
-    } else {
-      onAddItem(currentDate, type, nextValue);
-    }
-    setDrafts((current) => ({ ...current, [type]: '' }));
-  };
+  const buildSectionItems = useCallback((type) => {
+    const pending = pendingInlineItems
+      .filter((item) => item.type === type)
+      .map((item) => ({
+        id: item.id,
+        type: item.type,
+        text: '',
+        category: item.category,
+        priority: item.priority ?? 'medium',
+        done: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isPending: true,
+      }));
+    return [...pending, ...itemsByType[type]];
+  }, [itemsByType, pendingInlineItems]);
 
-  const handleSubmitTodo = () => {
-    const nextValue = drafts.todo?.trim();
-    if (!nextValue) return;
-    onAddTodo(nextValue, draftTodoCategory || undefined);
-    setDraftTodoCategory('');
-    setDrafts((current) => ({ ...current, todo: '' }));
-  };
+  const handleStartInlineAdd = useCallback((type) => {
+    const id = createPendingInlineId();
+    setPendingInlineItems((current) => [{ id, type, priority: type === 'task' ? 'medium' : undefined }, ...current]);
+    setEditingItem({ id, value: '', isPending: true });
+  }, []);
+
+  const handleUpdatePendingInline = useCallback((itemId, patch) => {
+    setPendingInlineItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+    );
+  }, []);
+
+  const handleStartInlineAddTodo = useCallback(() => {
+    const id = createPendingInlineId();
+    setPendingTodos((current) => [{ id }, ...current]);
+    setEditingItem({ id, value: '', isPending: true, isTodo: true });
+  }, []);
+
+  const buildTodoItems = useCallback(() => {
+    const pending = pendingTodos.map((item) => ({
+      id: item.id,
+      text: '',
+      isPending: true,
+    }));
+    return [...pending, ...todoPool];
+  }, [pendingTodos, todoPool]);
 
   const handleStartEdit = (item) => {
-    setEditingItem({ id: item.id, value: item.text });
+    setEditingItem({ id: item.id, value: item.text, isPending: Boolean(item.isPending) });
   };
 
   const handleEditDraftChange = (value) => {
@@ -497,19 +566,89 @@ function DailyNotebook({
   };
 
   const handleCancelEdit = () => {
+    if (!editingItem?.id) {
+      setEditingItem(null);
+      return;
+    }
+
+    const nextValue = editingItem.value?.trim();
+    if (editingItem.isPending) {
+      if (editingItem.isTodo) {
+        setPendingTodos((current) => current.filter((item) => item.id !== editingItem.id));
+      } else {
+        removePendingInline(editingItem.id);
+      }
+    } else if (!nextValue) {
+      onDeleteItem(currentDate, editingItem.id);
+    }
     setEditingItem(null);
   };
 
   const handleSaveEdit = () => {
     const nextValue = editingItem?.value?.trim();
-    if (!editingItem?.id || !nextValue) return;
+    if (!editingItem?.id) return;
+
+    if (editingItem.isPending) {
+      if (!nextValue) {
+        if (editingItem.isTodo) {
+          setPendingTodos((current) => current.filter((item) => item.id !== editingItem.id));
+        } else {
+          removePendingInline(editingItem.id);
+        }
+        setEditingItem(null);
+        return;
+      }
+      if (editingItem.isTodo) {
+        onAddTodo(nextValue);
+        setPendingTodos((current) => current.filter((item) => item.id !== editingItem.id));
+        setEditingItem(null);
+        return;
+      }
+      const pendingItem = pendingInlineItems.find((item) => item.id === editingItem.id);
+      const type = pendingItem?.type ?? 'note';
+      onAddItem(currentDate, type, nextValue, pendingItem?.category, pendingItem?.priority);
+      removePendingInline(editingItem.id);
+      setEditingItem(null);
+      return;
+    }
+
+    if (!nextValue) {
+      onDeleteItem(currentDate, editingItem.id);
+      setEditingItem(null);
+      return;
+    }
+
     onUpdateItem(currentDate, editingItem.id, nextValue);
     setEditingItem(null);
   };
 
   useEffect(() => {
     setEditingItem(null);
+    setPendingInlineItems([]);
+    setPendingTodos([]);
   }, [currentDate]);
+
+  const handleDeleteItem = useCallback((itemId) => {
+    if (pendingInlineItems.some((item) => item.id === itemId)) {
+      removePendingInline(itemId);
+      if (editingItem?.id === itemId) setEditingItem(null);
+      return;
+    }
+    onDeleteItem(currentDate, itemId);
+  }, [currentDate, editingItem?.id, onDeleteItem, pendingInlineItems, removePendingInline]);
+
+  const handleDeleteTodoItem = useCallback((itemId) => {
+    if (pendingTodos.some((item) => item.id === itemId)) {
+      setPendingTodos((current) => current.filter((item) => item.id !== itemId));
+      if (editingItem?.id === itemId) setEditingItem(null);
+      return;
+    }
+    onRemoveTodo(itemId);
+  }, [editingItem?.id, onRemoveTodo, pendingTodos]);
+
+  const todoItems = buildTodoItems();
+  const canSaveTodoEdit = Boolean(editingItem?.value?.trim());
+  const isEditingTodo = Boolean(editingItem?.isTodo);
 
   return (
     <div className="daily-notebook" data-testid="daily-surface">
@@ -542,11 +681,9 @@ function DailyNotebook({
             <DailySection
               key={section.type}
               section={section}
-              items={itemsByType[section.type]}
+              items={buildSectionItems(section.type)}
+              onStartInlineAdd={handleStartInlineAdd}
               currentDate={currentDate}
-              draftValue={drafts[section.type]}
-              onDraftChange={handleDraftChange}
-              onSubmit={handleSubmit}
               editingItemId={editingItem?.id ?? null}
               editingDraftValue={editingItem?.value ?? ''}
               onStartEdit={handleStartEdit}
@@ -557,17 +694,10 @@ function DailyNotebook({
               onMoveTaskToTodo={(itemId) => onMoveTaskToTodo(currentDate, itemId)}
               onMoveItem={(itemId, toDate) => onMoveItem(currentDate, itemId, toDate)}
               onMoveItems={(itemIds, toDate) => onMoveItems(currentDate, itemIds, toDate)}
-              onDeleteItem={(itemId) => onDeleteItem(currentDate, itemId)}
+              onDeleteItem={handleDeleteItem}
               onUpdatePriority={(itemId, priority) => onUpdateItemPriority(currentDate, itemId, priority)}
               onUpdateCategory={(itemId, category) => onUpdateItemCategory(currentDate, itemId, category)}
-              draftCategory={section.type === 'task' ? draftCategory : section.type === 'note' ? draftNoteCategory : ''}
-              onDraftCategoryChange={
-                section.type === 'task'
-                  ? setDraftCategory
-                  : section.type === 'note'
-                    ? setDraftNoteCategory
-                    : () => {}
-              }
+              onUpdatePendingItem={handleUpdatePendingInline}
               copiedId={copiedId}
               onCopy={handleCopy}
             />
@@ -583,41 +713,65 @@ function DailyNotebook({
               </div>
               <p>这里专门放今天没做完、但又不想直接丢掉的事。</p>
             </div>
-            <Tag>{todoPool.length} 条</Tag>
+            <div className="daily-notebook-section-head-actions">
+              <Tag className="daily-notebook-section-count">{todoPool.length} 条</Tag>
+              <Button
+                type="text"
+                size="small"
+                className="daily-notebook-add-trigger"
+                icon={<Plus size={16} strokeWidth={1.8} />}
+                onClick={handleStartInlineAddTodo}
+                aria-label="添加待办"
+              />
+            </div>
           </div>
 
-          <div className="daily-notebook-composer has-category">
-            <Select
-              size="small"
-              value={draftTodoCategory || undefined}
-              placeholder="类别"
-              allowClear
-              className="daily-notebook-category-select"
-              popupMatchSelectWidth={false}
-              options={DAILY_TASK_CATEGORY_OPTIONS.map((option) => ({
-                value: option.value,
-                label: (
-                  <span className="daily-notebook-category-menu-item">
-                    <span className="daily-notebook-category-dot" style={{ backgroundColor: option.color }} />
-                    {option.label}
-                  </span>
-                ),
-              }))}
-              onChange={(value) => setDraftTodoCategory(value ?? '')}
-            />
-            <Input
-              value={drafts.todo}
-              placeholder="手动补一条待办"
-              onChange={(event) => handleDraftChange('todo', event.target.value)}
-              onPressEnter={handleSubmitTodo}
-            />
-            <Button type="primary" onClick={handleSubmitTodo} icon={<Plus size={14} strokeWidth={2} />} />
-          </div>
-
-          {todoPool.length ? (
+          {todoItems.length ? (
             <div className="daily-notebook-list">
-              {todoPool.map((item) => (
-                <div key={item.id} className="daily-notebook-item">
+              {todoItems.map((item) => {
+                const isEditing = isEditingTodo && editingItem?.id === item.id;
+                const isEmptyItem = !item.text?.trim();
+
+                if (isEditing) {
+                  return (
+                    <div key={item.id} className="daily-notebook-item is-empty">
+                      <div className="daily-notebook-item-main">
+                        <div className="daily-notebook-item-editor">
+                          <Input
+                            autoFocus
+                            value={editingItem.value}
+                            placeholder="手动补一条待办"
+                            onChange={(event) => handleEditDraftChange(event.target.value)}
+                            onPressEnter={() => {
+                              if (canSaveTodoEdit) handleSaveEdit();
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Escape') {
+                                event.preventDefault();
+                                handleCancelEdit();
+                              }
+                            }}
+                          />
+                          <Button type="primary" size="small" disabled={!canSaveTodoEdit} onClick={handleSaveEdit}>
+                            保存
+                          </Button>
+                          {canSaveTodoEdit ? (
+                            <Button size="small" onClick={handleCancelEdit}>
+                              取消
+                            </Button>
+                          ) : (
+                            <Button size="small" danger onClick={handleCancelEdit}>
+                              删除
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                <div key={item.id} className={`daily-notebook-item ${isEmptyItem ? 'is-empty' : ''}`}>
                   <div className="daily-notebook-item-main">
                     <div className="daily-notebook-item-text-row">
                       <span className="daily-notebook-item-text">{item.text}</span>
@@ -645,10 +799,11 @@ function DailyNotebook({
                   </div>
                   <div className="daily-notebook-item-actions">
                     <Button type="text" size="small" icon={<RotateCcw size={14} strokeWidth={1.8} />} onClick={() => onPromoteTodo(item.id, currentDate)} title="加入今天" />
-                    <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => onRemoveTodo(item.id)} title="完成并移除" />
+                    <Button type="text" size="small" danger icon={<Trash2 size={14} strokeWidth={1.8} />} onClick={() => handleDeleteTodoItem(item.id)} title="完成并移除" />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="待办池是空的，今天可以轻装上阵。" />

@@ -409,7 +409,7 @@ export const moveDailyEntryItem = (dailyWorkspace, fromDate, itemId, toDate) => 
 
 export const updateDailyEntryItem = (dailyWorkspace, dateKey, itemId, text) => {
   const nextText = normalizeText(text);
-  if (!nextText) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
+  if (!nextText) return removeDailyEntryItem(dailyWorkspace, dateKey, itemId);
 
   return updateEntry(dailyWorkspace, dateKey, (entry) => ({
     ...entry,
