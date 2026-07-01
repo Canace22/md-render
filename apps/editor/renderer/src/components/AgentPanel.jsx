@@ -488,6 +488,12 @@ const SURFACE_LABELS = Object.freeze({
   folder: '文件夹',
 });
 
+const AGENT_PANEL_TABS = Object.freeze([
+  { id: 'chat', label: '对话', icon: MessagesSquare },
+  { id: 'context', label: '上下文', icon: MessageSquareQuote },
+  { id: 'skills', label: '技能', icon: Wrench },
+]);
+
 const getSurfaceLabel = (surface, selectedNode) => {
   if (surface === 'paper') {
     return selectedNode?.type === 'folder' ? '文件夹' : '文档工作区';
@@ -555,6 +561,8 @@ export default function AgentPanel({ onClose }) {
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [lastContextPacket, setLastContextPacket] = useState(null);
+  const [activePanelTab, setActivePanelTab] = useState('chat');
+  const [skillTabFilter, setSkillTabFilter] = useState('');
 
   // 工作区里所有 Markdown 文件（供 @ 选择）
   const mdFiles = useMemo(
@@ -571,6 +579,24 @@ export default function AgentPanel({ onClose }) {
     const list = q ? SLASH_SKILLS.filter((item) => item.searchText.includes(q)) : SLASH_SKILLS;
     return list.slice(0, MAX_SLASH_SKILL_RESULTS);
   }, [skillFilter]);
+  const skillTabItems = useMemo(() => {
+    const q = skillTabFilter.trim().toLowerCase();
+    return q ? SLASH_SKILLS.filter((item) => item.searchText.includes(q)) : SLASH_SKILLS;
+  }, [skillTabFilter]);
+  const skillTabGroups = useMemo(() => {
+    const groups = [];
+    const groupMap = new Map();
+    skillTabItems.forEach((item) => {
+      const category = item.category ?? '其他';
+      if (!groupMap.has(category)) {
+        const group = { category, items: [] };
+        groupMap.set(category, group);
+        groups.push(group);
+      }
+      groupMap.get(category).items.push(item);
+    });
+    return groups;
+  }, [skillTabItems]);
   const [showSessions, setShowSessions] = useState(false);
   const [showSettings, setShowSettings] = useState(() => !isAiConfigured());
   const providers = useMemo(() => listProviders(), []);
@@ -585,7 +611,8 @@ export default function AgentPanel({ onClose }) {
   useEffect(() => {
     setLastContextPacket(null);
   }, [activeSessionId]);
-  const isWelcomeMode = messages.length === 0 && !showSettings && !showSessions;
+  const isChatTab = activePanelTab === 'chat';
+  const isWelcomeMode = isChatTab && messages.length === 0 && !showSettings && !showSessions;
 
   const abortRef = useRef(null);
   const inputRef = useRef(null);
@@ -949,6 +976,7 @@ export default function AgentPanel({ onClose }) {
 
   const handleNewSession = useCallback(() => {
     createAgentSession();
+    setActivePanelTab('chat');
     setShowSessions(false);
   }, [createAgentSession]);
 
@@ -959,6 +987,7 @@ export default function AgentPanel({ onClose }) {
 
   const handleSwitchSession = useCallback((sessionId) => {
     switchAgentSession(sessionId);
+    setActivePanelTab('chat');
     setShowSessions(false);
   }, [switchAgentSession]);
 
@@ -1056,6 +1085,7 @@ export default function AgentPanel({ onClose }) {
     setInput('');
     setAttachedFiles([]);
     clearAiQuotedSelection();
+    setActivePanelTab('chat');
     await runTurn({
       promptText,
       displayText: text,
@@ -1097,6 +1127,7 @@ export default function AgentPanel({ onClose }) {
   }, [focusInput]);
 
   const handleShortcutClick = useCallback((item) => {
+    setActivePanelTab('chat');
     if (item.type === 'insert') {
       setInput(item.insertText ?? '');
       focusInput();
@@ -1175,6 +1206,7 @@ export default function AgentPanel({ onClose }) {
 
   const handlePickSkill = useCallback((item) => {
     closeSkillPicker();
+    setActivePanelTab('chat');
     if (item.type === 'insert') {
       setInput(item.insertText ?? '');
       focusInput();
@@ -1199,6 +1231,12 @@ export default function AgentPanel({ onClose }) {
       handleScriptTool(item);
     }
   }, [closeSkillPicker, focusInput, handlePlatformVariant, handleQuickAction, handleScriptTool]);
+
+  const handlePanelTabChange = useCallback((tabId) => {
+    setActivePanelTab(tabId);
+    setShowFilePicker(false);
+    setShowSkillPicker(false);
+  }, []);
 
   const handleComposerPlusClick = useCallback(({ key }) => {
     const shortcut = COMPOSER_PLUS_SHORTCUTS.find((item) => item.id === key);
@@ -1305,16 +1343,25 @@ export default function AgentPanel({ onClose }) {
         </div>
       </div>
 
-      {!isWelcomeMode && (
-        <div>
-          <AgentDocMeta
-            document={activeFile}
-            contextPacket={lastContextPacket}
-            onRecall={handleRecall}
-            onInsertReference={handleInsertReference}
-          />
-        </div>
-      )}
+      <div className="agent-panel__tabs" role="tablist" aria-label="AI 助手面板">
+        {AGENT_PANEL_TABS.map((tab) => {
+          const Icon = tab.icon;
+          const selected = activePanelTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={`agent-panel__tab${selected ? ' is-active' : ''}`}
+              onClick={() => handlePanelTabChange(tab.id)}
+            >
+              <Icon size={14} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {showSessions && (
         <div className="agent-panel__sessions">
@@ -1366,72 +1413,133 @@ export default function AgentPanel({ onClose }) {
         </div>
       )}
 
-      <div className={`agent-panel__messages${isWelcomeMode ? ' is-welcome' : ''}`}>
-        {isWelcomeMode && (
-          <div className="agent-panel__welcome">
-            <h2 className="agent-panel__welcome-title">有什么我能帮你的吗？</h2>
-            <p className="agent-panel__welcome-subtitle">直接提需求，或者先从下面这些常用动作开始。</p>
-            <div className="agent-panel__welcome-grid">
-              {WELCOME_SUGGESTIONS.map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  className="agent-panel__welcome-chip"
-                  disabled={running}
-                  onClick={() => handleWelcomeSuggestion(item)}
-                >
-                  {item.label}
-                </button>
-              ))}
+      {isChatTab && (
+        <div
+          className={`agent-panel__messages${isWelcomeMode ? ' is-welcome' : ''}`}
+          role="tabpanel"
+          aria-label="对话"
+        >
+          {isWelcomeMode && (
+            <div className="agent-panel__welcome">
+              <h2 className="agent-panel__welcome-title">有什么我能帮你的吗？</h2>
+              <p className="agent-panel__welcome-subtitle">直接提需求，或者先从下面这些常用动作开始。</p>
+              <div className="agent-panel__welcome-grid">
+                {WELCOME_SUGGESTIONS.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="agent-panel__welcome-chip"
+                    disabled={running}
+                    onClick={() => handleWelcomeSuggestion(item)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-        {!isWelcomeMode && messages.length === 0 && (
-          <div className="agent-panel__empty">问我点什么，比如「帮我把当前文档压缩到三段」。</div>
-        )}
-        {!isWelcomeMode && messages.map((m, i) => {
-          if (m.role === 'tool') {
+          )}
+          {!isWelcomeMode && messages.length === 0 && (
+            <div className="agent-panel__empty">问我点什么，比如「帮我把当前文档压缩到三段」。</div>
+          )}
+          {!isWelcomeMode && messages.map((m, i) => {
+            if (m.role === 'tool') {
+              return (
+                <div key={i} className="agent-panel__tool">
+                  {m.status === 'running'
+                    ? <Loader2 size={14} className="agent-panel__spin" />
+                    : <Wrench size={14} />}
+                  <span>{m.label}{m.status === 'done' ? ' ✓' : '…'}</span>
+                </div>
+              );
+            }
             return (
-              <div key={i} className="agent-panel__tool">
-                {m.status === 'running'
-                  ? <Loader2 size={14} className="agent-panel__spin" />
-                  : <Wrench size={14} />}
-                <span>{m.label}{m.status === 'done' ? ' ✓' : '…'}</span>
+              <div key={i} className={`agent-panel__msg agent-panel__msg--${m.role}`}>
+                <span className="agent-panel__avatar">
+                  {m.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+                </span>
+                <div className="agent-panel__bubble">
+                  {m.files?.length > 0 && (
+                    <div className="agent-panel__msg-files">
+                      {m.files.map((name, k) => (
+                        <span key={k} className="agent-panel__msg-file"><FileText size={11} /> {name}</span>
+                      ))}
+                    </div>
+                  )}
+                  {m.text}
+                  {m.role === 'assistant' && m.text && (
+                    <button
+                      type="button"
+                      className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
+                      title={copiedIndex === i ? '已复制' : '复制'}
+                      onClick={() => handleCopy(i, m.text)}
+                    >
+                      {copiedIndex === i ? <Check size={13} /> : <Copy size={13} />}
+                      <span className="agent-panel__copy-label">
+                        {copiedIndex === i ? '已复制' : '复制'}
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
             );
-          }
-          return (
-            <div key={i} className={`agent-panel__msg agent-panel__msg--${m.role}`}>
-              <span className="agent-panel__avatar">
-                {m.role === 'user' ? <User size={14} /> : <Bot size={14} />}
-              </span>
-              <div className="agent-panel__bubble">
-                {m.files?.length > 0 && (
-                  <div className="agent-panel__msg-files">
-                    {m.files.map((name, k) => (
-                      <span key={k} className="agent-panel__msg-file"><FileText size={11} /> {name}</span>
-                    ))}
-                  </div>
-                )}
-                {m.text}
-                {m.role === 'assistant' && m.text && (
-                  <button
-                    type="button"
-                    className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
-                    title={copiedIndex === i ? '已复制' : '复制'}
-                    onClick={() => handleCopy(i, m.text)}
-                  >
-                    {copiedIndex === i ? <Check size={13} /> : <Copy size={13} />}
-                    <span className="agent-panel__copy-label">
-                      {copiedIndex === i ? '已复制' : '复制'}
-                    </span>
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+          })}
+        </div>
+      )}
+
+      {activePanelTab === 'context' && (
+        <div className="agent-panel__tab-panel agent-panel__tab-panel--context" role="tabpanel" aria-label="上下文">
+          <AgentDocMeta
+            document={activeFile}
+            contextPacket={lastContextPacket}
+            onRecall={handleRecall}
+            onInsertReference={handleInsertReference}
+          />
+        </div>
+      )}
+
+      {activePanelTab === 'skills' && (
+        <div className="agent-panel__tab-panel agent-panel__tab-panel--skills" role="tabpanel" aria-label="技能">
+          <div className="agent-panel__skill-tab-head">
+            <input
+              className="agent-panel__skill-tab-search"
+              value={skillTabFilter}
+              placeholder="搜索 skill、平台版本或本地工具"
+              onChange={(e) => setSkillTabFilter(e.target.value)}
+            />
+          </div>
+          {skillTabGroups.length === 0 ? (
+            <div className="agent-panel__empty">没有匹配的 skill。</div>
+          ) : (
+            skillTabGroups.map((group) => (
+              <section key={group.category} className="agent-panel__skill-group">
+                <div className="agent-panel__skill-group-title">{group.category}</div>
+                <div className="agent-panel__skill-grid">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="agent-panel__skill-card"
+                        disabled={isShortcutDisabled(item)}
+                        onClick={() => handlePickSkill(item)}
+                      >
+                        <span className={`agent-panel__skill-option-icon agent-panel__tool-btn--${item.tone}`}>
+                          <Icon />
+                        </span>
+                        <span className="agent-panel__skill-option-main">
+                          <span className="agent-panel__skill-option-label">{item.label}</span>
+                          <span className="agent-panel__skill-option-desc">{item.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))
+          )}
+        </div>
+      )}
 
       <div className="agent-panel__composer">
         {showSkillPicker && (

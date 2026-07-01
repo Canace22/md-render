@@ -50,6 +50,13 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - 别新建独立 store（AGENTS.md 约定）。纯逻辑放 `sessionUtils.js`，store 里只调它。
 - 删当前会话自动选下一个；删光自动补一个空会话（`removeSession` 已处理）。
 
+## 面板交互（AgentPanel）
+
+- 面板里的「对话 / 上下文 / 技能」这类纯 UI 切换用 `AgentPanel.jsx` 局部 state，不进 `useEditorStore`，也不要改 `agentEngine`。
+- `AgentDocMeta.jsx` 负责当前稿件、本轮上下文、相关旧文召回展示；不要把这些展示块重新堆回消息流顶部。
+- 技能页或 `/skill` picker 选中 `insert` 类型时，只把 `insertText` 填进输入框并切回对话；真正执行仍由用户发送后进入 agent loop。
+- 技能页触发 `quick` / `platform` / `script` 时复用现有 handler，不新增一套执行入口。
+
 ## @文件（引用工作区文件作上下文）
 
 - 交互在 `AgentPanel.jsx`：输入框检测末尾 `@关键词`（正则 `/(?:^|\s)@([^\s@]*)$/`）→ 弹文件选择器 → 选中加入 `attachedFiles`。

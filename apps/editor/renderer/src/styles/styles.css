@@ -8191,6 +8191,62 @@ body.theme-dark .file-preview-iframe {
   font-weight: var(--font-weight-medium);
 }
 
+.agent-panel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-bg-surface) 88%, transparent);
+}
+
+.agent-panel__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--easing),
+    color var(--duration-fast) var(--easing);
+}
+
+.agent-panel__tab:hover,
+.agent-panel__tab.is-active {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.agent-panel__tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-panel__tab-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.agent-panel__tab-panel--context {
+  background: var(--color-bg-page);
+}
+
+.agent-panel__tab-panel--skills {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 18px;
+}
+
 .agent-panel__doc-meta {
   display: flex;
   flex-direction: column;
@@ -8251,7 +8307,9 @@ body.theme-dark .file-preview-iframe {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  width: auto;
   padding: 8px 12px;
   border: none;
   background: transparent;
@@ -8305,8 +8363,11 @@ body.theme-dark .file-preview-iframe {
 .agent-panel__context-refresh {
   display: inline-flex;
   align-items: center;
+  flex: none;
   margin-right: 12px;
+  padding: 4px;
   border: none;
+  border-radius: var(--radius-m);
   background: transparent;
   color: var(--color-icon-neutral);
   cursor: pointer;
@@ -8319,6 +8380,70 @@ body.theme-dark .file-preview-iframe {
 
 .agent-panel__context-hint {
   color: var(--color-text-muted);
+}
+
+.agent-panel__skill-tab-head {
+  display: flex;
+}
+
+.agent-panel__skill-tab-search {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.agent-panel__skill-tab-search:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-brand-primary) 60%, var(--color-border));
+}
+
+.agent-panel__skill-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-panel__skill-group-title {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.agent-panel__skill-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.agent-panel__skill-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--color-bg-surface) 94%, transparent);
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--easing),
+    background var(--duration-fast) var(--easing),
+    color var(--duration-fast) var(--easing);
+}
+
+.agent-panel__skill-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-brand-primary) 36%, var(--color-border));
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.agent-panel__skill-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* 召回的相关旧文条目 */
