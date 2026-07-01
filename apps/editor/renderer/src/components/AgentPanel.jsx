@@ -151,6 +151,24 @@ const PLATFORM_VARIANT_LABELS = Object.freeze(
 );
 const MAX_SLASH_SKILL_RESULTS = 8;
 const SLASH_SKILL_PATTERN = /^\s*\/([^\s/]*)$/;
+const TOPIC_SELECTION_SKILL_PROMPT = [
+  '帮我整理选题。如果我没有明确想法，请先基于当前工作区、最近稿件、已发布文章或相关旧文，归纳我的内容资产和可延展方向；',
+  '如果我提到互联网新闻、热点或最近趋势，请结合我提供的新闻/链接/剪藏材料整理，不要编造没有来源的新闻。',
+  '请输出候选选题并简要比较：目标读者、读者问题、核心角度、适合平台、可展开性、风险。',
+  '如果信息不足，最多问 2 个关键问题。',
+  '当我确认某个选题，或请求直接创建时，请调用 create_content_entry 创建 kind=topic 的选题条目，正文使用结构化选题卡。',
+].join('\n');
+const TOPIC_SELECTION_SKILL = Object.freeze({
+  id: 'topic-entry',
+  type: 'insert',
+  label: '选题',
+  icon: ApartmentOutlined,
+  tone: 'teal',
+  category: '项目 skill',
+  description: '从旧文、素材和趋势整理选题',
+  aliases: ['topic', 'idea', '选题库', '旧文', '新闻', '热点', '趋势'],
+  insertText: TOPIC_SELECTION_SKILL_PROMPT,
+});
 
 const WELCOME_SUGGESTIONS = Object.freeze([
   { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
@@ -197,6 +215,7 @@ const COMPOSER_SHORTCUTS = Object.freeze([
 ]);
 
 const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
+  TOPIC_SELECTION_SKILL,
   {
     id: 'outline',
     type: 'quick',
@@ -287,17 +306,7 @@ const EXTRA_PLATFORM_SLASH_SKILLS = Object.freeze([
 ]);
 
 const PROJECT_SLASH_SKILLS = Object.freeze([
-  {
-    id: 'topic-entry',
-    type: 'insert',
-    label: '选题',
-    icon: ApartmentOutlined,
-    tone: 'teal',
-    category: '项目 skill',
-    description: '新建一个选题条目',
-    aliases: ['topic', 'idea', '选题库'],
-    insertText: '帮我新建一个选题：',
-  },
+  TOPIC_SELECTION_SKILL,
   {
     id: 'draft-entry',
     type: 'insert',
@@ -427,18 +436,18 @@ const SLASH_SKILLS = Object.freeze([
     category: item.type === 'platform' ? '平台版本' : '快捷动作',
     searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
   })),
-  ...COMPOSER_PLUS_SHORTCUTS.map((item) => ({
+  ...PROJECT_SLASH_SKILLS.map((item) => ({
     ...item,
-    category: '快捷动作',
+    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+  })),
+  ...COMPOSER_PLUS_SHORTCUTS.filter((item) => item.id !== TOPIC_SELECTION_SKILL.id).map((item) => ({
+    ...item,
+    category: item.category ?? '快捷动作',
     searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
   })),
   ...EXTRA_PLATFORM_SLASH_SKILLS.map((item) => ({
     ...item,
     category: '平台版本',
-    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
-  })),
-  ...PROJECT_SLASH_SKILLS.map((item) => ({
-    ...item,
     searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
   })),
   ...COMPOSER_SCRIPT_TOOLS.map((item) => ({
@@ -1072,6 +1081,11 @@ export default function AgentPanel({ onClose }) {
   }, [focusInput]);
 
   const handleShortcutClick = useCallback((item) => {
+    if (item.type === 'insert') {
+      setInput(item.insertText ?? '');
+      focusInput();
+      return;
+    }
     if (item.type === 'quick') {
       handleQuickAction(item.actionKey);
       return;
@@ -1094,7 +1108,7 @@ export default function AgentPanel({ onClose }) {
     if (item.type === 'settings') {
       setShowSettings((v) => !v);
     }
-  }, [handleInsertMention, handlePlatformVariant, handleQuickAction]);
+  }, [focusInput, handleInsertMention, handlePlatformVariant, handleQuickAction]);
 
   const handleWelcomeSuggestion = useCallback((item) => {
     handleShortcutClick(item);

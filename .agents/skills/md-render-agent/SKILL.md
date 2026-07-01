@@ -36,6 +36,13 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 4. 如果工具需要新的宿主能力，在 `AgentPanel.jsx` 的 `host` 对象里补对应方法，对接 store/IPC。
 5. **执行器只通过 host 拿能力，不要 import store 或 window.electronAPI**——否则单测没法注入假 host。
 
+## 改内置 slash skill
+
+- 输入框里的 `/skill` 列表在 `AgentPanel.jsx` 的 `PROJECT_SLASH_SKILLS` 等常量里，不会自动读取 `.agents/skills/`。
+- `type: 'insert'` 的项目 skill 只是把 `insertText` 填进输入框；真正执行仍靠 agent prompt 和 `toolRegistry` 工具。
+- 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `insertText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
+- 需要结构化落库时，再扩展 `create_content_entry` 参数、执行器和 `AgentPanel` host，仍保持执行器只通过 host 取能力。
+
 ## 会话管理（全局，不持久化）
 
 - 会话状态在 `useEditorStore`（`agentSessions` / `activeAgentSessionId` + 相关 action），**故意不进 persist 的 partialize 白名单**：切页保留、关 app 清空。要做"关 app 还在"才把字段加进 partialize。
