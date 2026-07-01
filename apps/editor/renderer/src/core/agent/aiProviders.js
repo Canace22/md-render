@@ -14,7 +14,7 @@ export const AI_PROVIDERS = Object.freeze([
   {
     id: 'minimax',
     label: 'MiniMax',
-    baseURL: 'https://api.minimax.io/v1',
+    baseURL: 'https://api.minimaxi.com/v1',
     defaultModel: 'MiniMax-M3',
   },
   {

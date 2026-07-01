@@ -51,7 +51,7 @@ const DEFAULT_UPSTREAM_HOST = process.env.AI_UPSTREAM_HOST || 'api.openai.com';
 const PROVIDERS = {
   'minimax': {
     label: 'MiniMax',
-    baseURL: 'https://api.minimax.io/v1',
+    baseURL: 'https://api.minimaxi.com/v1',
     defaultModel: 'MiniMax-M3',
     apiKeyEnv: 'MINIMAX_API_KEY',
   },
