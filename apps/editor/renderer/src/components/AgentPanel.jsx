@@ -176,9 +176,6 @@ const WELCOME_SUGGESTIONS = Object.freeze([
   { type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '帮我总结一下' },
   { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼关键要点' },
   { type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '想几个标题' },
-  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.WECHAT, label: '生成公众号版本' },
-  { type: 'platform', platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU, label: '生成小红书版本' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.CONTINUE, label: '继续往下写' },
 ]);
 
 const COMPOSER_SHORTCUTS = Object.freeze([
@@ -234,7 +231,17 @@ const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
     icon: ArrowsAltOutlined,
     tone: 'blue',
     description: '把当前内容扩充展开',
-    aliases: ['展开', '续写', 'expand'],
+    aliases: ['展开', 'expand'],
+  },
+  {
+    id: 'continue',
+    type: 'quick',
+    actionKey: AI_ACTION_KEYS.CONTINUE,
+    label: '续写',
+    icon: ArrowsAltOutlined,
+    tone: 'blue',
+    description: '基于全文继续往下写',
+    aliases: ['继续往下写', 'continue'],
   },
   {
     id: 'polish',
