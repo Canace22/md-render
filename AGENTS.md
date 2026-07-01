@@ -74,6 +74,7 @@
 | `md-render-blocknote-core` | BlockNote 底层接入与避坑 |
 | `md-render-agent` | Agent 工具、引擎、面板 |
 | `md-render-kb-source` | 知识库新增节点类型 / 外部来源 |
+| `md-render-asset-derivation` | 派生资产：保留原稿、生成新稿、记录来源素材 |
 | `skill-harvest` | 判断并生成新 skill（沉淀机制执行器） |
 | `pre-commit-secrets` | 提交/push 前扫描敏感信息 |
 
