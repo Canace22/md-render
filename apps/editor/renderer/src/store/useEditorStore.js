@@ -13,8 +13,8 @@ import {
   ensureFileTimestamps,
   ensureKnowledgeFields,
   findFirstFileId,
-  nameExists,
   buildUniqueName,
+  buildUniqueRenameName,
   createDefaultKnowledgeFields,
   createBookmarkNode,
   BOOKMARK_FOLDER_NAME,
@@ -1855,10 +1855,10 @@ export const useEditorStore = create(
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
         if (node.projectRootPath && node.relativePath) return false;
-        if (nameExists(workspace, trimmed) && trimmed !== node.name) return false;
+        const nextName = buildUniqueRenameName(workspace, trimmed, targetId);
         const updated = updateNodeById(workspace, targetId, (current) => ({
           ...current,
-          name: trimmed,
+          name: nextName,
         }));
         persistWorkspace(updated);
         set({ workspace: updated });

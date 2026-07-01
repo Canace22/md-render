@@ -331,11 +331,11 @@ export function removeNodeById(node, targetId) {
   return { node, removed: false };
 }
 
-export function nameExists(node, name) {
+export function nameExists(node, name, excludeId = null) {
   if (!node) return false;
-  if (node.name === name) return true;
+  if (node.id !== excludeId && node.name === name) return true;
   if (node.type === 'folder' && Array.isArray(node.children)) {
-    return node.children.some((child) => nameExists(child, name));
+    return node.children.some((child) => nameExists(child, name, excludeId));
   }
   return false;
 }
@@ -362,9 +362,55 @@ export function buildUniqueNameInFolder(folder, baseName, extension = '') {
   return candidate;
 }
 
-export function nameExistsAmongSiblings(parent, name, excludeId = null) {
+const INVALID_FILENAME_CHARS_RE = /[<>:"/\\|?*\u0000-\u001F]/g;
+const WHITESPACE_RE = /\s+/g;
+const TRAILING_DOTS_OR_SPACES_RE = /[.\s]+$/g;
+const FALLBACK_RENAME_NAME = '未命名';
+
+export function sanitizeFileSystemName(name) {
+  const sanitized = String(name ?? '')
+    .replace(INVALID_FILENAME_CHARS_RE, ' ')
+    .replace(WHITESPACE_RE, ' ')
+    .trim()
+    .replace(TRAILING_DOTS_OR_SPACES_RE, '');
+  return sanitized || FALLBACK_RENAME_NAME;
+}
+
+export function splitFileName(name) {
+  const safeName = sanitizeFileSystemName(name);
+  const extMatch = safeName.match(/(\.[^./\\]+)$/);
+  if (!extMatch) {
+    return { baseName: safeName, extension: '' };
+  }
+  const extension = extMatch[1];
+  const baseName = safeName.slice(0, -extension.length).trim() || FALLBACK_RENAME_NAME;
+  return { baseName, extension };
+}
+
+export function buildUniqueRenameNameInFolder(parent, name, excludeId = null) {
   const siblings = parent?.type === 'folder' ? (parent.children ?? []) : [];
-  return siblings.some((child) => child.id !== excludeId && child.name === name);
+  const { baseName, extension } = splitFileName(name);
+  let candidate = `${baseName}${extension}`;
+  let index = 1;
+  const existsAmongSiblings = (nextName) => siblings.some((child) => (
+    child.id !== excludeId && child.name === nextName
+  ));
+  while (existsAmongSiblings(candidate)) {
+    candidate = `${baseName} ${index}${extension}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+export function buildUniqueRenameName(workspace, name, excludeId = null) {
+  const { baseName, extension } = splitFileName(name);
+  let candidate = `${baseName}${extension}`;
+  let index = 1;
+  while (nameExists(workspace, candidate, excludeId)) {
+    candidate = `${baseName} ${index}${extension}`;
+    index += 1;
+  }
+  return candidate;
 }
 
 export function replaceRelativePathBasename(relativePath, nextBaseName) {

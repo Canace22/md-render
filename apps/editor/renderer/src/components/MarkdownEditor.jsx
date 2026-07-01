@@ -77,6 +77,7 @@ import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
 import {
   buildUniqueName,
   buildUniqueNameInFolder,
+  buildUniqueRenameNameInFolder,
   collectFiles,
   collectLocalProjectRootPaths,
   createLocalProjectFileNode,
@@ -85,7 +86,6 @@ import {
   findNodeById,
   findParentId,
   getFolderDirectChildren,
-  nameExistsAmongSiblings,
   replaceRelativePathBasename,
   ensureRenameFileName,
   resolveLocalProjectCreateTarget,
@@ -665,8 +665,7 @@ function MarkdownEditor() {
       const parentId = findParentId(state.workspace, targetId) ?? state.workspace.id;
       const parent = findNodeById(state.workspace, parentId) ?? state.workspace;
 
-      const diskName = normalizedName;
-      if (nameExistsAmongSiblings(parent, diskName, targetId)) return false;
+      const diskName = buildUniqueRenameNameInFolder(parent, normalizedName, targetId);
       const newRelativePath = replaceRelativePathBasename(node.relativePath, diskName);
 
       try {
