@@ -27,6 +27,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - **Web 端兜底**：没有 IPC 时 `aiClient` 才直接 fetch `server/ai-proxy`（需配 `VITE_AI_PROXY` / 运行时代理地址）。
 - `aiClient.hasAiBridge()` 判断当前走哪条路；`isAiConfigured()` 在 Electron 下只校验 key，Web 下还要校验代理地址。
 - 改 AI 调用时优先保留 IPC 路径；代理地址默认在 main 进程读 `AI_PROXY_BASE || http://localhost:8788`，前端设置里的 server 地址主要给 Web 兜底用。
+- 开发启动用 `pnpm electron:dev` / `pnpm --filter @md-render/editor electron:dev`，脚本会先探活本地 ai-proxy，没启动就自动拉起；如果设置了远程 `AI_PROXY_BASE` 则跳过本地服务。
 
 ## 加一个新工具的标准步骤（最常见任务）
 

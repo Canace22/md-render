@@ -11,7 +11,7 @@
     "test:unit": "pnpm --filter @md-render/editor test:unit",
     "test:e2e": "pnpm --filter @md-render/editor test:e2e",
     "test:e2e:ui": "pnpm --filter @md-render/editor test:e2e:ui",
-    "electron:dev": "pnpm --filter @md-render/editor electron:dev",
+    "electron:dev": "node scripts/electron-dev.mjs",
     "electron:build": "pnpm --filter @md-render/editor electron:build",
     "electron:build:win": "pnpm --filter @md-render/editor electron:build:win",
     "electron:pack": "pnpm --filter @md-render/editor electron:pack",
