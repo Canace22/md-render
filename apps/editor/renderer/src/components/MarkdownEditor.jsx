@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
-import { RobotOutlined } from '@ant-design/icons';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteEditor, createCodeBlockSpec } from '@blocknote/core';
 import { buildSchema } from '@narrative/blocknote-core';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
+import { Bot } from 'lucide-react';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
@@ -261,14 +261,6 @@ const BLANK_CANVAS_CARD_NODE_TYPE = 'blank-card';
 const BLANK_CANVAS_CARD_TITLE = '空白卡片';
 const BLANK_CANVAS_CARD_TYPE_LABEL = '卡片';
 const BLANK_CANVAS_CARD_META = '自由记录';
-const AGENT_FAB_SIZE = 40;
-const AGENT_FAB_MARGIN = 16;
-const AGENT_FAB_DRAG_THRESHOLD = 4;
-
-const getDefaultAgentFabPos = () => ({
-  left: window.innerWidth - AGENT_FAB_SIZE - AGENT_FAB_MARGIN,
-  top: window.innerHeight - AGENT_FAB_SIZE - AGENT_FAB_MARGIN,
-});
 
 const stripMarkdownExtension = (name = '') => String(name).replace(/\.md$/i, '');
 const truncateInlineText = (value, maxLength = 96) => {
@@ -429,7 +421,6 @@ function MarkdownEditor() {
     closeOtherTabs,
     closeTabsToTheRight,
     updateTabTitle,
-    toggleEditorMode,
     setAiQuotedSelection,
   } = useEditorStore();
   const publishingPlatformLabelMap = useMemo(
@@ -767,16 +758,6 @@ function MarkdownEditor() {
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
-  const [agentFabPos, setAgentFabPos] = useState(getDefaultAgentFabPos);
-  const [agentFabDragging, setAgentFabDragging] = useState(false);
-  const agentFabDragRef = useRef({
-    active: false,
-    moved: false,
-    startX: 0,
-    startY: 0,
-    originLeft: 0,
-    originTop: 0,
-  });
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const [notionMessage, setNotionMessage] = useState('');
@@ -797,16 +778,6 @@ function MarkdownEditor() {
       || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
   );
 
-  useEffect(() => {
-    const onResize = () => {
-      setAgentFabPos((pos) => ({
-        left: Math.min(pos.left, window.innerWidth - AGENT_FAB_SIZE),
-        top: Math.min(pos.top, window.innerHeight - AGENT_FAB_SIZE),
-      }));
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
   const [previewData, setPreviewData] = useState({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
   const [previewLoading, setPreviewLoading] = useState(false);
   // 图片放大查看器：lightbox.index < 0 表示关闭
@@ -2257,21 +2228,6 @@ function MarkdownEditor() {
     };
   }, [setAiQuotedSelection]);
 
-  const showObsidianHeaderBar = (
-    surface !== 'settings'
-    && surface !== 'sync'
-    && !(surface === 'folder' && selectedFolder)
-    && surface !== 'daily'
-    && surface !== 'overview'
-    && surface !== 'canvas'
-    && surface !== 'creation-board'
-    && surface !== 'publishing'
-    && surface !== 'search'
-    && surface !== 'graph'
-    && !selectedUsesBookmarkCard
-    && !selectedNeedsConversion
-  );
-
   return (
     <div className={`container immersive-shell${macWindowed ? ' mac-windowed' : ''}`}>
       <input
@@ -2348,9 +2304,21 @@ function MarkdownEditor() {
           onCloseOthers={closeOtherTabs}
           onCloseToTheRight={closeTabsToTheRight}
           onOpenExternal={handleOpenBookmarkTabExternal}
-          trailing={!showObsidianHeaderBar ? (
-            <ThemeToggleButton theme={theme} onThemeChange={setTheme} />
-          ) : null}
+          trailing={(
+            <div className="tab-bar-actions">
+              <button
+                type="button"
+                className={`theme-toggle-btn titlebar-agent-toggle${agentPanelOpen ? ' is-open' : ''}`}
+                onClick={() => setAgentPanelOpen((v) => !v)}
+                aria-label={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
+                aria-pressed={agentPanelOpen}
+                title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
+              >
+                <Bot size={18} strokeWidth={1.7} />
+              </button>
+              <ThemeToggleButton theme={theme} onThemeChange={setTheme} />
+            </div>
+          )}
         />
 
         <div className="immersive-main-row">
@@ -2521,21 +2489,9 @@ function MarkdownEditor() {
           />
         ) : (
           <>
-            {/* 面包屑 + 编辑/预览切换 */}
+            {/* 面包屑 */}
             <div className="obsidian-header-bar">
               <Breadcrumb workspace={workspace} selectedId={selectedId} onNavigate={selectNode} />
-              <div className="obsidian-header-actions">
-                <ThemeToggleButton theme={theme} onThemeChange={setTheme} />
-                <button
-                  type="button"
-                  className={`editor-mode-toggle${editorMode === 'preview' ? ' is-preview' : ''}`}
-                  onClick={toggleEditorMode}
-                  title={editorMode === 'preview' ? '切换到编辑模式' : '切换到预览模式'}
-                  aria-label={editorMode === 'preview' ? '编辑模式' : '预览模式'}
-                >
-                  {editorMode === 'preview' ? '预览' : '编辑'}
-                </button>
-              </div>
             </div>
 
             <DocHeader
@@ -2631,57 +2587,6 @@ function MarkdownEditor() {
         onClose={closeLightbox}
         onIndexChange={changeLightboxIndex}
       />
-
-      {/* 全局 AI 助手浮动按钮：拖动调位置，点击切换侧边栏 */}
-      <button
-        type="button"
-        className={`agent-fab${agentPanelOpen ? ' is-active' : ''}${agentFabDragging ? ' is-dragging' : ''}`}
-        style={{ left: agentFabPos.left, top: agentFabPos.top }}
-        title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
-        aria-label="AI 助手"
-        onPointerDown={(e) => {
-          agentFabDragRef.current = {
-            active: true,
-            moved: false,
-            startX: e.clientX,
-            startY: e.clientY,
-            originLeft: agentFabPos.left,
-            originTop: agentFabPos.top,
-          };
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={(e) => {
-          if (!agentFabDragRef.current.active) return;
-          const dx = e.clientX - agentFabDragRef.current.startX;
-          const dy = e.clientY - agentFabDragRef.current.startY;
-          if (Math.abs(dx) <= AGENT_FAB_DRAG_THRESHOLD && Math.abs(dy) <= AGENT_FAB_DRAG_THRESHOLD) return;
-          agentFabDragRef.current.moved = true;
-          setAgentFabDragging(true);
-          const maxLeft = window.innerWidth - AGENT_FAB_SIZE;
-          const maxTop = window.innerHeight - AGENT_FAB_SIZE;
-          setAgentFabPos({
-            left: Math.max(0, Math.min(maxLeft, agentFabDragRef.current.originLeft + dx)),
-            top: Math.max(0, Math.min(maxTop, agentFabDragRef.current.originTop + dy)),
-          });
-        }}
-        onPointerUp={(e) => {
-          if (!agentFabDragRef.current.active) return;
-          agentFabDragRef.current.active = false;
-          setAgentFabDragging(false);
-          e.currentTarget.releasePointerCapture(e.pointerId);
-          if (!agentFabDragRef.current.moved) {
-            setAgentPanelOpen((v) => !v);
-          }
-        }}
-        onPointerCancel={(e) => {
-          if (!agentFabDragRef.current.active) return;
-          agentFabDragRef.current.active = false;
-          setAgentFabDragging(false);
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        }}
-      >
-        <RobotOutlined style={{ fontSize: 18 }} />
-      </button>
     </div>
   );
 }

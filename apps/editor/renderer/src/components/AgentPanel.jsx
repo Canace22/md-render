@@ -64,6 +64,13 @@ import {
 const hasElectronSearch = () =>
   typeof window !== 'undefined' && typeof window.electronAPI?.db?.search === 'function';
 
+const ASSISTANT_TYPE_INTERVAL_MS = 18;
+const ASSISTANT_TYPE_CHUNK_SIZE = 4;
+const ASSISTANT_TYPE_LONG_TEXT_LIMIT = 1200;
+const ASSISTANT_TYPE_LONG_TEXT_CHUNK_SIZE = 8;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** 把工作区文件树拍平成文件数组（web 端搜索兜底用） */
 const flattenFiles = (node, acc = []) => {
   if (!node) return acc;
@@ -94,6 +101,64 @@ const markLastToolDone = (messages, label) => {
     }
   }
   return next;
+};
+
+const updateTypingAssistantMessage = (messages, patch) => {
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    if (next[i].role === 'assistant' && next[i].typing) {
+      next[i] = { ...next[i], ...patch };
+      return next;
+    }
+  }
+  return [...next, { role: 'assistant', text: patch.text ?? '', typing: patch.typing ?? false }];
+};
+
+const stripPartialChoiceProtocol = (text) =>
+  String(text ?? '').replace(/<!--\s*agent-choice[\s\S]*$/i, '').trimEnd();
+
+const buildAssistantRenderPayload = (message) => {
+  if (message.typing) {
+    return {
+      displayText: stripPartialChoiceProtocol(message.text),
+      choices: [],
+    };
+  }
+  return parseAssistantChoiceCards(message.text);
+};
+
+const appendTypedAssistantMessage = async ({
+  sessionId,
+  text,
+  signal,
+  appendAgentMessage,
+  updateAgentMessages,
+}) => {
+  const fullText = String(text ?? '');
+  if (!fullText) return;
+
+  appendAgentMessage(sessionId, { role: 'assistant', text: '', typing: true });
+
+  const chunkSize = fullText.length > ASSISTANT_TYPE_LONG_TEXT_LIMIT
+    ? ASSISTANT_TYPE_LONG_TEXT_CHUNK_SIZE
+    : ASSISTANT_TYPE_CHUNK_SIZE;
+
+  for (let end = chunkSize; end < fullText.length; end += chunkSize) {
+    if (signal?.aborted) {
+      updateAgentMessages(sessionId, (msgs) =>
+        updateTypingAssistantMessage(msgs, {
+          text: fullText.slice(0, Math.max(0, end - chunkSize)),
+          typing: false,
+        }));
+      throw new Error('已取消');
+    }
+    updateAgentMessages(sessionId, (msgs) =>
+      updateTypingAssistantMessage(msgs, { text: fullText.slice(0, end), typing: true }));
+    await wait(ASSISTANT_TYPE_INTERVAL_MS);
+  }
+
+  updateAgentMessages(sessionId, (msgs) =>
+    updateTypingAssistantMessage(msgs, { text: fullText, typing: false }));
 };
 
 const formatAgentError = (error) => {
@@ -564,6 +629,8 @@ export default function AgentPanel({ onClose }) {
   const [lastContextPacket, setLastContextPacket] = useState(null);
   const [activePanelTab, setActivePanelTab] = useState('chat');
   const [skillTabFilter, setSkillTabFilter] = useState('');
+  const [assistantActivity, setAssistantActivity] = useState(null);
+  const [runningSessionId, setRunningSessionId] = useState(null);
 
   // 工作区里所有 Markdown 文件（供 @ 选择）
   const mdFiles = useMemo(
@@ -617,6 +684,7 @@ export default function AgentPanel({ onClose }) {
 
   const abortRef = useRef(null);
   const inputRef = useRef(null);
+  const messagesRef = useRef(null);
 
   const isShortcutDisabled = useCallback((item) => {
     return running && (item.type === 'quick' || item.type === 'platform');
@@ -896,6 +964,8 @@ export default function AgentPanel({ onClose }) {
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
+    setAssistantActivity(null);
+    setRunningSessionId(null);
     setRunning(false);
   }, []);
 
@@ -1037,13 +1107,15 @@ export default function AgentPanel({ onClose }) {
 
     appendAgentMessage(sessionId, { role: 'user', text: displayText, files: fileNames });
     setRunning(true);
+    setAssistantActivity('thinking');
+    setRunningSessionId(sessionId);
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
       const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
       setLastContextPacket(taskContext);
-      const { history } = await runAgent({
+      const { finalText, history } = await runAgent({
         userInput: promptText,
         history: activeSession?.history ?? [],
         config: readProviderConfig(),
@@ -1056,15 +1128,27 @@ export default function AgentPanel({ onClose }) {
             appendAgentMessage(sessionId, { role: 'tool', label: ev.label, status: 'running' });
           } else if (ev.type === 'tool_done') {
             updateAgentMessages(sessionId, (msgs) => markLastToolDone(msgs, ev.label));
-          } else if (ev.type === 'done') {
-            if (ev.finalText) appendAgentMessage(sessionId, { role: 'assistant', text: ev.finalText });
           }
         },
       });
       setAgentHistory(sessionId, history);
+      if (finalText) {
+        setAssistantActivity('typing');
+        await appendTypedAssistantMessage({
+          sessionId,
+          text: finalText,
+          signal: controller.signal,
+          appendAgentMessage,
+          updateAgentMessages,
+        });
+      }
     } catch (error) {
-      appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${formatAgentError(error)}` });
+      if (String(error?.message ?? '') !== '已取消') {
+        appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${formatAgentError(error)}` });
+      }
     } finally {
+      setAssistantActivity(null);
+      setRunningSessionId(null);
       setRunning(false);
       abortRef.current = null;
     }
@@ -1331,6 +1415,13 @@ export default function AgentPanel({ onClose }) {
     setActiveSkillIndex((prev) => Math.min(prev, Math.max(filteredSkills.length - 1, 0)));
   }, [showSkillPicker, filteredSkills]);
 
+  useEffect(() => {
+    if (!isChatTab) return;
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, assistantActivity, isChatTab]);
+
   return (
     <div className="agent-panel">
       <div className="agent-panel__header">
@@ -1426,6 +1517,7 @@ export default function AgentPanel({ onClose }) {
       {isChatTab && (
         <div
           className={`agent-panel__messages${isWelcomeMode ? ' is-welcome' : ''}`}
+          ref={messagesRef}
           role="tabpanel"
           aria-label="对话"
         >
@@ -1463,7 +1555,7 @@ export default function AgentPanel({ onClose }) {
               );
             }
             const parsed = m.role === 'assistant'
-              ? parseAssistantChoiceCards(m.text)
+              ? buildAssistantRenderPayload(m)
               : { displayText: m.text, choices: [] };
             return (
               <div key={i} className={`agent-panel__msg agent-panel__msg--${m.role}`}>
@@ -1479,6 +1571,9 @@ export default function AgentPanel({ onClose }) {
                     </div>
                   )}
                   {parsed.displayText}
+                  {m.role === 'assistant' && m.typing && (
+                    <span className="agent-panel__typing-cursor" aria-hidden="true" />
+                  )}
                   {parsed.choices.length > 0 && (
                     <div className="agent-panel__choice-cards">
                       {parsed.choices.map((choice) => (
@@ -1500,7 +1595,7 @@ export default function AgentPanel({ onClose }) {
                       ))}
                     </div>
                   )}
-                  {m.role === 'assistant' && parsed.displayText && (
+                  {m.role === 'assistant' && !m.typing && parsed.displayText && (
                     <button
                       type="button"
                       className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
@@ -1517,6 +1612,15 @@ export default function AgentPanel({ onClose }) {
               </div>
             );
           })}
+          {running && assistantActivity === 'thinking' && runningSessionId === activeSessionId && (
+            <div className="agent-panel__activity" aria-live="polite">
+              <Loader2 size={14} className="agent-panel__spin" />
+              <span>AI 正在思考</span>
+              <span className="agent-panel__typing-dots" aria-hidden="true">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+            </div>
+          )}
         </div>
       )}
 

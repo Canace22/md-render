@@ -19,6 +19,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 | `apps/editor/main/aiRequest.js` | 主进程转发 AI 请求 | 桌面 app 的主路径：Renderer → IPC → Main → `server/ai-proxy`；无浏览器 CORS，但仍依赖 ai-proxy 可连通 |
 | `core/agent/sessionUtils.js` | 会话纯函数（增删/标题派生）+ @文件附件拼接 | 无副作用，可单测；store 只是薄 action 调它 |
 | `components/AgentPanel.jsx` | 对话/会话列表/@文件 UI + 注入 host | host 在这里对接 store（markdown / updateSelectedFileContent）和 `electronAPI.db.search` |
+| `components/MarkdownEditor.jsx` + `components/TabBar.jsx` | AI 助手全局 titlebar 入口、右侧 dock 开关 | 入口状态留在编辑器 shell，不为开关新建全局 store；只调整入口时不要改 agent 引擎 |
 | `server/ai-proxy/` | OpenAI 兼容转发代理 + 本地脚本工具服务 | 当前桌面 AI 聊天和 server 工具都会用到；Web 端没有 IPC 时也会直接 fetch 它 |
 
 ## AI 请求走哪条路（重要，按真实链路排错）
@@ -52,11 +53,13 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 
 ## 面板交互（AgentPanel）
 
+- AI 助手入口不在 `AgentPanel.jsx` 内：打开/关闭由 `MarkdownEditor.jsx` 持有状态，全局顶部按钮走 `TabBar` 的 `trailing` 区。只改入口位置时优先改 shell/titlebar，面板内容和 agent loop 不动。
 - 面板里的「对话 / 上下文 / 技能」这类纯 UI 切换用 `AgentPanel.jsx` 局部 state，不进 `useEditorStore`，也不要改 `agentEngine`。
 - `AgentDocMeta.jsx` 负责当前稿件、本轮上下文、相关旧文召回展示；不要把这些展示块重新堆回消息流顶部。
 - 技能页或 `/skill` picker 选中 `insert` 类型时，只把 `insertText` 填进输入框并切回对话；真正执行仍由用户发送后进入 agent loop。
 - 技能页触发 `quick` / `platform` / `script` 时复用现有 handler，不新增一套执行入口。
 - AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
+- AI 响应态属于 `AgentPanel.jsx` 展示层：模型没有流式输出时，也可以在 `runAgent` 返回 `finalText` 后本地打字式填充同一条 assistant 消息；等待模型时在消息列表底部显示 loading。打字过程中要隐藏未闭合的 `agent-choice` 注释协议，避免把内部 JSON 闪给用户。
 
 ## @文件（引用工作区文件作上下文）
 
