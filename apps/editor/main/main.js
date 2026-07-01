@@ -647,6 +647,7 @@ async function createWindow() {
 
   // vite-plugin-electron 在 dev 时自动注入 VITE_DEV_SERVER_URL
   if (process.env.VITE_DEV_SERVER_URL) {
+    await mainWindow.webContents.session.clearCache();
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
