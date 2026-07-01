@@ -77,6 +77,9 @@ export default function KnowledgeMetaPanel({
   const relatedDocs = (selectedFile?.relatedIds ?? [])
     .map((id) => filesById.get(id))
     .filter(Boolean);
+  const sourceDocs = (selectedFile?.sourceMaterialIds ?? [])
+    .map((id) => filesById.get(id))
+    .filter(Boolean);
 
   const addRelatedDoc = (targetId) => {
     if (!selectedFile || !targetId) return;
@@ -220,6 +223,27 @@ export default function KnowledgeMetaPanel({
             </div>
           )}
         </div>
+
+        {sourceDocs.length > 0 && (
+          <div className="knowledge-meta-field">
+            <span className="knowledge-meta-label">来源素材</span>
+            <div className="knowledge-chip-list">
+              {sourceDocs.map((file) => (
+                <button
+                  key={file.id}
+                  type="button"
+                  className="knowledge-chip knowledge-chip--source"
+                  onClick={() => onOpenFile?.(file.id)}
+                  title={`打开来源 ${file.name}`}
+                >
+                  <FileText size={12} strokeWidth={1.8} />
+                  <span>{file.name.replace(/\.md$/i, '')}</span>
+                  <ArrowLeft size={11} strokeWidth={2} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {hasElectronDb() && (
           <div className="knowledge-meta-field">

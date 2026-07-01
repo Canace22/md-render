@@ -163,6 +163,17 @@ const buildGeneratedFileName = (folder, desiredName, fallbackBase = 'AI 生成')
   return buildUniqueNameInFolder(folder, baseName, MARKDOWN_FILE_EXTENSION);
 };
 
+const buildGeneratedFileKnowledgeFields = (meta, sourceFileId) => {
+  const knowledge = createDefaultKnowledgeFields(meta);
+  return {
+    ...knowledge,
+    sourceMaterialIds: sanitizeStringList([
+      ...(knowledge.sourceMaterialIds ?? []),
+      sourceFileId,
+    ]),
+  };
+};
+
 /** 避免启动时用空 Notion 配置覆盖 localStorage 中已有值 */
 let editorPersistHydrated = false;
 
@@ -1728,6 +1739,9 @@ export const useEditorStore = create(
         const normalizedContent = normalizeMarkdown(String(content ?? ''));
         const targetFolderId = resolveTargetFolderId(workspace, targetNodeId);
         const targetFolder = findNodeById(workspace, targetFolderId);
+        const sourceNode = findNodeById(workspace, targetNodeId);
+        const sourceFileId = sourceNode?.type === 'file' ? sourceNode.id : '';
+        const knowledgeFields = buildGeneratedFileKnowledgeFields(meta, sourceFileId);
 
         if (!targetFolder || targetFolder.type !== 'folder') {
           return { ok: false, error: '无法定位目标文件夹。' };
@@ -1761,7 +1775,7 @@ export const useEditorStore = create(
                 finalName,
                 normalizedContent,
               ),
-              ...createDefaultKnowledgeFields(meta),
+              ...knowledgeFields,
               updatedAt: result.updatedAt ?? Date.now(),
             };
             const nextWorkspace = addChildNode(workspace, target.parentFolderId, node, true);
@@ -1791,7 +1805,7 @@ export const useEditorStore = create(
           content: normalizedContent,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          ...createDefaultKnowledgeFields(meta),
+          ...knowledgeFields,
         };
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFile, true);
         persistWorkspace(nextWorkspace);

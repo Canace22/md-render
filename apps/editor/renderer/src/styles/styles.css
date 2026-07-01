@@ -754,6 +754,17 @@ a.sidebar-rail-btn:hover {
     color: #1d4ed8;
 }
 
+.knowledge-chip--source {
+    border: 1px solid rgba(13, 148, 136, 0.24);
+    background: rgba(13, 148, 136, 0.1);
+    color: #0f766e;
+    cursor: pointer;
+}
+
+.knowledge-chip--source:hover {
+    background: rgba(13, 148, 136, 0.16);
+}
+
 .knowledge-chip span {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -5888,6 +5899,12 @@ body.theme-dark .knowledge-chip--backlink,
 body.theme-dark .knowledge-version-restore {
     border-color: rgba(71, 85, 105, 0.42);
     color: var(--color-text-secondary);
+}
+
+body.theme-dark .knowledge-chip--source {
+    border-color: rgba(45, 212, 191, 0.28);
+    background: rgba(20, 184, 166, 0.14);
+    color: #5eead4;
 }
 
 body.theme-dark .draft-meta-panel {

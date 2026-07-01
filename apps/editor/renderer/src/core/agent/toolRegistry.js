@@ -236,6 +236,11 @@ export const TOOL_DEFINITIONS = Object.freeze([
             description: '新文档关联的平台标识列表，如 wechat / xiaohongshu / zhihu',
             items: { type: 'string' },
           },
+          sourceMaterialIds: {
+            type: 'array',
+            description: '可选，明确标记这个新文档来源于哪些已有文档 id；不传时默认关联当前文档',
+            items: { type: 'string' },
+          },
         },
         required: ['content'],
       },
@@ -468,6 +473,7 @@ const EXECUTORS = {
       name: args?.name,
       content,
       targetPlatforms: args?.targetPlatforms,
+      sourceMaterialIds: args?.sourceMaterialIds,
     });
     return typeof result === 'string' ? result : '已创建新文档。';
   },

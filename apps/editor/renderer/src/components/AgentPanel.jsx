@@ -636,12 +636,12 @@ export default function AgentPanel({ onClose }) {
       const applied = await stageAgentWrite({ oldText: markdown ?? '', newText: content });
       return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
     },
-    createNewDoc: async ({ name, content, targetPlatforms } = {}) => {
+    createNewDoc: async ({ name, content, targetPlatforms, sourceMaterialIds } = {}) => {
       const result = await createGeneratedFile({
         name,
         content,
         contextNodeId: selectedId,
-        meta: { targetPlatforms },
+        meta: { targetPlatforms, sourceMaterialIds },
       });
       return result?.ok
         ? `已新建文档「${result.name}」，原文未改动。`
