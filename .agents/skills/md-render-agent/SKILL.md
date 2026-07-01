@@ -15,18 +15,18 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 |------|------|---------|
 | `core/agent/agentEngine.js` | agent loop（调模型→执行工具→回填→循环） | 纯逻辑，**不碰 IPC / store / React**。模型调用走 aiClient，工具走 host，进度走 onEvent |
 | `core/agent/toolRegistry.js` | OpenAI tools 定义 + 执行器 | 工具定义是纯数据；执行器依赖注入的 `host`，**不直接 import store/IPC**（这样可单测） |
-| `core/agent/aiClient.js` | 调 OpenAI 兼容接口 + AI 配置读写 | 配置走 localStorage（key 前缀 `md-renderer-ai-*`），**key 绝不入库** |
-| `apps/editor/main/aiRequest.js` | 主进程 Node 直连 AI | 桌面 app 的 AI 主路径，无 CORS |
+| `core/agent/aiClient.js` | 调 OpenAI 兼容接口 + AI 配置读写 | Electron 下走 `window.electronAPI.ai.chat`，Web 下才直接 fetch；配置走 localStorage（key 前缀 `md-renderer-ai-*`），**key 绝不入库** |
+| `apps/editor/main/aiRequest.js` | 主进程转发 AI 请求 | 桌面 app 的主路径：Renderer → IPC → Main → `server/ai-proxy`；无浏览器 CORS，但仍依赖 ai-proxy 可连通 |
 | `core/agent/sessionUtils.js` | 会话纯函数（增删/标题派生）+ @文件附件拼接 | 无副作用，可单测；store 只是薄 action 调它 |
 | `components/AgentPanel.jsx` | 对话/会话列表/@文件 UI + 注入 host | host 在这里对接 store（markdown / updateSelectedFileContent）和 `electronAPI.db.search` |
-| `server/ai-proxy/` | OpenAI 兼容转发代理 | **仅 Web 端需要**，桌面 app 用不到（见下） |
+| `server/ai-proxy/` | OpenAI 兼容转发代理 + 本地脚本工具服务 | 当前桌面 AI 聊天和 server 工具都会用到；Web 端没有 IPC 时也会直接 fetch 它 |
 
-## AI 请求走哪条路（重要，别改回代理）
+## AI 请求走哪条路（重要，按真实链路排错）
 
-- **桌面 app（Electron，默认）**：走主进程 IPC `window.electronAPI.ai.chat` → `aiRequest.js`，Node 直连无 CORS，**不需要任何代理服务器**。设置里不显示代理地址框。
-- **Web 端兜底**：没有 IPC 时 aiClient 才回退到代理 fetch（需配 `VITE_AI_PROXY` / 运行时代理地址），这时才用 `server/ai-proxy`。
+- **桌面 app（Electron，默认）**：Renderer 走 IPC `window.electronAPI.ai.chat` → `apps/editor/main/aiRequest.js` → `server/ai-proxy` 的 `/api/chat`。这条路没有浏览器 CORS，但如果 `server/ai-proxy` 没启动或 `AI_PROXY_BASE` 指错，面板会报 AI 代理连接失败。
+- **Web 端兜底**：没有 IPC 时 `aiClient` 才直接 fetch `server/ai-proxy`（需配 `VITE_AI_PROXY` / 运行时代理地址）。
 - `aiClient.hasAiBridge()` 判断当前走哪条路；`isAiConfigured()` 在 Electron 下只校验 key，Web 下还要校验代理地址。
-- 改 AI 调用时优先用 IPC 路径，别为桌面 app 引入代理依赖。
+- 改 AI 调用时优先保留 IPC 路径；代理地址默认在 main 进程读 `AI_PROXY_BASE || http://localhost:8788`，前端设置里的 server 地址主要给 Web 兜底用。
 
 ## 加一个新工具的标准步骤（最常见任务）
 
@@ -60,6 +60,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 ## 不看代码想不到的坑
 
 - preload 暴露的是 `window.electronAPI`（不是 `window.electron`）；搜索是 `await window.electronAPI.db.search(query)`，返回 `{ results: [...] }`。
+- 截图里如果只显示 `fetch failed`，先查主进程是否连不上 `server/ai-proxy`，不要只按前端 CORS 排查。当前友好错误在 `apps/editor/main/aiRequest.js` 和 `AgentPanel.jsx` 两层兜底。
 - 写当前文档用 store 的 `updateSelectedFileContent(content)`，不要直接 setMarkdown（那个不落盘）。
 - 工具执行器要对坏 JSON 参数、空参数容错，返回友好字符串而非抛错（toolRegistry 已用 try/catch 包裹）。
 - agent loop 有 maxSteps 上限，防止模型反复调工具死循环。

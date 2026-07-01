@@ -10,6 +10,28 @@
 const AI_PROXY_TIMEOUT_MS = 60000;
 const TOOL_EXEC_TIMEOUT_MS = 5 * 60 * 1000; // 工具执行最长 5 分钟
 
+const normalizeAiProxyBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
+
+const isNetworkError = (err) => {
+  const message = String(err?.message ?? err ?? '').toLowerCase();
+  return err?.name === 'AbortError'
+    || message === 'fetch failed'
+    || message.includes('econnrefused')
+    || message.includes('enotfound')
+    || message.includes('network');
+};
+
+const formatProxyError = (err, aiProxyBase) => {
+  const base = normalizeAiProxyBase(aiProxyBase) || 'AI 代理服务';
+  if (err?.name === 'AbortError') {
+    return `AI 代理请求超时：${base} 暂无响应，请检查服务是否正常。`;
+  }
+  if (isNetworkError(err)) {
+    return `AI 代理连接失败：无法连接 ${base}。请先启动 server/ai-proxy，或检查 AI_PROXY_BASE 配置。`;
+  }
+  return err?.message || String(err);
+};
+
 /**
  * 调用 ai-proxy server 的 /api/chat 接口。
  *
@@ -26,7 +48,8 @@ export async function requestChatCompletion({ aiProxyBase, providerId, messages,
   if (!providerId) throw new Error('未指定 providerId');
   if (!messages || !messages.length) throw new Error('消息不能为空');
 
-  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/chat`;
+  const base = normalizeAiProxyBase(aiProxyBase);
+  const url = `${base}/api/chat`;
 
   const payload = { providerId, messages };
   if (model) payload.model = model;
@@ -52,6 +75,8 @@ export async function requestChatCompletion({ aiProxyBase, providerId, messages,
     const message = data?.choices?.[0]?.message;
     if (!message) throw new Error('AI 返回内容为空');
     return message;
+  } catch (err) {
+    throw new Error(formatProxyError(err, base));
   } finally {
     clearTimeout(timer);
   }

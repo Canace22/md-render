@@ -95,6 +95,15 @@ const markLastToolDone = (messages, label) => {
   return next;
 };
 
+const formatAgentError = (error) => {
+  const raw = String(error?.message ?? error ?? '').trim();
+  if (!raw) return 'AI 请求失败，请稍后再试。';
+  if (raw === 'fetch failed') {
+    return 'AI 服务连接失败：请检查 ai-proxy 是否已启动，或在设置里确认 AI 服务器地址。';
+  }
+  return raw;
+};
+
 const recallDocsForContext = async ({
   doc,
   selectedId,
@@ -1024,7 +1033,7 @@ export default function AgentPanel({ onClose }) {
       });
       setAgentHistory(sessionId, history);
     } catch (error) {
-      appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${error?.message ?? String(error)}` });
+      appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${formatAgentError(error)}` });
     } finally {
       setRunning(false);
       abortRef.current = null;
