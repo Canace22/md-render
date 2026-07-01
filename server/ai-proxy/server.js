@@ -14,7 +14,6 @@
  * - PORT              监听端口，默认 8788
  * - ALLOW_ORIGIN      允许的来源，默认 *
  * - AI_UPSTREAM_HOST  透明代理默认上游，默认 api.openai.com
- * - XIAOMI_API_KEY    小米 MiMo key
  * - MINIMAX_API_KEY   MiniMax key
  */
 
@@ -50,15 +49,9 @@ const DEFAULT_UPSTREAM_HOST = process.env.AI_UPSTREAM_HOST || 'api.openai.com';
 
 // ── Provider 配置（key 从 .env 读取） ──────────────────────
 const PROVIDERS = {
-  'xiaomi-mimo': {
-    label: '小米 MiMo',
-    baseURL: 'https://token-plan-sgp.xiaomimimo.com/v1',
-    defaultModel: 'mimo-v2.5-pro',
-    apiKeyEnv: 'XIAOMI_API_KEY',
-  },
   'minimax': {
     label: 'MiniMax',
-    baseURL: 'https://api.minimaxi.com/v1',
+    baseURL: 'https://api.minimax.io/v1',
     defaultModel: 'MiniMax-M3',
     apiKeyEnv: 'MINIMAX_API_KEY',
   },

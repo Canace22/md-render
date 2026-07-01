@@ -39,7 +39,7 @@ bash deploy.sh --skip-firewall --skip-python
 
 ### 部署后配置
 
-1. 编辑 `ai-proxy/.env`，填入 `XIAOMI_API_KEY`、`MINIMAX_API_KEY` 等
+1. 编辑 `ai-proxy/.env`，填入 `MINIMAX_API_KEY` 等
 2. `pm2 restart ai-proxy`
 3. 在开发机 `apps/editor/.env` 填入：
 

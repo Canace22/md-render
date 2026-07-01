@@ -13,6 +13,7 @@ import { AI_PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from './aiProviders.js
 
 const ACTIVE_PROVIDER_KEY = 'md-renderer-ai-provider';
 const AI_SERVER_STORAGE_KEY = 'md-renderer-ai-server';
+const LEGACY_PROVIDER_IDS = new Set(['xiaomi-mimo']);
 const providerModelStorageKey = (id) => `md-renderer-ai-model:${id}`;
 
 const normalizeBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
@@ -45,8 +46,11 @@ export const resolveAiServerBase = () => {
   return normalizeBase(import.meta.env?.VITE_AI_PROXY);
 };
 
-export const getActiveProviderId = () =>
-  readLocalStorage(ACTIVE_PROVIDER_KEY) || DEFAULT_PROVIDER_ID;
+export const getActiveProviderId = () => {
+  const savedProviderId = readLocalStorage(ACTIVE_PROVIDER_KEY);
+  if (!savedProviderId || LEGACY_PROVIDER_IDS.has(savedProviderId)) return DEFAULT_PROVIDER_ID;
+  return savedProviderId;
+};
 
 /**
  * 从主进程获取服务端可用的 provider 列表。

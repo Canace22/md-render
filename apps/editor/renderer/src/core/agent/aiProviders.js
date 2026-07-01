@@ -4,7 +4,7 @@
  * 只预设非敏感信息：服务商 id、显示名、完整 baseURL、默认模型。
  *
  * API key 策略：
- * - 内置服务商（xiaomi-mimo, minimax）：key 存在主进程 .env，renderer 不接触。
+ * - 内置服务商（minimax）：key 存在主进程 .env，renderer 不接触。
  * - 自定义服务商：用户在设置面板手填，存 localStorage。
  *
  * baseURL 存「完整基址」（含各家自己的路径），请求时统一拼 `${baseURL}/chat/completions`。
@@ -12,15 +12,9 @@
 
 export const AI_PROVIDERS = Object.freeze([
   {
-    id: 'xiaomi-mimo',
-    label: '小米 MiMo',
-    baseURL: 'https://token-plan-sgp.xiaomimimo.com/v1',
-    defaultModel: 'mimo-v2.5-pro',
-  },
-  {
     id: 'minimax',
     label: 'MiniMax',
-    baseURL: 'https://api.minimaxi.com/v1',
+    baseURL: 'https://api.minimax.io/v1',
     defaultModel: 'MiniMax-M3',
   },
   {
@@ -43,7 +37,7 @@ export const AI_PROVIDERS = Object.freeze([
   },
 ]);
 
-export const DEFAULT_PROVIDER_ID = 'xiaomi-mimo';
+export const DEFAULT_PROVIDER_ID = 'minimax';
 
 export const getProvider = (id) =>
   AI_PROVIDERS.find((p) => p.id === id) || AI_PROVIDERS.find((p) => p.id === DEFAULT_PROVIDER_ID);

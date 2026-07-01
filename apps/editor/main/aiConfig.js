@@ -8,14 +8,9 @@
 
 // 内置 provider 列表（与 server/ai-proxy/server.js 保持同步）
 export const BUILTIN_PROVIDERS = {
-  'xiaomi-mimo': {
-    label: '小米 MiMo',
-    baseURL: 'https://token-plan-sgp.xiaomimimo.com/v1',
-    defaultModel: 'mimo-v2.5-pro',
-  },
   'minimax': {
     label: 'MiniMax',
-    baseURL: 'https://api.minimaxi.com/v1',
+    baseURL: 'https://api.minimax.io/v1',
     defaultModel: 'MiniMax-M3',
   },
 };
