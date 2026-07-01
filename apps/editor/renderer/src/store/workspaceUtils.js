@@ -53,6 +53,17 @@ export const createDefaultKnowledgeFields = (overrides = {}) => {
   };
 };
 
+export const buildDerivedAssetKnowledgeFields = (meta = {}, sourceFileId = '') => {
+  const knowledge = createDefaultKnowledgeFields(meta);
+  return {
+    ...knowledge,
+    sourceMaterialIds: sanitizeStringList([
+      ...(knowledge.sourceMaterialIds ?? []),
+      sourceFileId,
+    ]),
+  };
+};
+
 export const getKnowledgeNodeTypeLabel = (nodeType) => {
   return KNOWLEDGE_NODE_TYPE_OPTIONS.find((item) => item.value === normalizeNodeType(nodeType))?.label ?? '文档';
 };
@@ -235,6 +246,11 @@ export function findNodeById(node, targetId) {
   }
   return null;
 }
+
+export const getDerivationSourceFileId = (workspace, sourceNodeId) => {
+  const node = findNodeById(workspace, sourceNodeId);
+  return node?.type === 'file' ? node.id : '';
+};
 
 export function findParentId(node, targetId, parentId = null) {
   if (!node) return null;

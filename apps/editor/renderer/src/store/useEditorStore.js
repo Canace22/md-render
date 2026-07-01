@@ -9,6 +9,7 @@ import {
   updateNodeById,
   removeNodeById,
   addChildNode,
+  buildDerivedAssetKnowledgeFields,
   ensureFileTimestamps,
   ensureKnowledgeFields,
   findFirstFileId,
@@ -33,6 +34,7 @@ import {
   sanitizeStringList,
   moveNodeInParent,
   togglePinNode,
+  getDerivationSourceFileId,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
@@ -161,17 +163,6 @@ const sanitizeGeneratedFileBaseName = (name, fallback = 'AI 生成') => {
 const buildGeneratedFileName = (folder, desiredName, fallbackBase = 'AI 生成') => {
   const baseName = sanitizeGeneratedFileBaseName(desiredName, fallbackBase);
   return buildUniqueNameInFolder(folder, baseName, MARKDOWN_FILE_EXTENSION);
-};
-
-const buildGeneratedFileKnowledgeFields = (meta, sourceFileId) => {
-  const knowledge = createDefaultKnowledgeFields(meta);
-  return {
-    ...knowledge,
-    sourceMaterialIds: sanitizeStringList([
-      ...(knowledge.sourceMaterialIds ?? []),
-      sourceFileId,
-    ]),
-  };
 };
 
 /** 避免启动时用空 Notion 配置覆盖 localStorage 中已有值 */
@@ -1739,9 +1730,8 @@ export const useEditorStore = create(
         const normalizedContent = normalizeMarkdown(String(content ?? ''));
         const targetFolderId = resolveTargetFolderId(workspace, targetNodeId);
         const targetFolder = findNodeById(workspace, targetFolderId);
-        const sourceNode = findNodeById(workspace, targetNodeId);
-        const sourceFileId = sourceNode?.type === 'file' ? sourceNode.id : '';
-        const knowledgeFields = buildGeneratedFileKnowledgeFields(meta, sourceFileId);
+        const sourceFileId = getDerivationSourceFileId(workspace, targetNodeId);
+        const knowledgeFields = buildDerivedAssetKnowledgeFields(meta, sourceFileId);
 
         if (!targetFolder || targetFolder.type !== 'folder') {
           return { ok: false, error: '无法定位目标文件夹。' };
