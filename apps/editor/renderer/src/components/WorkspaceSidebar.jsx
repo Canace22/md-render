@@ -513,6 +513,7 @@ const WorkspaceSidebar = ({
   const [contextMenu, setContextMenu] = useState(null); // { kind, nodeId, x, y }
   // undefined = 不强制（用户自由展开/收起），true = 全部展开，false = 全部收起
   const [forceOpen, setForceOpen] = useState(undefined);
+  const isCommittingRenameRef = useRef(false);
 
   const handleToggleAllFolders = useCallback(() => {
     setForceOpen((prev) => (prev === false ? true : false));
@@ -537,14 +538,20 @@ const WorkspaceSidebar = ({
 
   const handleCommitRename = async () => {
     if (!renamingNodeId) return;
-    const trimmed = renameDraft.trim();
-    if (!trimmed) {
-      handleCancelRename();
-      return;
-    }
-    const ok = await onRename(renamingNodeId, trimmed);
-    if (ok) {
-      handleCancelRename();
+    if (isCommittingRenameRef.current) return;
+    isCommittingRenameRef.current = true;
+    try {
+      const trimmed = renameDraft.trim();
+      if (!trimmed) {
+        handleCancelRename();
+        return;
+      }
+      const ok = await onRename(renamingNodeId, trimmed);
+      if (ok) {
+        handleCancelRename();
+      }
+    } finally {
+      isCommittingRenameRef.current = false;
     }
   };
 
