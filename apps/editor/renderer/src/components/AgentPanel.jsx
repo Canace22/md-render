@@ -21,6 +21,7 @@ import {
 } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
+import { parseAssistantChoiceCards } from '../core/agent/choiceCards.js';
 import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
@@ -1095,6 +1096,15 @@ export default function AgentPanel({ onClose }) {
     });
   }, [input, running, attachedFiles, quotedSelection, clearAiQuotedSelection, runTurn]);
 
+  const handleChoiceCardClick = useCallback((choice) => {
+    if (running) return;
+    const label = [choice.label, choice.title].filter(Boolean).join(' ');
+    runTurn({
+      promptText: choice.prompt,
+      displayText: label || choice.prompt,
+    });
+  }, [running, runTurn]);
+
   // 快捷动作：直接走 AI 助手，让 agent 读当前文档并处理。
   // 有引用选区时，改写类动作只处理这段（其余动作内部会忽略选区），触发后清空引用。
   const handleQuickAction = useCallback((actionKey) => {
@@ -1452,6 +1462,9 @@ export default function AgentPanel({ onClose }) {
                 </div>
               );
             }
+            const parsed = m.role === 'assistant'
+              ? parseAssistantChoiceCards(m.text)
+              : { displayText: m.text, choices: [] };
             return (
               <div key={i} className={`agent-panel__msg agent-panel__msg--${m.role}`}>
                 <span className="agent-panel__avatar">
@@ -1465,13 +1478,34 @@ export default function AgentPanel({ onClose }) {
                       ))}
                     </div>
                   )}
-                  {m.text}
-                  {m.role === 'assistant' && m.text && (
+                  {parsed.displayText}
+                  {parsed.choices.length > 0 && (
+                    <div className="agent-panel__choice-cards">
+                      {parsed.choices.map((choice) => (
+                        <button
+                          key={`${choice.label}-${choice.title}`}
+                          type="button"
+                          className="agent-panel__choice-card"
+                          disabled={running}
+                          onClick={() => handleChoiceCardClick(choice)}
+                        >
+                          <span className="agent-panel__choice-label">{choice.label}</span>
+                          <span className="agent-panel__choice-main">
+                            {choice.title && <span className="agent-panel__choice-title">{choice.title}</span>}
+                            {choice.description && (
+                              <span className="agent-panel__choice-desc">{choice.description}</span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {m.role === 'assistant' && parsed.displayText && (
                     <button
                       type="button"
                       className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
                       title={copiedIndex === i ? '已复制' : '复制'}
-                      onClick={() => handleCopy(i, m.text)}
+                      onClick={() => handleCopy(i, parsed.displayText)}
                     >
                       {copiedIndex === i ? <Check size={13} /> : <Copy size={13} />}
                       <span className="agent-panel__copy-label">

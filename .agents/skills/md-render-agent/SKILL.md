@@ -56,6 +56,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - `AgentDocMeta.jsx` 负责当前稿件、本轮上下文、相关旧文召回展示；不要把这些展示块重新堆回消息流顶部。
 - 技能页或 `/skill` picker 选中 `insert` 类型时，只把 `insertText` 填进输入框并切回对话；真正执行仍由用户发送后进入 agent loop。
 - 技能页触发 `quick` / `platform` / `script` 时复用现有 handler，不新增一套执行入口。
+- AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
 
 ## @文件（引用工作区文件作上下文）
 
