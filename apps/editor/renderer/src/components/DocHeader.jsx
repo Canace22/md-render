@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { countWords } from '../utils/wordCount.js';
 import DocMetaPanel from './DocMetaPanel.jsx';
 
@@ -23,7 +24,8 @@ export default function DocHeader({
   setTitleDraft,
 }) {
   const [metaOpen, setMetaOpen] = useState(false);
-  const displayName = titleDraft || selectedFile?.name || '未命名';
+  const selectedFileDisplayName = stripFileExtension(selectedFile?.name);
+  const displayName = titleDraft || selectedFileDisplayName;
   const wordCount = selectedFile ? countWords(selectedFile.content) : 0;
 
   return (
@@ -70,10 +72,10 @@ export default function DocHeader({
                 }
               }}
             >
-              {selectedFile?.name ?? '未命名'}
+              {selectedFileDisplayName}
             </span>
           ) : (
-            <span>{selectedFile?.name ?? '未命名'}</span>
+            <span>{selectedFileDisplayName}</span>
           )}
           {selectedFile && (
             <span className="right-area-doc-wordcount" data-testid="doc-wordcount">

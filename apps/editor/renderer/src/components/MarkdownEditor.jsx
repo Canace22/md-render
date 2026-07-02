@@ -48,6 +48,7 @@ import {
   normalizeMarkdown,
 } from '../utils/markdownUtils';
 import { applyThemeToBody } from '../utils/themeUtils';
+import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { copyToWeChat, htmlToPlainText } from '../utils/wechatCopy';
 import { getTemplateById } from '../utils/wechatTemplates';
 import { blocksToMarkdown, markdownToNotionPayload } from '../utils/notionConverter.js';
@@ -262,7 +263,6 @@ const BLANK_CANVAS_CARD_TITLE = '空白卡片';
 const BLANK_CANVAS_CARD_TYPE_LABEL = '卡片';
 const BLANK_CANVAS_CARD_META = '自由记录';
 
-const stripMarkdownExtension = (name = '') => String(name).replace(/\.md$/i, '');
 const truncateInlineText = (value, maxLength = 96) => {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
@@ -456,7 +456,7 @@ function MarkdownEditor() {
   const recentDrafts = useMemo(() => {
     return collectRecentDrafts(allFiles, 4).map((file) => ({
       id: file.id,
-      title: stripMarkdownExtension(file.name),
+      title: stripFileExtension(file.name),
       summary: file.summary,
       excerpt: truncateInlineText(file.content, 120),
       stage: getStatusLabel(getDocumentStatus(file) ?? 'drafting'),
@@ -468,7 +468,7 @@ function MarkdownEditor() {
   const topicQueue = useMemo(() => {
     return activeTopicSummary.items.map((item) => ({
       id: item.id,
-      title: stripMarkdownExtension(item.name),
+      title: stripFileExtension(item.name),
       summary: item.summary,
       angle: item.summary,
       status: getStatusLabel(item.status),
@@ -481,7 +481,7 @@ function MarkdownEditor() {
   const materialInbox = useMemo(() => {
     return collectPendingMaterials(allFiles, 4).map((file) => ({
       id: file.id,
-      title: stripMarkdownExtension(file.name),
+      title: stripFileExtension(file.name),
       summary: file.summary,
       note: truncateInlineText(file.content, 110),
       source: file.nodeType === 'bookmark' ? '书签' : '素材',
@@ -494,7 +494,7 @@ function MarkdownEditor() {
       const resolvedStatus = getDocumentStatus(file) ?? 'ready';
       return {
         id: file.id,
-        title: stripMarkdownExtension(file.name),
+        title: stripFileExtension(file.name),
         summary: file.summary,
         excerpt: truncateInlineText(file.content, 120),
         scheduledPublishAt: file.scheduledPublishAt,
@@ -537,7 +537,7 @@ function MarkdownEditor() {
         const resolvedStatus = getDocumentStatus(file);
         return {
           id: file.id,
-          title: stripMarkdownExtension(file.name),
+          title: stripFileExtension(file.name),
           summary: file.summary || truncateInlineText(file.content, 100),
           updatedAt: file.updatedAt,
           createdAt: file.createdAt,
@@ -550,7 +550,7 @@ function MarkdownEditor() {
   const canvasItems = useMemo(() => {
     return allFiles.map((file) => ({
       id: file.id,
-      title: stripMarkdownExtension(file.name),
+      title: stripFileExtension(file.name),
       summary: getCanvasCardSummary(file),
       nodeType: file.nodeType ?? 'document',
       typeLabel: getCanvasCardTypeLabel(file),

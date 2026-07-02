@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { X, FileText, Globe } from 'lucide-react';
+import { stripFileExtension } from '../utils/fileDisplayName.js';
 
 const getHostname = (url) => {
   try {
@@ -67,6 +68,7 @@ export default function TabBar({
       <div className="tab-bar-scroller">
         {tabs.map((tab) => {
           const isActive = tab.id === activeId;
+          const displayTitle = stripFileExtension(tab.title);
           return (
             <div
               key={tab.id}
@@ -79,13 +81,13 @@ export default function TabBar({
               title={tab.title}
             >
               <FileText size={13} strokeWidth={1.5} className="tab-bar-item-icon" />
-              <span className="tab-bar-item-text">{tab.title}</span>
+              <span className="tab-bar-item-text">{displayTitle}</span>
               <button
                 type="button"
                 className="tab-bar-item-close"
                 onClick={(e) => { e.stopPropagation(); onClose(tab.id); }}
                 title="关闭标签"
-                aria-label={`关闭 ${tab.title}`}
+                aria-label={`关闭 ${displayTitle}`}
               >
                 <X size={12} strokeWidth={2} />
               </button>

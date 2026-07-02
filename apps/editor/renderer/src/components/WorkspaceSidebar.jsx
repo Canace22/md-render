@@ -44,6 +44,7 @@ import {
   getNodeSortTime,
 } from '../store/workspaceUtils.js';
 import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
+import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
@@ -207,6 +208,7 @@ const TreeNode = ({
 
   const indentPx = depth * 12 + 8;
   const indentStyle = { paddingLeft: `${indentPx}px`, '--indent-guide-left': `${(depth - 1) * 12 + 8 + 4}px` };
+  const displayName = isFolder ? node.name : stripFileExtension(node.name);
   const nodeClass = [
     'tree-node',
     isFolder ? 'folder' : 'file',
@@ -339,7 +341,7 @@ const TreeNode = ({
               aria-label="重命名"
             />
           ) : (
-            <span className="tree-node-text">{node.name}</span>
+            <span className="tree-node-text">{displayName}</span>
           )}
           {node.pinned && (
             <span className="tree-node-pin-icon" title="已置顶">

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { findNodeById, findParentId } from '../store/workspaceUtils.js';
+import { stripFileExtension } from '../utils/fileDisplayName.js';
 
 /**
  * 面包屑导航 — 显示当前文件的路径层级
@@ -13,7 +14,13 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
     let currentId = selectedId;
     while (currentId && currentId !== 'root') {
       const node = findNodeById(workspace, currentId);
-      if (node) chain.unshift({ id: node.id, name: node.name, type: node.type });
+      if (node) {
+        chain.unshift({
+          id: node.id,
+          displayName: node.type === 'file' ? stripFileExtension(node.name) : (node.name ?? '未命名'),
+          type: node.type,
+        });
+      }
       currentId = findParentId(workspace, currentId);
     }
     return chain;
@@ -24,7 +31,7 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
   }
 
   const currentNodeId = pathChain[pathChain.length - 1]?.id;
-  const fullPathLabel = pathChain.map((item) => item.name).join(' / ');
+  const fullPathLabel = pathChain.map((item) => item.displayName).join(' / ');
 
   return (
     <nav className="breadcrumb-bar" aria-label="文件路径" title={fullPathLabel}>
@@ -33,7 +40,7 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
           {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="breadcrumb-sep" aria-hidden />}
           {item.id === currentNodeId ? (
             <span className="breadcrumb-current" aria-current="page" title={fullPathLabel}>
-              {item.name}
+              {item.displayName}
             </span>
           ) : (
             <button
@@ -41,7 +48,7 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
               className="breadcrumb-link"
               onClick={() => onNavigate(item.id)}
             >
-              {item.name}
+              {item.displayName}
             </button>
           )}
         </span>
