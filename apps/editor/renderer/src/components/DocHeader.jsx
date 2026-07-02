@@ -62,10 +62,10 @@ export default function DocHeader({
           ) : titleEditable ? (
             <span
               className="right-area-doc-title-clickable"
-              onDoubleClick={startTitleEditing}
+              onClick={startTitleEditing}
               role="button"
               tabIndex={0}
-              title="双击编辑标题"
+              title="编辑标题"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
