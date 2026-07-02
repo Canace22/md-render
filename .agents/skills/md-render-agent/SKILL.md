@@ -27,7 +27,8 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - **桌面 app（Electron，默认）**：Renderer 走 IPC `window.electronAPI.ai.chat` → `apps/editor/main/aiRequest.js` → `server/ai-proxy` 的 `/api/chat`。这条路没有浏览器 CORS，但如果 `server/ai-proxy` 没启动或 `AI_PROXY_BASE` 指错，面板会报 AI 代理连接失败。
 - **Web 端兜底**：没有 IPC 时 `aiClient` 才直接 fetch `server/ai-proxy`（需配 `VITE_AI_PROXY` / 运行时代理地址）。
 - `aiClient.hasAiBridge()` 判断当前走哪条路；`isAiConfigured()` 在 Electron 下只校验 key，Web 下还要校验代理地址。
-- 改 AI 调用时优先保留 IPC 路径；代理地址默认在 main 进程读 `AI_PROXY_BASE || http://localhost:8788`，前端设置里的 server 地址主要给 Web 兜底用。
+- 改 AI 调用时优先保留 IPC 路径；代理地址优先级是：AI 面板本机设置（localStorage `md-renderer-ai-server`，由 renderer 透传给 IPC）→ 打包时从 `AI_PROXY_BASE` / `VITE_AI_PROXY` 注入的默认值 → main 进程运行时 `AI_PROXY_BASE` → `http://localhost:8788`。
+- 打包后如果看到还在连 `localhost:8788`，先查 `apps/editor/.env` 是否有 `AI_PROXY_BASE`、`apps/editor/vite.config.js` 是否把它注入到 `__MD_RENDER_AI_PROXY_BASE__`、以及 `AgentPanel.jsx` / `aiClient.js` 是否把保存的 `aiProxyBase` 传给 `window.electronAPI.ai.chat/execTool/listTools`。
 - 开发启动用 `pnpm electron:dev` / `pnpm --filter @md-render/editor electron:dev`，脚本会先探活本地 ai-proxy，没启动就自动拉起；如果设置了远程 `AI_PROXY_BASE` 则跳过本地服务。
 
 ## 加一个新工具的标准步骤（最常见任务）
@@ -72,7 +73,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 ## 不看代码想不到的坑
 
 - preload 暴露的是 `window.electronAPI`（不是 `window.electron`）；搜索是 `await window.electronAPI.db.search(query)`，返回 `{ results: [...] }`。
-- 截图里如果只显示 `fetch failed`，先查主进程是否连不上 `server/ai-proxy`，不要只按前端 CORS 排查。当前友好错误在 `apps/editor/main/aiRequest.js` 和 `AgentPanel.jsx` 两层兜底。
+- 截图里如果只显示 `fetch failed` 或打包 app 仍连 `localhost:8788`，先查主进程是否拿到了正确的 `aiProxyBase`，不要只按前端 CORS 排查。当前友好错误在 `apps/editor/main/aiRequest.js` 和 `AgentPanel.jsx` 两层兜底。
 - 写当前文档用 store 的 `updateSelectedFileContent(content)`，不要直接 setMarkdown（那个不落盘）。
 - 工具执行器要对坏 JSON 参数、空参数容错，返回友好字符串而非抛错（toolRegistry 已用 try/catch 包裹）。
 - agent loop 有 maxSteps 上限，防止模型反复调工具死循环。

@@ -55,10 +55,11 @@ import {
   readProviderConfig,
   setActiveProvider,
   saveProviderConfig,
+  readAiServerBase,
+  saveAiServerBase,
   hasBuiltinKey,
   fetchServerProviders,
   hasAiBridge,
-  resolveAiServerBase,
 } from '../core/agent/aiClient.js';
 
 const hasElectronSearch = () =>
@@ -670,6 +671,7 @@ export default function AgentPanel({ onClose }) {
   const providers = useMemo(() => listProviders(), []);
   const [providerId, setProviderId] = useState(() => getActiveProviderId());
   const [cfg, setCfg] = useState(() => readProviderConfig());
+  const [aiServerBase, setAiServerBase] = useState(() => readAiServerBase());
   const [serverProvidersReady, setServerProvidersReady] = useState(false);
 
   // 启动时从主进程获取内置 provider 列表
@@ -913,7 +915,11 @@ export default function AgentPanel({ onClose }) {
         return JSON.stringify({ ok: false, error: 'server 工具通道不可用（需要 Electron 环境）' });
       }
       try {
-        const res = await window.electronAPI.ai.execTool({ toolName, args });
+        const res = await window.electronAPI.ai.execTool({
+          toolName,
+          args,
+          aiProxyBase: aiServerBase,
+        });
         if (!res) return JSON.stringify({ ok: false, error: 'server 无响应' });
         // 把 stdout/stderr 合并成一段摘要，避免超长
         const summary = [];
@@ -941,6 +947,7 @@ export default function AgentPanel({ onClose }) {
     setWorkspaceCanvas,
     setDailyCurrentDate,
     setSurface,
+    aiServerBase,
   ]);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
@@ -950,17 +957,17 @@ export default function AgentPanel({ onClose }) {
     (async () => {
       if (!hasAiBridge()) return;
       try {
-        const tools = await fetchServerTools(async (path) => {
-          const res = await fetch(`${resolveAiServerBase() || 'http://localhost:8788'}${path}`);
-          return res.json();
-        });
+        const tools = await fetchServerTools(
+          () => window.electronAPI.ai.listTools({ aiProxyBase: aiServerBase }),
+          { force: true },
+        );
         if (!cancelled) setServerTools(tools);
       } catch {
         /* ignore */
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [aiServerBase]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -1284,6 +1291,7 @@ export default function AgentPanel({ onClose }) {
       const res = await window.electronAPI.ai.execTool({
         toolName: tool.toolName,
         args: { input: inputPath, output: outputPath },
+        aiProxyBase: aiServerBase,
       });
       hide();
 
@@ -1374,9 +1382,11 @@ export default function AgentPanel({ onClose }) {
   const handleSaveSettings = useCallback(() => {
     setActiveProvider(providerId);
     saveProviderConfig(providerId, { model: cfg.model });
+    saveAiServerBase(aiServerBase);
     setCfg(readProviderConfig(providerId));
+    setAiServerBase(readAiServerBase());
     setShowSettings(false);
-  }, [providerId, cfg]);
+  }, [providerId, cfg, aiServerBase]);
 
   const handleKeyDown = useCallback((e) => {
     if (showSkillPicker && filteredSkills.length > 0) {
@@ -1509,6 +1519,10 @@ export default function AgentPanel({ onClose }) {
           <label>模型
             <input value={cfg.model} placeholder="默认已填，可改"
               onChange={(e) => setCfg({ ...cfg, model: e.target.value })} />
+          </label>
+          <label>AI 代理地址
+            <input value={aiServerBase} placeholder="http://你的服务器:8788"
+              onChange={(e) => setAiServerBase(e.target.value)} />
           </label>
           <button className="agent-panel__save-btn" onClick={handleSaveSettings}>保存</button>
         </div>

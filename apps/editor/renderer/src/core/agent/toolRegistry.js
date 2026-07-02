@@ -635,8 +635,8 @@ export const getToolLabel = (name) => _serverToolLabels[name] || _localToolLabel
 let _serverToolsCache = null;
 
 /** 拉取 server 工具 schema */
-export const fetchServerTools = async (fetchFn) => {
-  if (_serverToolsCache) return _serverToolsCache;
+export const fetchServerTools = async (fetchFn, { force = false } = {}) => {
+  if (!force && _serverToolsCache) return _serverToolsCache;
   try {
     const data = await fetchFn('/api/tools/schema');
     const tools = Array.isArray(data?.tools) ? data.tools : [];

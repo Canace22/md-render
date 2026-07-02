@@ -131,12 +131,12 @@ export async function requestToolExec({ aiProxyBase, toolName, args }) {
 }
 
 /**
- * 获取 server 注册的工具列表（不含 schema，仅摘要）。
+ * 获取 server 注册的工具 schema（OpenAI tools 格式）。
  */
-export async function requestToolList({ aiProxyBase }) {
+export async function requestToolSchema({ aiProxyBase }) {
   if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
-  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/tools`;
+  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/tools/schema`;
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
-  if (!res.ok) throw new Error(`获取工具列表失败 (${res.status})`);
+  if (!res.ok) throw new Error(`获取工具 schema 失败 (${res.status})`);
   return res.json();
 }

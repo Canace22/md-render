@@ -15,6 +15,9 @@ const ACTIVE_PROVIDER_KEY = 'md-renderer-ai-provider';
 const AI_SERVER_STORAGE_KEY = 'md-renderer-ai-server';
 const LEGACY_PROVIDER_IDS = new Set(['xiaomi-mimo']);
 const providerModelStorageKey = (id) => `md-renderer-ai-model:${id}`;
+const BUILT_AI_PROXY_BASE = typeof __MD_RENDER_AI_PROXY_BASE__ !== 'undefined'
+  ? __MD_RENDER_AI_PROXY_BASE__
+  : '';
 
 const normalizeBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 
@@ -39,11 +42,19 @@ const writeLocalStorage = (key, value) => {
 export const hasAiBridge = () =>
   typeof window !== 'undefined' && typeof window.electronAPI?.ai?.chat === 'function';
 
-/** ai-proxy server 地址（Web 兜底用） */
+/** ai-proxy server 地址（Electron IPC 透传 + Web 兜底用） */
 export const resolveAiServerBase = () => {
   const runtime = normalizeBase(readLocalStorage(AI_SERVER_STORAGE_KEY));
   if (runtime) return runtime;
+  const built = normalizeBase(BUILT_AI_PROXY_BASE);
+  if (built) return built;
   return normalizeBase(import.meta.env?.VITE_AI_PROXY);
+};
+
+export const readAiServerBase = () => resolveAiServerBase();
+
+export const saveAiServerBase = (value) => {
+  writeLocalStorage(AI_SERVER_STORAGE_KEY, normalizeBase(value));
 };
 
 export const getActiveProviderId = () => {
@@ -112,12 +123,14 @@ export const listProviders = () => AI_PROVIDERS;
 
 /** Electron 路径：走 IPC → 主进程 → ai-proxy server */
 const callViaBridge = async ({ messages, tools, config }) => {
+  const aiProxyBase = resolveAiServerBase();
   const payload = {
     providerId: config.providerId,
     messages,
     tools,
   };
   if (config.model) payload.model = config.model;
+  if (aiProxyBase) payload.aiProxyBase = aiProxyBase;
 
   const res = await window.electronAPI.ai.chat(payload);
   if (!res?.ok) throw new Error(res?.error || 'AI 请求失败');

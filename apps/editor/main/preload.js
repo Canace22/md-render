@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     chat: (payload) => ipcRenderer.invoke('ai:chat', payload),
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),
     execTool: (payload) => ipcRenderer.invoke('ai:execTool', payload),
-    listTools: () => ipcRenderer.invoke('ai:listTools'),
+    listTools: (payload) => ipcRenderer.invoke('ai:listTools', payload),
   },
 
   // SQLite 数据库 IPC

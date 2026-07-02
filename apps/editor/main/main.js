@@ -21,7 +21,7 @@ import {
   resolveProjectFilePath,
   readLocalProjectFileContent,
 } from './localProject.js';
-import { requestChatCompletion, requestToolExec, requestToolList } from './aiRequest.js';
+import { requestChatCompletion, requestToolExec, requestToolSchema } from './aiRequest.js';
 import { listAvailableProviders } from './aiConfig.js';
 import {
   watchLocalProjectRoot,
@@ -71,6 +71,10 @@ const LEGACY_USER_DATA_PATH_SEGMENTS = [
   ['MD Render'],
 ];
 const KNOWLEDGE_DB_FILENAME = 'knowledge.db';
+const DEFAULT_AI_PROXY_BASE = 'http://localhost:8788';
+const normalizeAiProxyBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
+const resolveAiProxyBase = (value) =>
+  normalizeAiProxyBase(value) || normalizeAiProxyBase(process.env.AI_PROXY_BASE) || DEFAULT_AI_PROXY_BASE;
 
 app.setPath('userData', path.join(app.getPath('appData'), STABLE_USER_DATA_DIRNAME));
 
@@ -413,8 +417,8 @@ ipcMain.handle('fetch-bookmark-page-snapshot', async (_event, payload = {}) => {
 
 ipcMain.handle('ai:chat', async (_event, payload = {}) => {
   try {
-    // aiProxyBase 从环境变量读取，默认本地 ai-proxy server
-    const aiProxyBase = process.env.AI_PROXY_BASE || 'http://localhost:8788';
+    // 优先使用 renderer 的本机配置；没有配置时再读环境变量，最后回退本地 ai-proxy。
+    const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
     const message = await requestChatCompletion({ ...payload, aiProxyBase });
     return { ok: true, message };
   } catch (err) {
@@ -430,19 +434,19 @@ ipcMain.handle('ai:getConfig', () => {
 // 调用 server 端工具（pdf_to_docx / video_to_audio 等）
 ipcMain.handle('ai:execTool', async (_event, payload = {}) => {
   try {
-    const aiProxyBase = process.env.AI_PROXY_BASE || 'http://localhost:8788';
-    const result = await requestToolExec({ aiProxyBase, ...payload });
+    const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
+    const result = await requestToolExec({ ...payload, aiProxyBase });
     return result;
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-// 获取 server 端注册的工具列表（仅元数据）
-ipcMain.handle('ai:listTools', async () => {
+// 获取 server 端注册的工具 schema（OpenAI tools 格式）
+ipcMain.handle('ai:listTools', async (_event, payload = {}) => {
   try {
-    const aiProxyBase = process.env.AI_PROXY_BASE || 'http://localhost:8788';
-    return await requestToolList({ aiProxyBase });
+    const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
+    return await requestToolSchema({ aiProxyBase });
   } catch (err) {
     return { tools: [], error: err.message };
   }

@@ -1,6 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
 
@@ -30,69 +30,77 @@ const inferBase = () => {
   return repoName ? `/${repoName}/` : '/';
 };
 
-export default defineConfig({
-  root: rendererRoot,
-  base: inferBase(),
-  resolve: {
-    alias: {
-      // 明确消费包的 dist 构建产物（ESM），不引入包的 .ts 源码
-      '@narrative/blocknote-core': blocknoteCoreDist,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, __dirname, '');
+  const aiProxyBase = env.VITE_AI_PROXY || env.AI_PROXY_BASE || '';
+
+  return {
+    root: rendererRoot,
+    base: inferBase(),
+    define: {
+      __MD_RENDER_AI_PROXY_BASE__: JSON.stringify(aiProxyBase),
     },
-  },
-  build: {
-    outDir: path.join(__dirname, 'dist'),
-    emptyOutDir: true,
-  },
-  plugins: [
-    react(),
-    // 仅在 Electron 模式下启用插件
-    isElectron && electron({
-      main: {
-        entry: path.join(__dirname, 'main/main.js'),
-        vite: {
-          root: __dirname,
-          build: {
-            outDir: 'dist-electron',
-            rollupOptions: {
-              // better-sqlite3 是原生模块，不能被 bundled，必须作为外部依赖
-              external: ['better-sqlite3', 'electron-updater'],
-            },
-          },
-        },
+    resolve: {
+      alias: {
+        // 明确消费包的 dist 构建产物（ESM），不引入包的 .ts 源码
+        '@narrative/blocknote-core': blocknoteCoreDist,
       },
-      preload: {
-        input: path.join(__dirname, 'main/preload.js'),
-        vite: {
-          root: __dirname,
-          build: {
-            outDir: 'dist-electron',
-            rollupOptions: {
-              output: {
-                // type:module 时插件默认产出 preload.mjs（CJS 内容），Electron 按 ESM 加载会导致 require 失败
-                entryFileNames: 'preload.cjs',
-                chunkFileNames: '[name].cjs',
+    },
+    build: {
+      outDir: path.join(__dirname, 'dist'),
+      emptyOutDir: true,
+    },
+    plugins: [
+      react(),
+      // 仅在 Electron 模式下启用插件
+      isElectron && electron({
+        main: {
+          entry: path.join(__dirname, 'main/main.js'),
+          vite: {
+            root: __dirname,
+            build: {
+              outDir: 'dist-electron',
+              rollupOptions: {
+                // better-sqlite3 是原生模块，不能被 bundled，必须作为外部依赖
+                external: ['better-sqlite3', 'electron-updater'],
               },
             },
           },
         },
-      },
-    }),
-  ].filter(Boolean),
-  server: {
-    port: 3000,
-    // Electron 模式下不自动打开浏览器
-    open: !isElectron,
-    proxy: {
-      '/notion-api': {
-        target: 'https://api.notion.com',
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/notion-api/, ''),
-      },
-      '/cloud-sync-api': {
-        target: process.env.CLOUD_SYNC_DEV_TARGET || 'http://localhost:8791',
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/cloud-sync-api/, ''),
+        preload: {
+          input: path.join(__dirname, 'main/preload.js'),
+          vite: {
+            root: __dirname,
+            build: {
+              outDir: 'dist-electron',
+              rollupOptions: {
+                output: {
+                  // type:module 时插件默认产出 preload.mjs（CJS 内容），Electron 按 ESM 加载会导致 require 失败
+                  entryFileNames: 'preload.cjs',
+                  chunkFileNames: '[name].cjs',
+                },
+              },
+            },
+          },
+        },
+      }),
+    ].filter(Boolean),
+    server: {
+      port: 3000,
+      // Electron 模式下不自动打开浏览器
+      open: !isElectron,
+      proxy: {
+        '/notion-api': {
+          target: 'https://api.notion.com',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/notion-api/, ''),
+        },
+        '/cloud-sync-api': {
+          target: process.env.CLOUD_SYNC_DEV_TARGET || 'http://localhost:8791',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/cloud-sync-api/, ''),
+        },
       },
     },
-  },
+  };
 });
