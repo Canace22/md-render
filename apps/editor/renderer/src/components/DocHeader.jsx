@@ -25,7 +25,7 @@ export default function DocHeader({
 }) {
   const [metaOpen, setMetaOpen] = useState(false);
   const selectedFileDisplayName = stripFileExtension(selectedFile?.name);
-  const displayName = titleDraft || selectedFileDisplayName;
+  const displayName = isTitleEditing ? titleDraft : selectedFileDisplayName;
   const wordCount = selectedFile ? countWords(selectedFile.content) : 0;
 
   return (
@@ -62,9 +62,10 @@ export default function DocHeader({
           ) : titleEditable ? (
             <span
               className="right-area-doc-title-clickable"
-              onClick={startTitleEditing}
+              onDoubleClick={startTitleEditing}
               role="button"
               tabIndex={0}
+              title="双击编辑标题"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();

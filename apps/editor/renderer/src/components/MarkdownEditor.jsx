@@ -2503,7 +2503,7 @@ function MarkdownEditor() {
               onKnowledgeMetaChange={setFileKnowledgeMeta}
               onOpenFile={selectNode}
               onRestoreVersion={updateSelectedFileContent}
-              titleEditable={!selectedInLocalProject}
+              titleEditable={!selectedInLocalProject || localProjectSupported}
               {...titleEditing}
             />
             <EditorQuickToolbar

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { stripFileExtension } from '../utils/fileDisplayName.js';
 
 /**
  * 文档标题编辑状态与逻辑
@@ -12,12 +13,13 @@ export function useTitleEditing(selectedFile, applyRename) {
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [titleInputWidth, setTitleInputWidth] = useState(160);
+  const selectedFileDisplayName = stripFileExtension(selectedFile?.name, '');
 
   const startTitleEditing = useCallback(() => {
     if (!selectedFile) return;
-    setTitleDraft(selectedFile.name);
+    setTitleDraft(selectedFileDisplayName);
     setIsTitleEditing(true);
-  }, [selectedFile]);
+  }, [selectedFile, selectedFileDisplayName]);
 
   const commitTitleEditing = useCallback(async () => {
     if (isCommittingRef.current) return;
@@ -30,7 +32,7 @@ export function useTitleEditing(selectedFile, applyRename) {
       }
       const nextName = titleDraft.trim();
       if (!nextName) {
-        setTitleDraft(selectedFile.name);
+        setTitleDraft(selectedFileDisplayName);
         setIsTitleEditing(false);
         return;
       }
@@ -38,18 +40,18 @@ export function useTitleEditing(selectedFile, applyRename) {
       const ok = result && typeof result.then === 'function' ? await result : result;
       if (!ok) {
         alert('名称已存在，请换一个。');
-        setTitleDraft(selectedFile.name);
+        setTitleDraft(selectedFileDisplayName);
       }
       setIsTitleEditing(false);
     } finally {
       isCommittingRef.current = false;
     }
-  }, [selectedFile, titleDraft, applyRename]);
+  }, [selectedFile, selectedFileDisplayName, titleDraft, applyRename]);
 
   const cancelTitleEditing = useCallback(() => {
-    setTitleDraft(selectedFile?.name ?? '');
+    setTitleDraft(selectedFileDisplayName);
     setIsTitleEditing(false);
-  }, [selectedFile]);
+  }, [selectedFileDisplayName]);
 
   useEffect(() => {
     if (!isTitleEditing || !titleInputRef.current) return;
@@ -65,8 +67,8 @@ export function useTitleEditing(selectedFile, applyRename) {
 
   useEffect(() => {
     if (!selectedFile) return;
-    if (!isTitleEditing) setTitleDraft(selectedFile.name);
-  }, [selectedFile, isTitleEditing]);
+    if (!isTitleEditing) setTitleDraft(selectedFileDisplayName);
+  }, [selectedFile, selectedFileDisplayName, isTitleEditing]);
 
   return {
     isTitleEditing,

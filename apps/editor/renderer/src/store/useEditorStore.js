@@ -1849,7 +1849,7 @@ export const useEditorStore = create(
       },
 
       applyRename: (targetId, newName) => {
-        const { workspace } = get();
+        const { workspace, openTabs } = get();
         const trimmed = newName.trim();
         if (!trimmed) return false;
         const node = findNodeById(workspace, targetId);
@@ -1861,12 +1861,17 @@ export const useEditorStore = create(
           name: nextName,
         }));
         persistWorkspace(updated);
-        set({ workspace: updated });
+        set({
+          workspace: updated,
+          openTabs: openTabs.map((tab) => (
+            tab.id === targetId ? { ...tab, title: nextName } : tab
+          )),
+        });
         return true;
       },
 
       replaceDiskBackedNode: (targetId, { name, relativePath: newRelativePath, updatedAt }) => {
-        const { workspace, selectedId } = get();
+        const { workspace, selectedId, openTabs } = get();
         const node = findNodeById(workspace, targetId);
         if (!node?.projectRootPath || !node.relativePath) return false;
 
@@ -1881,13 +1886,37 @@ export const useEditorStore = create(
           nextSelectedId = newRootId;
         } else {
           const selectedNode = findNodeById(workspace, selectedId);
-          if (selectedNode?.relativePath?.startsWith(`${oldRelativePath}/`)) {
+          if (
+            selectedNode?.projectRootPath === node.projectRootPath
+            && selectedNode.relativePath?.startsWith(`${oldRelativePath}/`)
+          ) {
             const nextRelativePath = `${newRelativePath}${selectedNode.relativePath.slice(oldRelativePath.length)}`;
             nextSelectedId = findNodeIdByRelativePath(updated, nextRelativePath) ?? nextSelectedId;
           }
         }
 
-        const patch = { workspace: updated, selectedId: nextSelectedId };
+        const nextOpenTabs = openTabs.map((tab) => {
+          const tabNode = findNodeById(workspace, tab.id);
+          if (tab.id === targetId) {
+            return { ...tab, id: newRootId, title: name };
+          }
+          if (
+            tabNode?.projectRootPath === node.projectRootPath
+            && tabNode.relativePath?.startsWith(`${oldRelativePath}/`)
+          ) {
+            const nextRelativePath = `${newRelativePath}${tabNode.relativePath.slice(oldRelativePath.length)}`;
+            const nextTabId = findNodeIdByRelativePath(updated, nextRelativePath) ?? tab.id;
+            const nextTabNode = findNodeById(updated, nextTabId);
+            return {
+              ...tab,
+              id: nextTabId,
+              title: nextTabNode?.name ?? tab.title,
+            };
+          }
+          return tab;
+        });
+
+        const patch = { workspace: updated, selectedId: nextSelectedId, openTabs: nextOpenTabs };
         if (updatedAt != null) {
           const renamedNode = findNodeById(updated, newRootId);
           if (renamedNode?.type === 'file') {
