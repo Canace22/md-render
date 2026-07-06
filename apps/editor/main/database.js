@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
+import { EDITOR_STATE_KEYS } from '../shared/stateKeys.js';
 
 let db = null;
 
@@ -108,27 +109,7 @@ export function markMigratedFromLocalStorage() {
 
 // ── editor state ─────────────────────────────────────────────────────────────
 
-const STATE_KEYS = [
-  'workspace_json',
-  'selected_id',
-  'theme',
-  'copy_style',
-  'surface',
-  'publishing_platforms',
-  'daily_workspace_json',
-  'storage_mode',
-  'project_root_path',
-  'notion_token',
-  'notion_file_pages',
-  'notion_database_id',
-  'notion_proxy_base',
-  'cloud_sync_base_url',
-  'cloud_workspace_id',
-  'cloud_last_synced_revision',
-  'cloud_last_synced_at',
-  'cloud_client_id',
-  'cloud_last_synced_hash',
-];
+export const STATE_KEYS = EDITOR_STATE_KEYS;
 
 export function loadEditorState() {
   const result = {};

@@ -71,12 +71,8 @@ import {
   getCloudPayloadHash,
   normalizeCloudSyncBaseUrl,
 } from '../utils/cloudSyncService.js';
-import {
-  createSession,
-  deriveTitle,
-  mapSession,
-  removeSession,
-} from '../core/agent/sessionUtils.js';
+import { createAgentSlice } from './slices/agentSlice.js';
+import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
@@ -101,6 +97,7 @@ const CLOUD_CLIENT_ID_STORAGE_KEY = 'md-renderer-cloud-client-id';
 const CLOUD_LAST_SYNCED_HASH_STORAGE_KEY = 'md-renderer-cloud-last-synced-hash';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
+export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
 
 /** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
 const hasElectronDb = () =>
@@ -919,95 +916,7 @@ export const useEditorStore = create(
       activeBlockId: null,
       activeBlockDraft: '',
 
-      // ===== AI 助手会话（全局内存态，故意不进 persist：切页不丢、关 app 清空）=====
-      agentSessions: [createSession()],
-      activeAgentSessionId: null, // null 时下方 getter 兜底用第一个
-
-      // 编辑器「引用到 AI」暂存的选中文字（内存态，不进 persist）。
-      // null = 无引用；AgentPanel 消费后调 clearAiQuotedSelection 清空。
-      aiQuotedSelection: null,
-      setAiQuotedSelection: (text) => {
-        const t = String(text ?? '').trim();
-        set({ aiQuotedSelection: t || null });
-      },
-      clearAiQuotedSelection: () => set({ aiQuotedSelection: null }),
-
-      // AI 待确认的文档写入（内存态，不进 persist）。
-      // null = 无待确认改动。stageAgentWrite 暂存改动并返回一个 Promise，
-      // 用户点「应用」或「放弃」后 resolve，agent 工具据此回填模型结果。
-      agentPendingWrite: null,
-      /**
-       * 暂存一次待确认写入，返回 Promise<boolean>（true=已应用，false=已放弃）。
-       * @param {{ oldText: string, newText: string }} change
-       */
-      stageAgentWrite: ({ oldText, newText }) => new Promise((resolve) => {
-        set({ agentPendingWrite: { oldText: oldText ?? '', newText: newText ?? '', resolve } });
-      }),
-      /** 应用待确认写入：真正写回当前文档，并 resolve(true) */
-      applyAgentWrite: () => {
-        const pending = get().agentPendingWrite;
-        if (!pending) return;
-        get().updateSelectedFileContent(pending.newText);
-        set({ agentPendingWrite: null });
-        pending.resolve?.(true);
-      },
-      /** 放弃待确认写入：不动文档，resolve(false) */
-      discardAgentWrite: () => {
-        const pending = get().agentPendingWrite;
-        if (!pending) return;
-        set({ agentPendingWrite: null });
-        pending.resolve?.(false);
-      },
-
-      /** 当前激活会话 id（兜底第一个） */
-      getActiveAgentSessionId: () => {
-        const { agentSessions, activeAgentSessionId } = get();
-        if (activeAgentSessionId && agentSessions.some((s) => s.id === activeAgentSessionId)) {
-          return activeAgentSessionId;
-        }
-        return agentSessions[0]?.id ?? null;
-      },
-
-      createAgentSession: () => {
-        const session = createSession();
-        set((state) => ({
-          agentSessions: [session, ...state.agentSessions],
-          activeAgentSessionId: session.id,
-        }));
-        return session.id;
-      },
-
-      switchAgentSession: (sessionId) => set({ activeAgentSessionId: sessionId }),
-
-      deleteAgentSession: (sessionId) => set((state) => {
-        const { sessions, nextActiveId } = removeSession(
-          state.agentSessions, sessionId, get().getActiveAgentSessionId(),
-        );
-        return { agentSessions: sessions, activeAgentSessionId: nextActiveId };
-      }),
-
-      /** 给某会话追加一条 UI 消息 */
-      appendAgentMessage: (sessionId, msg) => set((state) => ({
-        agentSessions: mapSession(state.agentSessions, sessionId, (s) => ({
-          ...s,
-          messages: [...s.messages, msg],
-          // 首条用户消息自动命名会话
-          title: s.messages.length === 0 && msg.role === 'user' ? deriveTitle(msg.text) : s.title,
-        })),
-      })),
-
-      /** 用 updater 改某会话最后一条匹配的消息（如把 tool running→done）*/
-      updateAgentMessages: (sessionId, updater) => set((state) => ({
-        agentSessions: mapSession(state.agentSessions, sessionId, (s) => ({
-          ...s,
-          messages: updater(s.messages),
-        })),
-      })),
-
-      /** 保存某会话的模型对话历史（跨轮复用）*/
-      setAgentHistory: (sessionId, history) => set((state) => ({
-        agentSessions: mapSession(state.agentSessions, sessionId, (s) => ({ ...s, history })),
-      })),
+      ...createAgentSlice(set, get),
 
       setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
       setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),
