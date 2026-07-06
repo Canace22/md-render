@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getUpdaterBridge } from '../services/electronBridge.js';
 
 /**
  * 自动更新通知条 —— 类似 Claude APP 的顶部 banner
@@ -9,7 +10,7 @@ export default function UpdateNotifier() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const api = window.electronAPI?.updater;
+    const api = getUpdaterBridge();
     if (!api) return;
     return api.onStatus((data) => {
       setState(data);
@@ -21,11 +22,11 @@ export default function UpdateNotifier() {
   }, []);
 
   const handleDownload = useCallback(() => {
-    window.electronAPI?.updater?.download();
+    getUpdaterBridge()?.download();
   }, []);
 
   const handleInstall = useCallback(() => {
-    window.electronAPI?.updater?.install();
+    getUpdaterBridge()?.install();
   }, []);
 
   // 不显示的情况

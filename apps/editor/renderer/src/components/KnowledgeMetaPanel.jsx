@@ -5,9 +5,12 @@ import {
   getKnowledgeNodeTypeLabel,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
 } from '../store/workspaceUtils.js';
-
-const hasElectronDb = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
+import {
+  dbGetBacklinks,
+  dbGetVersionContent,
+  dbGetVersions,
+  hasDbBridge,
+} from '../services/electronBridge.js';
 
 const formatVersionDate = (ts) => {
   if (!ts) return '';
@@ -38,30 +41,30 @@ export default function KnowledgeMetaPanel({
   }, [selectedFile]);
 
   useEffect(() => {
-    if (!selectedFile?.id || !hasElectronDb()) {
+    if (!selectedFile?.id || !hasDbBridge()) {
       setBacklinks([]);
       return;
     }
-    window.electronAPI.db.getBacklinks(selectedFile.id)
+    dbGetBacklinks(selectedFile.id)
       .then((res) => setBacklinks(res?.backlinks ?? []))
       .catch(() => setBacklinks([]));
   }, [selectedFile?.id]);
 
   useEffect(() => {
-    if (!selectedFile?.id || !hasElectronDb()) {
+    if (!selectedFile?.id || !hasDbBridge()) {
       setVersions([]);
       return;
     }
-    window.electronAPI.db.getVersions(selectedFile.id)
+    dbGetVersions(selectedFile.id)
       .then((res) => setVersions(res?.versions ?? []))
       .catch(() => setVersions([]));
   }, [selectedFile?.id]);
 
   const handleRestoreVersion = async (versionId) => {
-    if (!hasElectronDb() || !onRestoreVersion) return;
+    if (!hasDbBridge() || !onRestoreVersion) return;
     setRestoringVersionId(versionId);
     try {
-      const res = await window.electronAPI.db.getVersionContent(versionId);
+      const res = await dbGetVersionContent(versionId);
       if (res?.ok && res.version?.content != null) {
         onRestoreVersion(res.version.content);
       }

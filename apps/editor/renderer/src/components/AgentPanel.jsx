@@ -61,9 +61,15 @@ import {
   fetchServerProviders,
   hasAiBridge,
 } from '../core/agent/aiClient.js';
-
-const hasElectronSearch = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.db?.search === 'function';
+import {
+  aiExecTool,
+  aiListTools,
+  dbSearch,
+  hasAiToolBridge,
+  hasDbBridge,
+  pickFile,
+  pickSavePath,
+} from '../services/electronBridge.js';
 
 const ASSISTANT_TYPE_INTERVAL_MS = 18;
 const ASSISTANT_TYPE_CHUNK_SIZE = 4;
@@ -690,7 +696,7 @@ export default function AgentPanel({ onClose }) {
 
   const isShortcutDisabled = useCallback((item) => {
     return running && (item.type === 'quick' || item.type === 'platform');
-  }, [running]);
+  }, [aiServerBase, running]);
 
   const composerPlusMenuItems = useMemo(() => {
     const shortcuts = COMPOSER_PLUS_SHORTCUTS.map((item) => {
@@ -888,9 +894,9 @@ export default function AgentPanel({ onClose }) {
       return buildWorkspaceToolBrief(workspace, selectedId);
     },
     searchDocs: async (query) => {
-      if (hasElectronSearch()) {
+      if (hasDbBridge()) {
         try {
-          const res = await window.electronAPI.db.search(query);
+          const res = await dbSearch(query);
           return (res?.results ?? []).map((r) => ({
             title: r.title ?? r.name ?? '未命名',
             snippet: r.snippet ?? r.excerpt ?? '',
@@ -911,11 +917,11 @@ export default function AgentPanel({ onClose }) {
      * 返回结构化结果给模型，模型可以从中解析出文件路径告诉用户。
      */
     execServerTool: async (toolName, args) => {
-      if (!window.electronAPI?.ai?.execTool) {
+      if (!hasAiToolBridge()) {
         return JSON.stringify({ ok: false, error: 'server 工具通道不可用（需要 Electron 环境）' });
       }
       try {
-        const res = await window.electronAPI.ai.execTool({
+        const res = await aiExecTool({
           toolName,
           args,
           aiProxyBase: aiServerBase,
@@ -958,7 +964,7 @@ export default function AgentPanel({ onClose }) {
       if (!hasAiBridge()) return;
       try {
         const tools = await fetchServerTools(
-          () => window.electronAPI.ai.listTools({ aiProxyBase: aiServerBase }),
+          () => aiListTools({ aiProxyBase: aiServerBase }),
           { force: true },
         );
         if (!cancelled) setServerTools(tools);
@@ -1273,12 +1279,12 @@ export default function AgentPanel({ onClose }) {
 
     try {
       // 1) 选输入文件
-      const inputPick = await window.electronAPI.pickFile(tool.pickInput);
+      const inputPick = await pickFile(tool.pickInput);
       if (inputPick?.canceled) return;
       const inputPath = inputPick.filePath;
 
       // 2) 选输出路径
-      const outputPick = await window.electronAPI.pickSavePath({
+      const outputPick = await pickSavePath({
         title: tool.pickOutput.title,
         defaultName: tool.pickOutput.defaultFromInput(inputPath),
         extensions: tool.pickOutput.extensions,
@@ -1288,7 +1294,7 @@ export default function AgentPanel({ onClose }) {
 
       // 3) 执行
       const hide = message.loading(`正在执行 ${tool.label}...`, 0);
-      const res = await window.electronAPI.ai.execTool({
+      const res = await aiExecTool({
         toolName: tool.toolName,
         args: { input: inputPath, output: outputPath },
         aiProxyBase: aiServerBase,

@@ -46,6 +46,7 @@ import {
 import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
+import { getPlatform } from '../services/electronBridge.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
 const DEFAULT_SIDEBAR_WIDTH = 320;
@@ -54,7 +55,7 @@ const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
 const DEFAULT_EXPANDED_FOLDER_DEPTH = 1;
-const FILE_MANAGER_LABEL = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin'
+const FILE_MANAGER_LABEL = getPlatform() === 'darwin'
   ? '访达'
   : '文件管理器';
 

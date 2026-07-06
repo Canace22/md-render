@@ -8,6 +8,13 @@ import {
   KNOWLEDGE_NODE_TYPE_OPTIONS,
 } from '../store/workspaceUtils.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
+import {
+  dbGetBacklinks,
+  dbGetVersionContent,
+  dbGetVersions,
+  hasDbBridge,
+  selectCoverImage,
+} from '../services/electronBridge.js';
 import RelatedDocPicker from './RelatedDocPicker.jsx';
 
 /* ── constants ─────────────────────────────────────────────── */
@@ -23,12 +30,6 @@ const DEFAULT_STATUS_OPTIONS = [
 ];
 
 /* ── pure helpers ──────────────────────────────────────────── */
-
-const hasElectronDb = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
-
-const hasElectronSelectCoverImage = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.selectCoverImage === 'function';
 
 const toPreviewSrc = (value) => {
   if (!value) return '';
@@ -136,15 +137,15 @@ export default function DocMetaPanel({
   }, [selectedFile]);
 
   useEffect(() => {
-    if (!selectedFile?.id || !hasElectronDb()) { setBacklinks([]); return; }
-    window.electronAPI.db.getBacklinks(selectedFile.id)
+    if (!selectedFile?.id || !hasDbBridge()) { setBacklinks([]); return; }
+    dbGetBacklinks(selectedFile.id)
       .then((res) => setBacklinks(res?.backlinks ?? []))
       .catch(() => setBacklinks([]));
   }, [selectedFile?.id]);
 
   useEffect(() => {
-    if (!selectedFile?.id || !hasElectronDb()) { setVersions([]); return; }
-    window.electronAPI.db.getVersions(selectedFile.id)
+    if (!selectedFile?.id || !hasDbBridge()) { setVersions([]); return; }
+    dbGetVersions(selectedFile.id)
       .then((res) => setVersions(res?.versions ?? []))
       .catch(() => setVersions([]));
   }, [selectedFile?.id]);
@@ -192,8 +193,7 @@ export default function DocMetaPanel({
   };
 
   const selectLocalCoverImage = async () => {
-    if (!hasElectronSelectCoverImage()) return;
-    const result = await window.electronAPI.selectCoverImage();
+    const result = await selectCoverImage();
     if (result?.canceled || !result?.filePath) return;
     setCoverDraft(result.filePath);
     setCoverError(false);
@@ -221,10 +221,10 @@ export default function DocMetaPanel({
   };
 
   const handleRestoreVersion = async (versionId) => {
-    if (!hasElectronDb() || !onRestoreVersion) return;
+    if (!hasDbBridge() || !onRestoreVersion) return;
     setRestoringVersionId(versionId);
     try {
-      const res = await window.electronAPI.db.getVersionContent(versionId);
+      const res = await dbGetVersionContent(versionId);
       if (res?.ok && res.version?.content != null) {
         onRestoreVersion(res.version.content);
       }

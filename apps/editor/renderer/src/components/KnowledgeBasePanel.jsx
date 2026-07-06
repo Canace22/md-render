@@ -6,6 +6,7 @@ import {
   getFileKnowledgeSearchText,
   getKnowledgeNodeTypeLabel,
 } from '../store/workspaceUtils.js';
+import { dbGetGraph, dbSearch, hasDbBridge } from '../services/electronBridge.js';
 import GraphView from './GraphView.jsx';
 
 const GRAPH_NODE_LAYOUTS = [
@@ -73,9 +74,6 @@ const getSearchPreview = (file, query) => {
   }
   return getSearchSnippet(file?.content, query);
 };
-
-const hasElectronDb = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.db?.search === 'function';
 
 const buildGraphEdgeKey = (sourceId, targetId) => `${sourceId}::${targetId}`;
 
@@ -167,14 +165,14 @@ export default function KnowledgeBasePanel({
 
   useEffect(() => {
     const query = String(searchQuery ?? '').trim();
-    if (!query || !hasElectronDb()) {
+    if (!query || !hasDbBridge()) {
       setFtsResults(null);
       return;
     }
     clearTimeout(ftsTimerRef.current);
     ftsTimerRef.current = setTimeout(async () => {
       try {
-        const res = await window.electronAPI.db.search(query);
+        const res = await dbSearch(query);
         setFtsResults(res?.results ?? []);
       } catch {
         setFtsResults(null);
@@ -203,9 +201,9 @@ export default function KnowledgeBasePanel({
     const workspaceGraphData = buildWorkspaceGraphData(files);
     setGraphData(workspaceGraphData);
 
-    if (hasElectronDb()) {
+    if (hasDbBridge()) {
       let cancelled = false;
-      window.electronAPI.db.getGraph()
+      dbGetGraph()
         .then((res) => {
           if (cancelled) return;
           setGraphData(mergeGraphData(workspaceGraphData, res?.data?.edges ?? []));

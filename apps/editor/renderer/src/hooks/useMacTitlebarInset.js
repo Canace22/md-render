@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getElectronAPI } from '../services/electronBridge.js';
 
 /**
  * macOS Electron 窗口非全屏时，hiddenInset 标题栏的交通灯会覆盖左上角 UI。
@@ -8,7 +9,7 @@ export function useMacTitlebarInset() {
   const [active, setActive] = useState(false);
 
   useEffect(() => {
-    const api = typeof window !== 'undefined' ? window.electronAPI : null;
+    const api = getElectronAPI();
     if (!api || api.platform !== 'darwin') return undefined;
 
     let disposed = false;
