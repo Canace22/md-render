@@ -1,0 +1,17 @@
+{
+  "name": "@md-render/json-tool",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "JSON formatting, validation, and tree inspection tool for MD Render",
+  "exports": {
+    ".": "./src/index.js",
+    "./utils": "./src/jsonUtils.js"
+  },
+  "peerDependencies": {
+    "antd": "^5.28.0",
+    "lucide-react": "^0.577.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

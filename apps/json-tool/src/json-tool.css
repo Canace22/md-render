@@ -1,0 +1,344 @@
+.json-tool-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+}
+
+.json-tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-m);
+  padding: 14px var(--space-m);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+
+.json-tool-title-wrap,
+.json-tool-actions,
+.json-tool-preview-status,
+.json-tool-tree-actions {
+  display: flex;
+  align-items: center;
+}
+
+.json-tool-title-wrap {
+  min-width: 0;
+  gap: 10px;
+}
+
+.json-tool-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-m);
+  background: var(--color-bg-active);
+  color: var(--color-text-active);
+}
+
+.json-tool-title-wrap h1 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.json-tool-title-wrap p {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.json-tool-actions {
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.json-tool-actions .ant-btn,
+.json-tool-tree-actions .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.json-tool-file-input {
+  display: none;
+}
+
+.json-tool-workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-m);
+  gap: var(--space-m);
+}
+
+.json-tool-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.json-tool-pane-header {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-s);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+}
+
+.json-tool-meta {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+}
+
+.json-tool-editor-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-bg-surface);
+}
+
+.json-tool-line-numbers,
+.json-tool-editor {
+  margin: 0;
+  border: 0;
+  font: 13px/1.65 var(--font-mono);
+  tab-size: 2;
+}
+
+.json-tool-line-numbers {
+  min-width: 44px;
+  padding: 14px 10px;
+  overflow: hidden;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg-inline-code);
+  color: var(--color-text-secondary);
+  text-align: right;
+  user-select: none;
+}
+
+.json-tool-editor {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+  outline: none;
+  padding: 14px;
+  background: transparent;
+  color: var(--color-text-primary);
+  caret-color: var(--color-primary);
+  white-space: pre;
+}
+
+.json-tool-editor::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.72;
+}
+
+.json-tool-error {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.json-tool-error span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.json-tool-preview-status {
+  min-width: 0;
+  gap: 10px;
+}
+
+.json-tool-valid {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-brand-success);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular);
+}
+
+.json-tool-tree-actions {
+  gap: 2px;
+}
+
+.json-tool-tree-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 0;
+}
+
+.json-tool-empty {
+  display: flex;
+  height: 100%;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.json-tool-empty strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+.json-tool-empty span {
+  font-size: 12px;
+}
+
+.json-tree {
+  min-width: max-content;
+  color: var(--color-text-primary);
+  font: 13px/1.8 var(--font-mono);
+}
+
+.json-tree-line {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  padding-right: 16px;
+  padding-left: calc(12px + var(--json-tree-depth) * 20px);
+  white-space: pre;
+}
+
+.json-tree-line:hover {
+  background: var(--color-bg-inline-code);
+}
+
+.json-tree-toggle,
+.json-tree-toggle-placeholder {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.json-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.json-tree-toggle:hover {
+  background: var(--color-bg-active);
+  color: var(--color-text-active);
+}
+
+.json-tree-toggle svg {
+  transition: transform var(--duration-fast) var(--easing);
+}
+
+.json-tree-toggle.is-expanded svg {
+  transform: rotate(90deg);
+}
+
+.json-tree-key {
+  color: #a21caf;
+}
+
+.json-tree-bracket,
+.json-tree-punctuation {
+  color: var(--color-text-secondary);
+}
+
+.json-tree-collapsed {
+  padding: 0 6px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.json-tree-value--string {
+  color: #16a34a;
+}
+
+.json-tree-value--number {
+  color: #0284c7;
+}
+
+.json-tree-value--boolean {
+  color: #d97706;
+}
+
+.json-tree-value--null {
+  color: #dc2626;
+}
+
+body.theme-dark .json-tree-key {
+  color: #e879f9;
+}
+
+body.theme-dark .json-tree-value--string {
+  color: #4ade80;
+}
+
+body.theme-dark .json-tree-value--number {
+  color: #38bdf8;
+}
+
+body.theme-dark .json-tree-value--boolean {
+  color: #fbbf24;
+}
+
+body.theme-dark .json-tree-value--null,
+body.theme-dark .json-tool-error {
+  color: #f87171;
+}
+
+@media (max-width: 900px) {
+  .json-tool-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .json-tool-actions {
+    justify-content: flex-start;
+  }
+
+  .json-tool-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(280px, 1fr) minmax(280px, 1fr);
+    overflow: auto;
+  }
+}

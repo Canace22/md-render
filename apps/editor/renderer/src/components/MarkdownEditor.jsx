@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteEditor, createCodeBlockSpec } from '@blocknote/core';
@@ -131,6 +131,10 @@ import {
   saveLocalProjectMetadata,
 } from '../utils/localProjectBridge.js';
 import '../styles/styles.css';
+
+const JsonTool = lazy(() => import('@md-render/json-tool').then((module) => ({
+  default: module.JsonTool,
+})));
 
 const CODE_BLOCK_LANGUAGES = {
   text: { name: 'Plain Text', aliases: ['txt', 'plaintext'] },
@@ -2200,6 +2204,7 @@ function MarkdownEditor() {
         onOpenCanvas={() => setSurface('canvas')}
         onOpenSearch={() => setSurface('search')}
         onOpenGraph={() => setSurface('graph')}
+        onOpenJsonTool={() => setSurface('json-tool')}
         onOpenCurrentContent={() => setSurface(selectedContentSurface)}
         searchQuery={knowledgeSearchQuery}
         onSearchQueryChange={setKnowledgeSearchQuery}
@@ -2386,6 +2391,10 @@ function MarkdownEditor() {
             onOpenSearch={handlePublishingOpenSearch}
             onCreate={() => handleCreateEntryWithStatus('ready')}
           />
+        ) : surface === 'json-tool' ? (
+          <Suspense fallback={<div className="surface-loading">正在加载 JSON 解析器…</div>}>
+            <JsonTool />
+          </Suspense>
         ) : surface === 'search' || surface === 'graph' ? (
           <KnowledgeBasePanel
             mode={surface}

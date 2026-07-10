@@ -25,6 +25,9 @@ importers:
       '@excalidraw/excalidraw':
         specifier: ^0.18.1
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@md-render/json-tool':
+        specifier: workspace:*
+        version: link:../json-tool
       '@md-render/markdown-core':
         specifier: workspace:*
         version: link:../../packages/markdown-core
@@ -110,6 +113,21 @@ importers:
       vitest:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.12)(@types/node@25.9.1)(sass@1.51.0)
+
+  apps/json-tool:
+    dependencies:
+      antd:
+        specifier: ^5.28.0
+        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      lucide-react:
+        specifier: ^0.577.0
+        version: 0.577.0(react@18.3.1)
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/blocknote-core:
     dependencies:

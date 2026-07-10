@@ -28,6 +28,7 @@
     "@blocknote/react": "0.47.1",
     "@excalidraw/excalidraw": "^0.18.1",
     "@md-render/markdown-core": "workspace:*",
+    "@md-render/json-tool": "workspace:*",
     "@narrative/blocknote-core": "workspace:*",
     "antd": "^5.28.0",
     "better-sqlite3": "^12.10.0",

@@ -29,6 +29,7 @@ import {
   ChevronDown,
   CalendarDays,
   SlidersHorizontal,
+  Braces,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -499,6 +500,7 @@ const WorkspaceSidebar = ({
   onOpenCanvas,
   onOpenSearch,
   onOpenGraph,
+  onOpenJsonTool,
   onOpenCurrentContent,
   searchQuery,
   onSearchQueryChange,
@@ -794,6 +796,15 @@ const WorkspaceSidebar = ({
               aria-label="图谱视图"
             >
               <Network size={18} strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              className={`sidebar-rail-btn ${surface === 'json-tool' ? 'active' : ''}`}
+              onClick={onOpenJsonTool}
+              title="JSON 解析器"
+              aria-label="JSON 解析器"
+            >
+              <Braces size={18} strokeWidth={1.6} />
             </button>
           </nav>
         </div>

@@ -140,6 +140,7 @@ const VALID_SURFACES = new Set([
   'publishing',
   'search',
   'graph',
+  'json-tool',
   'paper',
   'folder',
   'settings',
