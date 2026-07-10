@@ -262,14 +262,14 @@ const TOPIC_SELECTION_SKILL_PROMPT = [
 ].join('\n');
 const TOPIC_SELECTION_SKILL = Object.freeze({
   id: 'topic-entry',
-  type: 'insert',
+  type: 'agent',
   label: '选题',
   icon: ApartmentOutlined,
   tone: 'teal',
   category: '项目 skill',
   description: '从旧文、素材和趋势整理选题',
   aliases: ['topic', 'idea', '选题库', '旧文', '新闻', '热点', '趋势'],
-  insertText: TOPIC_SELECTION_SKILL_PROMPT,
+  promptText: TOPIC_SELECTION_SKILL_PROMPT,
 });
 
 const APP_DIAGNOSTICS_SKILL_PROMPT = [
@@ -280,26 +280,26 @@ const APP_DIAGNOSTICS_SKILL_PROMPT = [
 ].join('\n');
 const APP_DIAGNOSTICS_SKILL = Object.freeze({
   id: 'app-diagnostics',
-  type: 'insert',
+  type: 'agent',
   label: '应用体检',
   icon: Activity,
   tone: 'rose',
   category: 'App 专家',
   description: '诊断发布版环境并尝试安全修复',
   aliases: ['diagnostics', 'health', 'bug', '故障', '修复', '体检'],
-  insertText: APP_DIAGNOSTICS_SKILL_PROMPT,
+  promptText: APP_DIAGNOSTICS_SKILL_PROMPT,
 });
 
 const DELIVERABLE_SKILL = Object.freeze({
   id: 'create-deliverable',
-  type: 'insert',
+  type: 'agent',
   label: '生成交付物',
   icon: PackageCheck,
   tone: 'teal',
   category: '产出物',
   description: '将结果另存为有来源关系的文档',
   aliases: ['artifact', 'deliverable', '交付', '报告', '方案'],
-  insertText: '请先理解当前稿件、相关旧文和我指定的资料，完成后调用 create_agent_artifact 把结果另存为一份可复用的交付物：',
+  promptText: '请先理解当前稿件、相关旧文和我指定的资料，完成后调用 create_agent_artifact 把结果另存为一份可复用的交付物。',
 });
 
 const WELCOME_SUGGESTIONS = Object.freeze([
@@ -449,124 +449,124 @@ const PROJECT_SLASH_SKILLS = Object.freeze([
   TOPIC_SELECTION_SKILL,
   {
     id: 'draft-entry',
-    type: 'insert',
+    type: 'agent',
     label: '新稿件',
     icon: FileTextOutlined,
     tone: 'blue',
     category: '项目 skill',
     description: '新建一篇稿件',
     aliases: ['draft', '稿件', '文章'],
-    insertText: '帮我新建一篇稿件：',
+    promptText: '请直接调用 create_content_entry 创建 kind=draft 的稿件，使用默认名称，不要先询问。',
   },
   {
     id: 'material-entry',
-    type: 'insert',
+    type: 'agent',
     label: '资料单',
     icon: FileTextOutlined,
     tone: 'amber',
     category: '项目 skill',
     description: '新建一个资料单',
     aliases: ['material', '资料', '素材'],
-    insertText: '帮我新建一个资料单：',
+    promptText: '请直接调用 create_content_entry 创建 kind=material 的资料单，使用默认名称，不要先询问。',
   },
   {
     id: 'ready-entry',
-    type: 'insert',
+    type: 'agent',
     label: '待发布稿',
     icon: FileTextOutlined,
     tone: 'green',
     category: '项目 skill',
     description: '新建一篇待发布稿',
     aliases: ['ready', '发布', '平台稿'],
-    insertText: '帮我新建一篇待发布稿：',
+    promptText: '请直接调用 create_content_entry 创建 kind=ready 的待发布稿，使用默认名称，不要先询问。',
   },
   {
     id: 'daily-task',
-    type: 'insert',
+    type: 'agent',
     label: '今日任务',
     icon: Check,
     tone: 'cyan',
     category: '项目 skill',
     description: '往今日速记添加一条任务',
     aliases: ['daily', 'task', '待办'],
-    insertText: '帮我在今日速记里加一条任务：',
+    promptText: '帮我在今日速记里加一条任务。如果缺少任务内容，请直接问我。',
   },
   {
     id: 'daily-note',
-    type: 'insert',
+    type: 'agent',
     label: '今日笔记',
     icon: MessageSquareQuote,
     tone: 'slate',
     category: '项目 skill',
     description: '往今日速记添加一条笔记',
     aliases: ['daily', 'note', '速记'],
-    insertText: '帮我在今日速记里记一条笔记：',
+    promptText: '帮我在今日速记里记一条笔记。如果缺少笔记内容，请直接问我。',
   },
   {
     id: 'todo-pool',
-    type: 'insert',
+    type: 'agent',
     label: '待办池',
     icon: Check,
     tone: 'violet',
     category: '项目 skill',
     description: '往待办池添加一条待办',
     aliases: ['todo', 'pool', '稍后处理'],
-    insertText: '帮我往待办池加一条待办：',
+    promptText: '帮我往待办池加一条待办。如果缺少待办内容，请直接问我。',
   },
   {
     id: 'canvas-flow',
-    type: 'insert',
+    type: 'agent',
     label: '白板流程图',
     icon: ArrowsAltOutlined,
     tone: 'rose',
     category: '项目 skill',
     description: '切到白板并生成流程图',
     aliases: ['白板', '流程图', 'canvas', 'flow'],
-    insertText: '请切到灵感白板，并画一个流程图：',
+    promptText: '请切到灵感白板，并根据当前稿件或上下文画一个流程图。',
   },
   {
     id: 'canvas-cards',
-    type: 'insert',
+    type: 'agent',
     label: '白板卡片',
     icon: PlusOutlined,
     tone: 'teal',
     category: '项目 skill',
     description: '往白板追加几张卡片',
     aliases: ['卡片', '点子', 'brainstorm'],
-    insertText: '请切到灵感白板，并追加几张卡片：',
+    promptText: '请切到灵感白板，并根据当前稿件或上下文追加几张卡片。',
   },
   {
     id: 'related-docs',
-    type: 'insert',
+    type: 'agent',
     label: '相关旧文',
     icon: FileText,
     tone: 'slate',
     category: '项目 skill',
     description: '召回和当前文档相关的旧文',
     aliases: ['参考', '召回', '旧文', 'related'],
-    insertText: '帮我找和当前文档相关的旧文参考',
+    promptText: '帮我找和当前文档相关的旧文参考。',
   },
   {
     id: 'workspace-brief',
-    type: 'insert',
+    type: 'agent',
     label: '工作区概览',
     icon: Bot,
     tone: 'gray',
     category: '项目 skill',
     description: '先概览当前工作区再继续',
     aliases: ['workspace', 'overview', '概览'],
-    insertText: '先帮我概览一下当前工作区，然后再继续：',
+    promptText: '请概览当前工作区，总结近期内容、重要主题和建议的下一步。',
   },
   {
     id: 'new-folder',
-    type: 'insert',
+    type: 'agent',
     label: '新建文件夹',
     icon: Plus,
     tone: 'purple',
     category: '项目 skill',
     description: '在当前位置新建文件夹',
     aliases: ['folder', '目录', '整理'],
-    insertText: '帮我在当前位置新建一个文件夹，名字叫：',
+    promptText: '请直接调用 create_folder 在当前位置创建文件夹，使用默认名称，不要先询问。',
   },
 ]);
 
@@ -746,8 +746,8 @@ export default function AgentPanel({ onClose }) {
   const messagesRef = useRef(null);
 
   const isShortcutDisabled = useCallback((item) => {
-    return running && (item.type === 'quick' || item.type === 'platform');
-  }, [aiServerBase, running]);
+    return running && ['agent', 'quick', 'platform'].includes(item.type);
+  }, [running]);
 
   const composerPlusMenuItems = useMemo(() => {
     const shortcuts = COMPOSER_PLUS_SHORTCUTS.map((item) => {
@@ -1346,11 +1346,34 @@ export default function AgentPanel({ onClose }) {
     focusInput();
   }, [focusInput]);
 
+  // Agent skill：内部 prompt 不进入输入框；点击后直接携带当前附件/选区运行。
+  const handleAgentSkill = useCallback((item) => {
+    if (running) return;
+    const instruction = String(item?.promptText ?? '').trim();
+    if (!instruction) return;
+
+    const selectionAttachment = quotedSelection
+      ? { id: 'selection', name: '选中内容', content: quotedSelection }
+      : null;
+    const files = selectionAttachment ? [selectionAttachment, ...attachedFiles] : attachedFiles;
+
+    setInput('');
+    setAttachedFiles([]);
+    clearAiQuotedSelection();
+    setActivePanelTab('chat');
+    runTurn({
+      promptText: buildInputWithAttachments(instruction, files),
+      displayText: item.label || '执行技能',
+      fileNames: files.map((file) => file.name),
+      selectionText: quotedSelection,
+      pinnedFiles: attachedFiles,
+    });
+  }, [running, quotedSelection, attachedFiles, clearAiQuotedSelection, runTurn]);
+
   const handleShortcutClick = useCallback((item) => {
     setActivePanelTab('chat');
-    if (item.type === 'insert') {
-      setInput(item.insertText ?? '');
-      focusInput();
+    if (item.type === 'agent') {
+      handleAgentSkill(item);
       return;
     }
     if (item.type === 'quick') {
@@ -1375,7 +1398,7 @@ export default function AgentPanel({ onClose }) {
     if (item.type === 'settings') {
       setShowSettings((v) => !v);
     }
-  }, [focusInput, handleInsertMention, handlePlatformVariant, handleQuickAction]);
+  }, [handleAgentSkill, handleInsertMention, handlePlatformVariant, handleQuickAction]);
 
   const handleWelcomeSuggestion = useCallback((item) => {
     handleShortcutClick(item);
@@ -1428,9 +1451,8 @@ export default function AgentPanel({ onClose }) {
   const handlePickSkill = useCallback((item) => {
     closeSkillPicker();
     setActivePanelTab('chat');
-    if (item.type === 'insert') {
-      setInput(item.insertText ?? '');
-      focusInput();
+    if (item.type === 'agent') {
+      handleAgentSkill(item);
       return;
     }
 
@@ -1451,7 +1473,7 @@ export default function AgentPanel({ onClose }) {
     if (item.type === 'script') {
       handleScriptTool(item);
     }
-  }, [closeSkillPicker, focusInput, handlePlatformVariant, handleQuickAction, handleScriptTool]);
+  }, [closeSkillPicker, focusInput, handleAgentSkill, handlePlatformVariant, handleQuickAction, handleScriptTool]);
 
   const handlePanelTabChange = useCallback((tabId) => {
     setActivePanelTab(tabId);

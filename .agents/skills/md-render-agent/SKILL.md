@@ -55,8 +55,8 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 ## 改内置 slash skill
 
 - 输入框里的 `/skill` 列表在 `AgentPanel.jsx` 的 `PROJECT_SLASH_SKILLS` 等常量里，不会自动读取 `.agents/skills/`。
-- `type: 'insert'` 的项目 skill 只是把 `insertText` 填进输入框；真正执行仍靠 agent prompt 和 `toolRegistry` 工具。
-- 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `insertText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
+- `type: 'agent'` 的项目 skill 把 `promptText` 当内部指令；点击后必须直接进入 `runTurn`，用户消息只显示 skill 名称，不得把 prompt 填入输入框。
+- 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `promptText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
 - 需要结构化落库时，再扩展 `create_content_entry` 参数、执行器和 `AgentPanel` host，仍保持执行器只通过 host 取能力。
 
 ## 会话管理（全局，不持久化）
@@ -70,7 +70,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - AI 助手入口不在 `AgentPanel.jsx` 内：打开/关闭由 `MarkdownEditor.jsx` 持有状态，全局顶部按钮走 `TabBar` 的 `trailing` 区。只改入口位置时优先改 shell/titlebar，面板内容和 agent loop 不动。
 - 面板里的「对话 / 上下文 / 技能」这类纯 UI 切换用 `AgentPanel.jsx` 局部 state，不进 `useEditorStore`，也不要改 `agentEngine`。
 - `AgentDocMeta.jsx` 负责当前稿件、本轮上下文、相关旧文召回展示；不要把这些展示块重新堆回消息流顶部。
-- 技能页或 `/skill` picker 选中 `insert` 类型时，只把 `insertText` 填进输入框并切回对话；真正执行仍由用户发送后进入 agent loop。
+- 技能页、欢迎页或 `/skill` picker 选中 `agent` 类型时，立即调用 `runTurn`；带上当前 @附件和选区，然后清空输入态。
 - 技能页触发 `quick` / `platform` / `script` 时复用现有 handler，不新增一套执行入口。
 - AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
 - AI 响应态属于 `AgentPanel.jsx` 展示层：模型没有流式输出时，也可以在 `runAgent` 返回 `finalText` 后本地打字式填充同一条 assistant 消息；等待模型时在消息列表底部显示 loading。打字过程中要隐藏未闭合的 `agent-choice` 注释协议，避免把内部 JSON 闪给用户。
