@@ -75,6 +75,17 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
 - AI 响应态属于 `AgentPanel.jsx` 展示层：模型没有流式输出时，也可以在 `runAgent` 返回 `finalText` 后本地打字式填充同一条 assistant 消息；等待模型时在消息列表底部显示 loading。打字过程中要隐藏未闭合的 `agent-choice` 注释协议，避免把内部 JSON 闪给用户。
 
+## Codex 式任务反馈与响应安全
+
+- 把模型 `assistant.content` 当成不可信输入：在 `agentEngine` 写入 history、发事件和返回 `finalText` **之前**，先用 `assistantResponse.js` 清理回复开头的 `<think>` / `<analysis>` 私有推理块；UI 复用同一函数兼容旧会话。
+- 只识别回复开头的精确标签，不要全局删除，否则会误伤 XML / 代码示例和 `<analysis-result>` 这类正常标签。opening tag 或 reasoning 块未闭合时不回显原文，给可重试的安全兜底。
+- Assistant 正文用 `AgentMessageContent.jsx` 安全渲染 Markdown：禁用原始 HTML，不自动加载模型给出的远程图片。不要复用现有 `MarkdownRenderer + dangerouslySetInnerHTML`，因为它不适合直接注入模型输出。
+- 工具过程和最终答复分层：连续 tool 消息聚合成可折叠的工作记录，最终答复始终独立；产出物卡片放在折叠区外，避免完成瞬间被隐藏。工具运行时不再叠加通用“思考中”。
+- `tool_start` / `tool_done` 必须带稳定 `callId`，UI 按 `callId` 收口步骤，不按会重复的 label 猜。不要默认展示原始 args / result，其中可能有正文、路径或诊断信息；只留白名单的产出物元数据。
+- 停止与重入要双重防护：`runLockRef` 防同一渲染帧内双启动，`runId` 防旧请求清掉新请求的状态；`callChatCompletion` 返回后再检查一次 `AbortSignal`，丢弃迟到响应。
+- Electron IPC / 已启动工具不一定能物理取消。Stop 只能保证不再执行后续步骤和不再回流迟到答复；在途步骤显示 `interrupted / 结果未确认`，不得误报“操作已停止”。
+- 没有真实流式通道时，优先展示结构化进度，最终答复到达后立即呈现；不要用长时间的“假逐字”代替真进度。真流式属于 proxy / Main IPC / Renderer 的独立改造。
+
 ## @文件（引用工作区文件作上下文）
 
 - 交互在 `AgentPanel.jsx`：输入框检测末尾 `@关键词`（正则 `/(?:^|\s)@([^\s@]*)$/`）→ 弹文件选择器 → 选中加入 `attachedFiles`。
