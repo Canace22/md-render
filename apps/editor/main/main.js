@@ -4,6 +4,7 @@ const { autoUpdater } = pkg;
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { createAppDiagnostics } from './appDiagnostics.js';
 import {
   readLocalProjectWorkspace,
   saveLocalProjectFile,
@@ -44,6 +45,7 @@ import {
   searchDocuments,
   updateDocumentDiskPaths,
   getGraphData,
+  getDatabaseDiagnostics,
   closeDatabase,
 } from './database.js';
 import { writeBuiltInDocsToDisk } from './mdSync.js';
@@ -76,6 +78,13 @@ const DEFAULT_AI_PROXY_BASE = 'http://localhost:8788';
 const normalizeAiProxyBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 const resolveAiProxyBase = (value) =>
   normalizeAiProxyBase(value) || normalizeAiProxyBase(process.env.AI_PROXY_BASE) || DEFAULT_AI_PROXY_BASE;
+
+const appDiagnostics = createAppDiagnostics({
+  app,
+  autoUpdater,
+  resolveAiProxyBase,
+  getDatabaseDiagnostics,
+});
 
 app.setPath('userData', path.join(app.getPath('appData'), STABLE_USER_DATA_DIRNAME));
 
@@ -204,6 +213,7 @@ registerIpcHandlers({
   ipcMain,
   app,
   autoUpdater,
+  getDiagnosticsSnapshot: appDiagnostics.getSnapshot,
   getMainWindow: () => mainWindow,
   resolveAiProxyBase,
   startWatchingLocalProject,

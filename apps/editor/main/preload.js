@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listTools: (payload) => ipcRenderer.invoke('ai:listTools', payload),
   },
 
+  // 只读本机运行诊断
+  diagnostics: {
+    getSnapshot: (payload) => ipcRenderer.invoke('diagnostics:get-snapshot', payload),
+  },
+
   // SQLite 数据库 IPC
   db: {
     isMigrated: () => ipcRenderer.invoke('db:is-migrated'),

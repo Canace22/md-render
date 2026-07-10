@@ -10,6 +10,10 @@ export const hasAiToolBridge = () => (
   typeof getElectronAPI()?.ai?.execTool === 'function'
 );
 
+export const hasDiagnosticsBridge = () => (
+  typeof getElectronAPI()?.diagnostics?.getSnapshot === 'function'
+);
+
 export const hasFilePickerBridge = () => (
   typeof getElectronAPI()?.pickFile === 'function'
   && typeof getElectronAPI()?.pickSavePath === 'function'
@@ -28,5 +32,9 @@ export const pickSavePath = (payload) => getElectronAPI()?.pickSavePath?.(payloa
 
 export const aiExecTool = (payload) => getElectronAPI()?.ai?.execTool?.(payload);
 export const aiListTools = (payload) => getElectronAPI()?.ai?.listTools?.(payload);
+
+export const getDiagnosticsSnapshot = (payload) => (
+  getElectronAPI()?.diagnostics?.getSnapshot?.(payload)
+);
 
 export const getUpdaterBridge = () => getElectronAPI()?.updater ?? null;

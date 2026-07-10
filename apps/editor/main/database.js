@@ -88,6 +88,57 @@ function getDb() {
   return db;
 }
 
+export function getDatabaseDiagnostics() {
+  if (!db) {
+    return {
+      ok: false,
+      initialized: false,
+      quickCheck: null,
+      counts: null,
+      error: {
+        code: 'DB_NOT_INITIALIZED',
+        message: '数据库尚未初始化。',
+      },
+    };
+  }
+
+  try {
+    const quickCheck = String(db.pragma('quick_check', { simple: true }) ?? '');
+    const counts = db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM app_state) AS appState,
+        (SELECT COUNT(*) FROM documents) AS documents,
+        (SELECT COUNT(*) FROM links) AS links,
+        (SELECT COUNT(*) FROM versions) AS versions
+    `).get();
+    const ok = quickCheck.toLowerCase() === 'ok';
+
+    return {
+      ok,
+      initialized: true,
+      quickCheck,
+      counts,
+      error: ok
+        ? null
+        : {
+          code: 'DB_QUICK_CHECK_FAILED',
+          message: '数据库快速检查未通过。',
+        },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      initialized: true,
+      quickCheck: null,
+      counts: null,
+      error: {
+        code: 'DB_DIAGNOSTICS_FAILED',
+        message: error?.message || String(error),
+      },
+    };
+  }
+}
+
 // ── app_state helpers ─────────────────────────────────────────────────────────
 
 function getState(key) {

@@ -19,6 +19,9 @@
  *   host.appendCanvasCards(args)    -> string           （往灵感白板追加卡片）
  *   host.replaceCanvas(args)        -> string           （整体替换灵感白板内容）
  *   host.clearCanvas()              -> string           （清空灵感白板）
+ *   host.inspectAppHealth()         -> object           （读取脱敏的本机运行快照）
+ *   host.applySafeRepair(args)      -> string           （用户确认后执行白名单修复）
+ *   host.createAgentArtifact(args)  -> string           （创建可追溯的结构化产出物）
  */
 
 import { extractRecallKeywords, rankRelatedDocs } from './contextRecall.js';
@@ -281,8 +284,44 @@ export const TOOL_DEFINITIONS = Object.freeze([
             description: '可选，目标平台标识列表，如 wechat / xiaohongshu / zhihu',
             items: { type: 'string' },
           },
+          sourceMaterialIds: {
+            type: 'array',
+            description: '可选，这个内容条目实际使用的来源文档 id 列表',
+            items: { type: 'string' },
+          },
         },
         required: ['kind'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_agent_artifact',
+      description: '把方案、调研、简报、清单、平台稿或事故报告作为新文档产出物保存，保留原稿并记录来源。',
+      parameters: {
+        type: 'object',
+        properties: {
+          artifactType: {
+            type: 'string',
+            enum: ['plan', 'brief', 'research', 'checklist', 'platform_draft', 'incident_report'],
+            description: '产出物类型',
+          },
+          name: { type: 'string', description: '文档名称' },
+          summary: { type: 'string', description: '一句话摘要' },
+          content: { type: 'string', description: '完整 Markdown 内容' },
+          sourceMaterialIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '实际使用的来源文档 id 列表',
+          },
+          targetPlatforms: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '可选的目标平台',
+          },
+        },
+        required: ['artifactType', 'content'],
       },
     },
   },
@@ -348,6 +387,32 @@ export const TOOL_DEFINITIONS = Object.freeze([
       name: 'get_workspace_brief',
       description: '获取当前工作区的简报，包括文档总数、高频标签和最近文档。适合先快速了解整个工作区概况。',
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'inspect_app_health',
+      description: '读取脱敏的 MD Render 本机运行快照，包括版本、运行环境、SQLite、AI 代理和更新能力。排查发布版问题时必须先调用。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'apply_safe_repair',
+      description: '执行 inspect_app_health 明确返回的白名单修复。宿主会强制弹出用户确认，并在复检失败时自动回滚。',
+      parameters: {
+        type: 'object',
+        properties: {
+          repairId: {
+            type: 'string',
+            enum: ['reset_ai_proxy_override'],
+            description: 'inspect_app_health.availableRepairs 返回的修复 id',
+          },
+        },
+        required: ['repairId'],
+      },
     },
   },
   {
@@ -494,8 +559,25 @@ const EXECUTORS = {
       summary: args?.summary,
       content: args?.content,
       targetPlatforms: args?.targetPlatforms,
+      sourceMaterialIds: args?.sourceMaterialIds,
     });
     return typeof result === 'string' ? result : '已创建内容条目。';
+  },
+
+  create_agent_artifact: async (args, host) => {
+    const artifactType = String(args?.artifactType ?? '').trim();
+    const content = String(args?.content ?? '');
+    if (!artifactType) return '创建失败：产出物类型为空。';
+    if (!content.trim()) return '创建失败：产出物内容为空。';
+    const result = await host.createAgentArtifact?.({
+      artifactType,
+      name: args?.name,
+      summary: args?.summary,
+      content,
+      sourceMaterialIds: args?.sourceMaterialIds,
+      targetPlatforms: args?.targetPlatforms,
+    });
+    return typeof result === 'string' ? result : '已创建产出物。';
   },
 
   read_doc_by_id: async (args, host) => {
@@ -518,11 +600,15 @@ const EXECUTORS = {
     if (!query) return '搜索失败：关键词为空。';
     const results = (await host.searchDocs(query)) || [];
     if (!results.length) return `未找到与「${query}」相关的文档。`;
-    const top = results.slice(0, MAX_SEARCH_RESULTS).map((r) => ({
-      id: r.id ?? '',
-      title: r.title ?? '未命名',
-      snippet: truncate(r.snippet ?? '', MAX_SNIPPET_CHARS),
-    }));
+    const top = results.slice(0, MAX_SEARCH_RESULTS).map((r) => {
+      const { content: _content, ...meta } = r ?? {};
+      return {
+        ...meta,
+        id: r?.id ?? '',
+        title: r?.title ?? '未命名',
+        snippet: truncate(r?.snippet ?? r?.summary ?? '', MAX_SNIPPET_CHARS),
+      };
+    });
     return JSON.stringify(top);
   },
 
@@ -540,6 +626,19 @@ const EXECUTORS = {
     const brief = await host.getWorkspaceBrief?.();
     if (!brief) return '当前工作区不可用。';
     return JSON.stringify(brief);
+  },
+
+  inspect_app_health: async (_args, host) => {
+    const snapshot = await host.inspectAppHealth?.();
+    if (!snapshot) return '当前环境不支持本机运行诊断。';
+    return typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot);
+  },
+
+  apply_safe_repair: async (args, host) => {
+    const repairId = String(args?.repairId ?? '').trim();
+    if (!repairId) return '修复失败：修复 id 为空。';
+    const result = await host.applySafeRepair?.({ repairId });
+    return typeof result === 'string' ? result : JSON.stringify(result ?? { ok: false });
   },
 
   recall_related_docs: async (_args, host) => {
@@ -608,11 +707,14 @@ const _localToolLabels = Object.freeze({
   create_new_doc: '新建文档',
   create_folder: '新建文件夹',
   create_content_entry: '创建内容条目',
+  create_agent_artifact: '创建交付产出物',
   open_workspace_item: '打开工作区条目',
   read_doc_by_id: '读取指定文档',
   search_docs: '搜索工作区',
   list_recent_docs: '查看最近文档',
   get_workspace_brief: '查看工作区简报',
+  inspect_app_health: '检查应用运行状态',
+  apply_safe_repair: '执行安全修复',
   recall_related_docs: '召回相关旧文',
 });
 

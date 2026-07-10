@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dropdown, message } from 'antd';
+import { Dropdown, Modal, message } from 'antd';
 import {
   ApartmentOutlined,
   ArrowsAltOutlined,
@@ -13,19 +13,22 @@ import {
   FilePdfOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import { Bot, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
+import { Activity, Bot, PackageCheck, Settings, ShieldCheck, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
   findNodeById,
+  getFileKnowledgeSearchText,
 } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
+import AgentArtifactCard from './AgentArtifactCard.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import { parseAssistantChoiceCards } from '../core/agent/choiceCards.js';
 import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
   buildActiveDocMeta,
+  buildContentAssetPointer,
   buildPinnedContext,
   buildRecentDocPointers,
   buildTaskContextPacket,
@@ -57,6 +60,8 @@ import {
   saveProviderConfig,
   readAiServerBase,
   saveAiServerBase,
+  clearAiServerOverride,
+  getAiServerConfiguration,
   hasBuiltinKey,
   fetchServerProviders,
   hasAiBridge,
@@ -65,11 +70,15 @@ import {
   aiExecTool,
   aiListTools,
   dbSearch,
+  getDiagnosticsSnapshot,
   hasAiToolBridge,
   hasDbBridge,
+  hasDiagnosticsBridge,
   pickFile,
   pickSavePath,
 } from '../services/electronBridge.js';
+import { buildAgentArtifactPayload } from '../core/agent/artifactUtils.js';
+import { buildAgentHealthSnapshot, runSafeRepair } from '../core/agent/appSupport.js';
 
 const ASSISTANT_TYPE_INTERVAL_MS = 18;
 const ASSISTANT_TYPE_CHUNK_SIZE = 4;
@@ -99,16 +108,27 @@ const buildRefReason = (ref, keywords) => {
 };
 
 /** 把 tool 消息里最后一条 running 改成 done */
-const markLastToolDone = (messages, label) => {
+const markLastToolDone = (messages, label, result = '') => {
   const next = [...messages];
   for (let i = next.length - 1; i >= 0; i -= 1) {
     if (next[i].role === 'tool' && next[i].label === label && next[i].status === 'running') {
-      next[i] = { ...next[i], status: 'done' };
+      next[i] = { ...next[i], status: 'done', result };
       break;
     }
   }
   return next;
 };
+
+const requestSafeRepairApproval = ({ title, description }) => new Promise((resolve) => {
+  Modal.confirm({
+    title,
+    content: description,
+    okText: '确认修复',
+    cancelText: '取消',
+    onOk: () => resolve(true),
+    onCancel: () => resolve(false),
+  });
+});
 
 const updateTypingAssistantMessage = (messages, patch) => {
   const next = [...messages];
@@ -252,12 +272,41 @@ const TOPIC_SELECTION_SKILL = Object.freeze({
   insertText: TOPIC_SELECTION_SKILL_PROMPT,
 });
 
+const APP_DIAGNOSTICS_SKILL_PROMPT = [
+  '请帮我排查 MD Render 当前的问题。',
+  '先调用 inspect_app_health 读取脱敏运行快照，再区分配置、数据、服务或代码故障。',
+  '只有诊断结果返回 availableRepairs 时，才能调用 apply_safe_repair；修复后必须复检。',
+  '如果不能在本机安全修复，请用 create_agent_artifact 创建 incident_report，写清复现、环境、证据、归属层、临时方案和验收标准。',
+].join('\n');
+const APP_DIAGNOSTICS_SKILL = Object.freeze({
+  id: 'app-diagnostics',
+  type: 'insert',
+  label: '应用体检',
+  icon: Activity,
+  tone: 'rose',
+  category: 'App 专家',
+  description: '诊断发布版环境并尝试安全修复',
+  aliases: ['diagnostics', 'health', 'bug', '故障', '修复', '体检'],
+  insertText: APP_DIAGNOSTICS_SKILL_PROMPT,
+});
+
+const DELIVERABLE_SKILL = Object.freeze({
+  id: 'create-deliverable',
+  type: 'insert',
+  label: '生成交付物',
+  icon: PackageCheck,
+  tone: 'teal',
+  category: '产出物',
+  description: '将结果另存为有来源关系的文档',
+  aliases: ['artifact', 'deliverable', '交付', '报告', '方案'],
+  insertText: '请先理解当前稿件、相关旧文和我指定的资料，完成后调用 create_agent_artifact 把结果另存为一份可复用的交付物：',
+});
+
 const WELCOME_SUGGESTIONS = Object.freeze([
+  APP_DIAGNOSTICS_SKILL,
+  DELIVERABLE_SKILL,
   { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '润色一下这段文字' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '帮我总结一下' },
   { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼关键要点' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '想几个标题' },
 ]);
 
 const COMPOSER_SHORTCUTS = Object.freeze([
@@ -395,6 +444,8 @@ const EXTRA_PLATFORM_SLASH_SKILLS = Object.freeze([
 ]);
 
 const PROJECT_SLASH_SKILLS = Object.freeze([
+  APP_DIAGNOSTICS_SKILL,
+  DELIVERABLE_SKILL,
   TOPIC_SELECTION_SKILL,
   {
     id: 'draft-entry',
@@ -747,9 +798,62 @@ export default function AgentPanel({ onClose }) {
         contextNodeId: selectedId,
         meta: { targetPlatforms, sourceMaterialIds },
       });
-      return result?.ok
-        ? `已新建文档「${result.name}」，原文未改动。`
-        : `新建文档失败：${result?.error || '未知错误'}`;
+      return JSON.stringify(result?.ok
+        ? { ok: true, fileId: result.fileId, name: result.name, message: '原文未改动。' }
+        : { ok: false, error: result?.error || '未知错误' });
+    },
+    createAgentArtifact: async (args = {}) => {
+      const prepared = buildAgentArtifactPayload(args);
+      if (!prepared.ok) return JSON.stringify({ ok: false, error: prepared.error });
+
+      const result = await createGeneratedFile({
+        name: prepared.artifact.name,
+        content: prepared.artifact.content,
+        contextNodeId: selectedId,
+        meta: prepared.artifact.meta,
+      });
+      return JSON.stringify(result?.ok
+        ? {
+          kind: 'agent_artifact',
+          ok: true,
+          artifactType: prepared.artifact.type,
+          artifactLabel: prepared.artifact.label,
+          fileId: result.fileId,
+          name: result.name,
+        }
+        : { kind: 'agent_artifact', ok: false, error: result?.error || '未知错误' });
+    },
+    inspectAppHealth: async () => {
+      const aiConfiguration = getAiServerConfiguration();
+      const runtimeSnapshot = hasDiagnosticsBridge()
+        ? await getDiagnosticsSnapshot({ aiProxyBase: aiConfiguration.resolved })
+        : {
+          ok: false,
+          error: '当前不在 Electron 环境，无法读取本机运行快照。',
+          aiProxy: { reachable: false },
+        };
+      return buildAgentHealthSnapshot({
+        runtimeSnapshot,
+        aiConfiguration,
+        workspaceBrief: buildWorkspaceToolBrief(workspace, selectedId),
+        activeDoc: buildActiveDocMeta(activeFile, markdown ?? ''),
+        currentSurface: getSurfaceLabel(surface, activeFile),
+      });
+    },
+    applySafeRepair: async ({ repairId = '' } = {}) => {
+      const result = await runSafeRepair({
+        repairId,
+        aiConfiguration: getAiServerConfiguration(),
+        confirm: requestSafeRepairApproval,
+        clearAiServerOverride,
+        restoreAiServerOverride: saveAiServerBase,
+        verify: async (nextBase) => {
+          if (!hasDiagnosticsBridge()) return { aiProxy: { reachable: false } };
+          return getDiagnosticsSnapshot({ aiProxyBase: nextBase });
+        },
+      });
+      setAiServerBase(readAiServerBase());
+      return JSON.stringify(result);
     },
     addDailyEntry: async ({ type = 'task', text = '', dateKey = '' } = {}) => {
       const cleanText = String(text ?? '').trim();
@@ -835,6 +939,7 @@ export default function AgentPanel({ onClose }) {
       summary = '',
       content = '',
       targetPlatforms = [],
+      sourceMaterialIds = [],
     } = {}) => {
       const preset = CONTENT_ENTRY_PRESETS[kind] || CONTENT_ENTRY_PRESETS.topic;
       const finalContent = String(content ?? '').trim()
@@ -847,6 +952,7 @@ export default function AgentPanel({ onClose }) {
           draftStatus: preset.draftStatus,
           summary,
           targetPlatforms,
+          sourceMaterialIds,
         },
       });
       return result?.ok
@@ -897,19 +1003,24 @@ export default function AgentPanel({ onClose }) {
       if (hasDbBridge()) {
         try {
           const res = await dbSearch(query);
-          return (res?.results ?? []).map((r) => ({
-            title: r.title ?? r.name ?? '未命名',
-            snippet: r.snippet ?? r.excerpt ?? '',
-            id: r.id,
-          }));
+          return (res?.results ?? []).map((r) => {
+            const node = collectFiles(workspace).find((file) => file?.id === r.id);
+            return buildContentAssetPointer({
+              ...(node ?? {}),
+              ...r,
+              title: r.title ?? r.name ?? node?.name ?? '未命名',
+              snippet: r.snippet ?? r.excerpt ?? node?.summary ?? '',
+              id: r.id ?? node?.id,
+            });
+          });
         } catch {
           /* 落到内存兜底 */
         }
       }
       const q = String(query).toLowerCase();
       return collectFiles(workspace)
-        .filter((f) => `${f.name ?? ''}${f.content ?? ''}`.toLowerCase().includes(q))
-        .map((f) => ({ title: f.name ?? '未命名', snippet: String(f.content ?? '').slice(0, 200), id: f.id }));
+        .filter((f) => getFileKnowledgeSearchText(f).includes(q))
+        .map((f) => buildContentAssetPointer(f, { content: String(f.content ?? '').slice(0, 200) }));
     },
     /**
      * 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等）。
@@ -954,6 +1065,8 @@ export default function AgentPanel({ onClose }) {
     setDailyCurrentDate,
     setSurface,
     aiServerBase,
+    activeFile,
+    surface,
   ]);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
@@ -1140,7 +1253,7 @@ export default function AgentPanel({ onClose }) {
           if (ev.type === 'tool_start') {
             appendAgentMessage(sessionId, { role: 'tool', label: ev.label, status: 'running' });
           } else if (ev.type === 'tool_done') {
-            updateAgentMessages(sessionId, (msgs) => markLastToolDone(msgs, ev.label));
+            updateAgentMessages(sessionId, (msgs) => markLastToolDone(msgs, ev.label, ev.result));
           }
         },
       });
@@ -1441,7 +1554,7 @@ export default function AgentPanel({ onClose }) {
   return (
     <div className="agent-panel">
       <div className="agent-panel__header">
-        <span className="agent-panel__title"><Bot size={16} /> AI 助手</span>
+        <span className="agent-panel__title"><Bot size={16} /> MD Render Agent</span>
         <div className="agent-panel__header-actions">
           <button className="agent-panel__icon-btn" onClick={() => setShowSessions((v) => !v)} title="会话列表">
             <MessagesSquare size={16} />
@@ -1543,8 +1656,13 @@ export default function AgentPanel({ onClose }) {
         >
           {isWelcomeMode && (
             <div className="agent-panel__welcome">
-              <h2 className="agent-panel__welcome-title">有什么我能帮你的吗？</h2>
-              <p className="agent-panel__welcome-subtitle">直接提需求，或者先从下面这些常用动作开始。</p>
+              <h2 className="agent-panel__welcome-title">我会先理解你的工作，再动手</h2>
+              <p className="agent-panel__welcome-subtitle">我懂当前稿件、工作区和应用状态；改文有 diff 确认，交付物默认保留原稿。</p>
+              <div className="agent-panel__expert-badges">
+                <span><ShieldCheck size={13} /> 可审计操作</span>
+                <span><Activity size={13} /> 可体检运行状态</span>
+                <span><PackageCheck size={13} /> 产出物留来源</span>
+              </div>
               <div className="agent-panel__welcome-grid">
                 {WELCOME_SUGGESTIONS.map((item) => (
                   <button
@@ -1566,11 +1684,19 @@ export default function AgentPanel({ onClose }) {
           {!isWelcomeMode && messages.map((m, i) => {
             if (m.role === 'tool') {
               return (
-                <div key={i} className="agent-panel__tool">
-                  {m.status === 'running'
-                    ? <Loader2 size={14} className="agent-panel__spin" />
-                    : <Wrench size={14} />}
-                  <span>{m.label}{m.status === 'done' ? ' ✓' : '…'}</span>
+                <div key={i} className="agent-panel__tool-wrap">
+                  <div className="agent-panel__tool">
+                    {m.status === 'running'
+                      ? <Loader2 size={14} className="agent-panel__spin" />
+                      : <Wrench size={14} />}
+                    <span>{m.label}{m.status === 'done' ? ' ✓' : '…'}</span>
+                  </div>
+                  {m.status === 'done' && (
+                    <AgentArtifactCard
+                      result={m.result}
+                      onOpen={(fileId) => host.openWorkspaceItem({ id: fileId })}
+                    />
+                  )}
                 </div>
               );
             }
