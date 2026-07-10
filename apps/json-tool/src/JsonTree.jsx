@@ -43,6 +43,7 @@ const JsonTreeNode = memo(function JsonTreeNode({
   depth,
   path,
   expansionSignal,
+  trailingComma = false,
 }) {
   const container = isContainer(value);
   const [expanded, setExpanded] = useState(
@@ -58,7 +59,7 @@ const JsonTreeNode = memo(function JsonTreeNode({
   const keyLabel = nodeKey == null
     ? null
     : typeof nodeKey === 'number'
-      ? `[${nodeKey}]`
+      ? null
       : JSON.stringify(nodeKey);
 
   if (!container) {
@@ -70,6 +71,7 @@ const JsonTreeNode = memo(function JsonTreeNode({
         <span className={`json-tree-value ${getPrimitiveClassName(value)}`}>
           {renderPrimitive(value)}
         </span>
+        {trailingComma && <span className="json-tree-punctuation">,</span>}
       </div>
     );
   }
@@ -99,14 +101,20 @@ const JsonTreeNode = memo(function JsonTreeNode({
           <>
             <span className="json-tree-collapsed">… {meta.label}</span>
             <span className="json-tree-bracket">{meta.closing}</span>
+            {trailingComma && <span className="json-tree-punctuation">,</span>}
           </>
         )}
-        {isEmpty && <span className="json-tree-bracket">{meta.closing}</span>}
+        {isEmpty && (
+          <>
+            <span className="json-tree-bracket">{meta.closing}</span>
+            {trailingComma && <span className="json-tree-punctuation">,</span>}
+          </>
+        )}
       </div>
 
       {expanded && !isEmpty && (
         <>
-          {meta.entries.map(([childKey, childValue]) => {
+          {meta.entries.map(([childKey, childValue], index) => {
             const childPath = typeof childKey === 'number'
               ? `${path}[${childKey}]`
               : `${path}.${childKey}`;
@@ -118,12 +126,14 @@ const JsonTreeNode = memo(function JsonTreeNode({
                 depth={depth + 1}
                 path={childPath}
                 expansionSignal={expansionSignal}
+                trailingComma={index < meta.entries.length - 1}
               />
             );
           })}
           <div className="json-tree-line" style={{ '--json-tree-depth': depth }}>
             <span className="json-tree-toggle-placeholder" />
             <span className="json-tree-bracket">{meta.closing}</span>
+            {trailingComma && <span className="json-tree-punctuation">,</span>}
           </div>
         </>
       )}
