@@ -4,8 +4,47 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  position: relative;
   background: var(--color-bg-page);
   color: var(--color-text-primary);
+}
+
+.json-tool-search {
+  position: absolute;
+  z-index: 20;
+  top: 58px;
+  right: var(--space-m);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: min(360px, calc(100% - 32px));
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-medium);
+}
+
+.json-tool-search .ant-input-affix-wrapper {
+  min-width: 0;
+  flex: 1;
+}
+
+.json-tool-search .ant-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.json-tool-search-count {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.json-tool-search-count.is-empty {
+  color: #dc2626;
 }
 
 .json-tool-header {

@@ -13,7 +13,9 @@ import {
   WandSparkles,
 } from 'lucide-react';
 import JsonTree from './JsonTree.jsx';
+import JsonSearchBar from './JsonSearchBar.jsx';
 import { countJsonNodes, formatJson, parseJson } from './jsonUtils.js';
+import useJsonSearch from './useJsonSearch.js';
 import './json-tool.css';
 
 const DOWNLOAD_FILE_NAME = 'data.json';
@@ -34,6 +36,8 @@ export default function JsonTool() {
   const [expansionSignal, setExpansionSignal] = useState({ version: 0, expanded: null });
   const fileInputRef = useRef(null);
   const lineNumbersRef = useRef(null);
+  const editorRef = useRef(null);
+  const search = useJsonSearch({ source, editorRef });
   const parsed = useMemo(() => parseJson(source), [source]);
   const lineNumbers = useMemo(
     () => Array.from({ length: Math.max(source.split('\n').length, 1) }, (_, index) => index + 1).join('\n'),
@@ -152,6 +156,17 @@ export default function JsonTool() {
         </div>
       </header>
 
+      <JsonSearchBar
+        activeIndex={search.activeIndex}
+        inputRef={search.inputRef}
+        matchCount={search.matchCount}
+        onClose={search.closeSearch}
+        onNavigate={search.navigate}
+        onQueryChange={search.updateQuery}
+        open={search.isOpen}
+        query={search.query}
+      />
+
       <div className="json-tool-workspace">
         <section className="json-tool-pane json-tool-source-pane">
           <div className="json-tool-pane-header">
@@ -161,6 +176,7 @@ export default function JsonTool() {
           <div className="json-tool-editor-wrap">
             <pre ref={lineNumbersRef} className="json-tool-line-numbers" aria-hidden>{lineNumbers}</pre>
             <textarea
+              ref={editorRef}
               value={source}
               onChange={(event) => setSource(event.target.value)}
               onScroll={handleEditorScroll}
