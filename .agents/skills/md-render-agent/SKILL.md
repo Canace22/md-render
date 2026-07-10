@@ -39,6 +39,19 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 4. 如果工具需要新的宿主能力，在 `AgentPanel.jsx` 的 `host` 对象里补对应方法，对接 store/IPC。
 5. **执行器只通过 host 拿能力，不要 import store 或 window.electronAPI**——否则单测没法注入假 host。
 
+## App 专家、诊断与安全自愈
+
+当 Agent 需要理解 md-render 自身、排查发布后问题或产出可复用文档时，优先使用已有产品契约，不要在单个组件里临时加 prompt：
+
+- 产品事实和边界在 `core/agent/appKnowledge.js`，由 `agentEngine.js` 注入 system prompt。
+- 内容指针来自 `taskContext.js`，必须带稳定 `id` 和有界元数据；正文只能通过工具按需读取。
+- 方案、简报、调研、清单、平台稿、事故报告使用 `create_agent_artifact`，走 `createGeneratedFile` 并保留 `sourceMaterialIds`。
+- 发生应用异常时先调用 `inspect_app_health`；只能把 `availableRepairs` 返回的 id 交给 `apply_safe_repair`，由 host 强制确认并复检/回滚。
+- 运行诊断放在 Main IPC，必须脱敏路径、凭证和正文。远端 `ai-proxy` 不是用户本机的修复通道。
+- 已打包客户端不能自改 asar；代码缺陷应生成 `incident_report`，再进入仓库 Agent、CI 与签名发版。
+
+安全修复流程固定为：`inspect → confirm → apply → verify → rollback on failure`。不要新增通用 shell、任意路径或自由 patch 工具。
+
 ## 改内置 slash skill
 
 - 输入框里的 `/skill` 列表在 `AgentPanel.jsx` 的 `PROJECT_SLASH_SKILLS` 等常量里，不会自动读取 `.agents/skills/`。
@@ -85,3 +98,5 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - 工具/引擎：read 拿到内容、write 真改文档、空内容被拒、search 有/无结果、未知工具、坏 JSON、完整 loop。
 - 会话（sessionUtils）：新建独立 id、删非激活/删激活跳下一个/删空补新、标题派生、mapSession 不可变。
 - @文件（buildInputWithAttachments）：无附件原样、单/多附件含文件名+内容、用户话在末尾、超长截断、空内容不崩。
+- 产出物：未知类型和空内容拒绝，来源 id 去重，平台元数据保留，原文不覆盖，成功结果可按 id 重新打开。
+- 诊断/修复：Web 只读降级，代理不可达时才提供可用修复，用户取消不改配置，复检失败自动回滚。
