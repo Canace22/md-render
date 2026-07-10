@@ -1,4 +1,5 @@
 const CHOICE_BLOCK_PATTERN = /<!--\s*agent-choice\s*([\s\S]*?)\s*-->/i;
+const CHOICE_PROTOCOL_PATTERN = /<!--\s*agent-choice[\s\S]*?(?:-->|$)/gi;
 const MAX_CHOICE_COUNT = 6;
 
 const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -50,7 +51,7 @@ const parseStructuredChoices = (text) => {
     const choices = normalizeChoices(payload?.options);
     if (choices.length < 2) return null;
     return {
-      displayText: text.replace(match[0], '').trim(),
+      displayText: text.replace(CHOICE_PROTOCOL_PATTERN, '').trim(),
       choices,
     };
   } catch {
@@ -103,9 +104,10 @@ export const parseAssistantChoiceCards = (text) => {
   const rawText = String(text ?? '');
   const structured = parseStructuredChoices(rawText);
   if (structured) return structured;
+  const displayText = rawText.replace(CHOICE_PROTOCOL_PATTERN, '').trim();
 
   return {
-    displayText: rawText,
-    choices: parseFallbackChoices(rawText),
+    displayText,
+    choices: parseFallbackChoices(displayText),
   };
 };

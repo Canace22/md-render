@@ -13,7 +13,7 @@ import {
   FilePdfOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import { Activity, Bot, PackageCheck, Settings, ShieldCheck, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
+import { Activity, Bot, PackageCheck, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
@@ -21,9 +21,8 @@ import {
   getFileKnowledgeSearchText,
 } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
-import AgentArtifactCard from './AgentArtifactCard.jsx';
+import AgentConversation from './AgentConversation.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
-import { parseAssistantChoiceCards } from '../core/agent/choiceCards.js';
 import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
@@ -77,15 +76,8 @@ import {
   pickFile,
   pickSavePath,
 } from '../services/electronBridge.js';
-import { buildAgentArtifactPayload } from '../core/agent/artifactUtils.js';
+import { buildAgentArtifactPayload, parseAgentArtifactResult } from '../core/agent/artifactUtils.js';
 import { buildAgentHealthSnapshot, runSafeRepair } from '../core/agent/appSupport.js';
-
-const ASSISTANT_TYPE_INTERVAL_MS = 18;
-const ASSISTANT_TYPE_CHUNK_SIZE = 4;
-const ASSISTANT_TYPE_LONG_TEXT_LIMIT = 1200;
-const ASSISTANT_TYPE_LONG_TEXT_CHUNK_SIZE = 8;
-
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 把工作区文件树拍平成文件数组（web 端搜索兜底用） */
 const flattenFiles = (node, acc = []) => {
@@ -107,17 +99,52 @@ const buildRefReason = (ref, keywords) => {
   return hits.length ? `关键词：${hits.join('、')}` : '与当前稿件主题相关';
 };
 
-/** 把 tool 消息里最后一条 running 改成 done */
-const markLastToolDone = (messages, label, result = '') => {
+const getArtifactResultForMessage = (result) => {
+  const artifact = parseAgentArtifactResult(result);
+  if (!artifact) return '';
+  return JSON.stringify({
+    kind: 'agent_artifact',
+    ok: true,
+    artifactType: artifact.artifactType,
+    artifactLabel: artifact.artifactLabel,
+    fileId: artifact.fileId,
+    name: artifact.name,
+  });
+};
+
+const TOOL_ERROR_RESULT_PATTERN = /^\s*(?:工具「[^」]+」(?:执行出错|不可用)|[^\n：:]{0,24}(?:失败|出错|错误|不可用)[：:]|server 工具通道不可用|未知工具|当前工作区不可用|当前环境不支持|当前没有.*无法)/i;
+
+const getToolCompletionStatus = (result) => {
+  const text = String(result ?? '').trim();
+  if (!text) return 'done';
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.ok === false) return 'error';
+  } catch {
+    /* 普通文本结果继续按前缀判断 */
+  }
+  return TOOL_ERROR_RESULT_PATTERN.test(text) ? 'error' : 'done';
+};
+
+/** 用 callId 精确收口工具步骤，兼容旧事件的 label 匹配。 */
+const finishToolMessage = (messages, { callId, label, status, result = '' }) => {
   const next = [...messages];
   for (let i = next.length - 1; i >= 0; i -= 1) {
-    if (next[i].role === 'tool' && next[i].label === label && next[i].status === 'running') {
-      next[i] = { ...next[i], status: 'done', result };
+    const item = next[i];
+    const matchesCall = callId ? item.callId === callId : item.label === label;
+    if (item.role === 'tool' && matchesCall && item.status === 'running') {
+      next[i] = { ...item, status, result };
       break;
     }
   }
   return next;
 };
+
+const finishRunningTools = (messages, status) => messages.map((item) => (
+  item.role === 'tool' && item.status === 'running'
+    ? { ...item, status }
+    : item
+));
 
 const requestSafeRepairApproval = ({ title, description }) => new Promise((resolve) => {
   Modal.confirm({
@@ -129,64 +156,6 @@ const requestSafeRepairApproval = ({ title, description }) => new Promise((resol
     onCancel: () => resolve(false),
   });
 });
-
-const updateTypingAssistantMessage = (messages, patch) => {
-  const next = [...messages];
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    if (next[i].role === 'assistant' && next[i].typing) {
-      next[i] = { ...next[i], ...patch };
-      return next;
-    }
-  }
-  return [...next, { role: 'assistant', text: patch.text ?? '', typing: patch.typing ?? false }];
-};
-
-const stripPartialChoiceProtocol = (text) =>
-  String(text ?? '').replace(/<!--\s*agent-choice[\s\S]*$/i, '').trimEnd();
-
-const buildAssistantRenderPayload = (message) => {
-  if (message.typing) {
-    return {
-      displayText: stripPartialChoiceProtocol(message.text),
-      choices: [],
-    };
-  }
-  return parseAssistantChoiceCards(message.text);
-};
-
-const appendTypedAssistantMessage = async ({
-  sessionId,
-  text,
-  signal,
-  appendAgentMessage,
-  updateAgentMessages,
-}) => {
-  const fullText = String(text ?? '');
-  if (!fullText) return;
-
-  appendAgentMessage(sessionId, { role: 'assistant', text: '', typing: true });
-
-  const chunkSize = fullText.length > ASSISTANT_TYPE_LONG_TEXT_LIMIT
-    ? ASSISTANT_TYPE_LONG_TEXT_CHUNK_SIZE
-    : ASSISTANT_TYPE_CHUNK_SIZE;
-
-  for (let end = chunkSize; end < fullText.length; end += chunkSize) {
-    if (signal?.aborted) {
-      updateAgentMessages(sessionId, (msgs) =>
-        updateTypingAssistantMessage(msgs, {
-          text: fullText.slice(0, Math.max(0, end - chunkSize)),
-          typing: false,
-        }));
-      throw new Error('已取消');
-    }
-    updateAgentMessages(sessionId, (msgs) =>
-      updateTypingAssistantMessage(msgs, { text: fullText.slice(0, end), typing: true }));
-    await wait(ASSISTANT_TYPE_INTERVAL_MS);
-  }
-
-  updateAgentMessages(sessionId, (msgs) =>
-    updateTypingAssistantMessage(msgs, { text: fullText, typing: false }));
-};
 
 const formatAgentError = (error) => {
   const raw = String(error?.message ?? error ?? '').trim();
@@ -730,20 +699,33 @@ export default function AgentPanel({ onClose }) {
   const [cfg, setCfg] = useState(() => readProviderConfig());
   const [aiServerBase, setAiServerBase] = useState(() => readAiServerBase());
   const [serverProvidersReady, setServerProvidersReady] = useState(false);
+  const abortRef = useRef(null);
+  const activeRunIdRef = useRef(0);
+  const runLockRef = useRef(false);
+  const inputRef = useRef(null);
+  const messagesRef = useRef(null);
+  const shouldFollowMessagesRef = useRef(true);
+  const forceScrollToBottomRef = useRef(false);
 
   // 启动时从主进程获取内置 provider 列表
   useEffect(() => {
     fetchServerProviders().then(() => setServerProvidersReady(true));
   }, []);
+  useEffect(() => () => {
+    activeRunIdRef.current += 1;
+    runLockRef.current = false;
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
   useEffect(() => {
     setLastContextPacket(null);
+    shouldFollowMessagesRef.current = true;
+    forceScrollToBottomRef.current = true;
   }, [activeSessionId]);
   const isChatTab = activePanelTab === 'chat';
   const isWelcomeMode = isChatTab && messages.length === 0 && !showSettings && !showSessions;
-
-  const abortRef = useRef(null);
-  const inputRef = useRef(null);
-  const messagesRef = useRef(null);
+  const isActiveSessionRunning = running && runningSessionId === activeSessionId;
+  const isOtherSessionRunning = running && runningSessionId !== activeSessionId;
 
   const isShortcutDisabled = useCallback((item) => {
     return running && ['agent', 'quick', 'platform'].includes(item.type);
@@ -1090,10 +1072,16 @@ export default function AgentPanel({ onClose }) {
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
+    activeRunIdRef.current += 1;
+    runLockRef.current = false;
+    abortRef.current = null;
+    if (runningSessionId) {
+      updateAgentMessages(runningSessionId, (items) => finishRunningTools(items, 'interrupted'));
+    }
     setAssistantActivity(null);
     setRunningSessionId(null);
     setRunning(false);
-  }, []);
+  }, [runningSessionId, updateAgentMessages]);
 
   // 复制某条 AI 回复文本，2 秒内显示「已复制」反馈。
   // 优先用 clipboard API；非安全上下文（如 file:// 下的 Electron）会抛错，
@@ -1223,7 +1211,7 @@ export default function AgentPanel({ onClose }) {
     selectionText = '',
     pinnedFiles = [],
   }) => {
-    if (running) return;
+    if (running || runLockRef.current) return;
     if (!isAiConfigured()) {
       setShowSettings(true);
       return;
@@ -1231,6 +1219,12 @@ export default function AgentPanel({ onClose }) {
     const sessionId = activeSessionId;
     if (!sessionId) return;
 
+    runLockRef.current = true;
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
+    const ownsRun = () => activeRunIdRef.current === runId;
+    forceScrollToBottomRef.current = true;
+    shouldFollowMessagesRef.current = true;
     appendAgentMessage(sessionId, { role: 'user', text: displayText, files: fileNames });
     setRunning(true);
     setAssistantActivity('thinking');
@@ -1240,6 +1234,7 @@ export default function AgentPanel({ onClose }) {
 
     try {
       const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
+      if (!ownsRun() || controller.signal.aborted) return;
       setLastContextPacket(taskContext);
       const { finalText, history } = await runAgent({
         userInput: promptText,
@@ -1250,33 +1245,46 @@ export default function AgentPanel({ onClose }) {
         serverTools,
         taskContext,
         onEvent: (ev) => {
+          if (!ownsRun() || controller.signal.aborted) return;
           if (ev.type === 'tool_start') {
-            appendAgentMessage(sessionId, { role: 'tool', label: ev.label, status: 'running' });
+            setAssistantActivity('working');
+            appendAgentMessage(sessionId, {
+              role: 'tool',
+              callId: ev.callId,
+              label: ev.label,
+              status: 'running',
+            });
           } else if (ev.type === 'tool_done') {
-            updateAgentMessages(sessionId, (msgs) => markLastToolDone(msgs, ev.label, ev.result));
+            setAssistantActivity('finalizing');
+            updateAgentMessages(sessionId, (items) => finishToolMessage(items, {
+              callId: ev.callId,
+              label: ev.label,
+              status: getToolCompletionStatus(ev.result),
+              result: getArtifactResultForMessage(ev.result),
+            }));
           }
         },
       });
+      if (!ownsRun() || controller.signal.aborted) return;
       setAgentHistory(sessionId, history);
       if (finalText) {
-        setAssistantActivity('typing');
-        await appendTypedAssistantMessage({
-          sessionId,
-          text: finalText,
-          signal: controller.signal,
-          appendAgentMessage,
-          updateAgentMessages,
-        });
+        setAssistantActivity(null);
+        appendAgentMessage(sessionId, { role: 'assistant', text: finalText });
       }
     } catch (error) {
+      if (!ownsRun()) return;
       if (String(error?.message ?? '') !== '已取消') {
+        updateAgentMessages(sessionId, (items) => finishRunningTools(items, 'error'));
         appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${formatAgentError(error)}` });
       }
     } finally {
-      setAssistantActivity(null);
-      setRunningSessionId(null);
-      setRunning(false);
-      abortRef.current = null;
+      if (ownsRun()) {
+        runLockRef.current = false;
+        setAssistantActivity(null);
+        setRunningSessionId(null);
+        setRunning(false);
+        if (abortRef.current === controller) abortRef.current = null;
+      }
     }
   }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, serverTools, buildTurnContext]);
 
@@ -1566,11 +1574,31 @@ export default function AgentPanel({ onClose }) {
     setActiveSkillIndex((prev) => Math.min(prev, Math.max(filteredSkills.length - 1, 0)));
   }, [showSkillPicker, filteredSkills]);
 
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldFollowMessagesRef.current = distanceToBottom <= 64;
+  }, []);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
+
   useEffect(() => {
     if (!isChatTab) return;
     const el = messagesRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const forceScroll = forceScrollToBottomRef.current;
+    forceScrollToBottomRef.current = false;
+    if (!forceScroll && !shouldFollowMessagesRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [messages, assistantActivity, isChatTab]);
 
   return (
@@ -1675,6 +1703,7 @@ export default function AgentPanel({ onClose }) {
           ref={messagesRef}
           role="tabpanel"
           aria-label="对话"
+          onScroll={handleMessagesScroll}
         >
           {isWelcomeMode && (
             <div className="agent-panel__welcome">
@@ -1703,91 +1732,17 @@ export default function AgentPanel({ onClose }) {
           {!isWelcomeMode && messages.length === 0 && (
             <div className="agent-panel__empty">问我点什么，比如「帮我把当前文档压缩到三段」。</div>
           )}
-          {!isWelcomeMode && messages.map((m, i) => {
-            if (m.role === 'tool') {
-              return (
-                <div key={i} className="agent-panel__tool-wrap">
-                  <div className="agent-panel__tool">
-                    {m.status === 'running'
-                      ? <Loader2 size={14} className="agent-panel__spin" />
-                      : <Wrench size={14} />}
-                    <span>{m.label}{m.status === 'done' ? ' ✓' : '…'}</span>
-                  </div>
-                  {m.status === 'done' && (
-                    <AgentArtifactCard
-                      result={m.result}
-                      onOpen={(fileId) => host.openWorkspaceItem({ id: fileId })}
-                    />
-                  )}
-                </div>
-              );
-            }
-            const parsed = m.role === 'assistant'
-              ? buildAssistantRenderPayload(m)
-              : { displayText: m.text, choices: [] };
-            return (
-              <div key={i} className={`agent-panel__msg agent-panel__msg--${m.role}`}>
-                <span className="agent-panel__avatar">
-                  {m.role === 'user' ? <User size={14} /> : <Bot size={14} />}
-                </span>
-                <div className="agent-panel__bubble">
-                  {m.files?.length > 0 && (
-                    <div className="agent-panel__msg-files">
-                      {m.files.map((name, k) => (
-                        <span key={k} className="agent-panel__msg-file"><FileText size={11} /> {name}</span>
-                      ))}
-                    </div>
-                  )}
-                  {parsed.displayText}
-                  {m.role === 'assistant' && m.typing && (
-                    <span className="agent-panel__typing-cursor" aria-hidden="true" />
-                  )}
-                  {parsed.choices.length > 0 && (
-                    <div className="agent-panel__choice-cards">
-                      {parsed.choices.map((choice) => (
-                        <button
-                          key={`${choice.label}-${choice.title}`}
-                          type="button"
-                          className="agent-panel__choice-card"
-                          disabled={running}
-                          onClick={() => handleChoiceCardClick(choice)}
-                        >
-                          <span className="agent-panel__choice-label">{choice.label}</span>
-                          <span className="agent-panel__choice-main">
-                            {choice.title && <span className="agent-panel__choice-title">{choice.title}</span>}
-                            {choice.description && (
-                              <span className="agent-panel__choice-desc">{choice.description}</span>
-                            )}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {m.role === 'assistant' && !m.typing && parsed.displayText && (
-                    <button
-                      type="button"
-                      className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
-                      title={copiedIndex === i ? '已复制' : '复制'}
-                      onClick={() => handleCopy(i, parsed.displayText)}
-                    >
-                      {copiedIndex === i ? <Check size={13} /> : <Copy size={13} />}
-                      <span className="agent-panel__copy-label">
-                        {copiedIndex === i ? '已复制' : '复制'}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {running && assistantActivity === 'thinking' && runningSessionId === activeSessionId && (
-            <div className="agent-panel__activity" aria-live="polite">
-              <Loader2 size={14} className="agent-panel__spin" />
-              <span>AI 正在思考</span>
-              <span className="agent-panel__typing-dots" aria-hidden="true">
-                <span>.</span><span>.</span><span>.</span>
-              </span>
-            </div>
+          {!isWelcomeMode && (
+            <AgentConversation
+              messages={messages}
+              running={running}
+              showActivity={isActiveSessionRunning}
+              activity={assistantActivity}
+              copiedIndex={copiedIndex}
+              onChoice={handleChoiceCardClick}
+              onCopy={handleCopy}
+              onOpenArtifact={(fileId) => host.openWorkspaceItem({ id: fileId })}
+            />
           )}
         </div>
       )}
@@ -1926,21 +1881,26 @@ export default function AgentPanel({ onClose }) {
             ref={inputRef}
             className="agent-panel__input"
             value={input}
-            placeholder="发消息，输入 / 选 skill，或输入 @ 引用工作区文件"
+            placeholder={isActiveSessionRunning
+              ? '正在处理，可继续编辑下一条消息'
+              : isOtherSessionRunning
+                ? '另一会话正在处理，请先停止或切回查看'
+                : '发消息，输入 / 选 skill，或输入 @ 引用工作区文件'}
             rows={1}
-            onInput={(e) => {
-              e.target.style.height = 'auto';
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-            }}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
           />
           {running ? (
-            <button className="agent-panel__send-btn" onClick={handleStop} title="停止">
+            <button
+              type="button"
+              className="agent-panel__send-btn is-stop"
+              onClick={handleStop}
+              title={isActiveSessionRunning ? '停止当前任务' : '停止运行中的会话'}
+            >
               <Square size={16} />
             </button>
           ) : (
-            <button className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
+            <button type="button" className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
               <SendOutlined />
             </button>
           )}

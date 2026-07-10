@@ -18,6 +18,10 @@ import {
   registerServerToolLabels,
 } from './toolRegistry.js';
 import { APP_KNOWLEDGE_PROMPT } from './appKnowledge.js';
+import {
+  EMPTY_ASSISTANT_RESPONSE,
+  normalizeAssistantContent,
+} from './assistantResponse.js';
 import { formatTaskContextPacket } from './taskContext.js';
 
 const DEFAULT_MAX_STEPS = 8;
@@ -55,6 +59,7 @@ const ROLE_RULES = [
   '{"options":[{"label":"A","title":"选项标题","description":"一句话说明","prompt":"我选择 A：选项标题"}]}',
   '-->',
   '这个协议只用于界面渲染选择卡片；JSON 必须合法，不要放 Markdown 代码块里。没有明确选择需求时不要输出该协议。',
+  '只输出给用户看的最终结论；不要输出内部推理，不要输出 <think> 或 <analysis> 标签。',
   '回答用中文，简洁直接，不要解释你调用了哪些工具。',
 ].join('\n');
 
@@ -66,9 +71,9 @@ const buildSystemPrompt = (taskContext) => {
 };
 
 /** 把模型返回的 assistant 消息规整成可追加进历史的对象 */
-const toAssistantMessage = (message) => ({
+const toAssistantMessage = (message, content) => ({
   role: 'assistant',
-  content: message.content ?? '',
+  content,
   ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}),
 });
 
@@ -87,8 +92,8 @@ const toAssistantMessage = (message) => ({
  *
  * onEvent 事件类型：
  *   { type: 'assistant_text', text }           模型的中间/最终文字
- *   { type: 'tool_start', name, label, args }  开始执行某工具
- *   { type: 'tool_done', name, label, result } 工具执行完成
+ *   { type: 'tool_start', callId, name, label, step }  开始执行某工具
+ *   { type: 'tool_done', callId, name, label, step, result } 工具执行完成
  *   { type: 'error', message }
  *   { type: 'done', finalText }
  */
@@ -129,14 +134,17 @@ export const runAgent = async ({
       config,
       signal,
     });
+    if (signal?.aborted) throw new Error('已取消');
 
-    messages.push(toAssistantMessage(message));
-
-    const toolCalls = message.tool_calls;
+    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    const assistantContent = normalizeAssistantContent(message.content, {
+      fallback: toolCalls.length ? '' : EMPTY_ASSISTANT_RESPONSE,
+    });
+    messages.push(toAssistantMessage(message, assistantContent));
 
     // 没有工具调用 → 这是最终答复，结束循环
-    if (!toolCalls || !toolCalls.length) {
-      finalText = message.content ?? '';
+    if (!toolCalls.length) {
+      finalText = assistantContent;
       if (finalText) onEvent({ type: 'assistant_text', text: finalText });
       onEvent({ type: 'done', finalText });
       break;
@@ -149,16 +157,17 @@ export const runAgent = async ({
 
       const name = call.function?.name;
       const label = getToolLabel(name);
-      let args = {};
-      try {
-        args = JSON.parse(call.function?.arguments || '{}');
-      } catch {
-        args = {};
-      }
 
-      onEvent({ type: 'tool_start', name, label, args });
+      const eventBase = {
+        callId: call.id,
+        name,
+        label,
+        step: step + 1,
+      };
+      onEvent({ type: 'tool_start', ...eventBase });
       const result = await executeTool(call, host);
-      onEvent({ type: 'tool_done', name, label, result });
+      if (signal?.aborted) throw new Error('已取消');
+      onEvent({ type: 'tool_done', ...eventBase, result });
 
       messages.push({
         role: 'tool',

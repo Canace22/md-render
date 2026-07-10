@@ -8663,6 +8663,10 @@ body.theme-dark .file-preview-iframe {
   align-items: flex-start;
 }
 
+.agent-panel__msg--assistant {
+  width: 100%;
+}
+
 .agent-panel__msg--user {
   flex-direction: row-reverse;
 }
@@ -8681,7 +8685,7 @@ body.theme-dark .file-preview-iframe {
 
 .agent-panel__bubble {
   position: relative;
-  max-width: 80%;
+  max-width: 82%;
   padding: 8px 12px;
   border-radius: var(--radius-lg);
   background: var(--color-bg-page);
@@ -8691,19 +8695,32 @@ body.theme-dark .file-preview-iframe {
   font-size: 14px;
 }
 
-/* AI 回复右下角的复制按钮：默认隐藏，悬停气泡或聚焦时显现 */
+.agent-panel__msg--assistant .agent-panel__bubble {
+  flex: 1;
+  min-width: 0;
+  max-width: calc(100% - 32px);
+  padding: 0 4px 0 0;
+  border-radius: 0;
+  background: transparent;
+  white-space: normal;
+}
+
+.agent-panel__message-actions {
+  display: flex;
+  min-height: 24px;
+  margin-top: 4px;
+}
+
+/* AI 回复的轻量操作行：默认隐藏，悬停回复或键盘聚焦时显现。 */
 .agent-panel__copy-btn {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 6px;
+  padding: 3px 6px;
   border: none;
   border-radius: 6px;
-  background: rgba(127, 127, 127, 0.18);
-  color: inherit;
+  background: transparent;
+  color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -8711,18 +8728,15 @@ body.theme-dark .file-preview-iframe {
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.agent-panel__copy-label {
-  white-space: nowrap;
-}
-
 .agent-panel__bubble:hover .agent-panel__copy-btn,
 .agent-panel__copy-btn:focus-visible {
-  opacity: 0.85;
+  opacity: 1;
 }
 
 .agent-panel__copy-btn:hover {
   opacity: 1;
-  background: rgba(127, 127, 127, 0.32);
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
 }
 
 /* 复制成功：变绿并常驻 2 秒，给出明确反馈 */
@@ -8732,9 +8746,137 @@ body.theme-dark .file-preview-iframe {
   background: rgba(22, 163, 74, 0.16);
 }
 
-/* 给 AI 气泡底部留出复制按钮的空间，避免压住最后一行文字 */
-.agent-panel__msg--assistant .agent-panel__bubble {
-  padding-bottom: 24px;
+.agent-message-markdown {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.agent-message-markdown > :first-child {
+  margin-top: 0;
+}
+
+.agent-message-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-message-markdown p {
+  margin: 0 0 10px;
+}
+
+.agent-message-markdown h1,
+.agent-message-markdown h2,
+.agent-message-markdown h3,
+.agent-message-markdown h4 {
+  margin: 16px 0 8px;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.35;
+}
+
+.agent-message-markdown h1 { font-size: 19px; }
+.agent-message-markdown h2 { font-size: 17px; }
+.agent-message-markdown h3,
+.agent-message-markdown h4 { font-size: 15px; }
+
+.agent-message-markdown ul,
+.agent-message-markdown ol {
+  margin: 6px 0 10px;
+  padding-left: 22px;
+}
+
+.agent-message-markdown li + li {
+  margin-top: 4px;
+}
+
+.agent-message-markdown li > p {
+  margin-bottom: 4px;
+}
+
+.agent-message-markdown blockquote {
+  margin: 10px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--color-brand-primary) 42%, var(--color-border));
+  color: var(--color-text-muted);
+}
+
+.agent-message-markdown code {
+  padding: 2px 5px;
+  border-radius: var(--radius-s);
+  background: var(--color-bg-inline-code);
+  color: color-mix(in srgb, var(--color-inline-code) 58%, var(--color-text-primary));
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.agent-message-markdown pre {
+  max-width: 100%;
+  margin: 10px 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-code);
+  color: var(--color-code-text);
+  line-height: 1.55;
+}
+
+.agent-message-markdown pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+
+.agent-message-markdown__table-wrap {
+  width: 100%;
+  margin: 10px 0;
+  overflow-x: auto;
+}
+
+.agent-message-markdown table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.agent-message-markdown th,
+.agent-message-markdown td {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.agent-message-markdown th {
+  background: var(--color-bg-surface);
+}
+
+.agent-message-markdown a {
+  color: color-mix(in srgb, var(--color-brand-primary) 58%, var(--color-text-primary));
+  text-decoration: none;
+}
+
+.agent-message-markdown a:hover {
+  text-decoration: underline;
+}
+
+.agent-message-markdown__image-placeholder {
+  display: inline-flex;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agent-message-markdown hr {
+  margin: 14px 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
 }
 
 .agent-panel__choice-cards {
@@ -8814,19 +8956,116 @@ body.theme-dark .file-preview-iframe {
   color: #fff;
 }
 
-.agent-panel__tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  padding-left: 32px;
-}
-
-.agent-panel__tool-wrap {
+.agent-run-trace-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.agent-run-trace {
+  margin-left: 32px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agent-run-trace__summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: inherit;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.agent-run-trace__summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-run-trace__summary:hover {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+.agent-run-trace__summary > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-run-trace__chevron {
+  flex: none;
+  transition: transform var(--duration-fast) var(--easing);
+}
+
+.agent-run-trace[open] .agent-run-trace__chevron {
+  transform: rotate(180deg);
+}
+
+.agent-run-trace.is-running .agent-run-trace__summary {
+  color: color-mix(in srgb, var(--color-brand-primary) 58%, var(--color-text-primary));
+}
+
+.agent-run-trace.is-error .agent-run-trace__summary {
+  color: color-mix(in srgb, var(--color-inline-code) 58%, var(--color-text-primary));
+}
+
+.agent-run-trace__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 10px 10px;
+}
+
+.agent-run-trace__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 7px;
+  min-width: 0;
+}
+
+.agent-run-trace__step > svg {
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+  background: var(--color-bg-surface);
+}
+
+.agent-run-trace__rail {
+  position: absolute;
+  top: 14px;
+  bottom: -10px;
+  left: 6px;
+  width: 1px;
+  background: var(--color-border);
+}
+
+.agent-run-trace__step:last-child .agent-run-trace__rail {
+  display: none;
+}
+
+.agent-run-trace__label {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.agent-run-trace__step.is-running .agent-run-trace__label {
+  color: var(--color-text-primary);
+}
+
+.agent-run-trace__step.is-error,
+.agent-run-trace__step.is-error .agent-run-trace__label {
+  color: color-mix(in srgb, var(--color-inline-code) 58%, var(--color-text-primary));
 }
 
 .agent-panel__artifact-card {
@@ -8976,6 +9215,15 @@ body.theme-dark .file-preview-iframe {
 
 .agent-panel__send-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--color-brand-primary) 85%, #000);
+}
+
+.agent-panel__send-btn.is-stop {
+  background: var(--color-text-primary);
+  color: var(--color-bg-surface);
+}
+
+.agent-panel__send-btn.is-stop:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 82%, transparent);
 }
 
 /* AI 助手停靠区（右侧抽屉） */
