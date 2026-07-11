@@ -35,6 +35,10 @@ import {
   moveNodeInParent,
   togglePinNode,
   getDerivationSourceFileId,
+  AGENT_META_FOLDER_NAME,
+  findAgentMetaFolder,
+  findAgentMetaFile,
+  moveNodeToFolder,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
@@ -1298,6 +1302,89 @@ export const useEditorStore = create(
         set({ workspace: updated, markdown: nextMarkdown });
       },
 
+      /** 找/建工作区根下的 .agent 元数据目录（带 agentMetaFolder 标记），返回目录 id */
+      ensureAgentMetaFolder: () => {
+        const { workspace } = get();
+        const existing = findAgentMetaFolder(workspace);
+        if (existing) return existing.id;
+        const folderId = createId('folder');
+        const nextWorkspace = addChildNode(workspace, workspace.id, {
+          id: folderId,
+          type: 'folder',
+          name: AGENT_META_FOLDER_NAME,
+          agentMetaFolder: true,
+          children: [],
+          createdAt: Date.now(),
+        }, true);
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+        return folderId;
+      },
+
+      /**
+       * 在 .agent 元数据目录里找/建并整体写入一个文件（agent 记忆等元数据专用）。
+       * 不改变当前选中和界面；目录不存在时自动创建（带 agentMetaFolder 标记）。
+       * 返回 { ok, fileId, created } 或 { ok: false, error }。
+       */
+      upsertAgentMetaFile: ({ name, content, summary = '' } = {}) => {
+        const cleanName = String(name ?? '').trim();
+        const cleanContent = String(content ?? '');
+        if (!cleanName) return { ok: false, error: '文件名为空。' };
+        if (!cleanContent.trim()) return { ok: false, error: '内容为空。' };
+
+        const folderId = get().ensureAgentMetaFolder();
+        const { workspace, selectedId } = get();
+        let nextWorkspace = workspace;
+
+        const existing = findAgentMetaFile(nextWorkspace, cleanName);
+        let fileId = existing?.id;
+        if (existing) {
+          nextWorkspace = updateNodeById(nextWorkspace, existing.id, (node) => ({
+            ...node,
+            content: cleanContent,
+            updatedAt: Date.now(),
+          }));
+        } else {
+          fileId = createId('file');
+          const now = Date.now();
+          nextWorkspace = addChildNode(nextWorkspace, folderId, {
+            id: fileId,
+            type: 'file',
+            name: `${cleanName}.md`,
+            content: cleanContent,
+            createdAt: now,
+            updatedAt: now,
+            ...createDefaultKnowledgeFields({ summary }),
+          }, true);
+        }
+
+        persistWorkspace(nextWorkspace);
+        const patch = { workspace: nextWorkspace };
+        if (fileId === selectedId) patch.markdown = cleanContent;
+        set(patch);
+        return { ok: true, fileId, created: !existing };
+      },
+
+      /** 按 id 更新某文件正文（不切换选中）；若正是当前选中文档则同步 markdown */
+      updateFileContentById: (fileId, nextContent) => {
+        const { workspace, selectedId } = get();
+        const updated = updateNodeById(workspace, fileId, (node) => {
+          if (node.type !== 'file') return node;
+          const patch = {
+            ...node,
+            content: nextContent,
+            updatedAt: Date.now(),
+          };
+          if (node.projectRootPath && node.diskContentSnapshot === undefined) {
+            patch.diskContentSnapshot = node.content ?? '';
+          }
+          return patch;
+        });
+        set(fileId === selectedId
+          ? { workspace: updated, markdown: nextContent }
+          : { workspace: updated });
+      },
+
       /** 设置某文件的标签（去重、去空、去首尾空格） */
       setFileTags: (fileId, tags) => {
         const { workspace } = get();
@@ -1748,6 +1835,18 @@ export const useEditorStore = create(
         if (nextWorkspace === workspace) return;
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace });
+      },
+
+      /** 把节点移进另一个文件夹（跨目录移动，不改选中）；成功返回 true */
+      moveNodeToFolderById: (nodeId, targetFolderId) => {
+        const { workspace } = get();
+        const node = findNodeById(workspace, nodeId);
+        if (node?.projectRootPath && node?.relativePath) return false; // 磁盘挂载节点不做纯内存移动
+        const nextWorkspace = moveNodeToFolder(workspace, nodeId, targetFolderId);
+        if (nextWorkspace === workspace) return false;
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+        return true;
       },
 
       pinNode: (targetId) => {

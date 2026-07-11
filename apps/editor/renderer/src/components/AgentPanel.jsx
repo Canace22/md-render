@@ -17,12 +17,26 @@ import { Activity, Bot, PackageCheck, Settings, ShieldCheck, Square, Wrench, Plu
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
+  collectHiddenFileIds,
+  findAgentMetaFile,
   findNodeById,
   getFileKnowledgeSearchText,
+  AGENT_META_FOLDER_NAME,
 } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
 import AgentConversation from './AgentConversation.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
+import {
+  EDITORIAL_REVIEW_PROMPT,
+  HEADLINE_ANALYSIS_PROMPT,
+  PUBLISH_RETRO_PROMPT,
+} from '../core/agent/editorialBoard.js';
+import {
+  EDITORIAL_MEMORY_DOC_NAME,
+  MEMORY_CATEGORIES,
+  appendMemoryEntry,
+  findEditorialMemoryFile,
+} from '../core/agent/editorialMemory.js';
 import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
@@ -193,6 +207,27 @@ const recallDocsForContext = async ({
   }));
 };
 
+/** AI 请求删除条目时的强制确认框：列出全部名称，用户点确认才继续 */
+const confirmAgentDelete = (names, reason) => new Promise((resolve) => {
+  Modal.confirm({
+    title: `AI 助手请求删除 ${names.length} 个条目`,
+    content: (
+      <div>
+        {reason ? <p style={{ marginBottom: 8 }}>原因：{reason}</p> : null}
+        <ul style={{ paddingLeft: 18, maxHeight: 200, overflow: 'auto' }}>
+          {names.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}
+        </ul>
+        <p style={{ marginTop: 8 }}>删除后不可恢复，确认继续吗？</p>
+      </div>
+    ),
+    okText: '确认删除',
+    okButtonProps: { danger: true },
+    cancelText: '取消',
+    onOk: () => resolve(true),
+    onCancel: () => resolve(false),
+  });
+});
+
 const CONTENT_ENTRY_PRESETS = Object.freeze({
   topic: {
     draftStatus: 'idea',
@@ -259,6 +294,45 @@ const APP_DIAGNOSTICS_SKILL = Object.freeze({
   promptText: APP_DIAGNOSTICS_SKILL_PROMPT,
 });
 
+// AI 编辑部：prompt 正文来自 core/agent/editorialBoard.js（事实源是 .agents/skills/ai-editorial-board/SKILL.md）
+const EDITORIAL_REVIEW_SKILL = Object.freeze({
+  id: 'editorial-review',
+  type: 'agent',
+  label: '编辑部审稿',
+  icon: ShieldCheck,
+  tone: 'violet',
+  category: 'AI 编辑部',
+  description: '9 个编辑角色评审当前稿件',
+  aliases: ['审稿', '编辑部', '评审', '总编辑', 'review', 'editorial'],
+  promptText: EDITORIAL_REVIEW_PROMPT,
+});
+
+const EDITORIAL_SKILLS = Object.freeze([
+  EDITORIAL_REVIEW_SKILL,
+  {
+    id: 'editorial-headline',
+    type: 'agent',
+    label: '标题分析',
+    icon: HighlightOutlined,
+    tone: 'cyan',
+    category: 'AI 编辑部',
+    description: '分析原标题并给多渠道版本',
+    aliases: ['标题分析', '标题编辑', 'headline', '起标题'],
+    promptText: HEADLINE_ANALYSIS_PROMPT,
+  },
+  {
+    id: 'editorial-retro',
+    type: 'agent',
+    label: '发布复盘',
+    icon: Activity,
+    tone: 'amber',
+    category: 'AI 编辑部',
+    description: '按后台数据复盘并沉淀经验',
+    aliases: ['复盘', '数据复盘', 'retro', '阅读量', '发布后'],
+    promptText: PUBLISH_RETRO_PROMPT,
+  },
+]);
+
 const DELIVERABLE_SKILL = Object.freeze({
   id: 'create-deliverable',
   type: 'agent',
@@ -272,6 +346,7 @@ const DELIVERABLE_SKILL = Object.freeze({
 });
 
 const WELCOME_SUGGESTIONS = Object.freeze([
+  EDITORIAL_REVIEW_SKILL,
   APP_DIAGNOSTICS_SKILL,
   DELIVERABLE_SKILL,
   { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
@@ -413,6 +488,7 @@ const EXTRA_PLATFORM_SLASH_SKILLS = Object.freeze([
 ]);
 
 const PROJECT_SLASH_SKILLS = Object.freeze([
+  ...EDITORIAL_SKILLS,
   APP_DIAGNOSTICS_SKILL,
   DELIVERABLE_SKILL,
   TOPIC_SELECTION_SKILL,
@@ -951,6 +1027,87 @@ export default function AgentPanel({ onClose }) {
         content: file.content ?? '',
       };
     },
+    moveWorkspaceItem: async ({ id, targetFolderId } = {}) => {
+      const state = useEditorStore.getState();
+      const node = findNodeById(state.workspace, id);
+      if (!node) return `移动失败：未找到 id 为「${id}」的条目。`;
+      const resolvedTargetId = targetFolderId === AGENT_META_FOLDER_NAME
+        ? state.ensureAgentMetaFolder()
+        : targetFolderId;
+      const target = findNodeById(useEditorStore.getState().workspace, resolvedTargetId);
+      if (!target || target.type !== 'folder') return '移动失败：目标不是有效文件夹。';
+      const ok = useEditorStore.getState().moveNodeToFolderById(id, resolvedTargetId);
+      return ok
+        ? `已把「${node.name}」移动到「${target.name}」。`
+        : `移动失败：「${node.name}」可能已在目标文件夹里，或该条目不支持移动（如磁盘挂载项目、目标在其子树内）。`;
+    },
+    renameWorkspaceItem: async ({ id, name } = {}) => {
+      const state = useEditorStore.getState();
+      const node = findNodeById(state.workspace, id);
+      if (!node) return `重命名失败：未找到 id 为「${id}」的条目。`;
+      const oldName = node.name;
+      const ok = state.applyRename(id, name);
+      return ok
+        ? `已把「${oldName}」重命名为「${name}」。`
+        : '重命名失败：名称无效或该条目不支持重命名（如磁盘挂载项目）。';
+    },
+    deleteWorkspaceItems: async ({ ids = [], reason = '' } = {}) => {
+      const state = useEditorStore.getState();
+      const looked = ids.map((id) => ({ id, node: findNodeById(state.workspace, id) }));
+      const found = looked.filter((item) => item.node && item.id !== 'root');
+      const missing = looked.filter((item) => !item.node).map((item) => item.id);
+      if (!found.length) return '删除失败：没有找到任何对应条目，请先用 search_docs 确认 id。';
+
+      const confirmed = await confirmAgentDelete(found.map((item) => item.node.name), reason);
+      if (!confirmed) return '用户取消了删除，未做任何改动。';
+
+      const removedNames = [];
+      const failedNames = [];
+      for (const item of found) {
+        const ok = useEditorStore.getState().deleteNode(item.id);
+        (ok ? removedNames : failedNames).push(item.node.name);
+      }
+      return [
+        removedNames.length ? `已删除 ${removedNames.length} 个条目：${removedNames.map((n) => `「${n}」`).join('、')}。` : '',
+        failedNames.length ? `删除失败：${failedNames.map((n) => `「${n}」`).join('、')}（可能是磁盘挂载项目，需在侧栏手动处理）。` : '',
+        missing.length ? `未找到 id：${missing.join('、')}。` : '',
+      ].filter(Boolean).join(' ');
+    },
+    // 记忆读写必须用 getState() 拿实时 workspace：同一轮 agent run 会连续多次读写，
+    // useMemo 闭包里的 workspace 是本轮开始时的旧快照，用它判断「文件是否存在」会重复建档。
+    readEditorialMemory: async () => {
+      const ws = useEditorStore.getState().workspace;
+      const file = findAgentMetaFile(ws, EDITORIAL_MEMORY_DOC_NAME)
+        ?? findEditorialMemoryFile(collectFiles(ws)); // 兼容旧版散落在笔记区的记忆
+      if (!file) return null;
+      return { id: file.id, name: file.name, content: file.content ?? '' };
+    },
+    updateEditorialMemory: async ({ category, text } = {}) => {
+      const state = useEditorStore.getState();
+      const metaFile = findAgentMetaFile(state.workspace, EDITORIAL_MEMORY_DOC_NAME);
+      const legacyFile = metaFile ? null : findEditorialMemoryFile(collectFiles(state.workspace));
+      const base = metaFile ?? legacyFile;
+
+      const next = appendMemoryEntry(base?.content ?? '', {
+        category,
+        text,
+        dateKey: getTodayDateKey(),
+      });
+      if (!next.ok) return `更新失败：${next.error}`;
+
+      const result = state.upsertAgentMetaFile({
+        name: EDITORIAL_MEMORY_DOC_NAME,
+        content: next.content,
+        summary: 'AI 编辑部的长期知识库（只追加，不改写）',
+      });
+      if (!result?.ok) return `写入记忆失败：${result?.error || '未知错误'}`;
+
+      const location = `${AGENT_META_FOLDER_NAME}/${EDITORIAL_MEMORY_DOC_NAME}`;
+      return [
+        `已把新经验追加到「${MEMORY_CATEGORIES[category]}」（${location}）。`,
+        legacyFile ? '旧位置的记忆内容已并入 .agent 目录，散落的旧「编辑部记忆」文档可以删除了。' : '',
+      ].filter(Boolean).join(' ');
+    },
     openWorkspaceItem: async ({ id = '' } = {}) => {
       const targetId = String(id ?? '').trim();
       if (!targetId) return '打开失败：条目 id 为空。';
@@ -982,10 +1139,12 @@ export default function AgentPanel({ onClose }) {
       return buildWorkspaceToolBrief(workspace, selectedId);
     },
     searchDocs: async (query) => {
+      // .agent 等隐藏目录里的元数据不进搜索/召回结果
+      const hiddenIds = collectHiddenFileIds(workspace);
       if (hasDbBridge()) {
         try {
           const res = await dbSearch(query);
-          return (res?.results ?? []).map((r) => {
+          return (res?.results ?? []).filter((r) => !hiddenIds.has(r?.id)).map((r) => {
             const node = collectFiles(workspace).find((file) => file?.id === r.id);
             return buildContentAssetPointer({
               ...(node ?? {}),
@@ -1001,6 +1160,7 @@ export default function AgentPanel({ onClose }) {
       }
       const q = String(query).toLowerCase();
       return collectFiles(workspace)
+        .filter((f) => !hiddenIds.has(f?.id))
         .filter((f) => getFileKnowledgeSearchText(f).includes(q))
         .map((f) => buildContentAssetPointer(f, { content: String(f.content ?? '').slice(0, 200) }));
     },

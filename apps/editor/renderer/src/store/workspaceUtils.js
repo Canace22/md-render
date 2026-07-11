@@ -834,11 +834,74 @@ export function collectFiles(node, acc = []) {
 }
 
 /**
+ * 把节点移动到另一个文件夹末尾（纯函数）。
+ * 非法情况原样返回 root：节点/目标不存在、目标不是文件夹、移动根节点、
+ * 目标在被移动节点的子树里（防环）、节点已在目标文件夹里。
+ */
+export function moveNodeToFolder(root, nodeId, targetFolderId) {
+  if (!root || !nodeId || !targetFolderId || nodeId === targetFolderId) return root;
+  if (nodeId === root.id) return root;
+
+  const node = findNodeById(root, nodeId);
+  const target = findNodeById(root, targetFolderId);
+  if (!node || !target || target.type !== 'folder') return root;
+  if (findNodeById(node, targetFolderId)) return root; // 目标在自己子树里
+  if ((target.children ?? []).some((child) => child.id === nodeId)) return root;
+
+  const result = removeNodeById(root, nodeId);
+  if (!result.removed) return root;
+  return addChildNode(result.node, targetFolderId, node, true);
+}
+
+// ── Agent 元数据目录（.agent，类似 .claude 的工作区隐藏约定） ──────────
+
+export const AGENT_META_FOLDER_NAME = '.agent';
+
+/** 隐藏节点：agent 元数据目录标记，或以 . 开头命名（对齐 .claude / .git 惯例） */
+export const isHiddenWorkspaceNode = (node) =>
+  node?.agentMetaFolder === true || String(node?.name ?? '').startsWith('.');
+
+/** 收集隐藏子树里所有文件 id（纯函数），用于搜索 / 召回 / 最近文档过滤 */
+export function collectHiddenFileIds(node, acc = new Set(), insideHidden = false) {
+  if (!node) return acc;
+  const hidden = insideHidden || isHiddenWorkspaceNode(node);
+  if (node.type === 'file') {
+    if (hidden) acc.add(node.id);
+  } else if (node.type === 'folder' && Array.isArray(node.children)) {
+    node.children.forEach((child) => collectHiddenFileIds(child, acc, hidden));
+  }
+  return acc;
+}
+
+/** 在工作区根下找 .agent 元数据目录（优先标记，其次目录名） */
+export const findAgentMetaFolder = (workspace) => {
+  const children = workspace?.children ?? [];
+  return (
+    children.find((child) => child?.type === 'folder' && child.agentMetaFolder === true)
+    ?? children.find(
+      (child) => child?.type === 'folder' && String(child?.name ?? '').trim() === AGENT_META_FOLDER_NAME,
+    )
+    ?? null
+  );
+};
+
+/** 在 .agent 目录里按名称找文件（忽略 .md 后缀差异） */
+export const findAgentMetaFile = (workspace, name) => {
+  const folder = findAgentMetaFolder(workspace);
+  if (!folder) return null;
+  const target = String(name ?? '').replace(/\.md$/i, '').trim();
+  return collectFiles(folder).find(
+    (file) => String(file?.name ?? '').replace(/\.md$/i, '').trim() === target,
+  ) ?? null;
+};
+
+/**
  * 取最近编辑的前 N 篇文件，按 updatedAt 倒序（纯函数）。
- * 没有 updatedAt 的老文件排在最后。
+ * 没有 updatedAt 的老文件排在最后；跳过 .agent 等隐藏目录里的元数据文件。
  */
 export function collectRecentFiles(workspace, limit = 5) {
-  const files = collectFiles(workspace).filter((f) => f.updatedAt);
+  const hiddenIds = collectHiddenFileIds(workspace);
+  const files = collectFiles(workspace).filter((f) => f.updatedAt && !hiddenIds.has(f.id));
   return files
     .slice()
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))

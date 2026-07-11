@@ -52,9 +52,12 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 
 安全修复流程固定为：`inspect → confirm → apply → verify → rollback on failure`。不要新增通用 shell、任意路径或自由 patch 工具。
 
+文件管理工具（move / rename / delete_workspace_items）同理是**按 id 的受限树操作**，不是自由路径操作：删除必须走宿主的 `confirmAgentDelete` 确认框（列全名单、用户确认前零改动、取消如实回报），单次上限 10 条；跨目录移动走 `moveNodeToFolderById`（防环、磁盘挂载节点拒绝）。新增破坏性工具时沿用这个「执行器校验 → host 确认 → 如实回报部分失败」模式。
+
 ## 改内置 slash skill
 
 - 输入框里的 `/skill` 列表在 `AgentPanel.jsx` 的 `PROJECT_SLASH_SKILLS` 等常量里，不会自动读取 `.agents/skills/`。
+- 例外模式（长 prompt 且要跨工具共用时用）：`core/agent/editorialBoard.js` 通过 Vite `?raw` 在构建期内联 `.agents/skills/ai-editorial-board/SKILL.md` 作为单一事实源，JS 侧只叠加 app 工具指令；SKILL.md 本体保持工具无关，外部 agent 产品（Claude Code / Cursor 等）打开工作空间可直接用。
 - `type: 'agent'` 的项目 skill 把 `promptText` 当内部指令；点击后必须直接进入 `runTurn`，用户消息只显示 skill 名称，不得把 prompt 填入输入框。
 - 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `promptText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
 - 需要结构化落库时，再扩展 `create_content_entry` 参数、执行器和 `AgentPanel` host，仍保持执行器只通过 host 取能力。
@@ -95,6 +98,9 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - **扩展引用类型**（@文件夹 / @搜索结果 / @整个工作区）时：在 `sessionUtils` 加新的拼接函数或扩展 `buildInputWithAttachments`，保持"拼接逻辑是纯函数、UI 只负责选"的分工。
 
 ## 不看代码想不到的坑
+
+- **host 闭包里的 workspace 是本轮开始时的旧快照**：AgentPanel 的 host 用 useMemo 构建，同一轮 agent run 内连续调用工具时，靠捕获的 `workspace` 判断「文件是否存在」会误判并重复建档（曾造成一轮建出 6 个「编辑部记忆」副本）。工具执行器里凡是「先查再写」的逻辑，必须用 `useEditorStore.getState()` 拿实时状态。
+- **agent 元数据（记忆等）统一放 `.agent` 隐藏目录**（工作区根下，`agentMetaFolder` 标记，类似 `.claude` 约定）：store 走 `upsertAgentMetaFile`，纯函数 `findAgentMetaFolder / findAgentMetaFile / collectHiddenFileIds` 在 workspaceUtils。隐藏节点不进目录树（`sortTreeChildren` 过滤）、不进搜索/召回/最近文档；不要用 `create_new_doc` 往笔记区写元数据。
 
 - preload 暴露的是 `window.electronAPI`（不是 `window.electron`）；搜索是 `await window.electronAPI.db.search(query)`，返回 `{ results: [...] }`。
 - 截图里如果只显示 `fetch failed` 或打包 app 仍连 `localhost:8788`，先查主进程是否拿到了正确的 `aiProxyBase`，不要只按前端 CORS 排查。当前友好错误在 `apps/editor/main/aiRequest.js` 和 `AgentPanel.jsx` 两层兜底。

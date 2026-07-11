@@ -7,6 +7,7 @@ export const AGENT_ARTIFACT_TYPES = Object.freeze({
   checklist: Object.freeze({ label: '清单', fallbackName: '执行清单', draftStatus: 'draft' }),
   platform_draft: Object.freeze({ label: '平台稿', fallbackName: '平台版本', draftStatus: 'ready' }),
   incident_report: Object.freeze({ label: '事故报告', fallbackName: 'MD Render 故障报告', draftStatus: 'collecting' }),
+  editorial_review: Object.freeze({ label: '审稿报告', fallbackName: '编辑部审稿报告', draftStatus: 'collecting' }),
 });
 
 const normalizeList = (value) => Array.from(new Set(

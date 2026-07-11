@@ -43,6 +43,7 @@ import {
   META_FILTER_STATUS_NONE,
   META_FILTER_STATUS_NONE_LABEL,
   getNodeSortTime,
+  isHiddenWorkspaceNode,
 } from '../store/workspaceUtils.js';
 import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
@@ -142,9 +143,14 @@ const getRenameDraftValue = (node, fallbackName = '') => {
   return next || name;
 };
 
-/** 置顶节点优先，同组内按 updatedAt（最近活跃，缺失时用 createdAt）降序 */
-const sortTreeChildren = (children) => {
-  if (!Array.isArray(children) || children.length <= 1) return children ?? [];
+/**
+ * 置顶节点优先，同组内按 updatedAt（最近活跃，缺失时用 createdAt）降序。
+ * .agent 等隐藏元数据节点（点开头命名 / agentMetaFolder 标记）不进目录树。
+ */
+const sortTreeChildren = (childrenRaw) => {
+  const children = (Array.isArray(childrenRaw) ? childrenRaw : [])
+    .filter((child) => !isHiddenWorkspaceNode(child));
+  if (children.length <= 1) return children;
   const indexed = children.map((child, index) => ({ child, index }));
   const byActivityDesc = (a, b) => {
     const diff = getNodeSortTime(b.child) - getNodeSortTime(a.child);
