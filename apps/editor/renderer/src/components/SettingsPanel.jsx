@@ -10,6 +10,10 @@ export default function SettingsPanel({
   projectRootPath,
   notionProxyBase = '',
   onNotionProxyBaseChange,
+  notionToken = '',
+  onNotionTokenChange,
+  cloudSyncBaseUrl = '',
+  onCloudSyncBaseUrlChange,
   onCopyStyleChange,
   onPublishingPlatformsChange,
   onClose,
@@ -17,6 +21,8 @@ export default function SettingsPanel({
   const [platformDrafts, setPlatformDrafts] = useState(publishingPlatforms);
   const [newPlatformLabel, setNewPlatformLabel] = useState('');
   const [proxyDraft, setProxyDraft] = useState(notionProxyBase);
+  const [tokenDraft, setTokenDraft] = useState(notionToken);
+  const [cloudUrlDraft, setCloudUrlDraft] = useState(cloudSyncBaseUrl);
 
   useEffect(() => {
     setPlatformDrafts(publishingPlatforms);
@@ -26,10 +32,30 @@ export default function SettingsPanel({
     setProxyDraft(notionProxyBase);
   }, [notionProxyBase]);
 
+  useEffect(() => {
+    setTokenDraft(notionToken);
+  }, [notionToken]);
+
+  useEffect(() => {
+    setCloudUrlDraft(cloudSyncBaseUrl);
+  }, [cloudSyncBaseUrl]);
+
   const commitProxyDraft = () => {
     const next = proxyDraft.trim();
     if (next === (notionProxyBase ?? '').trim()) return;
     onNotionProxyBaseChange?.(next);
+  };
+
+  const commitTokenDraft = () => {
+    const next = tokenDraft.trim();
+    if (next === (notionToken ?? '').trim()) return;
+    onNotionTokenChange?.(next);
+  };
+
+  const commitCloudUrlDraft = () => {
+    const next = cloudUrlDraft.trim();
+    if (next === (cloudSyncBaseUrl ?? '').trim()) return;
+    onCloudSyncBaseUrlChange?.(next);
   };
 
   const handlePlatformDraftChange = (value, index) => {
@@ -193,6 +219,60 @@ export default function SettingsPanel({
         <div className="settings-platform-hint">
           填你自己部署的 Notion 转发服务地址（末尾到 <code>/v1</code>），用于绕过浏览器跨域限制。
           只保存在本机、不会打进安装包；留空则仅本机开发模式可用。部署见 <code>server/notion-proxy/README.md</code>。
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <div className="settings-group-title">同步连接</div>
+        <label className="notion-field">
+          <span>Notion Integration Secret（Token）</span>
+          <input
+            type="password"
+            className="settings-platform-input"
+            data-testid="notion-token-input"
+            autoComplete="off"
+            placeholder="secret_…"
+            value={tokenDraft}
+            onChange={(event) => setTokenDraft(event.target.value)}
+            onBlur={commitTokenDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitTokenDraft();
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setTokenDraft(notionToken);
+              }
+            }}
+          />
+        </label>
+        <div className="settings-platform-hint">
+          在 Notion 集成中创建并授予目标页面访问权限，「同步」页的拉取/推送都用这一个 Token。
+        </div>
+        <label className="notion-field">
+          <span>云端同步服务地址</span>
+          <input
+            className="settings-platform-input"
+            data-testid="cloud-sync-url-input"
+            placeholder="留空则使用 VITE_CLOUD_SYNC_API"
+            value={cloudUrlDraft}
+            onChange={(event) => setCloudUrlDraft(event.target.value)}
+            onBlur={commitCloudUrlDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitCloudUrlDraft();
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setCloudUrlDraft(cloudSyncBaseUrl);
+              }
+            }}
+          />
+        </label>
+        <div className="settings-platform-hint">
+          工作区云端快照的上传/拉取地址，通常由 <code>.env</code> 提供，这里填写会临时覆盖。
         </div>
       </div>
 

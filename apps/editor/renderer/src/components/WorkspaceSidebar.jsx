@@ -297,13 +297,18 @@ const TreeNode = ({
     }
   };
 
-  const sharedProps = allowStructureActions && !isRoot && !node.projectRootPath ? {
-    draggable: true,
-    onDragStart: handleDragStart,
-    onDragOver: handleDragOver,
-    onDragLeave: handleDragLeave,
-    onDrop: handleDrop,
-  } : {};
+  // 拖拽源：普通节点和磁盘文件/文件夹都可拖，项目挂载根和工作区根不可拖
+  const canDrag = allowStructureActions && !isRoot && !isLocalProjectRoot;
+  // 放置目标：文件夹（含项目根）可接收「移入」，文件可接收「同级排序」；是否合法由 onMoveNode 判定
+  const canDrop = allowStructureActions && (isFolder || !isRoot);
+  const sharedProps = {
+    ...(canDrag ? { draggable: true, onDragStart: handleDragStart } : {}),
+    ...(canDrop ? {
+      onDragOver: handleDragOver,
+      onDragLeave: handleDragLeave,
+      onDrop: handleDrop,
+    } : {}),
+  };
 
   return (
     <div key={node.id} className={nodeClass} {...sharedProps}>

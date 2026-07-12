@@ -457,6 +457,109 @@ export function remapDiskNodeAfterRename(node, oldRelativePath, newRelativePath,
   return next;
 }
 
+/**
+ * 把磁盘挂载节点移入同项目的另一个文件夹（纯函数）。
+ * 移动后整棵子树的 relativePath / id 会按 newRelativePath 重映射。
+ * 非法情况原样返回 root：节点/目标缺失、目标不是文件夹、跨项目、目标在自己子树里、已在目标里。
+ */
+export function moveDiskNodeToFolder(root, nodeId, targetFolderId, newRelativePath) {
+  if (!root || !nodeId || !targetFolderId || nodeId === targetFolderId || !newRelativePath) return root;
+
+  const node = findNodeById(root, nodeId);
+  const target = findNodeById(root, targetFolderId);
+  if (!node?.projectRootPath || !node.relativePath) return root;
+  if (!target || target.type !== 'folder' || target.projectRootPath !== node.projectRootPath) return root;
+  if (findNodeById(node, targetFolderId)) return root; // 目标在自己子树里
+  if ((target.children ?? []).some((child) => child.id === nodeId)) return root;
+
+  const remapped = remapDiskNodeAfterRename(node, node.relativePath, newRelativePath, node.name);
+  const result = removeNodeById(root, nodeId);
+  if (!result.removed) return root;
+  return addChildNode(result.node, targetFolderId, remapped, true);
+}
+
+/**
+ * 磁盘节点路径变化（重命名/移动）后，按新树重映射 selectedId 和 openTabs（纯函数）。
+ * 旧路径本身或其子路径下的引用都会跟着迁移；找不到对应新节点时保持原值。
+ */
+export function remapDiskPathReferences({
+  previousWorkspace,
+  nextWorkspace,
+  projectRootPath,
+  oldRelativePath,
+  newRelativePath,
+  selectedId,
+  openTabs = [],
+}) {
+  const remapPath = (relativePath) => {
+    if (relativePath === oldRelativePath) return newRelativePath;
+    if (relativePath?.startsWith(`${oldRelativePath}/`)) {
+      return `${newRelativePath}${relativePath.slice(oldRelativePath.length)}`;
+    }
+    return null;
+  };
+
+  const remapId = (id) => {
+    const node = findNodeById(previousWorkspace, id);
+    if (!node || node.projectRootPath !== projectRootPath) return null;
+    const nextRelativePath = remapPath(node.relativePath);
+    if (!nextRelativePath) return null;
+    return findNodeIdByRelativePath(nextWorkspace, nextRelativePath);
+  };
+
+  const nextSelectedId = remapId(selectedId) ?? selectedId;
+  const nextOpenTabs = openTabs.map((tab) => {
+    const nextId = remapId(tab.id);
+    if (!nextId) return tab;
+    const nextNode = findNodeById(nextWorkspace, nextId);
+    return { ...tab, id: nextId, title: nextNode?.name ?? tab.title };
+  });
+
+  return { selectedId: nextSelectedId, openTabs: nextOpenTabs };
+}
+
+/**
+ * 磁盘文件重命名/移动后，迁移 notionFilePages 映射的 key（纯函数）。
+ * key 形如 `project:<root>:file:<relativePath>`；旧路径本身或其子路径下的映射都跟着迁移。
+ * 无需变更时返回原对象引用，调用方可据此跳过写入。
+ */
+export function remapNotionFilePagesAfterPathChange(
+  notionFilePages,
+  projectRootPath,
+  oldRelativePath,
+  newRelativePath,
+) {
+  if (!notionFilePages || !projectRootPath || !oldRelativePath || !newRelativePath) {
+    return notionFilePages;
+  }
+
+  const prefix = `project:${projectRootPath}:file:`;
+  let changed = false;
+  const next = {};
+
+  for (const [key, pageId] of Object.entries(notionFilePages)) {
+    if (!key.startsWith(prefix)) {
+      next[key] = pageId;
+      continue;
+    }
+    const rel = key.slice(prefix.length);
+    let nextRel = null;
+    if (rel === oldRelativePath) {
+      nextRel = newRelativePath;
+    } else if (rel.startsWith(`${oldRelativePath}/`)) {
+      nextRel = `${newRelativePath}${rel.slice(oldRelativePath.length)}`;
+    }
+    if (nextRel) {
+      next[`${prefix}${nextRel}`] = pageId;
+      changed = true;
+    } else {
+      next[key] = pageId;
+    }
+  }
+
+  return changed ? next : notionFilePages;
+}
+
 export function findNodeIdByRelativePath(node, relativePath) {
   if (!node) return null;
   if (node.relativePath === relativePath) return node.id;

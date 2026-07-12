@@ -62,6 +62,15 @@ import {
 } from '../utils/notionService.js';
 import { incrementalPull } from '../utils/notionIncrementalSync.js';
 import { batchPull, batchPush } from '../utils/notionBatchSync.js';
+import {
+  createAutoPushScheduler,
+  pushFileToNotionDatabase,
+  pushMarkdownToNotionPage,
+} from '../utils/notionAutoPush.js';
+import {
+  openNotionDatabaseWorkspace,
+  fetchNotionPageMarkdown,
+} from '../utils/notionWorkspace.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
 import {
@@ -71,6 +80,8 @@ import {
 } from '../hooks/useEditorImageUpload.js';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
+import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
+import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
   collectPendingMaterials,
@@ -122,6 +133,7 @@ import {
   ensureMdRenderWorkspace,
   fetchBookmarkPageSnapshot,
   isLocalProjectSupported,
+  isDesktopProjectSupported,
   openLocalProject,
   readLocalProjectDisk,
   readLocalProjectFileContent,
@@ -358,6 +370,11 @@ function MarkdownEditor() {
     deleteNode,
     replaceDiskBackedNode,
     removeDiskBackedNode,
+    localProjectConflict,
+    resolveLocalProjectConflict,
+    dismissLocalProjectConflict,
+    notionAutoPushEnabled,
+    setNotionAutoPushEnabled,
     importWorkspace,
     importBookmarks,
     insertWorkspaceNode,
@@ -567,6 +584,50 @@ function MarkdownEditor() {
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
+  // 仅桌面版为 true：MdRender Projects 目录、增量落盘等能力依赖 Electron
+  const desktopProjectSupported = isDesktopProjectSupported();
+  // 监听本地项目磁盘变化：外部改动自动刷新，编辑冲突时弹窗
+  useLocalProjectWatcher();
+
+  // 保存后自动推送 Notion：按文件防抖，成功新建页面后登记映射
+  const notionAutoPushRef = useRef(null);
+  if (!notionAutoPushRef.current) {
+    notionAutoPushRef.current = createAutoPushScheduler({
+      pushFile: async (snapshot) => {
+        const state = useEditorStore.getState();
+        if (!state.notionAutoPushEnabled || !state.notionToken) return;
+        try {
+          const mappedPageId = state.notionFilePages?.[snapshot.fileId];
+          // 没配数据库但有页面映射（如 Web 端从数据库拉下来的页面）→ 直接写回页面
+          if (!state.notionDatabaseId) {
+            if (mappedPageId) {
+              await pushMarkdownToNotionPage({
+                pageId: mappedPageId,
+                markdown: snapshot.markdown,
+                token: state.notionToken,
+              });
+            }
+            return;
+          }
+          const result = await pushFileToNotionDatabase({
+            databaseId: state.notionDatabaseId,
+            token: state.notionToken,
+            fileName: snapshot.fileName,
+            relativePath: snapshot.relativePath,
+            markdown: snapshot.markdown,
+            pageId: state.notionFilePages?.[snapshot.fileId],
+          });
+          if (result.created) {
+            state.mergeNotionFilePages({ [snapshot.fileId]: result.pageId });
+          }
+        } catch (error) {
+          console.error('自动推送 Notion 失败:', error);
+          message.warning(`自动推送 Notion 失败：${error?.message || '未知错误'}`);
+        }
+      },
+    });
+  }
+  useEffect(() => () => notionAutoPushRef.current?.dispose(), []);
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
   const handleCanvasChange = useCallback((nextCanvasState, edges) => {
     if (
@@ -635,7 +696,7 @@ function MarkdownEditor() {
         return true;
       } catch (error) {
         console.error('重命名本地文件失败:', error);
-        alert(error?.message || '重命名失败');
+        message.error(error?.message || '重命名失败');
         return false;
       }
     }
@@ -670,7 +731,7 @@ function MarkdownEditor() {
 
     const ok = await performRename(targetId, trimmed);
     if (!ok) {
-      alert('名称已存在，请换一个。');
+      message.warning('名称已存在，请换一个。');
     }
     return ok;
   }, [workspace, selectedId, performRename]);
@@ -678,7 +739,7 @@ function MarkdownEditor() {
   const handleDelete = useCallback(async (nodeId) => {
     const targetId = nodeId ?? selectedId;
     if (targetId === 'root') {
-      alert('根目录不能删除');
+      message.warning('根目录不能删除');
       return;
     }
     const node = findNodeById(workspace, targetId);
@@ -695,21 +756,84 @@ function MarkdownEditor() {
           projectRootPath: node.projectRootPath,
           relativePath: node.relativePath,
         });
+        notionAutoPushRef.current?.cancel(targetId);
         removeDiskBackedNode(targetId);
         setContentResetKey((k) => k + 1);
       } catch (error) {
         console.error('删除本地文件失败:', error);
-        alert(error?.message || '删除失败');
+        message.error(error?.message || '删除失败');
       }
       return;
     }
 
     deleteNode(targetId);
   }, [workspace, selectedId, localProjectSupported, deleteNode, removeDiskBackedNode]);
-  const [syncChannel, setSyncChannel] = useState('notion');
+
+  /**
+   * 侧边栏拖拽：拖到文件上 = 同级排序；拖到文件夹上 = 移入该文件夹。
+   * 磁盘挂载节点移动时先在磁盘上 rename，成功后再同步内存树。
+   */
+  const handleMoveNode = useCallback(async (fromId, toId) => {
+    const state = useEditorStore.getState();
+    const from = findNodeById(state.workspace, fromId);
+    const to = findNodeById(state.workspace, toId);
+    if (!from || !to || fromId === toId) return;
+
+    // 拖到文件上：同级排序（磁盘节点顺序由磁盘决定，不支持排序）
+    if (to.type !== 'folder') {
+      if (!from.projectRootPath) moveNode(fromId, toId);
+      return;
+    }
+
+    const fromDisk = Boolean(from.projectRootPath && from.relativePath);
+    const toDisk = Boolean(to.projectRootPath);
+
+    if (!fromDisk && !toDisk) {
+      state.moveNodeToFolderById(fromId, toId);
+      return;
+    }
+
+    if (!fromDisk || !toDisk || from.projectRootPath !== to.projectRootPath) {
+      message.warning('暂不支持在本地项目和内存工作区之间拖拽移动');
+      return;
+    }
+
+    if (from.localProjectRoot) return;
+    if (findNodeById(from, toId)) return; // 不能移进自己的子目录
+    if (findParentId(state.workspace, fromId) === toId) return; // 已在目标目录
+
+    const uniqueName = buildUniqueRenameNameInFolder(to, from.name, fromId);
+    const newRelativePath = to.relativePath ? `${to.relativePath}/${uniqueName}` : uniqueName;
+    try {
+      const result = await renameLocalProjectEntryOnDisk({
+        projectRootPath: from.projectRootPath,
+        relativePath: from.relativePath,
+        newRelativePath,
+      });
+      useEditorStore.getState().moveDiskBackedNodeToFolder(fromId, toId, {
+        relativePath: result?.relativePath ?? newRelativePath,
+      });
+    } catch (error) {
+      console.error('移动本地文件失败:', error);
+      message.error(error?.message || '移动失败');
+    }
+  }, [moveNode]);
+  const [syncChannel, setSyncChannel] = useState('doc');
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  // Cmd/Ctrl+J 开关 AI 助手面板
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey
+        && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setAgentPanelOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const [notionMessage, setNotionMessage] = useState('');
@@ -983,6 +1107,15 @@ function MarkdownEditor() {
             relativePath: selectedFile.relativePath,
             content: diskMarkdown,
           });
+          const latest = useEditorStore.getState();
+          if (latest.notionAutoPushEnabled && latest.notionToken && latest.notionDatabaseId) {
+            notionAutoPushRef.current?.schedule({
+              fileId: selectedFile.id,
+              fileName: selectedFile.name,
+              relativePath: selectedFile.relativePath,
+              markdown: diskMarkdown,
+            });
+          }
         } catch (error) {
           console.error('保存本地项目文件失败:', error);
           alert(error?.message || '保存本地项目文件失败');
@@ -992,6 +1125,20 @@ function MarkdownEditor() {
         }
       }, 400);
       projectSaveTimersRef.current.set(selectedFile.id, timerId);
+    } else if (selectedFile && !selectedFile.notionLazy) {
+      // 内存工作区文件（如 Web 端从 Notion 数据库拉取的页面）：
+      // 已有页面映射且开了自动推送时，编辑后防抖写回 Notion。
+      // notionLazy（正文还没拉下来）时绝不写回，避免空内容覆盖远端。
+      const latest = useEditorStore.getState();
+      const mappedPageId = latest.notionFilePages?.[selectedFile.id];
+      if (mappedPageId && latest.notionAutoPushEnabled && latest.notionToken) {
+        notionAutoPushRef.current?.schedule({
+          fileId: selectedFile.id,
+          fileName: selectedFile.name,
+          relativePath: selectedFile.relativePath,
+          markdown: normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document)),
+        });
+      }
     }
   };
 
@@ -1138,12 +1285,13 @@ function MarkdownEditor() {
         const markdownText = normalizeMarkdown(await convertToMarkdown(file.name, raw));
         const stem = file.name.replace(/\.[^.]+$/, '').trim() || '导入';
 
-        if (localProjectSupported) {
-          const target = await resolveLocalCreateTarget();
-          if (!target) {
-            message.error('无法定位本地 Projects 目录，请稍后重试。');
-            return;
-          }
+        const importTarget = localProjectSupported ? await resolveLocalCreateTarget() : null;
+        if (localProjectSupported && !importTarget && desktopProjectSupported) {
+          message.error('无法定位本地 Projects 目录，请稍后重试。');
+          return;
+        }
+        if (importTarget) {
+          const target = importTarget;
           const name = buildUniqueNameInFolder(target.parentFolder, stem, '.md');
           const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
           const result = await createLocalProjectFileOnDisk({
@@ -1185,33 +1333,36 @@ function MarkdownEditor() {
       reader.readAsText(file, 'UTF-8');
     }
     event.target.value = '';
-  }, [localProjectSupported, insertLocalProjectNode, resolveLocalCreateTarget]);
+  }, [localProjectSupported, desktopProjectSupported, insertLocalProjectNode, resolveLocalCreateTarget]);
 
   const handleAddFile = useCallback(async (contextNodeId) => {
     if (localProjectSupported) {
       try {
         const target = await resolveLocalCreateTarget(contextNodeId);
-        if (!target) {
+        if (!target && desktopProjectSupported) {
           message.error('无法定位本地 Projects 目录，请稍后重试。');
           return { ok: false };
         }
-        const name = buildUniqueNameInFolder(target.parentFolder, '未命名', '.md');
-        const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
-        const result = await createLocalProjectFileOnDisk({
-          projectRootPath: target.projectRootPath,
-          relativePath,
-          content: '',
-        });
-        const node = createLocalProjectFileNode(target.projectRootPath, result.relativePath, name, '');
-        node.updatedAt = result.updatedAt;
-        insertLocalProjectNode(target.parentFolderId, node);
-        setContentResetKey((k) => k + 1);
-        return {
-          ok: true,
-          nodeId: node.id,
-          name: node.name,
-          type: node.type,
-        };
+        // Web 端不在本地项目上下文时，target 为空 → 落到下方内存流程
+        if (target) {
+          const name = buildUniqueNameInFolder(target.parentFolder, '未命名', '.md');
+          const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
+          const result = await createLocalProjectFileOnDisk({
+            projectRootPath: target.projectRootPath,
+            relativePath,
+            content: '',
+          });
+          const node = createLocalProjectFileNode(target.projectRootPath, result.relativePath, name, '');
+          node.updatedAt = result.updatedAt;
+          insertLocalProjectNode(target.parentFolderId, node);
+          setContentResetKey((k) => k + 1);
+          return {
+            ok: true,
+            nodeId: node.id,
+            name: node.name,
+            type: node.type,
+          };
+        }
       } catch (error) {
         console.error('新建本地文件失败:', error);
         message.error(error?.message || '新建本地文件失败');
@@ -1228,31 +1379,34 @@ function MarkdownEditor() {
     return node
       ? { ok: true, nodeId: node.id, name: node.name, type: node.type }
       : { ok: false };
-  }, [localProjectSupported, resolveLocalCreateTarget, addFile, insertLocalProjectNode]);
+  }, [localProjectSupported, desktopProjectSupported, resolveLocalCreateTarget, addFile, insertLocalProjectNode]);
 
   const handleAddFolder = useCallback(async (contextNodeId) => {
     if (localProjectSupported) {
       try {
         const target = await resolveLocalCreateTarget(contextNodeId);
-        if (!target) {
+        if (!target && desktopProjectSupported) {
           message.error('无法定位本地 Projects 目录，请稍后重试。');
           return { ok: false };
         }
-        const name = buildUniqueNameInFolder(target.parentFolder, '新建文件夹');
-        const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
-        const result = await createLocalProjectFolderOnDisk({
-          projectRootPath: target.projectRootPath,
-          relativePath,
-        });
-        const node = createLocalProjectFolderNode(target.projectRootPath, result.relativePath, name);
-        insertLocalProjectNode(target.parentFolderId, node);
-        setContentResetKey((k) => k + 1);
-        return {
-          ok: true,
-          nodeId: node.id,
-          name: node.name,
-          type: node.type,
-        };
+        // Web 端不在本地项目上下文时，target 为空 → 落到下方内存流程
+        if (target) {
+          const name = buildUniqueNameInFolder(target.parentFolder, '新建文件夹');
+          const relativePath = target.parentRelativePath ? `${target.parentRelativePath}/${name}` : name;
+          const result = await createLocalProjectFolderOnDisk({
+            projectRootPath: target.projectRootPath,
+            relativePath,
+          });
+          const node = createLocalProjectFolderNode(target.projectRootPath, result.relativePath, name);
+          insertLocalProjectNode(target.parentFolderId, node);
+          setContentResetKey((k) => k + 1);
+          return {
+            ok: true,
+            nodeId: node.id,
+            name: node.name,
+            type: node.type,
+          };
+        }
       } catch (error) {
         console.error('新建本地文件夹失败:', error);
         message.error(error?.message || '新建本地文件夹失败');
@@ -1269,7 +1423,7 @@ function MarkdownEditor() {
     return node
       ? { ok: true, nodeId: node.id, name: node.name, type: node.type }
       : { ok: false };
-  }, [localProjectSupported, resolveLocalCreateTarget, addFolder, insertLocalProjectNode]);
+  }, [localProjectSupported, desktopProjectSupported, resolveLocalCreateTarget, addFolder, insertLocalProjectNode]);
 
   const handleCreateDraftFromDashboard = useCallback(async (actionKey) => {
     if (actionKey === 'material') {
@@ -1294,7 +1448,7 @@ function MarkdownEditor() {
         draftStatus: 'idea',
         summary: '',
       });
-      if (!localProjectSupported) {
+      if (!nextFile.projectRootPath) {
         after.applyRename(nextFileId, buildUniqueName(after.workspace, '新选题', '.md'));
       }
       return;
@@ -1304,10 +1458,10 @@ function MarkdownEditor() {
       draftStatus: 'drafting',
       targetPlatforms: getDefaultTargetPlatforms(publishingPlatforms),
     });
-    if (!localProjectSupported) {
+    if (!nextFile.projectRootPath) {
       after.applyRename(nextFileId, buildUniqueName(after.workspace, '新稿件', '.md'));
     }
-  }, [handleAddFile, localProjectSupported, publishingPlatforms, setSurface]);
+  }, [handleAddFile, publishingPlatforms, setSurface]);
 
   const handleCreateEntryWithStatus = useCallback(async (nextStatus) => {
     const beforeSelectedId = useEditorStore.getState().selectedId;
@@ -1325,7 +1479,7 @@ function MarkdownEditor() {
       targetPlatforms,
     });
 
-    if (!localProjectSupported) {
+    if (!nextFile.projectRootPath) {
       const nameMap = {
         idea: '新选题',
         collecting: '新资料单',
@@ -1337,7 +1491,7 @@ function MarkdownEditor() {
       };
       after.applyRename(nextFileId, buildUniqueName(after.workspace, nameMap[nextStatus] ?? '新稿件', '.md'));
     }
-  }, [handleAddFile, localProjectSupported, publishingPlatforms]);
+  }, [handleAddFile, publishingPlatforms]);
 
   const handleDashboardViewSection = useCallback((sectionKey) => {
     if (sectionKey === 'planner') {
@@ -1646,6 +1800,59 @@ function MarkdownEditor() {
     }
   }, [notionAvailable, selectedFile, notionToken, linkedNotionPageId, resolvedMarkdown, updateSelectedFileContent]);
 
+  /**
+   * Notion 即工作区：只查数据库页面清单秒开成懒加载树，点开文件才拉正文。
+   * 编辑写回由自动推送按映射原地更新页面。
+   */
+  const handleOpenNotionWorkspace = useCallback(async () => {
+    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
+    setNotionError('');
+    setNotionMessage('');
+    setBatchPullLoading(true);
+    try {
+      const result = await openNotionDatabaseWorkspace(notionDatabaseId, notionToken);
+      const { workspace: ws } = useEditorStore.getState();
+      const folder = {
+        ...result.folder,
+        name: buildUniqueName(ws, result.folder.name),
+      };
+      insertWorkspaceNode(folder);
+      mergeNotionFilePages(result.mappings);
+      setNotionMessage(
+        `已打开「${folder.name}」（${Object.keys(result.mappings).length} 个页面，点开时自动拉取正文）。`,
+      );
+    } catch (e) {
+      setNotionError(e?.message || '打开 Notion 工作区失败');
+    } finally {
+      setBatchPullLoading(false);
+    }
+  }, [notionAvailable, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
+
+  // 懒加载：选中 Notion 工作区文件且正文未拉取时，自动拉取并回填
+  useEffect(() => {
+    const file = selectedFile;
+    if (!file?.notionLazy) return undefined;
+    const state = useEditorStore.getState();
+    const pageId = state.notionFilePages?.[file.id];
+    if (!pageId || !state.notionToken) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const md = await fetchNotionPageMarkdown(pageId, state.notionToken);
+        if (!cancelled) {
+          useEditorStore.getState().hydrateNotionFileContent(file.id, md);
+        }
+      } catch (error) {
+        console.error('拉取 Notion 页面正文失败:', error);
+        if (!cancelled) {
+          message.error(`拉取 Notion 页面失败：${error?.message || '未知错误'}`);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedFile?.id, selectedFile?.notionLazy]);
+
   const handleBatchPull = useCallback(async () => {
     if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
     setNotionError('');
@@ -1683,7 +1890,7 @@ function MarkdownEditor() {
    */
   const handleIncrementalPull = useCallback(async () => {
     if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
-    if (!localProjectSupported) {
+    if (!desktopProjectSupported) {
       setNotionError('增量拉取仅支持桌面版应用。');
       return;
     }
@@ -1756,7 +1963,7 @@ function MarkdownEditor() {
     notionAvailable,
     notionToken,
     notionDatabaseId,
-    localProjectSupported,
+    desktopProjectSupported,
     ensureLocalMdRenderWorkspace,
     hydrateProjectsWorkspace,
   ]);
@@ -2183,9 +2390,9 @@ function MarkdownEditor() {
         onManualSyncLocalProject={handleManualSyncLocalProject}
         onAddFile={handleAddFile}
         onAddFolder={handleAddFolder}
-        onMoveNode={moveNode}
+        onMoveNode={handleMoveNode}
         onPinNode={pinNode}
-        onRevealLocalProjectEntry={localProjectSupported ? handleRevealLocalProjectEntry : null}
+        onRevealLocalProjectEntry={desktopProjectSupported ? handleRevealLocalProjectEntry : null}
         onRename={handleRename}
         onDelete={handleDelete}
         onImportMarkdown={localProjectSupported || !selectedInLocalProject
@@ -2213,7 +2420,7 @@ function MarkdownEditor() {
           if (surface === 'sync') {
             setSurface(lastContentSurfaceRef.current);
           } else {
-            setSyncChannel('notion');
+            setSyncChannel('doc');
             setSurface('sync');
           }
         }}
@@ -2241,7 +2448,7 @@ function MarkdownEditor() {
                 onClick={() => setAgentPanelOpen((v) => !v)}
                 aria-label={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
                 aria-pressed={agentPanelOpen}
-                title={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
+                title={`${agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}（⌘/Ctrl+J）`}
               >
                 <Bot size={18} strokeWidth={1.7} />
               </button>
@@ -2261,6 +2468,10 @@ function MarkdownEditor() {
             projectRootPath={visibleProjectRootPath}
             notionProxyBase={notionProxyBase}
             onNotionProxyBaseChange={setNotionProxyBase}
+            notionToken={notionToken}
+            onNotionTokenChange={setNotionToken}
+            cloudSyncBaseUrl={cloudSyncBaseUrl}
+            onCloudSyncBaseUrlChange={setCloudSyncBaseUrl}
             onCopyStyleChange={setCopyStyle}
             onPublishingPlatformsChange={setPublishingPlatforms}
             onClose={() => setSurface(lastContentSurfaceRef.current)}
@@ -2271,6 +2482,7 @@ function MarkdownEditor() {
             selectedFileName={selectedFile?.name}
             localProjectSupported={localProjectSupported}
             onClose={() => setSurface(lastContentSurfaceRef.current)}
+            onOpenSettings={() => setSurface('settings')}
             notion={{
               canSync: Boolean(selectedFile),
               token: notionToken,
@@ -2283,16 +2495,19 @@ function MarkdownEditor() {
               onDatabaseIdChange: setNotionDatabaseId,
               onPull: handleNotionPull,
               onPush: handleNotionPush,
-              onDatabasePull: localProjectSupported ? handleIncrementalPull : handleBatchPull,
+              onDatabasePull: desktopProjectSupported ? handleIncrementalPull : handleBatchPull,
               onDatabasePush: handleBatchPush,
               pullLoading: notionPullLoading,
               pushLoading: notionPushLoading,
-              databasePullLoading: localProjectSupported ? incrementalPullLoading : batchPullLoading,
+              databasePullLoading: desktopProjectSupported ? incrementalPullLoading : batchPullLoading,
               databasePushLoading: batchPushLoading,
-              incrementalActive: localProjectSupported,
+              incrementalActive: desktopProjectSupported,
               batchProgress,
               message: notionMessage,
               error: notionError,
+              autoPushEnabled: notionAutoPushEnabled,
+              onAutoPushChange: setNotionAutoPushEnabled,
+              onOpenNotionWorkspace: handleOpenNotionWorkspace,
             }}
             cloud={{
               baseUrl: cloudSyncBaseUrl,
@@ -2492,11 +2707,15 @@ function MarkdownEditor() {
           </>
         )}
           </div>
-          {agentPanelOpen && (
-            <div className="agent-panel-dock agent-panel-dock--sidebar">
-              <AgentPanel onClose={() => setAgentPanelOpen(false)} />
-            </div>
-          )}
+          {/* 常挂载、用 display 控制显隐：收起时不卸载 AgentPanel，
+              避免其卸载清理里的 abort 掐断进行中的回复，也保留输入草稿等面板状态 */}
+          <div
+            className="agent-panel-dock agent-panel-dock--sidebar"
+            style={agentPanelOpen ? undefined : { display: 'none' }}
+            aria-hidden={!agentPanelOpen}
+          >
+            <AgentPanel onClose={() => setAgentPanelOpen(false)} />
+          </div>
         </div>
       </div>
 
@@ -2519,6 +2738,14 @@ function MarkdownEditor() {
         index={lightbox.index}
         onClose={closeLightbox}
         onIndexChange={changeLightboxIndex}
+      />
+
+      <LocalProjectConflictModal
+        open={Boolean(localProjectConflict)}
+        conflicts={localProjectConflict?.conflicts ?? []}
+        onKeepLocal={() => resolveLocalProjectConflict('keep-local')}
+        onUseDisk={() => resolveLocalProjectConflict('use-disk')}
+        onDismiss={dismissLocalProjectConflict}
       />
     </div>
   );

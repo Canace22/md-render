@@ -12,6 +12,7 @@ import {
   dbGetBacklinks,
   dbGetVersionContent,
   dbGetVersions,
+  hasCoverImagePicker,
   hasDbBridge,
   selectCoverImage,
 } from '../services/electronBridge.js';
@@ -284,7 +285,7 @@ export default function DocMetaPanel({
             封面图片
           </span>
           <span className="doc-meta-cover-actions">
-            {hasElectronSelectCoverImage() && (
+            {hasCoverImagePicker() && (
               <button type="button" className="doc-meta-action" onClick={selectLocalCoverImage} disabled={disabled}>选择图片</button>
             )}
             {coverDraft && (
@@ -455,7 +456,7 @@ export default function DocMetaPanel({
       </div>
 
       {/* ── row 7: backlinks ── */}
-      {hasElectronDb() && backlinks.length > 0 && (
+      {hasDbBridge() && backlinks.length > 0 && (
         <div className="doc-meta-field">
           <span className="doc-meta-label">
             <Link size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
@@ -474,7 +475,7 @@ export default function DocMetaPanel({
       )}
 
       {/* ── row 8: version history ── */}
-      {hasElectronDb() && versions.length > 0 && (
+      {hasDbBridge() && versions.length > 0 && (
         <>
           <div className="doc-meta-divider" />
           <button

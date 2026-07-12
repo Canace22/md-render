@@ -12,6 +12,7 @@ export const EDITOR_STATE_KEYS = Object.freeze([
   'notion_file_pages',
   'notion_database_id',
   'notion_proxy_base',
+  'notion_auto_push',
   'cloud_sync_base_url',
   'cloud_workspace_id',
   'cloud_last_synced_revision',

@@ -1,5 +1,9 @@
-import { CloudUpload, Download, Loader2 } from 'lucide-react';
+import { CloudUpload, Download, Loader2, Settings } from 'lucide-react';
 
+/**
+ * 云端工作区快照（工作区级）。
+ * 服务地址在「编辑器设置 → 同步连接」里维护（默认读 .env），这里只读取。
+ */
 export default function CloudSyncChannel({
   baseUrl,
   workspaceId,
@@ -9,28 +13,31 @@ export default function CloudSyncChannel({
   message,
   error,
   conflict,
-  onBaseUrlChange,
   onWorkspaceIdChange,
   onUpload,
   onPull,
   onForceUpload,
   onUseRemote,
+  onOpenSettings,
 }) {
-  const canSync = Boolean(baseUrl?.trim() && workspaceId?.trim());
+  const hasBaseUrl = Boolean(baseUrl?.trim());
+  const canSync = hasBaseUrl && Boolean(workspaceId?.trim());
 
   return (
     <>
       <div className="settings-group">
-        <div className="settings-group-title">云端工作区</div>
-        <label className="notion-field">
-          <span>服务地址（默认读取 .env）</span>
-          <input
-            className="notion-input"
-            placeholder="留空则使用 VITE_CLOUD_SYNC_API"
-            value={baseUrl}
-            onChange={(e) => onBaseUrlChange(e.target.value)}
-          />
-        </label>
+        <div className="settings-group-title">云端快照</div>
+        {!hasBaseUrl && (
+          <p className="notion-hint sync-config-hint" role="status">
+            <span>尚未配置云端同步服务地址（也可在 .env 里配 VITE_CLOUD_SYNC_API）。</span>
+            {onOpenSettings && (
+              <button type="button" className="sync-inline-link" onClick={onOpenSettings}>
+                <Settings size={13} strokeWidth={1.8} />
+                <span>去设置</span>
+              </button>
+            )}
+          </p>
+        )}
         <label className="notion-field">
           <span>工作区 ID</span>
           <input
@@ -40,13 +47,6 @@ export default function CloudSyncChannel({
             onChange={(e) => onWorkspaceIdChange(e.target.value)}
           />
         </label>
-        <p className="notion-hint">
-          手动同步当前工作区快照；服务地址通常由 .env 提供，这里只用于临时覆盖。
-        </p>
-      </div>
-
-      <div className="settings-group">
-        <div className="settings-group-title">手动同步</div>
         <div className="notion-action-row">
           <button
             type="button"
@@ -75,26 +75,25 @@ export default function CloudSyncChannel({
           当前 revision：{lastSyncedRevision ?? 0}
           {lastSyncedAt ? `；最近同步：${new Date(lastSyncedAt).toLocaleString()}` : '；尚未同步'}
         </p>
-      </div>
 
-      {conflict && (
-        <div className="settings-group">
-          <div className="settings-group-title">冲突保护</div>
-          <p className="notion-panel-error" role="alert">
-            云端 revision {conflict.remoteRevision ?? '未知'} 与本地记录不一致，请选择处理方式。
-          </p>
-          <div className="notion-action-row">
-            <button type="button" className="notion-primary-btn" onClick={onUseRemote} disabled={loading}>
-              <Download size={18} strokeWidth={1.6} />
-              <span>使用云端版本</span>
-            </button>
-            <button type="button" className="notion-primary-btn" onClick={onForceUpload} disabled={loading}>
-              <CloudUpload size={18} strokeWidth={1.6} />
-              <span>覆盖云端</span>
-            </button>
-          </div>
-        </div>
-      )}
+        {conflict && (
+          <>
+            <p className="notion-panel-error" role="alert">
+              云端 revision {conflict.remoteRevision ?? '未知'} 与本地记录不一致，请选择处理方式。
+            </p>
+            <div className="notion-action-row">
+              <button type="button" className="notion-primary-btn" onClick={onUseRemote} disabled={loading}>
+                <Download size={18} strokeWidth={1.6} />
+                <span>使用云端版本</span>
+              </button>
+              <button type="button" className="notion-primary-btn" onClick={onForceUpload} disabled={loading}>
+                <CloudUpload size={18} strokeWidth={1.6} />
+                <span>覆盖云端</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {message && <p className="notion-panel-message" role="status">{message}</p>}
       {error && <p className="notion-panel-error" role="alert">{error}</p>}

@@ -1,3 +1,5 @@
+import * as webFs from './webFsBridge.js';
+
 const LEGACY_PROJECT_PICK_CHANNEL = 'project:pick-folder';
 const LEGACY_PROJECT_READ_CHANNEL = 'project:read-file';
 const LEGACY_PROJECT_WRITE_CHANNEL = 'project:write-file';
@@ -59,7 +61,17 @@ const normalizeLegacyNode = async (node, rootPath) => {
   };
 };
 
+// Web 端（非 Electron）用 File System Access API 兜底；payload 归 webfs 时路由过去
+const shouldUseWebFs = (projectRootPath) => {
+  return !hasDirectBridge() && webFs.isWebFsSupported() && webFs.isWebFsRootPath(projectRootPath);
+};
+
 export function isLocalProjectSupported() {
+  return hasDirectBridge() || hasLegacyBridge() || webFs.isWebFsSupported();
+}
+
+/** 仅桌面版（Electron）为 true：MdRender 工作区、增量落盘同步等能力需要它 */
+export function isDesktopProjectSupported() {
   return hasDirectBridge() || hasLegacyBridge();
 }
 
@@ -69,7 +81,10 @@ export async function openLocalProject() {
   }
 
   if (!hasLegacyBridge()) {
-    throw new Error('本地项目打开仅支持桌面版应用');
+    if (webFs.isWebFsSupported()) {
+      return webFs.openLocalProject();
+    }
+    throw new Error('本地项目打开仅支持桌面版应用或 Chrome/Edge 浏览器');
   }
 
   const result = await window.electronAPI.invoke(LEGACY_PROJECT_PICK_CHANNEL);
@@ -89,6 +104,10 @@ export async function openLocalProject() {
 export async function saveLocalProjectFile(payload) {
   if (hasDirectBridge()) {
     return window.electronAPI.saveLocalProjectFile(payload);
+  }
+
+  if (shouldUseWebFs(payload?.projectRootPath)) {
+    return webFs.saveLocalProjectFile(payload);
   }
 
   if (!hasLegacyBridge()) {
@@ -142,12 +161,18 @@ export async function createLocalProjectFileOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFile === 'function') {
     return window.electronAPI.createLocalProjectFile(payload);
   }
+  if (shouldUseWebFs(payload?.projectRootPath)) {
+    return webFs.createLocalProjectFile(payload);
+  }
   throw new Error('本地新建文件仅支持桌面版应用');
 }
 
 export async function createLocalProjectFolderOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFolder === 'function') {
     return window.electronAPI.createLocalProjectFolder(payload);
+  }
+  if (shouldUseWebFs(payload?.projectRootPath)) {
+    return webFs.createLocalProjectFolder(payload);
   }
   throw new Error('本地新建文件夹仅支持桌面版应用');
 }
@@ -156,12 +181,18 @@ export async function renameLocalProjectEntryOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.renameLocalProjectEntry === 'function') {
     return window.electronAPI.renameLocalProjectEntry(payload);
   }
+  if (shouldUseWebFs(payload?.projectRootPath)) {
+    return webFs.renameLocalProjectEntry(payload);
+  }
   throw new Error('本地重命名仅支持桌面版应用');
 }
 
 export async function deleteLocalProjectEntryOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.deleteLocalProjectEntry === 'function') {
     return window.electronAPI.deleteLocalProjectEntry(payload);
+  }
+  if (shouldUseWebFs(payload?.projectRootPath)) {
+    return webFs.deleteLocalProjectEntry(payload);
   }
   throw new Error('本地删除仅支持桌面版应用');
 }
@@ -177,6 +208,9 @@ export async function readLocalProjectDisk(projectRootPath, mode) {
   if (hasDirectBridge() && typeof window.electronAPI.readLocalProjectDisk === 'function') {
     return window.electronAPI.readLocalProjectDisk({ projectRootPath, mode });
   }
+  if (shouldUseWebFs(projectRootPath)) {
+    return webFs.readLocalProjectDisk(projectRootPath);
+  }
   return null;
 }
 
@@ -187,6 +221,9 @@ export async function readLocalProjectFileContent(payload) {
       throw new Error(result.error || '读取本地文件失败');
     }
     return result;
+  }
+  if (shouldUseWebFs(payload?.projectRootPath)) {
+    return webFs.readLocalProjectFileContent(payload);
   }
   throw new Error('本地文件读取仅支持桌面版应用');
 }

@@ -19,6 +19,10 @@ export const hasFilePickerBridge = () => (
   && typeof getElectronAPI()?.pickSavePath === 'function'
 );
 
+export const hasCoverImagePicker = () => (
+  typeof getElectronAPI()?.selectCoverImage === 'function'
+);
+
 export const dbSearch = (query) => getElectronAPI()?.db?.search(query);
 export const dbGetGraph = () => getElectronAPI()?.db?.getGraph();
 export const dbGetBacklinks = (docId) => getElectronAPI()?.db?.getBacklinks(docId);

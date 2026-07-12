@@ -4,6 +4,7 @@ import {
   mapSession,
   removeSession,
 } from '../../core/agent/sessionUtils.js';
+import { findNodeById } from '../workspaceUtils.js';
 
 export const createAgentSlice = (set, get) => ({
   // AI 助手会话（全局内存态，故意不进 persist：切页不丢、关 app 清空）
@@ -20,13 +21,30 @@ export const createAgentSlice = (set, get) => ({
 
   // AI 待确认的文档写入（内存态，不进 persist）。
   agentPendingWrite: null,
-  stageAgentWrite: ({ oldText, newText }) => new Promise((resolve) => {
-    set({ agentPendingWrite: { oldText: oldText ?? '', newText: newText ?? '', resolve } });
+  // 在“调用写入”这一刻就把改动绑定到目标文档 id（取实时选中态）。
+  // 否则应用时若选中态已漂移（AI 期间打开了别的文档 / 用户切了文档），
+  // 会把改动写进错误的文档，导致上下文里的其它文档被误改。
+  stageAgentWrite: ({ oldText, newText } = {}) => new Promise((resolve) => {
+    const { selectedId, workspace } = get();
+    const targetNode = findNodeById(workspace, selectedId);
+    const isFile = targetNode?.type === 'file';
+    set({
+      agentPendingWrite: {
+        targetId: isFile ? selectedId : null,
+        oldText: isFile ? (targetNode.content ?? '') : (oldText ?? ''),
+        newText: newText ?? '',
+        resolve,
+      },
+    });
   }),
   applyAgentWrite: () => {
     const pending = get().agentPendingWrite;
     if (!pending) return;
-    get().updateSelectedFileContent(pending.newText);
+    if (pending.targetId) {
+      get().updateFileContentById(pending.targetId, pending.newText);
+    } else {
+      get().updateSelectedFileContent(pending.newText);
+    }
     set({ agentPendingWrite: null });
     pending.resolve?.(true);
   },

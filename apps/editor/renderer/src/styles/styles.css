@@ -4934,6 +4934,69 @@ body.theme-light #markdown-output code {
     text-transform: uppercase;
 }
 
+/* 同步页顶部状态条：一眼看到「同步到哪了」 */
+.sync-status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 32px;
+    padding: 14px 18px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.sync-status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.sync-status-label {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+}
+
+.sync-status-value {
+    font-size: 13px;
+    color: var(--color-text-primary);
+}
+
+.sync-config-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.sync-inline-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--accent, #6366f1);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.sync-inline-link:hover {
+    background: rgba(99, 102, 241, 0.2);
+}
+
+body.theme-dark .sync-status-bar {
+    border-color: rgba(148, 163, 184, 0.24);
+    background: rgba(30, 41, 59, 0.55);
+}
+
+body.theme-dark .sync-inline-link {
+    background: rgba(129, 140, 248, 0.18);
+    color: #a5b4fc;
+}
+
 .settings-option-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6210,6 +6273,19 @@ body.theme-dark .doc-header-notion-btn.is-linked {
 .notion-field > span {
     font-size: 14px;
     color: var(--color-text-primary);
+}
+
+/* 行内开关字段（如「保存后自动推送」勾选框） */
+.notion-field-inline {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    cursor: pointer;
+}
+
+.notion-field-inline input[type='checkbox'] {
+    accent-color: var(--color-accent, #6366f1);
 }
 
 .notion-input {
