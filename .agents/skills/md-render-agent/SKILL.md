@@ -107,6 +107,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - ai-proxy 的网页抓取必须限制为公开 `http/https` 文本资源，校验重定向并拒绝本机、内网、账号 URL，避免把服务变成 SSRF 入口。
 - 返回结果必须包含来源名、标题和 URL；Agent prompt 要求保留引用，来源失败或未命中时如实说明。
 - 新增来源优先复用同一查询契约 `{ query, sources }`，不要每接一个站点就新增一套 IPC 或工具。
+- 「我写过类似文章吗 / 有没有相关旧文」属于跨来源召回：`recall_related_docs` 应在一个执行器里同时查工作区和外挂知识库，返回分组结果。不要只靠 system prompt 要求模型先后调用两个工具，否则模型很容易只完成本地搜索。
 
 ## 不看代码想不到的坑
 

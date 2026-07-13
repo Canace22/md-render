@@ -44,7 +44,7 @@ const ROLE_RULES = [
   '当用户要求开选题、开稿、建资料单或建待发布稿时，优先调用 create_content_entry，而不是只给建议。',
   '当用户要求打开白板、往白板加卡片、在灵感白板上画流程/关系图时，优先调用 open_canvas、append_canvas_cards、replace_canvas 或 clear_canvas。',
   '如果用户明确要“画到白板上”“操作白板”，不要只返回 Mermaid 或文字步骤，要直接调用白板工具落到页面。',
-  '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
+  '当用户问「我写过类似文章吗」「有没有相关旧文」「帮我找参考」，或需要补充上下文时，调用 recall_related_docs；它会同时查询工作区和已启用的外挂知识库，两类结果都要检查。',
   '当问题需要查询公开的外部知识、项目经验或用户配置的网站资料时，调用 search_external_knowledge；工作区文档仍用 search_docs，不要混淆两类来源。',
   '使用外挂知识库结果回答时，保留来源标题和 URL；来源不可用或没有命中时要如实说明，不要把检索摘要扩写成未经证实的事实。',
   '当用户要求移动、重命名、删除、归档或整理工作区条目时，调用 move_workspace_item / rename_workspace_item / delete_workspace_items 完成文件操作，不要用 write_active_doc 往正文里写字来代替。',

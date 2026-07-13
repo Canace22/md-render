@@ -521,7 +521,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
     function: {
       name: 'recall_related_docs',
       description:
-        '根据当前文档（标题 + 正文）主动召回工作区里相关的旧文，供写作引用参考。当用户问「有没有相关旧文」「帮我找参考」，或你需要补充上下文 / 引用既有内容时调用。无需传参，会自动读当前文档并按关键词相关度排序返回。',
+        '根据当前文档（标题 + 正文）同时召回工作区旧文和已启用的外挂知识库内容，供写作引用参考。当用户问「我写过类似文章吗」「有没有相关旧文」「帮我找参考」时调用。无需传参，会自动提取关键词并按相关度返回两类来源。',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -552,6 +552,15 @@ const collectCandidates = async (host, keywords) => {
     });
   }
   return [...byKey.values()];
+};
+
+const searchExternalRecall = async (host, keywords) => {
+  if (typeof host.searchExternalKnowledge !== 'function') return null;
+  try {
+    return await host.searchExternalKnowledge({ query: keywords.join(' ') });
+  } catch (error) {
+    return { ok: false, results: [], error: error?.message || '外挂知识库搜索失败' };
+  }
 };
 
 /** 工具执行器：name -> async (args, host) => 结果字符串 */
@@ -811,27 +820,44 @@ const EXECUTORS = {
 
   recall_related_docs: async (_args, host) => {
     const doc = await host.readActiveDoc();
-    if (!doc || !String(doc.content ?? '').trim()) {
-      return '当前文档为空，无法据此召回相关旧文。';
+    if (!doc || !`${doc.title ?? ''}${doc.content ?? ''}`.trim()) {
+      return '当前文档标题和正文都为空，无法据此召回相关内容。';
     }
     const keywords = extractRecallKeywords(doc, { max: MAX_RECALL_KEYWORDS });
     if (!keywords.length) return '未能从当前文档提取到关键词。';
 
-    // 多个关键词分别搜，再按 id/标题合并去重，得到候选集
-    const candidates = await collectCandidates(host, keywords);
+    // 工作区和外挂知识库同时召回，避免模型只执行本地搜索而漏掉用户自己的 Wiki。
+    const [candidates, externalResponse] = await Promise.all([
+      collectCandidates(host, keywords),
+      searchExternalRecall(host, keywords),
+    ]);
     // 候选叠加 snippet 作为内容参与重合度排序，排除当前文档自身
     const ranked = rankRelatedDocs(doc, candidates, {
       limit: MAX_RECALL_RESULTS,
       keywords,
     });
-    if (!ranked.length) return '工作区里没有与当前文档明显相关的旧文。';
-
-    const top = ranked.map((r) => ({
+    const workspaceDocs = ranked.map((r) => ({
       id: r.id ?? null,
       title: r.title ?? '未命名',
       snippet: truncate(r.snippet ?? r.content ?? '', MAX_SNIPPET_CHARS),
     }));
-    return JSON.stringify(top);
+    const externalKnowledge = (externalResponse?.results ?? [])
+      .slice(0, MAX_RECALL_RESULTS)
+      .map((result) => ({
+        sourceName: result.sourceName ?? '外挂知识库',
+        title: result.title ?? '未命名',
+        url: result.url ?? '',
+        snippet: truncate(result.snippet ?? result.excerpt ?? '', MAX_SNIPPET_CHARS),
+      }));
+
+    return JSON.stringify({
+      keywords,
+      workspaceDocs,
+      externalKnowledge,
+      externalUnavailable: externalResponse?.ok === false
+        ? [{ error: externalResponse.error || '外挂知识库搜索失败' }]
+        : (externalResponse?.errors ?? []),
+    });
   },
 };
 
@@ -884,7 +910,7 @@ const _localToolLabels = Object.freeze({
   get_workspace_brief: '查看工作区简报',
   inspect_app_health: '检查应用运行状态',
   apply_safe_repair: '执行安全修复',
-  recall_related_docs: '召回相关旧文',
+  recall_related_docs: '召回相关内容',
   read_editorial_memory: '读取编辑部记忆',
   update_editorial_memory: '更新编辑部记忆',
   move_workspace_item: '移动工作区条目',
