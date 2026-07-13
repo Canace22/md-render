@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { message } from 'antd';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteEditor, createCodeBlockSpec } from '@blocknote/core';
-import { buildSchema } from '@narrative/blocknote-core';
+import { buildSchema, isSelectAllShortcut } from '@narrative/blocknote-core';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
 import { Bot } from 'lucide-react';
@@ -2351,7 +2351,9 @@ function MarkdownEditor() {
   // 选中即引用：在编辑器里选中文字（松开鼠标/键），自动写入 store 供 AI 助手引用。
   // 覆盖式更新；选区折叠（点空白）不清空，保留引用，由用户从 chip 上的 × 移除。
   useEffect(() => {
-    const commitSelection = () => {
+    const commitSelection = (event) => {
+      // Cmd/Ctrl+A 的 keyup 期间更新全局引用状态会让 BlockNote 重渲染，导致全选立即丢失。
+      if (event.type === 'keyup' && isSelectAllShortcut(event)) return;
       const text = getSelectedEditorText();
       if (text) setAiQuotedSelection(text);
     };
