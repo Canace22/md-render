@@ -1,6 +1,6 @@
 ---
 name: md-render-blocknote-core
-description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器底层机制包）时的规范与避坑。涉及 buildSchema、EditorToolbar、消费 dist、Arco→AntD、vite CJS interop。
+description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器底层机制包）时的规范与避坑。涉及 buildSchema、EditorToolbar、编辑器焦点/全选、消费 dist、Arco→AntD、vite CJS interop。
 ---
 
 # 接入 @narrative/blocknote-core
@@ -26,7 +26,7 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 4. **EditorToolbar 是数据驱动、无单项 disabled**。业务侧用 `entries` 表达按钮/分隔线/下拉；disabled 态在 wrapper 里让 `onItemClick` no-op。不聚焦编辑器的按钮（AI/复制/预览）要设 `skipFocusEditor: true`。
 
-5. **不要在 `Cmd/Ctrl+A` 的 `keyup` 里同步全局选区状态**。BlockNote/Tiptap 已原生处理全文全选；如果 document 级 `keyup` 监听随后写 Zustand，而编辑器外层又订阅了整个 store，重渲染会让选区和焦点立即丢失，下一次快捷键就会全选整个页面。遇到这类问题先跳过 `isSelectAllShortcut(event)` 对应的 `keyup`，不要额外接管 `keydown`，也不要调用私有 `_tiptapEditor` API。
+5. **全选快捷键要同时守住选区和焦点**。默认全文全选直接保留 BlockNote/Tiptap 原生行为，不接管 `keydown`；如果 document 级 `keyup` 会写 Zustand，要跳过对应快捷键，避免重渲染后焦点丢失。只有产品明确要求“首次当前行、长按或第二次全文”时，才在 `editor.domElement` 范围内接管：用公开的 `editor.transact()` + `TextSelection/AllSelection`，忽略单独的 Meta/Control keydown，后续 repeat 保持全文，并在 pointer、blur、其它按键或 editor 实例变化时重置。不要调用私有 `_tiptapEditor` API，也不要劫持链接框等浮层输入框的全选。
 
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
