@@ -81,6 +81,7 @@ import {
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
+import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
@@ -995,6 +996,13 @@ function MarkdownEditor() {
     },
     [selectedId, contentResetKey, editorReloadToken],
   );
+
+  const {
+    handleSelectAllBlurCapture,
+    handleSelectAllKeyDownCapture,
+    handleSelectAllKeyUpCapture,
+    resetSelectAllState,
+  } = useTwoStageSelectAll(editor);
 
   // 供导出/预览/微信使用的纯 Markdown 文本：
   // content 存的是 BlockNote JSON，需通过 editor 转换；旧数据直接用
@@ -2677,7 +2685,14 @@ function MarkdownEditor() {
                     />
                   ) : (
                     <div id="markdown-output" className="paper-content">
-                      <div className="blocknote-paper" onClick={handlePaperClick}>
+                      <div
+                        className="blocknote-paper"
+                        onClick={handlePaperClick}
+                        onBlurCapture={handleSelectAllBlurCapture}
+                        onKeyDownCapture={handleSelectAllKeyDownCapture}
+                        onKeyUpCapture={handleSelectAllKeyUpCapture}
+                        onPointerDownCapture={resetSelectAllState}
+                      >
                         <BlockNoteView
                           editor={editor}
                           className="blocknote-editor"

@@ -46,11 +46,14 @@ export { useClipboardFeedback } from './hooks/useClipboardFeedback.js';
 export {
   isSelectAllShortcut,
   resolveBlockInlineContentRange,
+  selectAllEditorContent,
+  selectCurrentTextBlockContent,
   shouldPromoteBlockSelectionToFullSelection,
 } from './utils/keyboardSelection.js';
 export type {
   ISelectAllShortcutLike,
   IBlockInlineContentRange,
+  IKeyboardSelectionEditor,
 } from './utils/keyboardSelection.js';
 
 // Schema 组装机制
