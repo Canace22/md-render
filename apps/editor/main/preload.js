@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),
     execTool: (payload) => ipcRenderer.invoke('ai:execTool', payload),
     listTools: (payload) => ipcRenderer.invoke('ai:listTools', payload),
+    searchKnowledge: (payload) => ipcRenderer.invoke('ai:searchKnowledge', payload),
   },
 
   // 只读本机运行诊断

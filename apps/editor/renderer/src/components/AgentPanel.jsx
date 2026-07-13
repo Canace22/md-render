@@ -25,6 +25,7 @@ import {
 } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
 import AgentConversation from './AgentConversation.jsx';
+import AgentKnowledgeSources from './AgentKnowledgeSources.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import {
   EDITORIAL_REVIEW_PROMPT,
@@ -92,6 +93,11 @@ import {
 } from '../services/electronBridge.js';
 import { buildAgentArtifactPayload, parseAgentArtifactResult } from '../core/agent/artifactUtils.js';
 import { buildAgentHealthSnapshot, runSafeRepair } from '../core/agent/appSupport.js';
+import {
+  loadKnowledgeSources,
+  saveKnowledgeSources,
+} from '../core/agent/knowledgeSources.js';
+import { searchExternalKnowledge } from '../services/externalKnowledgeService.js';
 
 /** 把工作区文件树拍平成文件数组（web 端搜索兜底用） */
 const flattenFiles = (node, acc = []) => {
@@ -774,6 +780,7 @@ export default function AgentPanel({ onClose }) {
   const [providerId, setProviderId] = useState(() => getActiveProviderId());
   const [cfg, setCfg] = useState(() => readProviderConfig());
   const [aiServerBase, setAiServerBase] = useState(() => readAiServerBase());
+  const [knowledgeSources, setKnowledgeSources] = useState(() => loadKnowledgeSources());
   const [serverProvidersReady, setServerProvidersReady] = useState(false);
   const abortRef = useRef(null);
   const activeRunIdRef = useRef(0);
@@ -1164,6 +1171,11 @@ export default function AgentPanel({ onClose }) {
         .filter((f) => getFileKnowledgeSearchText(f).includes(q))
         .map((f) => buildContentAssetPointer(f, { content: String(f.content ?? '').slice(0, 200) }));
     },
+    searchExternalKnowledge: async ({ query } = {}) => searchExternalKnowledge({
+      query,
+      sources: knowledgeSources,
+      aiProxyBase: aiServerBase,
+    }),
     /**
      * 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等）。
      * 走 IPC → ai-proxy server → spawn 脚本。
@@ -1209,6 +1221,7 @@ export default function AgentPanel({ onClose }) {
     aiServerBase,
     activeFile,
     surface,
+    knowledgeSources,
   ]);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
@@ -1692,10 +1705,14 @@ export default function AgentPanel({ onClose }) {
     setActiveProvider(providerId);
     saveProviderConfig(providerId, { model: cfg.model });
     saveAiServerBase(aiServerBase);
+    if (!saveKnowledgeSources(knowledgeSources)) {
+      message.error('外挂知识库配置保存失败');
+      return;
+    }
     setCfg(readProviderConfig(providerId));
     setAiServerBase(readAiServerBase());
     setShowSettings(false);
-  }, [providerId, cfg, aiServerBase]);
+  }, [providerId, cfg, aiServerBase, knowledgeSources]);
 
   const handleKeyDown = useCallback((e) => {
     if (showSkillPicker && filteredSkills.length > 0) {
@@ -1853,6 +1870,10 @@ export default function AgentPanel({ onClose }) {
             <input value={aiServerBase} placeholder="http://你的服务器:8788"
               onChange={(e) => setAiServerBase(e.target.value)} />
           </label>
+          <AgentKnowledgeSources
+            sources={knowledgeSources}
+            onChange={setKnowledgeSources}
+          />
           <button className="agent-panel__save-btn" onClick={handleSaveSettings}>保存</button>
         </div>
       )}

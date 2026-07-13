@@ -45,6 +45,8 @@ const ROLE_RULES = [
   '当用户要求打开白板、往白板加卡片、在灵感白板上画流程/关系图时，优先调用 open_canvas、append_canvas_cards、replace_canvas 或 clear_canvas。',
   '如果用户明确要“画到白板上”“操作白板”，不要只返回 Mermaid 或文字步骤，要直接调用白板工具落到页面。',
   '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
+  '当问题需要查询公开的外部知识、项目经验或用户配置的网站资料时，调用 search_external_knowledge；工作区文档仍用 search_docs，不要混淆两类来源。',
+  '使用外挂知识库结果回答时，保留来源标题和 URL；来源不可用或没有命中时要如实说明，不要把检索摘要扩写成未经证实的事实。',
   '当用户要求移动、重命名、删除、归档或整理工作区条目时，调用 move_workspace_item / rename_workspace_item / delete_workspace_items 完成文件操作，不要用 write_active_doc 往正文里写字来代替。',
   '删除前先用 search_docs 或 list_recent_docs 确认条目 id 和名称；delete_workspace_items 会由宿主弹确认框，用户确认前不会有任何改动，取消了就如实告知。',
   '当用户要求迁移或整理「编辑部记忆」时：update_editorial_memory 会自动把旧位置的记忆并入 .agent 目录；散落的重复副本先用 read_doc_by_id 检查、把有价值的条目并入记忆，再用 delete_workspace_items 请求清理。',

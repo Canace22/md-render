@@ -12,6 +12,7 @@
  *   host.createNewDoc(payload)      -> string           （新建一篇 Markdown 文档；返回创建结果文案）
  *   host.createFolder(payload)      -> string           （新建文件夹；返回创建结果文案）
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
+ *   host.searchExternalKnowledge(args) -> { ok, results, errors }
  *   host.openSurface(args)          -> string           （切换 app 主界面）
  *   host.openWorkspaceItem(args)    -> string           （打开工作区里的文档或文件夹）
  *   host.getDailyOverview(args)     -> { ... }          （读取 Daily / 待办概况）
@@ -377,6 +378,23 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     type: 'function',
     function: {
+      name: 'search_external_knowledge',
+      description: '搜索已启用的公开外挂知识库，包括内置 Canace Wiki 和用户在 Agent 设置中添加的网站。适合查询外部知识、项目经验和参考资料；返回结果带来源 URL。不要用它替代工作区文档搜索。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '2-5 个精确关键词，中文关键词可用空格分隔，例如「RAG Graph RAG」',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'list_recent_docs',
       description: '列出最近活跃的几篇文档及其简要元数据。当你需要快速判断近期工作上下文时调用。',
       parameters: {
@@ -695,6 +713,24 @@ const EXECUTORS = {
     return JSON.stringify(top);
   },
 
+  search_external_knowledge: async (args, host) => {
+    const query = String(args?.query ?? '').trim();
+    if (!query) return '外挂知识库搜索失败：关键词为空。';
+    const response = await host.searchExternalKnowledge?.({ query });
+    if (!response) return '当前环境不支持外挂知识库搜索。';
+    if (!response.ok) return `外挂知识库搜索失败：${response.error || '未知错误'}。`;
+    if (!response.results?.length) {
+      const errors = (response.errors ?? []).map((item) => `${item.sourceName}：${item.error}`);
+      return errors.length
+        ? `没有找到与「${query}」相关的外部知识。部分来源不可用：${errors.join('；')}`
+        : `没有找到与「${query}」相关的外部知识。`;
+    }
+    return JSON.stringify({
+      results: response.results,
+      unavailableSources: response.errors ?? [],
+    });
+  },
+
   list_recent_docs: async (args, host) => {
     const rawLimit = Number(args?.limit);
     const limit = Number.isFinite(rawLimit)
@@ -843,6 +879,7 @@ const _localToolLabels = Object.freeze({
   open_workspace_item: '打开工作区条目',
   read_doc_by_id: '读取指定文档',
   search_docs: '搜索工作区',
+  search_external_knowledge: '搜索外挂知识库',
   list_recent_docs: '查看最近文档',
   get_workspace_brief: '查看工作区简报',
   inspect_app_health: '检查应用运行状态',

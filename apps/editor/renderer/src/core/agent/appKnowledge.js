@@ -38,7 +38,7 @@ export const APP_CAPABILITY_SUMMARY = Object.freeze([
   {
     id: 'context',
     label: '内容上下文',
-    description: '搜索工作区、召回相关旧文，并结合用户指定的文档。',
+    description: '搜索工作区、召回相关旧文，并按需查询已启用的外挂知识库。',
   },
   {
     id: 'workspace',

@@ -3,7 +3,9 @@
 > 桌面 app（Electron）的 AI 请求也会经过主进程转发到本服务（`apps/editor/main/aiRequest.js`）；Web 端则直接请求本服务。
 > 服务除了模型请求还提供工具 schema 和转换脚本执行入口，公网部署前必须加鉴权和限流；不要把这些远端工具当成用户本机修复通道。
 
-这个零依赖单文件服务提供 `/api/chat` 、`/api/health` 、工具 schema 和工具执行接口，供 Electron 主进程和 Web 端统一调用。
+这个零依赖服务提供 `/api/chat`、`/api/health`、工具 schema、工具执行和外挂知识库检索接口，供 Electron 主进程和 Web 端统一调用。
+
+外挂知识库使用 `POST /api/knowledge/search`，请求体为 `{ query, sources }`。服务只读取公开的 `http/https` 文本页面，拒绝本机、内网地址和非文本资源；用户配置的知识库不会复制到服务端或工作区。
 
 ## 为什么需要它
 

@@ -97,6 +97,17 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - 当前只列 `.md` 文件、单文件超 `MAX_ATTACH_CHARS`(6000) 截断、附件去重。
 - **扩展引用类型**（@文件夹 / @搜索结果 / @整个工作区）时：在 `sessionUtils` 加新的拼接函数或扩展 `buildInputWithAttachments`，保持"拼接逻辑是纯函数、UI 只负责选"的分工。
 
+## 外挂知识库（公开网页 / Wiki）
+
+外挂知识和工作区知识是两条链路：工作区仍用 `search_docs / recall_related_docs`，公开网页用 `search_external_knowledge`，不要把网页结果伪装成可打开、可编辑的本地文档。
+
+- 内置来源和用户手动添加的来源统一在 `core/agent/knowledgeSources.js` 归一化；Agent 私有配置可沿用 `md-renderer-agent-*` localStorage，不要为面板配置新建全局 store。
+- 网络调用放 `services/externalKnowledgeService.js`：Electron 走 preload → Main → ai-proxy，Web 才直接请求 ai-proxy；组件不直接写 IPC 或第三方 fetch。
+- 工具定义/执行器仍只依赖 host；`AgentPanel` host 注入已启用来源和 AI 代理地址。
+- ai-proxy 的网页抓取必须限制为公开 `http/https` 文本资源，校验重定向并拒绝本机、内网、账号 URL，避免把服务变成 SSRF 入口。
+- 返回结果必须包含来源名、标题和 URL；Agent prompt 要求保留引用，来源失败或未命中时如实说明。
+- 新增来源优先复用同一查询契约 `{ query, sources }`，不要每接一个站点就新增一套 IPC 或工具。
+
 ## 不看代码想不到的坑
 
 - **host 闭包里的 workspace 是本轮开始时的旧快照**：AgentPanel 的 host 用 useMemo 构建，同一轮 agent run 内连续调用工具时，靠捕获的 `workspace` 判断「文件是否存在」会误判并重复建档（曾造成一轮建出 6 个「编辑部记忆」副本）。工具执行器里凡是「先查再写」的逻辑，必须用 `useEditorStore.getState()` 拿实时状态。

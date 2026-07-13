@@ -8,6 +8,7 @@
  */
 
 const AI_PROXY_TIMEOUT_MS = 60000;
+const KNOWLEDGE_SEARCH_TIMEOUT_MS = 30000;
 const TOOL_EXEC_TIMEOUT_MS = 5 * 60 * 1000; // 工具执行最长 5 分钟
 
 const normalizeAiProxyBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
@@ -139,4 +140,35 @@ export async function requestToolSchema({ aiProxyBase }) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
   if (!res.ok) throw new Error(`获取工具 schema 失败 (${res.status})`);
   return res.json();
+}
+
+/**
+ * 通过 ai-proxy 检索公开的外挂知识库。
+ */
+export async function requestKnowledgeSearch({ aiProxyBase, query, sources }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  if (!String(query ?? '').trim()) throw new Error('知识库搜索关键词为空');
+
+  const url = `${aiProxyBase.replace(/\/+$/, '')}/api/knowledge/search`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), KNOWLEDGE_SEARCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, sources }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || `外挂知识库搜索失败 (${response.status})`);
+    }
+    return data;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('外挂知识库搜索超时');
+    throw new Error(formatProxyError(err, aiProxyBase));
+  } finally {
+    clearTimeout(timer);
+  }
 }
