@@ -13,7 +13,7 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 - 包内 UI 已从 Arco 改为 **AntD**（本项目 UI 库）。改包 UI 时继续用 antd 的 `Button/Divider/Dropdown/message`，**不要引回 Arco**。
 - 改包源码（src/*.ts/tsx）后必须 **重建 dist**；tsc 不拷非 ts 资源（如 .css），需手动 `cp` 到 dist。
 
-## 四个必踩的坑
+## 常见的坑
 
 1. **buildSchema 默认排除 heading / quote**（剧本编辑器不要 `#`/`>` input rule）。本项目是 Markdown 编辑器，**必须传 `excludeDefaultBlocks: []`** 才能保留标题/引用。buildSchema 内部已合并 defaultBlockSpecs，调用时只传自定义块（如 codeBlock）。
 
@@ -25,6 +25,8 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 3. **barrel(index.js) 会 eager 加载所有组件**，含 FindBar 的样式。原本是 `.scss`，会让整个 app 构建要求 sass 工具链。已改为 **plain `.css`**（本项目用 CSS，不用 Sass）。再加组件时别引 scss。
 
 4. **EditorToolbar 是数据驱动、无单项 disabled**。业务侧用 `entries` 表达按钮/分隔线/下拉；disabled 态在 wrapper 里让 `onItemClick` no-op。不聚焦编辑器的按钮（AI/复制/预览）要设 `skipFocusEditor: true`。
+
+5. **不要在 `Cmd/Ctrl+A` 的 `keyup` 里同步全局选区状态**。BlockNote/Tiptap 已原生处理全文全选；如果 document 级 `keyup` 监听随后写 Zustand，而编辑器外层又订阅了整个 store，重渲染会让选区和焦点立即丢失，下一次快捷键就会全选整个页面。遇到这类问题先跳过 `isSelectAllShortcut(event)` 对应的 `keyup`，不要额外接管 `keydown`，也不要调用私有 `_tiptapEditor` API。
 
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
