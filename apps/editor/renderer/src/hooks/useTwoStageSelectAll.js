@@ -66,15 +66,19 @@ export function useTwoStageSelectAll(editor) {
     selectAllState.fullSelectionActive = false;
   }, [editor, resetSelectAllState]);
 
-  const handleSelectAllKeyUpCapture = useCallback((event) => {
+  const shouldSuppressSelectAllKeyUp = useCallback((event) => {
     const key = event.key.toLowerCase();
-    if (!selectAllStateRef.current.suppressShortcutKeyUp
-      || !SELECT_ALL_RELEASE_KEYS.has(key)) return;
+    return selectAllStateRef.current.suppressShortcutKeyUp
+      && SELECT_ALL_RELEASE_KEYS.has(key);
+  }, []);
+
+  const handleSelectAllKeyUpCapture = useCallback((event) => {
+    if (!shouldSuppressSelectAllKeyUp(event)) return;
 
     // 阻止 document 级“选中即引用”监听在快捷键释放时更新 Zustand，避免选区失焦。
     event.preventDefault();
     event.stopPropagation();
-  }, []);
+  }, [shouldSuppressSelectAllKeyUp]);
 
   const handleSelectAllBlurCapture = useCallback((event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) resetSelectAllState();
@@ -89,5 +93,6 @@ export function useTwoStageSelectAll(editor) {
     handleSelectAllKeyDownCapture,
     handleSelectAllKeyUpCapture,
     resetSelectAllState,
+    shouldSuppressSelectAllKeyUp,
   };
 }
