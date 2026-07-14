@@ -7,6 +7,14 @@ import {
 } from '@narrative/blocknote-core';
 
 const SELECT_ALL_MODIFIER_KEYS = new Set(['alt', 'control', 'meta', 'shift']);
+const TEXT_EDITING_TARGET_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  '[contenteditable]:not([contenteditable="false"])',
+].join(',');
+
+const isTextEditingTarget = (target) => Boolean(target?.closest?.(TEXT_EDITING_TARGET_SELECTOR));
 
 const createSelectAllState = () => ({
   pendingBlockId: null,
@@ -28,6 +36,16 @@ export function useTwoStageSelectAll(editor) {
     selectAllStateRef.current = createSelectAllState();
   }, []);
 
+  const startShortcutRelease = useCallback((event) => {
+    if (event.repeat) return;
+    shortcutReleaseStateRef.current = {
+      active: true,
+      characterReleased: false,
+      modifierKey: event.metaKey ? 'meta' : 'control',
+      modifierReleased: false,
+    };
+  }, []);
+
   const handleSelectAllKeyDownCapture = useCallback((event) => {
     if (!editor.domElement?.contains(event.target)) return;
 
@@ -41,14 +59,7 @@ export function useTwoStageSelectAll(editor) {
     event.stopPropagation();
 
     const selectAllState = selectAllStateRef.current;
-    if (!event.repeat) {
-      shortcutReleaseStateRef.current = {
-        active: true,
-        characterReleased: false,
-        modifierKey: event.metaKey ? 'meta' : 'control',
-        modifierReleased: false,
-      };
-    }
+    startShortcutRelease(event);
 
     // 已提升为全文后继续保持，避免长按 repeat 在“当前行 / 全文”之间反复切换。
     if (selectAllState.fullSelectionActive) {
@@ -77,7 +88,7 @@ export function useTwoStageSelectAll(editor) {
 
     selectAllState.pendingBlockId = currentBlock.id;
     selectAllState.fullSelectionActive = false;
-  }, [editor, resetSelectAllState]);
+  }, [editor, resetSelectAllState, startShortcutRelease]);
 
   const shouldSuppressSelectAllKeyUp = useCallback((event) => {
     const key = event.key.toLowerCase();
@@ -113,6 +124,28 @@ export function useTwoStageSelectAll(editor) {
   useEffect(() => {
     resetSelectAllState();
   }, [editor, resetSelectAllState]);
+
+  useEffect(() => {
+    const handleDocumentSelectAll = (event) => {
+      const editorDom = editor.domElement;
+      if (!isSelectAllShortcut(event)
+        || !editorDom?.isConnected
+        || editorDom.contains(event.target)
+        || isTextEditingTarget(event.target)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      startShortcutRelease(event);
+      selectAllEditorContent(editor);
+      selectAllStateRef.current = {
+        pendingBlockId: null,
+        fullSelectionActive: true,
+      };
+    };
+
+    document.addEventListener('keydown', handleDocumentSelectAll, true);
+    return () => document.removeEventListener('keydown', handleDocumentSelectAll, true);
+  }, [editor, startShortcutRelease]);
 
   return {
     handleSelectAllBlurCapture,
