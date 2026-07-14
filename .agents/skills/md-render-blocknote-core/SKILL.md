@@ -26,7 +26,7 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 4. **EditorToolbar 是数据驱动、无单项 disabled**。业务侧用 `entries` 表达按钮/分隔线/下拉；disabled 态在 wrapper 里让 `onItemClick` no-op。不聚焦编辑器的按钮（AI/复制/预览）要设 `skipFocusEditor: true`。
 
-5. **全选快捷键要同时守住选区和焦点**。默认全文全选直接保留 BlockNote/Tiptap 原生行为，不接管 `keydown`；如果 document 级 `keyup` 会写 Zustand，要跳过对应快捷键，避免重渲染后焦点丢失。只有产品明确要求“首次当前行、长按或第二次全文”时，才在 `editor.domElement` 范围内接管：用公开的 `editor.transact()` + `TextSelection/AllSelection`，忽略单独的 Meta/Control keydown，后续 repeat 保持全文，并在 pointer、blur、其它按键或 editor 实例变化时重置。不要调用私有 `_tiptapEditor` API，也不要劫持链接框等浮层输入框的全选。
+5. **全选快捷键要同时守住选区和焦点**。默认全文全选直接保留 BlockNote/Tiptap 原生行为，不接管 `keydown`；如果 document 级 `keyup` 会写 Zustand，要跳过对应快捷键，避免重渲染后焦点丢失。`Meta/Control` 的 `keyup` 可能落在编辑器容器外，不能只依赖容器的 capture 阻止；要让 document 监听复用同一份全选状态做判断。只有产品明确要求“首次当前行、长按或第二次全文”时，才在 `editor.domElement` 范围内接管：用公开的 `editor.transact()` + `TextSelection/AllSelection`，忽略单独的 Meta/Control keydown，后续 repeat 保持全文，并在 pointer、blur、其它按键或 editor 实例变化时重置。不要调用私有 `_tiptapEditor` API，也不要劫持链接框等浮层输入框的全选。
 
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
