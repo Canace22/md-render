@@ -6,17 +6,23 @@ import {
   shouldPromoteBlockSelectionToFullSelection,
 } from '@narrative/blocknote-core';
 
-const SELECT_ALL_RELEASE_KEYS = new Set(['a', 'meta', 'control']);
 const SELECT_ALL_MODIFIER_KEYS = new Set(['alt', 'control', 'meta', 'shift']);
 
 const createSelectAllState = () => ({
   pendingBlockId: null,
   fullSelectionActive: false,
-  suppressShortcutKeyUp: false,
+});
+
+const createShortcutReleaseState = () => ({
+  active: false,
+  characterReleased: false,
+  modifierKey: null,
+  modifierReleased: false,
 });
 
 export function useTwoStageSelectAll(editor) {
   const selectAllStateRef = useRef(createSelectAllState());
+  const shortcutReleaseStateRef = useRef(createShortcutReleaseState());
 
   const resetSelectAllState = useCallback(() => {
     selectAllStateRef.current = createSelectAllState();
@@ -35,7 +41,14 @@ export function useTwoStageSelectAll(editor) {
     event.stopPropagation();
 
     const selectAllState = selectAllStateRef.current;
-    selectAllState.suppressShortcutKeyUp = true;
+    if (!event.repeat) {
+      shortcutReleaseStateRef.current = {
+        active: true,
+        characterReleased: false,
+        modifierKey: event.metaKey ? 'meta' : 'control',
+        modifierReleased: false,
+      };
+    }
 
     // 已提升为全文后继续保持，避免长按 repeat 在“当前行 / 全文”之间反复切换。
     if (selectAllState.fullSelectionActive) {
@@ -68,8 +81,21 @@ export function useTwoStageSelectAll(editor) {
 
   const shouldSuppressSelectAllKeyUp = useCallback((event) => {
     const key = event.key.toLowerCase();
-    return selectAllStateRef.current.suppressShortcutKeyUp
-      && SELECT_ALL_RELEASE_KEYS.has(key);
+    const shortcutReleaseState = shortcutReleaseStateRef.current;
+    if (!shortcutReleaseState.active) return false;
+
+    if (key === 'a') {
+      shortcutReleaseState.characterReleased = true;
+    } else if (key === shortcutReleaseState.modifierKey) {
+      shortcutReleaseState.modifierReleased = true;
+    } else {
+      return false;
+    }
+
+    if (shortcutReleaseState.characterReleased && shortcutReleaseState.modifierReleased) {
+      shortcutReleaseStateRef.current = createShortcutReleaseState();
+    }
+    return true;
   }, []);
 
   const handleSelectAllKeyUpCapture = useCallback((event) => {
