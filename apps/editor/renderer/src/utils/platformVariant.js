@@ -85,7 +85,7 @@ export const buildPlatformVariantInstruction = (platformValue, options = {}) => 
   const rules = resolved.outputRules.map((rule) => `- ${rule}`).join('\n');
 
   return [
-    `请先读取当前文档，然后把整篇正文改写成「${label}」平台版本。`,
+    `请先读取当前文档（调用 read_active_doc），然后把整篇正文改写成「${label}」平台版本。`,
     resolved.task,
     `输出要求：\n${rules}`,
     '保持原文核心观点与事实不变，只调整语气、结构、长度和排版以贴合该平台。',

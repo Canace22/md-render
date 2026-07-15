@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { app } from 'electron';
 import {
   applyKnowledgeMetadataToFrontmatter,
   extractKnowledgeMetadataFromFrontmatter,
@@ -367,12 +368,62 @@ export async function saveLocalProjectMetadata(projectRootPath, relativePath, me
 }
 
 export function getMdRenderRootPath() {
+  // 存放在 userData（Application Support）而非 ~/Documents。
+  // Documents 是 macOS 受保护目录，未签名应用每次访问都会弹权限窗；
+  // userData 不受 TCC 保护，永远不会弹窗。
+  const baseDir = app?.getPath
+    ? app.getPath('userData')
+    : path.join(os.homedir(), '.md-render');
+  return path.join(baseDir, MD_RENDER_DIR_NAME);
+}
+
+/** 旧版本把数据放在 ~/Documents/MdRender，这里一次性搬到新位置。 */
+function getLegacyMdRenderRootPath() {
   return path.join(os.homedir(), 'Documents', MD_RENDER_DIR_NAME);
+}
+
+/**
+ * 首次运行时把 ~/Documents/MdRender 的内容搬到新位置。
+ * 迁移标记写在新位置（不受保护），确保只访问一次 Documents，避免重复弹权限窗。
+ */
+async function migrateLegacyMdRenderRoot(newRootPath) {
+  const markerPath = path.join(newRootPath, '.migrated-from-documents');
+  try {
+    await fs.access(markerPath);
+    return; // 已迁移，绝不再碰 Documents
+  } catch {
+    // 未迁移，继续
+  }
+
+  const legacyPath = getLegacyMdRenderRootPath();
+  if (path.resolve(legacyPath) !== path.resolve(newRootPath)) {
+    try {
+      const entries = await fs.readdir(legacyPath);
+      // newRootPath 刚创建、为空，逐个搬入不会有冲突
+      for (const name of entries) {
+        const from = path.join(legacyPath, name);
+        const to = path.join(newRootPath, name);
+        try {
+          await fs.rename(from, to);
+        } catch (err) {
+          console.warn('[localProject] 迁移条目失败，已跳过:', from, err?.code || err);
+        }
+      }
+      await fs.rmdir(legacyPath).catch(() => {});
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        console.warn('[localProject] 旧目录迁移跳过:', err?.code || err);
+      }
+    }
+  }
+
+  await fs.writeFile(markerPath, new Date().toISOString(), 'utf8').catch(() => {});
 }
 
 export async function ensureMdRenderDirectories() {
   const rootPath = getMdRenderRootPath();
   await fs.mkdir(rootPath, { recursive: true });
+  await migrateLegacyMdRenderRoot(rootPath);
   await Promise.all(
     MD_RENDER_SUBDIRS.map((dirName) => fs.mkdir(path.join(rootPath, dirName), { recursive: true })),
   );
