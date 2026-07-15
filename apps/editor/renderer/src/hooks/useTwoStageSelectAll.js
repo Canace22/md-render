@@ -5,6 +5,7 @@ import {
   selectCurrentTextBlockContent,
   shouldPromoteBlockSelectionToFullSelection,
 } from '@narrative/blocknote-core';
+import { onMenuSelectAll } from '../services/electronBridge.js';
 
 const SELECT_ALL_MODIFIER_KEYS = new Set(['alt', 'control', 'meta', 'shift']);
 const TEXT_EDITING_TARGET_SELECTOR = [
@@ -14,7 +15,49 @@ const TEXT_EDITING_TARGET_SELECTOR = [
   '[contenteditable]:not([contenteditable="false"])',
 ].join(',');
 
-const isTextEditingTarget = (target) => Boolean(target?.closest?.(TEXT_EDITING_TARGET_SELECTOR));
+const getTextEditingTarget = (target) => target?.closest?.(TEXT_EDITING_TARGET_SELECTOR) ?? null;
+const isTextEditingTarget = (target) => Boolean(getTextEditingTarget(target));
+
+const selectTextEditingTargetContent = (target) => {
+  const editingTarget = getTextEditingTarget(target);
+  if (!editingTarget) return false;
+
+  if (typeof editingTarget.select === 'function') {
+    try {
+      editingTarget.select();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (!editingTarget.isContentEditable) return false;
+
+  const selection = window.getSelection();
+  if (!selection) return false;
+  const range = document.createRange();
+  range.selectNodeContents(editingTarget);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+};
+
+const selectDocumentContent = () => {
+  try {
+    if (typeof document.execCommand === 'function' && document.execCommand('selectAll')) {
+      return true;
+    }
+  } catch {
+    // 降级为 Range 全页选区。
+  }
+
+  const selection = window.getSelection();
+  if (!selection || !document.body) return false;
+  const range = document.createRange();
+  range.selectNodeContents(document.body);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+};
 
 const createSelectAllState = () => ({
   pendingBlockId: null,
@@ -46,6 +89,51 @@ export function useTwoStageSelectAll(editor) {
     };
   }, []);
 
+  const selectFullEditorContent = useCallback(() => {
+    selectAllEditorContent(editor);
+    selectAllStateRef.current = {
+      pendingBlockId: null,
+      fullSelectionActive: true,
+    };
+  }, [editor]);
+
+  const selectEditorContent = useCallback(() => {
+    const selectAllState = selectAllStateRef.current;
+
+    // 已提升为全文后继续保持，避免长按 repeat 在“当前行 / 全文”之间反复切换。
+    if (selectAllState.fullSelectionActive) {
+      selectFullEditorContent();
+      return;
+    }
+
+    const currentBlock = editor.getTextCursorPosition()?.block;
+    if (!currentBlock) {
+      selectFullEditorContent();
+      return;
+    }
+
+    const selectedBlockIds = editor.getSelection()?.blocks.map((block) => block.id) ?? [];
+    const shouldSelectFullDocument = shouldPromoteBlockSelectionToFullSelection(
+      currentBlock.id,
+      selectedBlockIds,
+      selectAllState.pendingBlockId,
+    );
+
+    if (shouldSelectFullDocument) {
+      selectFullEditorContent();
+      return;
+    }
+
+    if (!selectCurrentTextBlockContent(editor)) {
+      // 图片/文件等非文本块没有“当前行”，首次直接选中全文。
+      selectFullEditorContent();
+      return;
+    }
+
+    selectAllState.pendingBlockId = currentBlock.id;
+    selectAllState.fullSelectionActive = false;
+  }, [editor, selectFullEditorContent]);
+
   const handleSelectAllKeyDownCapture = useCallback((event) => {
     if (!editor.domElement?.contains(event.target)) return;
 
@@ -58,37 +146,9 @@ export function useTwoStageSelectAll(editor) {
     event.preventDefault();
     event.stopPropagation();
 
-    const selectAllState = selectAllStateRef.current;
     startShortcutRelease(event);
-
-    // 已提升为全文后继续保持，避免长按 repeat 在“当前行 / 全文”之间反复切换。
-    if (selectAllState.fullSelectionActive) {
-      selectAllEditorContent(editor);
-      return;
-    }
-
-    const currentBlock = editor.getTextCursorPosition()?.block;
-    if (!currentBlock) return;
-
-    const selectedBlockIds = editor.getSelection()?.blocks.map((block) => block.id) ?? [];
-    const shouldSelectFullDocument = shouldPromoteBlockSelectionToFullSelection(
-      currentBlock.id,
-      selectedBlockIds,
-      selectAllState.pendingBlockId,
-    );
-
-    if (shouldSelectFullDocument) {
-      selectAllEditorContent(editor);
-      selectAllState.pendingBlockId = null;
-      selectAllState.fullSelectionActive = true;
-      return;
-    }
-
-    if (!selectCurrentTextBlockContent(editor)) return;
-
-    selectAllState.pendingBlockId = currentBlock.id;
-    selectAllState.fullSelectionActive = false;
-  }, [editor, resetSelectAllState, startShortcutRelease]);
+    selectEditorContent();
+  }, [editor, resetSelectAllState, selectEditorContent, startShortcutRelease]);
 
   const shouldSuppressSelectAllKeyUp = useCallback((event) => {
     const key = event.key.toLowerCase();
@@ -136,16 +196,54 @@ export function useTwoStageSelectAll(editor) {
       event.preventDefault();
       event.stopPropagation();
       startShortcutRelease(event);
-      selectAllEditorContent(editor);
-      selectAllStateRef.current = {
-        pendingBlockId: null,
-        fullSelectionActive: true,
-      };
+      selectFullEditorContent();
     };
 
     document.addEventListener('keydown', handleDocumentSelectAll, true);
     return () => document.removeEventListener('keydown', handleDocumentSelectAll, true);
-  }, [editor, startShortcutRelease]);
+  }, [editor, selectFullEditorContent, startShortcutRelease]);
+
+  useEffect(() => onMenuSelectAll(({ modifierKey, repeat = false, triggeredByAccelerator } = {}) => {
+    const editorDom = editor.domElement;
+    const activeTarget = document.activeElement;
+
+    if (!editorDom?.isConnected) {
+      if (isTextEditingTarget(activeTarget)) {
+        selectTextEditingTargetContent(activeTarget);
+      } else {
+        selectDocumentContent();
+      }
+      return;
+    }
+
+    if (!editorDom.contains(activeTarget) && isTextEditingTarget(activeTarget)) {
+      resetSelectAllState();
+      selectTextEditingTargetContent(activeTarget);
+      return;
+    }
+
+    if (triggeredByAccelerator) {
+      startShortcutRelease({
+        metaKey: modifierKey === 'meta',
+        repeat,
+      });
+      if (editorDom.contains(activeTarget)) {
+        selectEditorContent();
+      } else {
+        selectFullEditorContent();
+      }
+      return;
+    }
+
+    // 菜单中明确点“全选”遵循原生语义，不走两段式首次当前行。
+    selectFullEditorContent();
+  }), [
+    editor,
+    resetSelectAllState,
+    selectEditorContent,
+    selectFullEditorContent,
+    startShortcutRelease,
+  ]);
 
   return {
     handleSelectAllBlurCapture,

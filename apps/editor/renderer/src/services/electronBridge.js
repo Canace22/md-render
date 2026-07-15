@@ -47,3 +47,9 @@ export const getDiagnosticsSnapshot = (payload) => (
 );
 
 export const getUpdaterBridge = () => getElectronAPI()?.updater ?? null;
+
+export const onMenuSelectAll = (callback) => {
+  const api = getElectronAPI();
+  if (typeof api?.on !== 'function') return () => {};
+  return api.on('menu-select-all', callback);
+};

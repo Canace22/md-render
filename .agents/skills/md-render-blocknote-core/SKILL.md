@@ -28,6 +28,8 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 5. **全选快捷键要同时守住选区和焦点**。默认全文全选直接保留 BlockNote/Tiptap 原生行为，不接管 `keydown`；如果 document 级 `keyup` 会写 Zustand，要跳过对应快捷键，避免重渲染后焦点丢失。`Meta/Control` 的 `keyup` 可能落在编辑器容器外，不能只依赖容器的 capture 阻止；要让 document 监听复用同一份快捷键释放状态做判断。这份释放状态不能和两段式全选进度共用，pointer/blur 可以重置全选进度，但必须等 `A` 和对应修饰键都释放后才结束 keyup 保护。手动取消选区后焦点可能落到纸张空白或普通容器，此时要在 document capture 做最窄的全选兜底，仅当编辑器仍挂载且事件目标不是 input/textarea/select/可编辑元素时阻止“全页全选”。只有产品明确要求“首次当前行、长按或第二次全文”时，才在 `editor.domElement` 范围内接管：用公开的 `editor.transact()` + `TextSelection/AllSelection`，忽略单独的 Meta/Control keydown，后续 repeat 保持全文，并在 pointer、blur、其它按键或 editor 实例变化时重置。不要调用私有 `_tiptapEditor` API，也不要劫持链接框等浮层输入框的全选。
 
+6. **自定义粘贴不能打乱 BlockNote 的 MIME 优先级**。在用 `text/plain` / `text/html` 做 Markdown 启发式判断前，先把 `vscode-editor-data`、`blocknote/html`、`text/markdown` 交回 `defaultPasteHandler`，否则内部复制会丢颜色/背景等不可用 Markdown 表达的结构，VS Code 代码也可能被误判成列表/标题。代码块特判只能在 HTML 确实是“纯单代码块”时执行；混合 HTML 必须走默认粘贴，且自定义插入要用 `pasteHTML` / `pasteMarkdown` 保留 ProseMirror 的选区替换语义，不要手工 `updateBlock/insertBlocks` 绕过选区。
+
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
 ```bash

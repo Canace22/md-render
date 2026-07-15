@@ -1,4 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, protocol } from 'electron';
+
+app.commandLine.appendSwitch('remote-debugging-port', '9222');
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'path';
@@ -75,6 +77,15 @@ const LEGACY_USER_DATA_PATH_SEGMENTS = [
 ];
 const KNOWLEDGE_DB_FILENAME = 'knowledge.db';
 const DEFAULT_AI_PROXY_BASE = 'http://localhost:8788';
+const MENU_SELECT_ALL_CHANNEL = 'menu-select-all';
+const SELECT_ALL_ACCELERATOR = 'CmdOrCtrl+A';
+const isSelectAllInput = (input) => (
+  input?.type === 'keyDown'
+  && (input.control || input.meta)
+  && input.key?.toLowerCase() === 'a'
+  && !input.alt
+  && !input.shift
+);
 const normalizeAiProxyBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 const resolveAiProxyBase = (value) =>
   normalizeAiProxyBase(value) || normalizeAiProxyBase(process.env.AI_PROXY_BASE) || DEFAULT_AI_PROXY_BASE;
@@ -259,6 +270,18 @@ async function createWindow() {
     },
   });
 
+  // 菜单 accelerator 与 Renderer keydown 会同时收到同一次按键。
+  // 在输入入口收口后只发一次 IPC，但保留 keyUp 给 Renderer 释放状态。
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!isSelectAllInput(input)) return;
+    event.preventDefault();
+    mainWindow?.webContents?.send(MENU_SELECT_ALL_CHANNEL, {
+      modifierKey: input.meta ? 'meta' : 'control',
+      triggeredByAccelerator: true,
+      repeat: Boolean(input.isAutoRepeat),
+    });
+  });
+
   if (maximized) mainWindow.maximize();
 
   // vite-plugin-electron 在 dev 时自动注入 VITE_DEV_SERVER_URL
@@ -349,7 +372,20 @@ function createMenu() {
       submenu: [
         { role: 'undo' }, { role: 'redo' },
         { type: 'separator' },
-        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' },
+        {
+          label: '全选',
+          accelerator: SELECT_ALL_ACCELERATOR,
+          click: (_menuItem, _browserWindow, event) => {
+            // accelerator 已由 before-input-event 单独路由，这里只处理菜单鼠标/键盘激活。
+            if (event?.triggeredByAccelerator) return;
+            mainWindow?.webContents?.send(MENU_SELECT_ALL_CHANNEL, {
+              modifierKey: isMac ? 'meta' : 'control',
+              triggeredByAccelerator: false,
+              repeat: false,
+            });
+          },
+        },
       ],
     },
     {

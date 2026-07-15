@@ -88,7 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 通用 IPC：主进程 → 渲染进程（监听）
   on: (channel, callback) => {
-    const allowedChannels = ['update-available', 'updater-status'];
+    const allowedChannels = ['menu-select-all', 'update-available', 'updater-status'];
     if (allowedChannels.includes(channel)) {
       const sub = (_event, ...args) => callback(...args);
       ipcRenderer.on(channel, sub);

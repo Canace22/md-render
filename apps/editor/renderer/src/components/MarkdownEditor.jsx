@@ -34,12 +34,14 @@ import Breadcrumb from './Breadcrumb.jsx';
 import StatusBar from './StatusBar.jsx';
 import UpdateNotifier from './UpdateNotifier.jsx';
 import {
+  buildCodeBlockClipboardHtml,
   createEmptyDocument,
   extractCodeBlockFromClipboardHtml,
   getBlockTextContent,
   getMarkdownCodeFenceLanguage,
   isBlockNoteContent,
   parseBlockNoteContent,
+  resolvePendingImagesInContent,
   serializeBlockNoteContent,
   looksLikeCodeBlockClipboardHtml,
   looksLikeMarkdownCodeFenceClipboardText,
@@ -49,7 +51,8 @@ import {
 } from '../utils/markdownUtils';
 import { applyThemeToBody } from '../utils/themeUtils';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
-import { copyToWeChat, htmlToPlainText } from '../utils/wechatCopy';
+import { copyToWeChat } from '../utils/wechatCopy';
+import { copyHtmlWithExecCommand } from '../utils/clipboardUtils.js';
 import { getTemplateById } from '../utils/wechatTemplates';
 import { blocksToMarkdown, markdownToNotionPayload } from '../utils/notionConverter.js';
 import {
@@ -74,8 +77,11 @@ import {
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
 import {
-  insertImageFromFile,
-  pickClipboardImageFile,
+  classifyClipboardFiles,
+  hasPendingImageClipboardData,
+  hasPendingImagePlaceholders,
+  insertImagesFromFiles,
+  reconcilePendingImages,
   useEditorImageUpload,
 } from '../hooks/useEditorImageUpload.js';
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
@@ -206,6 +212,24 @@ const BLOCKNOTE_OPTIONS = {
   },
 };
 
+const contentToDiskMarkdown = (content) => {
+  const blocks = parseBlockNoteContent(content);
+  if (!blocks) return normalizeMarkdown(content);
+  const converter = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
+  return normalizeMarkdown(converter.blocksToMarkdownLossy(blocks));
+};
+
+const DEFAULT_PASTE_MIME_TYPES = new Set([
+  'vscode-editor-data',
+  'blocknote/html',
+  'text/markdown',
+]);
+const PROJECT_SAVE_DEBOUNCE_MS = 400;
+
+const shouldUseDefaultPasteMime = (clipboardData) => (
+  Array.from(clipboardData?.types ?? []).some((type) => DEFAULT_PASTE_MIME_TYPES.has(type))
+);
+
 const formatBatchFailures = (failed, fallbackName = '项目') => {
   const items = failed ?? [];
   if (!items.length) return '';
@@ -222,6 +246,17 @@ const hasLocalProjectNode = (node) => {
   if (node.localProjectRoot) return true;
   if (!Array.isArray(node.children)) return false;
   return node.children.some((child) => hasLocalProjectNode(child));
+};
+
+const findProjectNodeByRelativePath = (node, projectRootPath, relativePath) => {
+  if (!node) return null;
+  if (node.projectRootPath === projectRootPath && node.relativePath === relativePath) return node;
+  if (node.type !== 'folder') return null;
+  for (const child of node.children ?? []) {
+    const found = findProjectNodeByRelativePath(child, projectRootPath, relativePath);
+    if (found) return found;
+  }
+  return null;
 };
 
 const STATUS_LABELS = new Map(CREATION_STATUS_OPTIONS.map((item) => [item.value, item.label]));
@@ -579,12 +614,64 @@ function MarkdownEditor() {
   const importInputRef = useRef(null);
   const markdownImportInputRef = useRef(null);
   const projectSaveTimersRef = useRef(new Map());
+  const projectSaveQueuesRef = useRef(new Map());
+  const projectPathChangesRef = useRef(new Map());
+  const projectPathChangeDirtyRef = useRef(new Set());
+  const activeEditorRef = useRef(null);
   const lastContentSurfaceRef = useRef(surface);
   const previousSurfaceRef = useRef(null);
   const lastSyncedMarkdownRef = useRef(normalizeMarkdown(markdown));
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
+
+  const enqueueProjectFileSave = useCallback((fileId, saveTask) => {
+    const previousSave = projectSaveQueuesRef.current.get(fileId) ?? Promise.resolve();
+    const queuedSave = previousSave.catch(() => {}).then(saveTask);
+    projectSaveQueuesRef.current.set(fileId, queuedSave);
+    return queuedSave.finally(() => {
+      if (projectSaveQueuesRef.current.get(fileId) === queuedSave) {
+        projectSaveQueuesRef.current.delete(fileId);
+      }
+    });
+  }, []);
+
+  const beginNodePathChange = useCallback((node) => {
+    const trackedFileIds = new Set();
+    let release;
+    const completion = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    const trackNode = (targetNode) => {
+      const files = targetNode?.type === 'file' ? [targetNode] : collectFiles(targetNode);
+      files.forEach((file) => {
+        trackedFileIds.add(file.id);
+        projectPathChangesRef.current.set(file.id, completion);
+      });
+    };
+    trackNode(node);
+
+    return {
+      consumeDirty: () => {
+        let dirty = false;
+        trackedFileIds.forEach((fileId) => {
+          if (projectPathChangeDirtyRef.current.delete(fileId)) dirty = true;
+        });
+        return dirty;
+      },
+      finish: () => {
+        release();
+        trackedFileIds.forEach((fileId) => {
+          projectPathChangeDirtyRef.current.delete(fileId);
+          if (projectPathChangesRef.current.get(fileId) === completion) {
+            projectPathChangesRef.current.delete(fileId);
+          }
+        });
+      },
+      trackNode,
+    };
+  }, []);
   // 仅桌面版为 true：MdRender Projects 目录、增量落盘等能力依赖 Electron
   const desktopProjectSupported = isDesktopProjectSupported();
   // 监听本地项目磁盘变化：外部改动自动刷新，编辑冲突时弹窗
@@ -665,6 +752,84 @@ function MarkdownEditor() {
       excalidraw: null,
     });
   }, [setWorkspaceCanvas]);
+
+  const flushFileSaveBeforePathChange = useCallback(async (file) => {
+    if (file?.type !== 'file' || !file.projectRootPath || !file.relativePath) return;
+
+    const pendingTimer = projectSaveTimersRef.current.get(file.id);
+    const wasDiskSavePending = Boolean(
+      useEditorStore.getState().diskSavePendingFileIds?.[file.id],
+    );
+    if (pendingTimer) {
+      window.clearTimeout(pendingTimer);
+      projectSaveTimersRef.current.delete(file.id);
+    }
+
+    await projectSaveQueuesRef.current.get(file.id)?.catch(() => {});
+    const latestFile = findNodeById(useEditorStore.getState().workspace, file.id);
+    const latestBlocks = parseBlockNoteContent(latestFile?.content);
+
+    // 图片占位等最终 URL 回填后按新路径保存，不将 blob: 写入旧文件。
+    if (
+      (!pendingTimer && !wasDiskSavePending)
+      || latestFile?.type !== 'file'
+      || hasPendingImagePlaceholders(latestBlocks)
+    ) {
+      if (!wasDiskSavePending) setDiskSavePending(file.id, false);
+      return;
+    }
+
+    setDiskSavePending(file.id, true);
+    const diskMarkdown = contentToDiskMarkdown(latestFile.content);
+    let saveFailed = false;
+    try {
+      await enqueueProjectFileSave(file.id, () => saveLocalProjectFile({
+        projectRootPath: latestFile.projectRootPath,
+        relativePath: latestFile.relativePath,
+        content: diskMarkdown,
+      }));
+    } catch (error) {
+      saveFailed = true;
+      throw error;
+    } finally {
+      setDiskSavePending(file.id, saveFailed);
+    }
+  }, [enqueueProjectFileSave, setDiskSavePending]);
+
+  const flushNodeSavesBeforePathChange = useCallback(async (node) => {
+    const files = node?.type === 'file' ? [node] : collectFiles(node);
+    await Promise.all(files.map(flushFileSaveBeforePathChange));
+  }, [flushFileSaveBeforePathChange]);
+
+  const saveNodeContentAfterPathChange = useCallback(async (node) => {
+    const files = node?.type === 'file' ? [node] : collectFiles(node);
+    await Promise.all(files.map(async (file) => {
+      const blocks = parseBlockNoteContent(file.content);
+      const canSaveFile = file.projectRootPath
+        && file.relativePath
+        && !file.needsConversion
+        && !needsConversion(file.name)
+        && !hasPendingImagePlaceholders(blocks);
+      if (!canSaveFile) return;
+
+      setDiskSavePending(file.id, true);
+      let saveFailed = false;
+      try {
+        await enqueueProjectFileSave(file.id, () => saveLocalProjectFile({
+          projectRootPath: file.projectRootPath,
+          relativePath: file.relativePath,
+          content: contentToDiskMarkdown(file.content),
+        }));
+      } catch (error) {
+        saveFailed = true;
+        console.error('路径变更后保存文件失败:', error);
+        message.error(error?.message || '移动后保存文件失败');
+      } finally {
+        setDiskSavePending(file.id, saveFailed);
+      }
+    }));
+  }, [enqueueProjectFileSave, setDiskSavePending]);
+
   const performRename = useCallback(async (targetId, rawName) => {
     const trimmed = String(rawName ?? '').trim();
     if (!trimmed) return false;
@@ -682,28 +847,74 @@ function MarkdownEditor() {
 
       const diskName = buildUniqueRenameNameInFolder(parent, normalizedName, targetId);
       const newRelativePath = replaceRelativePathBasename(node.relativePath, diskName);
+      const pathChange = beginNodePathChange(node);
+      let diskPathChanged = false;
 
       try {
+        await flushNodeSavesBeforePathChange(node);
         const result = await renameLocalProjectEntryOnDisk({
           projectRootPath: node.projectRootPath,
           relativePath: node.relativePath,
           newRelativePath,
         });
+        diskPathChanged = true;
         useEditorStore.getState().replaceDiskBackedNode(targetId, {
           name: diskName,
           relativePath: result.relativePath ?? newRelativePath,
           updatedAt: result.updatedAt,
         });
+        const finalRelativePath = result.relativePath ?? newRelativePath;
+        const nextState = useEditorStore.getState();
+        let nextNode = findProjectNodeByRelativePath(
+          nextState.workspace,
+          node.projectRootPath,
+          finalRelativePath,
+        );
+        if (nextNode) pathChange.trackNode(nextNode);
+        while (nextNode && pathChange.consumeDirty()) {
+          await saveNodeContentAfterPathChange(nextNode);
+          const latestState = useEditorStore.getState();
+          nextNode = findProjectNodeByRelativePath(
+            latestState.workspace,
+            node.projectRootPath,
+            finalRelativePath,
+          );
+        }
+        (node.type === 'file' ? [node] : collectFiles(node))
+          .forEach((file) => setDiskSavePending(file.id, false));
         return true;
       } catch (error) {
+        if (!diskPathChanged) {
+          let currentNode = findProjectNodeByRelativePath(
+            useEditorStore.getState().workspace,
+            node.projectRootPath,
+            node.relativePath,
+          );
+          while (currentNode && pathChange.consumeDirty()) {
+            await saveNodeContentAfterPathChange(currentNode);
+            currentNode = findProjectNodeByRelativePath(
+              useEditorStore.getState().workspace,
+              node.projectRootPath,
+              node.relativePath,
+            );
+          }
+        }
         console.error('重命名本地文件失败:', error);
         message.error(error?.message || '重命名失败');
         return false;
+      } finally {
+        pathChange.finish();
       }
     }
 
     return useEditorStore.getState().applyRename(targetId, normalizedName);
-  }, [localProjectSupported]);
+  }, [
+    beginNodePathChange,
+    flushNodeSavesBeforePathChange,
+    localProjectSupported,
+    saveNodeContentAfterPathChange,
+    setDiskSavePending,
+  ]);
 
   const titleEditing = useTitleEditing(selectedFile, performRename);
   const { handleExport, handleImport } = useWorkspaceActions({
@@ -752,23 +963,56 @@ function MarkdownEditor() {
     if (!confirmed) return;
 
     if (node.projectRootPath && node.relativePath && localProjectSupported) {
+      const pathChange = beginNodePathChange(node);
+      let deletedFromDisk = false;
       try {
+        await flushNodeSavesBeforePathChange(node);
         await deleteLocalProjectEntryOnDisk({
           projectRootPath: node.projectRootPath,
           relativePath: node.relativePath,
         });
+        deletedFromDisk = true;
+        (node.type === 'file' ? [node] : collectFiles(node))
+          .forEach((file) => setDiskSavePending(file.id, false));
         notionAutoPushRef.current?.cancel(targetId);
         removeDiskBackedNode(targetId);
         setContentResetKey((k) => k + 1);
       } catch (error) {
+        if (!deletedFromDisk) {
+          let currentNode = findProjectNodeByRelativePath(
+            useEditorStore.getState().workspace,
+            node.projectRootPath,
+            node.relativePath,
+          );
+          while (currentNode && pathChange.consumeDirty()) {
+            await saveNodeContentAfterPathChange(currentNode);
+            currentNode = findProjectNodeByRelativePath(
+              useEditorStore.getState().workspace,
+              node.projectRootPath,
+              node.relativePath,
+            );
+          }
+        }
         console.error('删除本地文件失败:', error);
         message.error(error?.message || '删除失败');
+      } finally {
+        pathChange.finish();
       }
       return;
     }
 
     deleteNode(targetId);
-  }, [workspace, selectedId, localProjectSupported, deleteNode, removeDiskBackedNode]);
+  }, [
+    beginNodePathChange,
+    deleteNode,
+    flushNodeSavesBeforePathChange,
+    localProjectSupported,
+    removeDiskBackedNode,
+    saveNodeContentAfterPathChange,
+    selectedId,
+    setDiskSavePending,
+    workspace,
+  ]);
 
   /**
    * 侧边栏拖拽：拖到文件上 = 同级排序；拖到文件夹上 = 移入该文件夹。
@@ -805,20 +1049,66 @@ function MarkdownEditor() {
 
     const uniqueName = buildUniqueRenameNameInFolder(to, from.name, fromId);
     const newRelativePath = to.relativePath ? `${to.relativePath}/${uniqueName}` : uniqueName;
+    const pathChange = beginNodePathChange(from);
+    let diskPathChanged = false;
     try {
+      await flushNodeSavesBeforePathChange(from);
       const result = await renameLocalProjectEntryOnDisk({
         projectRootPath: from.projectRootPath,
         relativePath: from.relativePath,
         newRelativePath,
       });
+      diskPathChanged = true;
       useEditorStore.getState().moveDiskBackedNodeToFolder(fromId, toId, {
         relativePath: result?.relativePath ?? newRelativePath,
       });
+      const finalRelativePath = result?.relativePath ?? newRelativePath;
+      const nextState = useEditorStore.getState();
+      let nextNode = findProjectNodeByRelativePath(
+        nextState.workspace,
+        from.projectRootPath,
+        finalRelativePath,
+      );
+      if (nextNode) pathChange.trackNode(nextNode);
+      while (nextNode && pathChange.consumeDirty()) {
+        await saveNodeContentAfterPathChange(nextNode);
+        const latestState = useEditorStore.getState();
+        nextNode = findProjectNodeByRelativePath(
+          latestState.workspace,
+          from.projectRootPath,
+          finalRelativePath,
+        );
+      }
+      (from.type === 'file' ? [from] : collectFiles(from))
+        .forEach((file) => setDiskSavePending(file.id, false));
     } catch (error) {
+      if (!diskPathChanged) {
+        let currentNode = findProjectNodeByRelativePath(
+          useEditorStore.getState().workspace,
+          from.projectRootPath,
+          from.relativePath,
+        );
+        while (currentNode && pathChange.consumeDirty()) {
+          await saveNodeContentAfterPathChange(currentNode);
+          currentNode = findProjectNodeByRelativePath(
+            useEditorStore.getState().workspace,
+            from.projectRootPath,
+            from.relativePath,
+          );
+        }
+      }
       console.error('移动本地文件失败:', error);
       message.error(error?.message || '移动失败');
+    } finally {
+      pathChange.finish();
     }
-  }, [moveNode]);
+  }, [
+    beginNodePathChange,
+    flushNodeSavesBeforePathChange,
+    moveNode,
+    saveNodeContentAfterPathChange,
+    setDiskSavePending,
+  ]);
   const [syncChannel, setSyncChannel] = useState('doc');
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
@@ -921,23 +1211,157 @@ function MarkdownEditor() {
     selectedProjectRootPath,
   });
 
+  const persistResolvedImages = useCallback(async (fileId, resolutions, sourceEditor) => {
+    if (!fileId || resolutions.length === 0) return true;
+    const pendingPathChange = projectPathChangesRef.current.get(fileId);
+    if (pendingPathChange) await pendingPathChange;
+
+    const state = useEditorStore.getState();
+    let sourceFile = findNodeById(state.workspace, fileId);
+    let resolvedContent = sourceFile?.type === 'file'
+      ? resolvePendingImagesInContent(sourceFile.content, resolutions)
+      : null;
+
+    // 本地项目重命名/移动会更换路径型 fileId，用 blockId + pendingUrl
+    // 在最新 workspace 里重新定位，避免写回旧路径。
+    if (!resolvedContent) {
+      for (const file of collectFiles(state.workspace)) {
+        const nextContent = resolvePendingImagesInContent(file.content, resolutions);
+        if (nextContent) {
+          sourceFile = file;
+          resolvedContent = nextContent;
+          break;
+        }
+      }
+    }
+
+    // 文档已删除，或当前 editor onChange 已完成回填。
+    if (sourceFile?.type !== 'file' || !resolvedContent) return true;
+
+    const resolvedFileId = sourceFile.id;
+    resolutions.forEach((resolution) => {
+      resolution.fileId = resolvedFileId;
+    });
+
+    // 当前编辑器的 onChange 已经落盘时不再重复保存；
+    // 只处理切换文档后仍留在 store 里的占位 URL。
+    state.updateFileContentById(resolvedFileId, resolvedContent);
+    const diskMarkdown = contentToDiskMarkdown(resolvedContent);
+
+    for (const pendingFileId of new Set([fileId, resolvedFileId])) {
+      const pendingTimer = projectSaveTimersRef.current.get(pendingFileId);
+      if (pendingTimer) {
+        window.clearTimeout(pendingTimer);
+        projectSaveTimersRef.current.delete(pendingFileId);
+      }
+      setDiskSavePending(pendingFileId, false);
+    }
+
+    const activeEditor = activeEditorRef.current;
+    if (activeEditor && activeEditor !== sourceEditor) {
+      try {
+        reconcilePendingImages(activeEditor, resolvedFileId);
+      } catch (error) {
+        console.warn('[asset] 当前编辑器回填延后处理:', error);
+      }
+    }
+
+    const canSaveSourceFile = localProjectSupported
+      && sourceFile.projectRootPath
+      && sourceFile.relativePath
+      && !sourceFile.needsConversion
+      && !needsConversion(sourceFile.name);
+
+    let diskSaveFailed = false;
+    try {
+      if (canSaveSourceFile) {
+        setDiskSavePending(resolvedFileId, true);
+        if (fileId !== resolvedFileId) {
+          await projectSaveQueuesRef.current.get(fileId)?.catch(() => {});
+        }
+        await enqueueProjectFileSave(resolvedFileId, () => saveLocalProjectFile({
+          projectRootPath: sourceFile.projectRootPath,
+          relativePath: sourceFile.relativePath,
+          content: diskMarkdown,
+        }));
+      }
+
+      const latest = useEditorStore.getState();
+      if (latest.notionAutoPushEnabled && latest.notionToken) {
+        notionAutoPushRef.current?.schedule({
+          fileId: resolvedFileId,
+          fileName: sourceFile.name,
+          relativePath: sourceFile.relativePath,
+          markdown: diskMarkdown,
+        });
+      }
+      return true;
+    } catch (error) {
+      diskSaveFailed = true;
+      if (canSaveSourceFile) setDiskSavePending(resolvedFileId, true);
+      console.error('[asset] 图片地址写回文档失败:', error);
+      message.error(error?.message || '图片地址写回文档失败');
+      return false;
+    } finally {
+      if (
+        canSaveSourceFile
+        && !diskSaveFailed
+        && !projectSaveTimersRef.current.has(resolvedFileId)
+      ) {
+        setDiskSavePending(resolvedFileId, false);
+      }
+    }
+  }, [enqueueProjectFileSave, localProjectSupported, setDiskSavePending]);
+
   const editor = useCreateBlockNote(
     {
       ...BLOCKNOTE_OPTIONS,
       initialContent,
       uploadFile,
       pasteHandler: ({ event, editor: pasteEditor, defaultPasteHandler }) => {
-        // 优先处理剪贴板里的图片文件（截图、复制图片）：直接存盘并插入图片块，
-        // 避免被下面的文本/HTML 分支拦截，或被默认处理器内嵌成 base64
-        const imageFile = pickClipboardImageFile(event.clipboardData);
-        if (imageFile) {
-          insertImageFromFile(pasteEditor, imageFile, uploadFile);
+        const clipboardData = event.clipboardData;
+        const useDefaultPaste = () => defaultPasteHandler({
+          prioritizeMarkdownOverHTML: false,
+          plainTextAsMarkdown: false,
+        });
+
+        if (hasPendingImageClipboardData(clipboardData)) {
+          message.warning('图片仍在上传，请等待完成后再复制粘贴');
           return true;
         }
 
-        const plainText = event.clipboardData?.getData('text/plain') ?? '';
-        const htmlText = event.clipboardData?.getData('text/html') ?? '';
+        // 剪贴板里的图片文件（截图、复制图片）先占住当前选区，再异步存盘回填 URL。
+        const { hasFiles, imageFiles, unsupportedFiles } = classifyClipboardFiles(clipboardData);
+        if (hasFiles) {
+          if (unsupportedFiles.length > 0 || imageFiles.length === 0) {
+            message.warning('暂不支持粘贴非图片附件，请使用文件导入');
+          }
+          const sourceFileId = selectedFile?.id ?? '';
+          if (imageFiles.length > 0) {
+            void insertImagesFromFiles(pasteEditor, imageFiles, uploadFile, {
+              fileId: sourceFileId,
+              onResolved: (resolutions) => (
+                persistResolvedImages(sourceFileId, resolutions, pasteEditor)
+              ),
+            });
+          }
+          return true;
+        }
+
+        // 先保留 BlockNote/VS Code/Markdown 的明确 MIME 语义，避免内部复制被启发式判断降级。
+        if (shouldUseDefaultPasteMime(clipboardData)) {
+          return useDefaultPaste();
+        }
+
+        // BlockNote 在代码块内会强制按纯文本粘贴，不让 Markdown 记号改变块结构。
+        if (pasteEditor.getTextCursorPosition()?.block?.type === 'codeBlock') {
+          return useDefaultPaste();
+        }
+
+        const plainText = clipboardData?.getData('text/plain') ?? '';
+        const htmlText = clipboardData?.getData('text/html') ?? '';
         const hasHtmlCodeBlock = looksLikeCodeBlockClipboardHtml(htmlText);
+        const hasPlainTextHtml = looksLikePlainTextHtml(htmlText);
 
         if (hasHtmlCodeBlock && looksLikeMarkdownCodeFenceClipboardText(plainText)) {
           pasteEditor.pasteMarkdown(plainText);
@@ -946,56 +1370,43 @@ function MarkdownEditor() {
 
         if (hasHtmlCodeBlock) {
           const codeBlock = extractCodeBlockFromClipboardHtml(htmlText);
-          const currentBlock = pasteEditor.getTextCursorPosition()?.block;
-
-          if (codeBlock?.content && currentBlock) {
-            const nextBlock = {
-              type: 'codeBlock',
-              props: { language: codeBlock.language || 'text' },
-              content: codeBlock.content,
-            };
-
-            const isCurrentParagraph =
-              currentBlock.type === 'paragraph' &&
-              !currentBlock.content?.length &&
-              !(currentBlock.children?.length > 0);
-
-            if (isCurrentParagraph) {
-              pasteEditor.updateBlock(currentBlock, nextBlock);
-              pasteEditor.setTextCursorPosition(currentBlock, 'end');
-            } else {
-              const [insertedBlock] = pasteEditor.insertBlocks([nextBlock], currentBlock, 'after');
-              if (insertedBlock) {
-                pasteEditor.setTextCursorPosition(insertedBlock, 'end');
-              }
-            }
-
-            pasteEditor.focus();
+          const codeBlockHtml = buildCodeBlockClipboardHtml(codeBlock);
+          if (codeBlockHtml) {
+            // 走 ProseMirror 粘贴以正确替换选区、拆分光标所在段落。
+            pasteEditor.pasteHTML(codeBlockHtml);
             return true;
           }
         }
 
-        if (looksLikeMarkdownClipboardText(plainText)) {
+        if (looksLikeMarkdownClipboardText(plainText) && (!htmlText.trim() || hasPlainTextHtml)) {
           pasteEditor.pasteMarkdown(plainText);
           return true;
         }
 
         // HTML 只含 <br>/<p>/<div> 等结构标签、无富文本时，
         // 用纯文本走 pasteMarkdown 避免 <br><br> 被转成多余空段落
-        if (plainText.trim() && looksLikePlainTextHtml(htmlText)) {
+        if (plainText.trim() && hasPlainTextHtml) {
           const collapsed = plainText.replace(/\n{3,}/g, '\n\n');
           pasteEditor.pasteMarkdown(collapsed);
           return true;
         }
 
-        return defaultPasteHandler({
-          prioritizeMarkdownOverHTML: false,
-          plainTextAsMarkdown: false,
-        });
+        return useDefaultPaste();
       },
     },
     [selectedId, contentResetKey, editorReloadToken],
   );
+
+  useEffect(() => {
+    activeEditorRef.current = editor;
+    return () => {
+      if (activeEditorRef.current === editor) activeEditorRef.current = null;
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    reconcilePendingImages(editor, selectedFile?.id ?? '');
+  }, [editor, markdown, selectedFile?.id]);
 
   const {
     handleSelectAllBlurCapture,
@@ -1093,6 +1504,7 @@ function MarkdownEditor() {
 
   const handleEditorChange = () => {
     if (selectedReadOnly) return;
+    reconcilePendingImages(editor, selectedFile?.id ?? '');
     tryConvertTypedMarkdownCodeFence();
 
     // content 字段存 BlockNote JSON（保留颜色等富文本样式）
@@ -1100,6 +1512,29 @@ function MarkdownEditor() {
     if (nextContent === lastSyncedMarkdownRef.current) return;
     lastSyncedMarkdownRef.current = nextContent;
     updateSelectedFileContent(nextContent);
+
+    // 重命名/移动期间只更新 store，不再按旧路径新建保存定时器。
+    // 路径变更完成后会把最新内容写到新路径。
+    if (projectPathChangesRef.current.has(selectedFile?.id)) {
+      projectPathChangeDirtyRef.current.add(selectedFile.id);
+      const pendingTimer = projectSaveTimersRef.current.get(selectedFile.id);
+      if (pendingTimer) window.clearTimeout(pendingTimer);
+      projectSaveTimersRef.current.delete(selectedFile.id);
+      setDiskSavePending(selectedFile.id, true);
+      return;
+    }
+
+    // blob:/pending 只是显示占位，不能写进 Markdown。
+    // 最终 URL 由上传回调精确回填后再落盘。
+    if (hasPendingImagePlaceholders(editor.document)) {
+      if (canSaveLocalProjectFile) {
+        const pendingTimer = projectSaveTimersRef.current.get(selectedFile.id);
+        if (pendingTimer) window.clearTimeout(pendingTimer);
+        projectSaveTimersRef.current.delete(selectedFile.id);
+        setDiskSavePending(selectedFile.id, false);
+      }
+      return;
+    }
 
     if (canSaveLocalProjectFile) {
       const existingTimer = projectSaveTimersRef.current.get(selectedFile.id);
@@ -1111,11 +1546,11 @@ function MarkdownEditor() {
         try {
           // 磁盘 .md 文件仍写 Markdown（有损转换，但保持文件可读性）
           const diskMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
-          await saveLocalProjectFile({
+          await enqueueProjectFileSave(selectedFile.id, () => saveLocalProjectFile({
             projectRootPath: selectedProjectRootPath,
             relativePath: selectedFile.relativePath,
             content: diskMarkdown,
-          });
+          }));
           const latest = useEditorStore.getState();
           if (latest.notionAutoPushEnabled && latest.notionToken && latest.notionDatabaseId) {
             notionAutoPushRef.current?.schedule({
@@ -1129,10 +1564,12 @@ function MarkdownEditor() {
           console.error('保存本地项目文件失败:', error);
           alert(error?.message || '保存本地项目文件失败');
         } finally {
-          projectSaveTimersRef.current.delete(selectedFile.id);
-          setDiskSavePending(selectedFile.id, false);
+          if (projectSaveTimersRef.current.get(selectedFile.id) === timerId) {
+            projectSaveTimersRef.current.delete(selectedFile.id);
+            setDiskSavePending(selectedFile.id, false);
+          }
         }
-      }, 400);
+      }, PROJECT_SAVE_DEBOUNCE_MS);
       projectSaveTimersRef.current.set(selectedFile.id, timerId);
     } else if (selectedFile && !selectedFile.notionLazy) {
       // 内存工作区文件（如 Web 端从 Notion 数据库拉取的页面）：
@@ -1152,12 +1589,16 @@ function MarkdownEditor() {
   };
 
   const handleCopyRichText = async () => {
-    const html = wechatSourceHtml;
+    if (hasPendingImagePlaceholders(editor.document)) {
+      message.warning('图片仍在上传，请稍后再复制');
+      return false;
+    }
+    const html = editor.blocksToHTMLLossy(editor.document);
     if (!html.trim()) {
       message.warning('没有可复制的内容');
-      return;
+      return false;
     }
-    const plainText = htmlToPlainText(html);
+    const plainText = editor.blocksToMarkdownLossy(editor.document);
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
@@ -1166,36 +1607,41 @@ function MarkdownEditor() {
         }),
       ]);
       message.success('已复制富文本');
+      return true;
     } catch {
       // 降级：execCommand
-      const container = document.createElement('div');
-      container.innerHTML = html;
-      container.style.cssText = 'position:fixed;left:-9999px;top:0;';
-      document.body.appendChild(container);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      const range = document.createRange();
-      range.selectNodeContents(container);
-      sel.addRange(range);
-      const ok = document.execCommand('copy');
-      document.body.removeChild(container);
-      sel.removeAllRanges();
-      if (ok) message.success('已复制富文本');
-      else message.error('复制失败，请重试');
+      let ok = false;
+      try {
+        ok = copyHtmlWithExecCommand(html, plainText);
+      } catch {
+        ok = false;
+      }
+      if (ok) {
+        message.success('已复制富文本');
+        return true;
+      }
+      message.error('复制失败，请重试');
+      return false;
     }
   };
 
   const handleCopyToWeChat = async () => {
+    if (hasPendingImagePlaceholders(editor.document)) {
+      message.warning('图片仍在上传，请稍后再复制');
+      return false;
+    }
     const html = wechatSourceHtml;
     if (!html.trim()) {
       message.warning('没有可复制的内容');
-      return;
+      return false;
     }
     try {
       await copyToWeChat(html, { templateId: copyStyle });
       message.success('已复制，可直接粘贴到公众号编辑器');
+      return true;
     } catch {
       message.error('复制失败，请重试');
+      return false;
     }
   };
 

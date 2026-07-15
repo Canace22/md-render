@@ -19,7 +19,14 @@ export function markLocalProjectWriteIgnored(absolutePath, ms = WRITE_IGNORE_MS)
 
 export function markLocalProjectRootIgnored(projectRootPath, ms = WRITE_IGNORE_MS) {
   if (!projectRootPath) return;
-  ignoreUntilByRoot.set(path.resolve(projectRootPath), Date.now() + ms);
+  const rootPath = path.resolve(projectRootPath);
+  ignoreUntilByRoot.set(rootPath, Date.now() + ms);
+
+  const entry = watchers.get(rootPath);
+  if (entry?.timer) {
+    clearTimeout(entry.timer);
+    entry.timer = null;
+  }
 }
 
 function shouldIgnorePath(absolutePath) {

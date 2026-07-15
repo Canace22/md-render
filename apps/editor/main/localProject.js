@@ -435,7 +435,9 @@ export async function saveBinaryAsset(projectRootPath, base64, mimeSubtype = 'pn
   if (!projectRootPath) throw new Error('缺少项目根路径');
   if (!base64) throw new Error('图片数据为空');
 
-  const ext = ASSET_MIME_EXTENSIONS[String(mimeSubtype).toLowerCase()] || 'png';
+  const normalizedMimeSubtype = String(mimeSubtype).toLowerCase();
+  const ext = ASSET_MIME_EXTENSIONS[normalizedMimeSubtype];
+  if (!ext) throw new Error(`不支持的图片格式：${normalizedMimeSubtype || '未知'}`);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const rand = Math.random().toString(36).slice(2, 6);
   const relativePath = `${ASSETS_DIR_NAME}/截图-${stamp}-${rand}.${ext}`;
