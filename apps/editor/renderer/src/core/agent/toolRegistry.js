@@ -12,6 +12,7 @@
  *   host.createNewDoc(payload)      -> string           （新建一篇 Markdown 文档；返回创建结果文案）
  *   host.createFolder(payload)      -> string           （新建文件夹；返回创建结果文案）
  *   host.searchDocs(query)          -> [{ title, snippet, id }]
+ *   host.searchExternalKnowledge(args) -> { ok, results, errors }
  *   host.openSurface(args)          -> string           （切换 app 主界面）
  *   host.openWorkspaceItem(args)    -> string           （打开工作区里的文档或文件夹）
  *   host.getDailyOverview(args)     -> { ... }          （读取 Daily / 待办概况）
@@ -19,15 +20,25 @@
  *   host.appendCanvasCards(args)    -> string           （往灵感白板追加卡片）
  *   host.replaceCanvas(args)        -> string           （整体替换灵感白板内容）
  *   host.clearCanvas()              -> string           （清空灵感白板）
+ *   host.inspectAppHealth()         -> object           （读取脱敏的本机运行快照）
+ *   host.applySafeRepair(args)      -> string           （用户确认后执行白名单修复）
+ *   host.createAgentArtifact(args)  -> string           （创建可追溯的结构化产出物）
+ *   host.readEditorialMemory()      -> object|null      （读「编辑部记忆」文档 { id, name, content }）
+ *   host.updateEditorialMemory(args)-> string           （按分类往记忆文档追加一条经验）
+ *   host.moveWorkspaceItem(args)    -> string           （移动条目到目标文件夹；支持 ".agent" 特殊目标）
+ *   host.renameWorkspaceItem(args)  -> string           （重命名条目）
+ *   host.deleteWorkspaceItems(args) -> string           （批量删除；宿主强制弹确认框）
  */
 
 import { extractRecallKeywords, rankRelatedDocs } from './contextRecall.js';
+import { MEMORY_CATEGORIES } from './editorialMemory.js';
 
 const MAX_SEARCH_RESULTS = 8;
 const MAX_SNIPPET_CHARS = 200;
 const MAX_RECALL_RESULTS = 5; // 主动召回返回的相关旧文条数
 const MAX_RECALL_KEYWORDS = 6; // 用于召回搜索的关键词条数
 const MAX_RECENT_DOCS = 6;
+const MAX_DELETE_ITEMS = 10;
 const OPENABLE_SURFACES = new Set([
   'overview',
   'paper',
@@ -281,8 +292,44 @@ export const TOOL_DEFINITIONS = Object.freeze([
             description: '可选，目标平台标识列表，如 wechat / xiaohongshu / zhihu',
             items: { type: 'string' },
           },
+          sourceMaterialIds: {
+            type: 'array',
+            description: '可选，这个内容条目实际使用的来源文档 id 列表',
+            items: { type: 'string' },
+          },
         },
         required: ['kind'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_agent_artifact',
+      description: '把方案、调研、简报、清单、平台稿或事故报告作为新文档产出物保存，保留原稿并记录来源。',
+      parameters: {
+        type: 'object',
+        properties: {
+          artifactType: {
+            type: 'string',
+            enum: ['plan', 'brief', 'research', 'checklist', 'platform_draft', 'incident_report', 'editorial_review'],
+            description: '产出物类型',
+          },
+          name: { type: 'string', description: '文档名称' },
+          summary: { type: 'string', description: '一句话摘要' },
+          content: { type: 'string', description: '完整 Markdown 内容' },
+          sourceMaterialIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '实际使用的来源文档 id 列表',
+          },
+          targetPlatforms: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '可选的目标平台',
+          },
+        },
+        required: ['artifactType', 'content'],
       },
     },
   },
@@ -331,6 +378,23 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     type: 'function',
     function: {
+      name: 'search_external_knowledge',
+      description: '搜索已启用的公开外挂知识库，包括内置 Canace Wiki 和用户在 Agent 设置中添加的网站。适合查询外部知识、项目经验和参考资料；返回结果带来源 URL。不要用它替代工作区文档搜索。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '2-5 个精确关键词，中文关键词可用空格分隔，例如「RAG Graph RAG」',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'list_recent_docs',
       description: '列出最近活跃的几篇文档及其简要元数据。当你需要快速判断近期工作上下文时调用。',
       parameters: {
@@ -353,9 +417,111 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     type: 'function',
     function: {
+      name: 'inspect_app_health',
+      description: '读取脱敏的 MD Render 本机运行快照，包括版本、运行环境、SQLite、AI 代理和更新能力。排查发布版问题时必须先调用。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'apply_safe_repair',
+      description: '执行 inspect_app_health 明确返回的白名单修复。宿主会强制弹出用户确认，并在复检失败时自动回滚。',
+      parameters: {
+        type: 'object',
+        properties: {
+          repairId: {
+            type: 'string',
+            enum: ['reset_ai_proxy_override'],
+            description: 'inspect_app_health.availableRepairs 返回的修复 id',
+          },
+        },
+        required: ['repairId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'move_workspace_item',
+      description: '把工作区里的文档或文件夹移动到另一个文件夹。targetFolderId 传目标文件夹 id，或传特殊值 ".agent" 表示移入 agent 元数据隐藏目录（不存在会自动创建）。整理文件、归档元数据时调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '要移动的条目 id' },
+          targetFolderId: { type: 'string', description: '目标文件夹 id，或 ".agent"' },
+        },
+        required: ['id', 'targetFolderId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'rename_workspace_item',
+      description: '重命名工作区里的文档或文件夹。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '条目 id' },
+          name: { type: 'string', description: '新名称' },
+        },
+        required: ['id', 'name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_workspace_items',
+      description: '删除工作区里的一批文档或文件夹（最多 10 个）。宿主会弹出确认框列出全部名称，用户确认后才真正删除；未确认前不会有任何改动。清理重复副本、废稿时调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '要删除的条目 id 列表',
+          },
+          reason: { type: 'string', description: '一句话删除原因，会显示在确认框里' },
+        },
+        required: ['ids'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_editorial_memory',
+      description: '读取「编辑部记忆」（存放在 .agent 元数据目录，含作者知识体系、写作画像、平台经验库、复盘日志）。编辑部审稿、标题分析或复盘前调用，作为各角色的判断依据。',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_editorial_memory',
+      description: '往「编辑部记忆」的对应小节追加一条带日期的经验，只追加不改写；记忆统一存在 .agent 元数据目录，不存在时自动创建，不要用 create_new_doc 另建记忆文档。复盘沉淀经验、更新写作画像或知识体系时调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            enum: ['knowledge', 'persona', 'experience', 'retro'],
+            description: '记忆分类：knowledge=作者知识体系，persona=作者写作画像，experience=平台经验库，retro=复盘日志',
+          },
+          text: { type: 'string', description: '要追加的经验内容，一条一个结论' },
+        },
+        required: ['category', 'text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'recall_related_docs',
       description:
-        '根据当前文档（标题 + 正文）主动召回工作区里相关的旧文，供写作引用参考。当用户问「有没有相关旧文」「帮我找参考」，或你需要补充上下文 / 引用既有内容时调用。无需传参，会自动读当前文档并按关键词相关度排序返回。',
+        '根据当前文档（标题 + 正文）同时召回工作区旧文和已启用的外挂知识库内容，供写作引用参考。当用户问「我写过类似文章吗」「有没有相关旧文」「帮我找参考」时调用。无需传参，会自动提取关键词并按相关度返回两类来源。',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -386,6 +552,15 @@ const collectCandidates = async (host, keywords) => {
     });
   }
   return [...byKey.values()];
+};
+
+const searchExternalRecall = async (host, keywords) => {
+  if (typeof host.searchExternalKnowledge !== 'function') return null;
+  try {
+    return await host.searchExternalKnowledge({ query: keywords.join(' ') });
+  } catch (error) {
+    return { ok: false, results: [], error: error?.message || '外挂知识库搜索失败' };
+  }
 };
 
 /** 工具执行器：name -> async (args, host) => 结果字符串 */
@@ -494,8 +669,25 @@ const EXECUTORS = {
       summary: args?.summary,
       content: args?.content,
       targetPlatforms: args?.targetPlatforms,
+      sourceMaterialIds: args?.sourceMaterialIds,
     });
     return typeof result === 'string' ? result : '已创建内容条目。';
+  },
+
+  create_agent_artifact: async (args, host) => {
+    const artifactType = String(args?.artifactType ?? '').trim();
+    const content = String(args?.content ?? '');
+    if (!artifactType) return '创建失败：产出物类型为空。';
+    if (!content.trim()) return '创建失败：产出物内容为空。';
+    const result = await host.createAgentArtifact?.({
+      artifactType,
+      name: args?.name,
+      summary: args?.summary,
+      content,
+      sourceMaterialIds: args?.sourceMaterialIds,
+      targetPlatforms: args?.targetPlatforms,
+    });
+    return typeof result === 'string' ? result : '已创建产出物。';
   },
 
   read_doc_by_id: async (args, host) => {
@@ -518,12 +710,34 @@ const EXECUTORS = {
     if (!query) return '搜索失败：关键词为空。';
     const results = (await host.searchDocs(query)) || [];
     if (!results.length) return `未找到与「${query}」相关的文档。`;
-    const top = results.slice(0, MAX_SEARCH_RESULTS).map((r) => ({
-      id: r.id ?? '',
-      title: r.title ?? '未命名',
-      snippet: truncate(r.snippet ?? '', MAX_SNIPPET_CHARS),
-    }));
+    const top = results.slice(0, MAX_SEARCH_RESULTS).map((r) => {
+      const { content: _content, ...meta } = r ?? {};
+      return {
+        ...meta,
+        id: r?.id ?? '',
+        title: r?.title ?? '未命名',
+        snippet: truncate(r?.snippet ?? r?.summary ?? '', MAX_SNIPPET_CHARS),
+      };
+    });
     return JSON.stringify(top);
+  },
+
+  search_external_knowledge: async (args, host) => {
+    const query = String(args?.query ?? '').trim();
+    if (!query) return '外挂知识库搜索失败：关键词为空。';
+    const response = await host.searchExternalKnowledge?.({ query });
+    if (!response) return '当前环境不支持外挂知识库搜索。';
+    if (!response.ok) return `外挂知识库搜索失败：${response.error || '未知错误'}。`;
+    if (!response.results?.length) {
+      const errors = (response.errors ?? []).map((item) => `${item.sourceName}：${item.error}`);
+      return errors.length
+        ? `没有找到与「${query}」相关的外部知识。部分来源不可用：${errors.join('；')}`
+        : `没有找到与「${query}」相关的外部知识。`;
+    }
+    return JSON.stringify({
+      results: response.results,
+      unavailableSources: response.errors ?? [],
+    });
   },
 
   list_recent_docs: async (args, host) => {
@@ -542,29 +756,108 @@ const EXECUTORS = {
     return JSON.stringify(brief);
   },
 
+  inspect_app_health: async (_args, host) => {
+    const snapshot = await host.inspectAppHealth?.();
+    if (!snapshot) return '当前环境不支持本机运行诊断。';
+    return typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot);
+  },
+
+  apply_safe_repair: async (args, host) => {
+    const repairId = String(args?.repairId ?? '').trim();
+    if (!repairId) return '修复失败：修复 id 为空。';
+    const result = await host.applySafeRepair?.({ repairId });
+    return typeof result === 'string' ? result : JSON.stringify(result ?? { ok: false });
+  },
+
+  move_workspace_item: async (args, host) => {
+    const id = String(args?.id ?? '').trim();
+    const targetFolderId = String(args?.targetFolderId ?? '').trim();
+    if (!id || !targetFolderId) return '移动失败：条目 id 或目标文件夹为空。';
+    const result = await host.moveWorkspaceItem?.({ id, targetFolderId });
+    return typeof result === 'string' ? result : '已移动。';
+  },
+
+  rename_workspace_item: async (args, host) => {
+    const id = String(args?.id ?? '').trim();
+    const name = String(args?.name ?? '').trim();
+    if (!id || !name) return '重命名失败：条目 id 或新名称为空。';
+    const result = await host.renameWorkspaceItem?.({ id, name });
+    return typeof result === 'string' ? result : '已重命名。';
+  },
+
+  delete_workspace_items: async (args, host) => {
+    const ids = Array.from(new Set(
+      (Array.isArray(args?.ids) ? args.ids : [])
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean),
+    ));
+    if (!ids.length) return '删除失败：没有可删除的条目 id。';
+    if (ids.length > MAX_DELETE_ITEMS) {
+      return `删除失败：一次最多删除 ${MAX_DELETE_ITEMS} 个条目，请分批。`;
+    }
+    const result = await host.deleteWorkspaceItems?.({ ids, reason: args?.reason });
+    return typeof result === 'string' ? result : '删除请求已处理。';
+  },
+
+  read_editorial_memory: async (_args, host) => {
+    const doc = await host.readEditorialMemory?.();
+    if (!doc) {
+      return '「编辑部记忆」文档还不存在。可用 update_editorial_memory 写入第一条记忆，会自动按模板创建。';
+    }
+    return JSON.stringify(doc);
+  },
+
+  update_editorial_memory: async (args, host) => {
+    const category = String(args?.category ?? '').trim();
+    const text = String(args?.text ?? '').trim();
+    if (!MEMORY_CATEGORIES[category]) {
+      return `更新失败：不支持的记忆分类「${category}」，可用：${Object.keys(MEMORY_CATEGORIES).join(' / ')}。`;
+    }
+    if (!text) return '更新失败：记忆内容为空。';
+    const result = await host.updateEditorialMemory?.({ category, text });
+    return typeof result === 'string' ? result : '已更新编辑部记忆。';
+  },
+
   recall_related_docs: async (_args, host) => {
     const doc = await host.readActiveDoc();
-    if (!doc || !String(doc.content ?? '').trim()) {
-      return '当前文档为空，无法据此召回相关旧文。';
+    if (!doc || !`${doc.title ?? ''}${doc.content ?? ''}`.trim()) {
+      return '当前文档标题和正文都为空，无法据此召回相关内容。';
     }
     const keywords = extractRecallKeywords(doc, { max: MAX_RECALL_KEYWORDS });
     if (!keywords.length) return '未能从当前文档提取到关键词。';
 
-    // 多个关键词分别搜，再按 id/标题合并去重，得到候选集
-    const candidates = await collectCandidates(host, keywords);
+    // 工作区和外挂知识库同时召回，避免模型只执行本地搜索而漏掉用户自己的 Wiki。
+    const [candidates, externalResponse] = await Promise.all([
+      collectCandidates(host, keywords),
+      searchExternalRecall(host, keywords),
+    ]);
     // 候选叠加 snippet 作为内容参与重合度排序，排除当前文档自身
     const ranked = rankRelatedDocs(doc, candidates, {
       limit: MAX_RECALL_RESULTS,
       keywords,
     });
-    if (!ranked.length) return '工作区里没有与当前文档明显相关的旧文。';
-
-    const top = ranked.map((r) => ({
+    const workspaceDocs = ranked.map((r) => ({
       id: r.id ?? null,
       title: r.title ?? '未命名',
       snippet: truncate(r.snippet ?? r.content ?? '', MAX_SNIPPET_CHARS),
     }));
-    return JSON.stringify(top);
+    const externalKnowledge = (externalResponse?.results ?? [])
+      .slice(0, MAX_RECALL_RESULTS)
+      .map((result) => ({
+        sourceName: result.sourceName ?? '外挂知识库',
+        title: result.title ?? '未命名',
+        url: result.url ?? '',
+        snippet: truncate(result.snippet ?? result.excerpt ?? '', MAX_SNIPPET_CHARS),
+      }));
+
+    return JSON.stringify({
+      keywords,
+      workspaceDocs,
+      externalKnowledge,
+      externalUnavailable: externalResponse?.ok === false
+        ? [{ error: externalResponse.error || '外挂知识库搜索失败' }]
+        : (externalResponse?.errors ?? []),
+    });
   },
 };
 
@@ -608,12 +901,21 @@ const _localToolLabels = Object.freeze({
   create_new_doc: '新建文档',
   create_folder: '新建文件夹',
   create_content_entry: '创建内容条目',
+  create_agent_artifact: '创建交付产出物',
   open_workspace_item: '打开工作区条目',
   read_doc_by_id: '读取指定文档',
   search_docs: '搜索工作区',
+  search_external_knowledge: '搜索外挂知识库',
   list_recent_docs: '查看最近文档',
   get_workspace_brief: '查看工作区简报',
-  recall_related_docs: '召回相关旧文',
+  inspect_app_health: '检查应用运行状态',
+  apply_safe_repair: '执行安全修复',
+  recall_related_docs: '召回相关内容',
+  read_editorial_memory: '读取编辑部记忆',
+  update_editorial_memory: '更新编辑部记忆',
+  move_workspace_item: '移动工作区条目',
+  rename_workspace_item: '重命名条目',
+  delete_workspace_items: '删除条目（需确认）',
 });
 
 const _serverToolLabels = {};

@@ -23,6 +23,12 @@ const DEFAULT_TOP_TAGS_LIMIT = 3;
 const MAX_SUMMARY_CHARS = 140;
 const MAX_SELECTION_CHARS = 180;
 const MAX_SNIPPET_CHARS = 90;
+const MAX_TITLE_CHARS = 96;
+const MAX_URL_CHARS = 240;
+const MAX_META_VALUE_CHARS = 48;
+const MAX_REASON_CHARS = 90;
+const MAX_POINTER_LIST_ITEMS = 8;
+const MAX_POINTER_ID_ITEMS = 12;
 
 const toList = (value) => {
   if (Array.isArray(value)) return value;
@@ -44,37 +50,86 @@ const pickSummary = (summary, content) => {
   return truncate(content, MAX_SUMMARY_CHARS);
 };
 
-const toDocPointer = (file) => {
-  const status = getDocumentStatus(file);
-  return {
-    id: file?.id ?? '',
-    title: file?.name ?? '未命名',
-    summary: pickSummary(file?.summary, file?.content),
-    status,
-    statusLabel: getStatusLabel(status),
-    nodeType: file?.nodeType ?? 'document',
-    nodeTypeLabel: getKnowledgeNodeTypeLabel(file?.nodeType),
-  };
+const getFirstText = (...values) => {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
 };
 
-export const buildActiveDocMeta = (file, content = '') => {
+const sanitizePointerList = (values, maxItems = MAX_POINTER_LIST_ITEMS) => {
+  return sanitizeStringList(toList(values))
+    .slice(0, maxItems)
+    .map((item) => truncate(item, MAX_META_VALUE_CHARS));
+};
+
+// 文档 id 需要保持完整才能继续调用 read_doc_by_id；这里只限制条数，不截断 id 本身。
+const sanitizePointerIds = (values) => {
+  return sanitizeStringList(toList(values)).slice(0, MAX_POINTER_ID_ITEMS);
+};
+
+const sanitizeTimestamp = (value) => {
+  if (Number.isFinite(value)) return value;
+  return truncate(value, MAX_META_VALUE_CHARS);
+};
+
+/**
+ * 把工作区文件或搜索结果规整成统一的内容资产指针。
+ * 指针只携带定位和摘要元数据，不暴露正文；文本和列表都有明确上限。
+ */
+export const buildContentAssetPointer = (file, { content } = {}) => {
   if (!file) return null;
 
   const status = getDocumentStatus(file);
-  const cleanContent = String(content ?? file?.content ?? '');
+  const explicitSummary = getFirstText(file.summary, file.snippet, file.excerpt);
+  const summaryFallback = content ?? file.content;
+  const title = truncate(getFirstText(file.name, file.title) || '未命名', MAX_TITLE_CHARS);
 
   return {
-    id: file.id ?? '',
-    title: file.name ?? '未命名',
-    summary: pickSummary(file.summary, cleanContent),
+    id: String(file.id ?? '').trim(),
+    title: title || '未命名',
+    summary: pickSummary(explicitSummary, summaryFallback),
+    snippet: truncate(getFirstText(file.snippet, file.excerpt), MAX_SNIPPET_CHARS),
     status,
-    statusLabel: getStatusLabel(status),
-    nodeType: file.nodeType ?? 'document',
-    nodeTypeLabel: getKnowledgeNodeTypeLabel(file.nodeType),
-    tags: sanitizeStringList(toList(file.tags)),
-    targetPlatforms: sanitizeStringList(toList(file.targetPlatforms ?? file.platforms ?? file.publishPlatforms)),
-    relatedDocCount: Array.isArray(file.relatedIds) ? file.relatedIds.length : 0,
-    sourceMaterialCount: Array.isArray(file.sourceMaterialIds) ? file.sourceMaterialIds.length : 0,
+    statusLabel: truncate(file.statusLabel || getStatusLabel(status), MAX_META_VALUE_CHARS),
+    nodeType: truncate(file.nodeType ?? file.node_type ?? 'document', MAX_META_VALUE_CHARS),
+    nodeTypeLabel: truncate(
+      file.nodeTypeLabel || getKnowledgeNodeTypeLabel(file.nodeType ?? file.node_type),
+      MAX_META_VALUE_CHARS,
+    ),
+    aliases: sanitizePointerList(file.aliases),
+    tags: sanitizePointerList(file.tags),
+    targetPlatforms: sanitizePointerList(
+      file.targetPlatforms ?? file.platforms ?? file.publishPlatforms,
+    ),
+    scheduledPublishAt: truncate(
+      file.scheduledPublishAt ?? file.publishAt,
+      MAX_META_VALUE_CHARS,
+    ),
+    sourceMaterialIds: sanitizePointerIds(
+      file.sourceMaterialIds ?? file.sourceMaterials,
+    ),
+    relatedIds: sanitizePointerIds(file.relatedIds),
+    url: truncate(file.url, MAX_URL_CHARS),
+    createdAt: sanitizeTimestamp(file.createdAt),
+    updatedAt: sanitizeTimestamp(file.updatedAt),
+    reason: truncate(file.reason, MAX_REASON_CHARS),
+  };
+};
+
+export const buildActiveDocMeta = (file, content) => {
+  if (!file) return null;
+
+  const cleanContent = String(content ?? file?.content ?? '');
+  const pointer = buildContentAssetPointer(file, { content: cleanContent });
+
+  return {
+    ...pointer,
+    relatedDocCount: sanitizeStringList(toList(file.relatedIds)).length,
+    sourceMaterialCount: sanitizeStringList(
+      toList(file.sourceMaterialIds ?? file.sourceMaterials),
+    ).length,
     contentLength: cleanContent.trim().length,
   };
 };
@@ -85,7 +140,7 @@ export const buildWorkspaceBrief = (workspace, selectedId, { recentLimit = DEFAU
   const recentDocs = collectRecentFiles(workspace, recentLimit + 1)
     .filter((file) => file?.id !== selectedFileId)
     .slice(0, recentLimit)
-    .map(toDocPointer);
+    .map((file) => buildContentAssetPointer(file));
   const topTags = collectTags(workspace)
     .slice(0, DEFAULT_TOP_TAGS_LIMIT)
     .map((item) => item.tag);
@@ -113,20 +168,59 @@ export const buildTaskContextPacket = ({
   relatedRefs = [],
   userPinnedContext = [],
 } = {}) => {
+  const normalizePointer = (item) => {
+    const pointer = buildContentAssetPointer(item);
+    if (!pointer) return null;
+    return {
+      ...pointer,
+      ...(Number.isFinite(item?.contentLength) ? { contentLength: item.contentLength } : {}),
+      ...(Number.isFinite(item?.relatedDocCount)
+        ? { relatedDocCount: item.relatedDocCount }
+        : {}),
+      ...(Number.isFinite(item?.sourceMaterialCount)
+        ? { sourceMaterialCount: item.sourceMaterialCount }
+        : {}),
+    };
+  };
+
   return {
-    activeDoc,
+    activeDoc: normalizePointer(activeDoc),
     currentSurface: String(currentSurface ?? '').trim(),
     selection: truncate(selectionText, MAX_SELECTION_CHARS),
     workspace: workspaceBrief
       ? {
         totalDocs: workspaceBrief.totalDocs ?? 0,
-        topTags: workspaceBrief.topTags ?? [],
+        topTags: sanitizePointerList(workspaceBrief.topTags, DEFAULT_TOP_TAGS_LIMIT),
       }
       : null,
-    recentDocs: workspaceBrief?.recentDocs?.slice(0, DEFAULT_RECENT_DOCS_LIMIT) ?? [],
-    relatedRefs: relatedRefs.slice(0, DEFAULT_REF_DOCS_LIMIT),
-    userPinnedContext,
+    recentDocs: (workspaceBrief?.recentDocs ?? [])
+      .slice(0, DEFAULT_RECENT_DOCS_LIMIT)
+      .map(normalizePointer)
+      .filter(Boolean),
+    relatedRefs: (relatedRefs ?? [])
+      .slice(0, DEFAULT_REF_DOCS_LIMIT)
+      .map(normalizePointer)
+      .filter(Boolean),
+    userPinnedContext: (userPinnedContext ?? []).map((item) => ({
+      id: String(item?.id ?? '').trim(),
+      title: truncate(item?.title, MAX_TITLE_CHARS) || '未命名附件',
+      snippet: truncate(item?.snippet, MAX_SNIPPET_CHARS),
+    })),
   };
+};
+
+const formatPointerForModel = (item, { includeReason = false } = {}) => {
+  const pointer = buildContentAssetPointer(item);
+  if (!pointer) return '';
+
+  const identity = pointer.id
+    ? `${pointer.title} [id: ${pointer.id}]`
+    : pointer.title;
+  const details = [];
+  if (pointer.statusLabel) details.push(`状态 ${pointer.statusLabel}`);
+  if (pointer.summary) details.push(`摘要 ${pointer.summary}`);
+  if (includeReason && pointer.reason) details.push(pointer.reason);
+  return details.length ? `${identity}（${details.join('；')}）` : identity;
 };
 
 export const formatTaskContextPacket = (packet) => {
@@ -134,11 +228,12 @@ export const formatTaskContextPacket = (packet) => {
 
   const lines = ['当前轮任务简报：以下都是摘要，需要细节时再调用工具读取全文。'];
 
-  if (packet.activeDoc?.title) {
+  const activeDoc = buildContentAssetPointer(packet.activeDoc);
+  if (activeDoc?.title) {
     const docLine = [
-      `当前稿件：${packet.activeDoc.title}`,
-      packet.activeDoc.statusLabel ? `状态 ${packet.activeDoc.statusLabel}` : '',
-      packet.activeDoc.nodeTypeLabel ? `类型 ${packet.activeDoc.nodeTypeLabel}` : '',
+      `当前稿件：${activeDoc.title}${activeDoc.id ? ` [id: ${activeDoc.id}]` : ''}`,
+      activeDoc.statusLabel ? `状态 ${activeDoc.statusLabel}` : '',
+      activeDoc.nodeTypeLabel ? `类型 ${activeDoc.nodeTypeLabel}` : '',
     ].filter(Boolean).join('；');
     lines.push(docLine);
   } else {
@@ -149,10 +244,10 @@ export const formatTaskContextPacket = (packet) => {
     lines.push(`当前界面：${packet.currentSurface}`);
   }
 
-  if (packet.activeDoc?.summary) lines.push(`稿件摘要：${packet.activeDoc.summary}`);
-  if (packet.activeDoc?.tags?.length) lines.push(`稿件标签：${packet.activeDoc.tags.join('、')}`);
-  if (packet.activeDoc?.targetPlatforms?.length) {
-    lines.push(`目标平台：${packet.activeDoc.targetPlatforms.join('、')}`);
+  if (activeDoc?.summary) lines.push(`稿件摘要：${activeDoc.summary}`);
+  if (activeDoc?.tags?.length) lines.push(`稿件标签：${activeDoc.tags.join('、')}`);
+  if (activeDoc?.targetPlatforms?.length) {
+    lines.push(`目标平台：${activeDoc.targetPlatforms.join('、')}`);
   }
   if (packet.selection) lines.push(`当前选区：${packet.selection}`);
 
@@ -164,14 +259,16 @@ export const formatTaskContextPacket = (packet) => {
   }
 
   if (packet.recentDocs?.length) {
-    lines.push(`最近稿件：${packet.recentDocs.map((item) => item.title).join('、')}`);
+    lines.push(
+      `最近稿件：${packet.recentDocs.map((item) => formatPointerForModel(item)).filter(Boolean).join(' | ')}`,
+    );
   }
 
   if (packet.relatedRefs?.length) {
     lines.push(
       `相关旧文：${packet.relatedRefs.map((item) => (
-        item.reason ? `${item.title}（${item.reason}）` : item.title
-      )).join('、')}`,
+        formatPointerForModel(item, { includeReason: true })
+      )).filter(Boolean).join(' | ')}`,
     );
   }
 
@@ -220,5 +317,5 @@ export const buildRecentDocPointers = (workspace, selectedId, limit = DEFAULT_RE
 
 export const buildDocPointerById = (workspace, docId) => {
   const file = collectFiles(workspace).find((item) => item?.id === docId);
-  return file ? toDocPointer(file) : null;
+  return file ? buildContentAssetPointer(file) : null;
 };

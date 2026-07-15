@@ -8,6 +8,7 @@
  */
 
 import type { Node } from '@tiptap/pm/model';
+import { AllSelection, TextSelection, type Transaction } from '@tiptap/pm/state';
 
 export interface ISelectAllShortcutLike {
   key: string;
@@ -79,6 +80,43 @@ export function resolveBlockInlineContentRange(
   const from = contentBeforePos + 1;
   const to = contentAfterPos - 1;
   return { from, to: Math.max(from, to) };
+}
+
+export interface IKeyboardSelectionEditor {
+  transact<T>(callback: (transaction: Transaction) => T): T;
+  focus(): void;
+}
+
+/** 选中光标所在的最近文本块，并保持编辑器焦点。 */
+export function selectCurrentTextBlockContent(editor: IKeyboardSelectionEditor): boolean {
+  const selected = editor.transact((transaction) => {
+    const { $anchor } = transaction.selection;
+    for (let depth = $anchor.depth; depth > 0; depth -= 1) {
+      if (!$anchor.node(depth).isTextblock) continue;
+      transaction
+        .setSelection(TextSelection.create(
+          transaction.doc,
+          $anchor.start(depth),
+          $anchor.end(depth),
+        ))
+        .scrollIntoView();
+      return true;
+    }
+    return false;
+  });
+  if (selected) editor.focus();
+  return selected;
+}
+
+/** 选中 ProseMirror 编辑器全文，并保持编辑器焦点。 */
+export function selectAllEditorContent(editor: IKeyboardSelectionEditor): boolean {
+  editor.transact((transaction) => {
+    transaction
+      .setSelection(new AllSelection(transaction.doc))
+      .scrollIntoView();
+  });
+  editor.focus();
+  return true;
 }
 
 /**

@@ -1,15 +1,17 @@
 # AI 转发代理（OpenAI 兼容）
 
-> ⚠️ **可选，仅 Web 端需要。** 桌面 app（Electron）的 AI 请求走主进程直连（`apps/editor/main/aiRequest.js`），
-> Node 没有 CORS 限制，**不需要本代理**。只有当你要把工具部署成纯浏览器 Web 版时，才需要起这个代理来绕过 CORS。
+> 桌面 app（Electron）的 AI 请求也会经过主进程转发到本服务（`apps/editor/main/aiRequest.js`）；Web 端则直接请求本服务。
+> 服务除了模型请求还提供工具 schema 和转换脚本执行入口，公网部署前必须加鉴权和限流；不要把这些远端工具当成用户本机修复通道。
 
-浏览器前端直连第三方 AI API 会被 CORS 拦截。这个零依赖单文件服务把前端的 `/v1/*` 请求透传给上游 OpenAI 兼容服务，并补上 CORS 头。和 `../notion-proxy` 同一套思路。
+这个零依赖服务提供 `/api/chat`、`/api/health`、工具 schema、工具执行和外挂知识库检索接口，供 Electron 主进程和 Web 端统一调用。
+
+外挂知识库使用 `POST /api/knowledge/search`，请求体为 `{ query, sources }`。服务只读取公开的 `http/https` 文本页面，拒绝本机、内网地址和非文本资源；用户配置的知识库不会复制到服务端或工作区。
 
 ## 为什么需要它
 
 - 解决 CORS：前端无法直接 `fetch` 第三方 AI API。
 - 生产可用：不只在 dev 的 Vite proxy 下能用，打包后的 app 也能用。
-- key 不落地：API key 由前端在 `Authorization` 头携带，本服务不读、不存、不打印。
+- key 不落地：提供商 key 由服务端配置，前端只传 provider id。
 
 ## 启动
 
@@ -35,7 +37,7 @@ node server.js
 两种方式（前端按"localStorage 优先 → VITE_ 兜底"读取，和 notion-proxy 一致）：
 
 1. 运行时在「设置」里填代理地址（持久化在 localStorage，打包后也能改）。
-2. 构建时注入 `VITE_AI_PROXY=https://你的服务器:8788/v1`。
+2. 构建时注入 `VITE_AI_PROXY=https://你的服务器:8788`（填代理根地址，不要加 `/v1`）。
 
 ## 部署
 

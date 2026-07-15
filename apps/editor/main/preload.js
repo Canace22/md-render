@@ -44,6 +44,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),
     execTool: (payload) => ipcRenderer.invoke('ai:execTool', payload),
     listTools: (payload) => ipcRenderer.invoke('ai:listTools', payload),
+    searchKnowledge: (payload) => ipcRenderer.invoke('ai:searchKnowledge', payload),
+  },
+
+  // 只读本机运行诊断
+  diagnostics: {
+    getSnapshot: (payload) => ipcRenderer.invoke('diagnostics:get-snapshot', payload),
   },
 
   // SQLite 数据库 IPC
@@ -82,7 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 通用 IPC：主进程 → 渲染进程（监听）
   on: (channel, callback) => {
-    const allowedChannels = ['update-available', 'updater-status'];
+    const allowedChannels = ['menu-select-all', 'update-available', 'updater-status'];
     if (allowedChannels.includes(channel)) {
       const sub = (_event, ...args) => callback(...args);
       ipcRenderer.on(channel, sub);

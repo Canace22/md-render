@@ -35,6 +35,13 @@ import {
   moveNodeInParent,
   togglePinNode,
   getDerivationSourceFileId,
+  AGENT_META_FOLDER_NAME,
+  findAgentMetaFolder,
+  findAgentMetaFile,
+  moveNodeToFolder,
+  moveDiskNodeToFolder,
+  remapDiskPathReferences,
+  remapNotionFilePagesAfterPathChange,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
@@ -89,6 +96,7 @@ const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
 const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
 // 与 notionService.js 中同名常量保持一致：服务层直接从这个 key 读运行时反代地址
 const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
+const NOTION_AUTO_PUSH_STORAGE_KEY = 'md-renderer-notion-auto-push';
 const CLOUD_SYNC_BASE_URL_STORAGE_KEY = 'md-renderer-cloud-sync-base-url';
 const CLOUD_WORKSPACE_ID_STORAGE_KEY = 'md-renderer-cloud-workspace-id';
 const CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY = 'md-renderer-cloud-last-synced-revision';
@@ -179,9 +187,16 @@ const readNotionPersistSnapshot = () => {
         notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
       notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
       notionProxyBase: typeof notionProxyBase === 'string' ? notionProxyBase : '',
+      notionAutoPushEnabled: window.localStorage.getItem(NOTION_AUTO_PUSH_STORAGE_KEY) === '1',
     };
   } catch {
-    return { notionToken: '', notionFilePages: {}, notionDatabaseId: '', notionProxyBase: '' };
+    return {
+      notionToken: '',
+      notionFilePages: {},
+      notionDatabaseId: '',
+      notionProxyBase: '',
+      notionAutoPushEnabled: false,
+    };
   }
 };
 
@@ -215,6 +230,12 @@ const persistNotionSnapshot = (state) => {
   persistNotionFilePagesField(state.notionFilePages);
   persistNotionStringField(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
   persistNotionStringField(NOTION_PROXY_STORAGE_KEY, state.notionProxyBase);
+  if (state.notionAutoPushEnabled != null) {
+    persistNotionStringField(
+      NOTION_AUTO_PUSH_STORAGE_KEY,
+      state.notionAutoPushEnabled ? '1' : '0',
+    );
+  }
 };
 
 /** 从 localStorage 构建标准 state 对象（在非 Electron 或 Electron 迁移时使用） */
@@ -326,6 +347,7 @@ const buildStateFromDb = (raw) => {
         typeof raw.notion_database_id === 'string' ? raw.notion_database_id : '',
       notionProxyBase:
         typeof raw.notion_proxy_base === 'string' ? raw.notion_proxy_base : '',
+      notionAutoPushEnabled: raw.notion_auto_push === '1',
     },
     version: 0,
   };
@@ -353,6 +375,9 @@ const buildStateMap = (state) => {
   if (state.notionFilePages != null) map.notion_file_pages = JSON.stringify(state.notionFilePages);
   if (state.notionDatabaseId != null) map.notion_database_id = state.notionDatabaseId;
   if (state.notionProxyBase != null) map.notion_proxy_base = state.notionProxyBase;
+  if (state.notionAutoPushEnabled != null) {
+    map.notion_auto_push = state.notionAutoPushEnabled ? '1' : '0';
+  }
   if (state.cloudSyncBaseUrl != null) map.cloud_sync_base_url = normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl);
   if (state.cloudWorkspaceId != null) map.cloud_workspace_id = String(state.cloudWorkspaceId);
   if (state.cloudLastSyncedRevision != null) {
@@ -617,6 +642,7 @@ const persistConfig = {
     notionFilePages: state.notionFilePages,
     notionDatabaseId: state.notionDatabaseId,
     notionProxyBase: state.notionProxyBase,
+    notionAutoPushEnabled: state.notionAutoPushEnabled,
   }),
 };
 
@@ -908,6 +934,8 @@ export const useEditorStore = create(
       notionDatabaseId: '',
       // Notion 反代地址（运行时可配，不打进构建产物）。空 = 未配置，走 dev 回退。
       notionProxyBase: '',
+      /** 保存本地文件后自动推送到 Notion 数据库 */
+      notionAutoPushEnabled: false,
       cloudSyncBaseUrl: getDefaultCloudSyncBaseUrl(),
       cloudWorkspaceId: '',
       cloudLastSyncedRevision: 0,
@@ -921,6 +949,7 @@ export const useEditorStore = create(
 
       setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
       setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),
+      setNotionAutoPushEnabled: (enabled) => set({ notionAutoPushEnabled: Boolean(enabled) }),
       // 立即写一份到 localStorage，让 notionService 当次请求即可读到新地址
       setNotionProxyBase: (notionProxyBase) => {
         const next = (notionProxyBase ?? '').trim();
@@ -948,6 +977,25 @@ export const useEditorStore = create(
         set((state) => ({
           notionFilePages: { ...(state.notionFilePages ?? {}), ...newMappings },
         })),
+      /** Notion 懒加载文件拉到正文后回填内容；若正被选中则同步编辑器并强制重载 */
+      hydrateNotionFileContent: (fileId, content) => {
+        const { workspace, selectedId, editorReloadToken } = get();
+        const node = findNodeById(workspace, fileId);
+        if (!node || node.type !== 'file') return false;
+        const nextWorkspace = updateNodeById(workspace, fileId, (current) => ({
+          ...current,
+          content: content ?? '',
+          notionLazy: false,
+        }));
+        const patch = { workspace: nextWorkspace };
+        if (selectedId === fileId) {
+          patch.markdown = content ?? '';
+          patch.editorReloadToken = editorReloadToken + 1;
+        }
+        persistWorkspace(nextWorkspace);
+        set(patch);
+        return true;
+      },
 
       setCloudSyncBaseUrl: (cloudSyncBaseUrl) => set({
         cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(cloudSyncBaseUrl) || getDefaultCloudSyncBaseUrl(),
@@ -1281,9 +1329,12 @@ export const useEditorStore = create(
         set(get()._buildSelectPatch(nodeId, false));
       },
 
-      updateSelectedFileContent: (nextMarkdown) => {
+      // 按 id 精确写入某篇文档正文。只有当写的正是当前打开的文档时，
+      // 才同步编辑器正文视图（markdown），避免误改别的文档的编辑器状态。
+      updateFileContentById: (fileId, nextMarkdown) => {
+        if (!fileId) return;
         const { workspace, selectedId } = get();
-        const updated = updateNodeById(workspace, selectedId, (node) => {
+        const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           const patch = {
             ...node,
@@ -1295,7 +1346,96 @@ export const useEditorStore = create(
           }
           return patch;
         });
-        set({ workspace: updated, markdown: nextMarkdown });
+        const nextState = { workspace: updated };
+        if (fileId === selectedId) nextState.markdown = nextMarkdown;
+        set(nextState);
+      },
+
+      updateSelectedFileContent: (nextMarkdown) => {
+        get().updateFileContentById(get().selectedId, nextMarkdown);
+      },
+
+      /** 找/建工作区根下的 .agent 元数据目录（带 agentMetaFolder 标记），返回目录 id */
+      ensureAgentMetaFolder: () => {
+        const { workspace } = get();
+        const existing = findAgentMetaFolder(workspace);
+        if (existing) return existing.id;
+        const folderId = createId('folder');
+        const nextWorkspace = addChildNode(workspace, workspace.id, {
+          id: folderId,
+          type: 'folder',
+          name: AGENT_META_FOLDER_NAME,
+          agentMetaFolder: true,
+          children: [],
+          createdAt: Date.now(),
+        }, true);
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+        return folderId;
+      },
+
+      /**
+       * 在 .agent 元数据目录里找/建并整体写入一个文件（agent 记忆等元数据专用）。
+       * 不改变当前选中和界面；目录不存在时自动创建（带 agentMetaFolder 标记）。
+       * 返回 { ok, fileId, created } 或 { ok: false, error }。
+       */
+      upsertAgentMetaFile: ({ name, content, summary = '' } = {}) => {
+        const cleanName = String(name ?? '').trim();
+        const cleanContent = String(content ?? '');
+        if (!cleanName) return { ok: false, error: '文件名为空。' };
+        if (!cleanContent.trim()) return { ok: false, error: '内容为空。' };
+
+        const folderId = get().ensureAgentMetaFolder();
+        const { workspace, selectedId } = get();
+        let nextWorkspace = workspace;
+
+        const existing = findAgentMetaFile(nextWorkspace, cleanName);
+        let fileId = existing?.id;
+        if (existing) {
+          nextWorkspace = updateNodeById(nextWorkspace, existing.id, (node) => ({
+            ...node,
+            content: cleanContent,
+            updatedAt: Date.now(),
+          }));
+        } else {
+          fileId = createId('file');
+          const now = Date.now();
+          nextWorkspace = addChildNode(nextWorkspace, folderId, {
+            id: fileId,
+            type: 'file',
+            name: `${cleanName}.md`,
+            content: cleanContent,
+            createdAt: now,
+            updatedAt: now,
+            ...createDefaultKnowledgeFields({ summary }),
+          }, true);
+        }
+
+        persistWorkspace(nextWorkspace);
+        const patch = { workspace: nextWorkspace };
+        if (fileId === selectedId) patch.markdown = cleanContent;
+        set(patch);
+        return { ok: true, fileId, created: !existing };
+      },
+
+      /** 按 id 更新某文件正文（不切换选中）；若正是当前选中文档则同步 markdown */
+      updateFileContentById: (fileId, nextContent) => {
+        const { workspace, selectedId } = get();
+        const updated = updateNodeById(workspace, fileId, (node) => {
+          if (node.type !== 'file') return node;
+          const patch = {
+            ...node,
+            content: nextContent,
+            updatedAt: Date.now(),
+          };
+          if (node.projectRootPath && node.diskContentSnapshot === undefined) {
+            patch.diskContentSnapshot = node.content ?? '';
+          }
+          return patch;
+        });
+        set(fileId === selectedId
+          ? { workspace: updated, markdown: nextContent }
+          : { workspace: updated });
       },
 
       /** 设置某文件的标签（去重、去空、去首尾空格） */
@@ -1750,6 +1890,50 @@ export const useEditorStore = create(
         set({ workspace: nextWorkspace });
       },
 
+      /** 把节点移进另一个文件夹（跨目录移动，不改选中）；成功返回 true */
+      moveNodeToFolderById: (nodeId, targetFolderId) => {
+        const { workspace } = get();
+        const node = findNodeById(workspace, nodeId);
+        if (node?.projectRootPath && node?.relativePath) return false; // 磁盘挂载节点不做纯内存移动
+        const nextWorkspace = moveNodeToFolder(workspace, nodeId, targetFolderId);
+        if (nextWorkspace === workspace) return false;
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+        return true;
+      },
+
+      /**
+       * 磁盘挂载节点在磁盘上已完成移动后，同步内存树：
+       * 移入目标文件夹 + 重映射子树路径/id + 修正选中和打开的标签页。
+       */
+      moveDiskBackedNodeToFolder: (nodeId, targetFolderId, { relativePath: newRelativePath } = {}) => {
+        const { workspace, selectedId, openTabs } = get();
+        const node = findNodeById(workspace, nodeId);
+        if (!node?.projectRootPath || !node.relativePath || !newRelativePath) return false;
+
+        const nextWorkspace = moveDiskNodeToFolder(workspace, nodeId, targetFolderId, newRelativePath);
+        if (nextWorkspace === workspace) return false;
+
+        const refs = remapDiskPathReferences({
+          previousWorkspace: workspace,
+          nextWorkspace,
+          projectRootPath: node.projectRootPath,
+          oldRelativePath: node.relativePath,
+          newRelativePath,
+          selectedId,
+          openTabs,
+        });
+        const nextNotionFilePages = remapNotionFilePagesAfterPathChange(
+          get().notionFilePages,
+          node.projectRootPath,
+          node.relativePath,
+          newRelativePath,
+        );
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace, notionFilePages: nextNotionFilePages, ...refs });
+        return true;
+      },
+
       pinNode: (targetId) => {
         const { workspace } = get();
         const nextWorkspace = togglePinNode(workspace, targetId);
@@ -1826,7 +2010,17 @@ export const useEditorStore = create(
           return tab;
         });
 
-        const patch = { workspace: updated, selectedId: nextSelectedId, openTabs: nextOpenTabs };
+        const patch = {
+          workspace: updated,
+          selectedId: nextSelectedId,
+          openTabs: nextOpenTabs,
+          notionFilePages: remapNotionFilePagesAfterPathChange(
+            get().notionFilePages,
+            node.projectRootPath,
+            oldRelativePath,
+            newRelativePath,
+          ),
+        };
         if (updatedAt != null) {
           const renamedNode = findNodeById(updated, newRootId);
           if (renamedNode?.type === 'file') {

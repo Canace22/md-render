@@ -4,6 +4,7 @@
  */
 
 import { getTemplateById } from './wechatTemplates.js';
+import { copyHtmlWithExecCommand } from './clipboardUtils.js';
 
 /**
  * 参照 wechat-format：将 ul/ol 转为 p+bullet，避免微信编辑器重置列表样式
@@ -488,37 +489,23 @@ const copyToWeChat = async (html, options = {}) => {
    * 降级：execCommand 复制。容器仅做定位，不设置 font-size/line-height 避免干扰子元素样式。
    * @see https://github.com/lyricat/wechat-format
    */
-  const writeWithExecCommand = () => {
-    const container = document.createElement('div');
-    container.innerHTML = wechatHTML;
-    container.style.cssText = 'position:fixed;left:-9999px;top:0;';
-    document.body.appendChild(container);
-
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    const range = document.createRange();
-    range.setStartBefore(container.firstChild);
-    range.setEndAfter(container.lastChild);
-    sel.addRange(range);
-
-    document.execCommand('copy');
-    document.body.removeChild(container);
-    sel.removeAllRanges();
-  };
+  const writeWithExecCommand = () => copyHtmlWithExecCommand(wechatHTML, plainText);
 
   try {
     const ok = await writeWithClipboardAPI();
     if (ok) {
       copySuccess();
-      return;
+      return true;
     }
   } catch (_) {
     /* clipboard API 不可用或失败，继续降级 */
   }
 
   try {
-    writeWithExecCommand();
+    const ok = writeWithExecCommand();
+    if (!ok) throw new Error('浏览器未能写入剪贴板');
     copySuccess();
+    return true;
   } catch (err) {
     console.error('复制失败:', err);
     throw err;

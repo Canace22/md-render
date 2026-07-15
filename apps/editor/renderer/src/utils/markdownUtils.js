@@ -36,13 +36,47 @@ export const looksLikeMarkdownCodeFenceClipboardText = (value = '') => {
   return /(^|\n) {0,3}```[\s\S]*?```(?:\n|$)/.test(text);
 };
 
+const IGNORED_CLIPBOARD_ELEMENT_TAGS = new Set(['META']);
+const PLAIN_TEXT_HTML_TAGS = new Set(['BR', 'DIV', 'P']);
+const SAFARI_PLAIN_TEXT_BREAK_CLASS = 'Apple-interchange-newline';
+
+const getMeaningfulChildNodes = (node) => Array.from(node?.childNodes ?? []).filter((child) => {
+  if (child.nodeType === Node.ELEMENT_NODE) {
+    return !IGNORED_CLIPBOARD_ELEMENT_TAGS.has(child.tagName);
+  }
+  return child.nodeType === Node.TEXT_NODE && child.textContent?.trim();
+});
+
 /**
- * 判断剪贴板 HTML 是否包含代码块，避免将复制来的代码误判为 Markdown 列表/标题
+ * 判断剪贴板 HTML 是否只有一个代码块。
+ * 混合内容必须交回 BlockNote 默认 HTML 粘贴，不能只截取第一个 <pre>。
  */
 export const looksLikeCodeBlockClipboardHtml = (value = '') => {
   const html = value.trim();
-  if (!html) return false;
-  return /<pre[\s>]/i.test(html);
+  if (!html || typeof window === 'undefined') return false;
+
+  const container = window.document.createElement('div');
+  container.innerHTML = html;
+  const preBlocks = container.querySelectorAll('pre');
+  if (preBlocks.length !== 1) return false;
+
+  const pre = preBlocks[0];
+  const directCode = pre.querySelector(':scope > code');
+  if (directCode) {
+    const preChildren = getMeaningfulChildNodes(pre);
+    if (preChildren.length !== 1 || preChildren[0] !== directCode) return false;
+  }
+
+  let onlyChild = pre;
+  while (onlyChild.parentNode && onlyChild.parentNode !== container) {
+    const parent = onlyChild.parentNode;
+    const siblings = getMeaningfulChildNodes(parent);
+    if (siblings.length !== 1 || siblings[0] !== onlyChild) return false;
+    onlyChild = parent;
+  }
+
+  const rootChildren = getMeaningfulChildNodes(container);
+  return rootChildren.length === 1 && rootChildren[0] === onlyChild;
 };
 
 /**
@@ -51,8 +85,18 @@ export const looksLikeCodeBlockClipboardHtml = (value = '') => {
  */
 export const looksLikePlainTextHtml = (value = '') => {
   const html = value.trim();
-  if (!html) return false;
-  return !/<(?:a|b|strong|i|em|u|s|del|sup|sub|mark|img|table|t[hdr]|ul|ol|li|h[1-6]|pre|code|blockquote|figure)\b/i.test(html);
+  if (!html || typeof window === 'undefined') return false;
+
+  const container = window.document.createElement('div');
+  container.innerHTML = html;
+  return Array.from(container.querySelectorAll('*')).every((element) => {
+    if (IGNORED_CLIPBOARD_ELEMENT_TAGS.has(element.tagName)) return true;
+    if (!PLAIN_TEXT_HTML_TAGS.has(element.tagName)) return false;
+    if (element.attributes.length === 0) return true;
+    return element.tagName === 'BR'
+      && element.attributes.length === 1
+      && element.getAttribute('class') === SAFARI_PLAIN_TEXT_BREAK_CLASS;
+  });
 };
 
 /**
@@ -66,17 +110,37 @@ export const extractCodeBlockFromClipboardHtml = (value = '') => {
   container.innerHTML = html;
 
   const pre = container.querySelector('pre');
-  const code = pre?.querySelector('code');
-  if (!pre || !code) return null;
+  if (!pre) return null;
 
-  const classLanguage = Array.from(code.classList)
+  const code = pre.querySelector(':scope > code');
+  const contentNode = code ?? pre;
+  const languageNode = code ?? pre;
+
+  const classLanguage = Array.from(languageNode.classList)
     .find((name) => name.startsWith('language-'))
     ?.replace('language-', '');
 
   return {
-    content: code.textContent ?? '',
-    language: code.getAttribute('data-language') || classLanguage || 'text',
+    content: contentNode.textContent ?? '',
+    language:
+      languageNode.getAttribute('data-language')
+      || pre.getAttribute('data-language')
+      || classLanguage
+      || 'text',
   };
+};
+
+/** 将提取后的单代码块重建为安全 HTML，交给 ProseMirror 按当前选区粘贴。 */
+export const buildCodeBlockClipboardHtml = ({ content = '', language = 'text' } = {}) => {
+  if (typeof window === 'undefined') return '';
+  const pre = window.document.createElement('pre');
+  const code = window.document.createElement('code');
+  const normalizedLanguage = String(language || 'text');
+  code.className = `language-${normalizedLanguage}`;
+  code.setAttribute('data-language', normalizedLanguage);
+  code.textContent = String(content);
+  pre.appendChild(code);
+  return pre.outerHTML;
 };
 
 export const getBlockTextContent = (content = []) => {
@@ -137,6 +201,51 @@ export const parseBlockNoteContent = (value) => {
   } catch {
     return null;
   }
+};
+
+/**
+ * 在已序列化的 BlockNote 正文中精确结算异步图片占位块。
+ * 成功时回填最终 URL，失败时移除占位，且不覆盖用户后续替换的图片。
+ */
+export const resolvePendingImagesInContent = (value, resolutions = []) => {
+  const blocks = parseBlockNoteContent(value);
+  if (!blocks || resolutions.length === 0) return null;
+
+  const byBlockId = new Map(
+    resolutions
+      .filter((item) => item?.blockId)
+      .map((item) => [item.blockId, item]),
+  );
+  let changed = false;
+
+  const visit = (items = []) => items.map((block) => {
+    const resolution = byBlockId.get(block.id)
+      ?? resolutions.find((item) => item?.pendingUrl === block.props?.url);
+    const matchesPendingImage = block.type === 'image'
+      && resolution
+      && block.props?.url === resolution.pendingUrl;
+    const children = Array.isArray(block.children) ? visit(block.children) : block.children;
+
+    if (matchesPendingImage) {
+      changed = true;
+      if (resolution.failed) return null;
+      return {
+        ...block,
+        props: {
+          ...block.props,
+          url: resolution.url,
+          name: resolution.name,
+        },
+        ...(children === block.children ? {} : { children }),
+      };
+    }
+    if (children !== block.children) return { ...block, children };
+    return block;
+  }).filter(Boolean);
+
+  const settledBlocks = visit(blocks);
+  const nextBlocks = settledBlocks.length > 0 ? settledBlocks : createEmptyDocument();
+  return changed ? serializeBlockNoteContent(nextBlocks) : null;
 };
 
 /**

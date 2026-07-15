@@ -44,9 +44,15 @@ flowchart TD
 ## 关键约束 / 易踩的坑
 
 - **不要改 `save-local-project-file`**：它是文本路径，二进制必须走新 IPC。
-- **`local-media://` 后面跟绝对路径**：`saveBinaryAsset` 返回的是相对项目根的路径，renderer 要拼成 `local-media://${projectRoot}/${relativePath}` 并 `encodeURI`。
+- **`local-media://` 后面跟绝对路径**：`saveBinaryAsset` 返回的是相对项目根的路径，renderer 要拼成 `local-media://${projectRoot}/${relativePath}`。不要对整条路径用 `encodeURI`（它不编码 `#` / `?`），要保留 `/` 并对每个路径段分别 `encodeURIComponent`。
 - **mime 子类型来自 data URL**：`data:image/png;base64,...` 里的 `png` 才是 mime 子类型；`jpeg` 要映射成 `.jpg`，`svg+xml` 映射成 `.svg`。
 - **降级是必须的**：内置文档没有 `projectRootPath`，不降级会直接报错丢图。
+- **异步上传前先固定粘贴现场**：`uploadFile` 一进入就快照当前项目根，不要在 `FileReader` / IPC `await` 之后再读 ref；粘贴图片时先在当前 ProseMirror 选区同步插入占位图片，再异步回填最终 URL。这样才不会因移动光标/切项目而插错位置、存错目录，多图也要一次占位保持顺序。
+- **占位 URL 的生命周期要跨 editor 实例**：上传期间切文档会卸载原 `BlockNoteView`，只对旧 editor `updateBlock` 不会回写 store/磁盘。要保留 `fileId + blockId + pendingUrl → finalUrl` 映射，按 blockId 精确 patch 最新序列化正文并落盘，不能整篇覆盖旧快照。
+- **回填不应新增 Undo 步骤**：最终 URL 回填放在 `editor.transact()` 中并设 `addToHistory=false`；同时保留 pending 映射，让用户在上传前 Undo、上传后 Redo 时仍能把恢复的占位块换成最终 URL。
+- **占位内容禁止落盘和跨文档复制**：`blob:` / pending data URL 不能写进 Markdown、Notion 或剪贴到另一篇文档；上传完成前应暂停该文档落盘并在复制/粘贴时给出提示，最终 URL 回填后再保存。
+- **保存与路径变更要串行**：防抖 timer 已进入 async 后 `clearTimeout` 无效，要按文件排队保存；重命名/移动/删除期间禁止用旧 fileId 新建 timer，并在路径变更后用 blockId/pendingUrl 定位新节点、把最新内容写到新路径，避免旧文件被重新创建。
+- **混合附件不要半接管**：只有当剪贴板中所有 file item 都是图片时才走自定义多图链路；图片 + PDF/其它附件应交回默认 paste handler，避免非图片文件被静默丢弃。
 - **遵循 `safe-change-workflow`**：定向搜索→最小改动，别碰无关模块。
 
 ## 验证

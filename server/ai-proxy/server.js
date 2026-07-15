@@ -21,6 +21,7 @@ const http = require('http');
 const https = require('https');
 const { ALLOW_ORIGIN, DEFAULT_UPSTREAM_HOST, PORT } = require('./config');
 const { PROVIDERS, listProviders, resolveProvider } = require('./providers');
+const { searchKnowledgeSources } = require('./knowledgeSearch');
 const { executeTool, loadTools, toolsToOpenAISchema } = require('./toolRunner');
 
 const TOOLS = loadTools();
@@ -126,6 +127,22 @@ const server = http.createServer((req, res) => {
   // ── Provider 列表：GET /api/providers ──
   if (req.method === 'GET' && req.url === '/api/providers') {
     return jsonRes(res, 200, { providers: listProviders() });
+  }
+
+  // ── 外挂知识库检索：POST /api/knowledge/search ──
+  if (req.method === 'POST' && req.url === '/api/knowledge/search') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const result = await searchKnowledgeSources(payload);
+        return jsonRes(res, result.ok ? 200 : 400, result);
+      } catch (err) {
+        return jsonRes(res, 400, { ok: false, error: `请求解析失败: ${err.message}`, results: [] });
+      }
+    });
+    return;
   }
 
   // ── 工具列表：GET /api/tools ──

@@ -53,8 +53,28 @@ export const resolveAiServerBase = () => {
 
 export const readAiServerBase = () => resolveAiServerBase();
 
+/**
+ * 返回可用于诊断的 AI 地址来源，不包含任何 API Key。
+ * override 来自本机设置；builtDefault 来自打包时配置。
+ */
+export const getAiServerConfiguration = () => {
+  const override = normalizeBase(readLocalStorage(AI_SERVER_STORAGE_KEY));
+  const builtDefault = normalizeBase(BUILT_AI_PROXY_BASE)
+    || normalizeBase(import.meta.env?.VITE_AI_PROXY);
+  return {
+    override,
+    builtDefault,
+    resolved: override || builtDefault,
+    source: override ? 'override' : (builtDefault ? 'build' : 'main-default'),
+  };
+};
+
 export const saveAiServerBase = (value) => {
   writeLocalStorage(AI_SERVER_STORAGE_KEY, normalizeBase(value));
+};
+
+export const clearAiServerOverride = () => {
+  writeLocalStorage(AI_SERVER_STORAGE_KEY, '');
 };
 
 export const getActiveProviderId = () => {

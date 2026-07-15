@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dropdown, message } from 'antd';
+import { Dropdown, Modal, message } from 'antd';
 import {
   ApartmentOutlined,
   ArrowsAltOutlined,
@@ -13,19 +13,36 @@ import {
   FilePdfOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import { Bot, Settings, Square, Wrench, User, Loader2, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check, Copy } from 'lucide-react';
+import { Activity, Bot, PackageCheck, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
+  collectHiddenFileIds,
+  findAgentMetaFile,
   findNodeById,
+  getFileKnowledgeSearchText,
+  AGENT_META_FOLDER_NAME,
 } from '../store/workspaceUtils.js';
 import AgentDocMeta from './AgentDocMeta.jsx';
+import AgentConversation from './AgentConversation.jsx';
+import AgentKnowledgeSources from './AgentKnowledgeSources.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
-import { parseAssistantChoiceCards } from '../core/agent/choiceCards.js';
+import {
+  EDITORIAL_REVIEW_PROMPT,
+  HEADLINE_ANALYSIS_PROMPT,
+  PUBLISH_RETRO_PROMPT,
+} from '../core/agent/editorialBoard.js';
+import {
+  EDITORIAL_MEMORY_DOC_NAME,
+  MEMORY_CATEGORIES,
+  appendMemoryEntry,
+  findEditorialMemoryFile,
+} from '../core/agent/editorialMemory.js';
 import { fetchServerTools } from '../core/agent/toolRegistry.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
   buildActiveDocMeta,
+  buildContentAssetPointer,
   buildPinnedContext,
   buildRecentDocPointers,
   buildTaskContextPacket,
@@ -57,6 +74,8 @@ import {
   saveProviderConfig,
   readAiServerBase,
   saveAiServerBase,
+  clearAiServerOverride,
+  getAiServerConfiguration,
   hasBuiltinKey,
   fetchServerProviders,
   hasAiBridge,
@@ -65,18 +84,20 @@ import {
   aiExecTool,
   aiListTools,
   dbSearch,
+  getDiagnosticsSnapshot,
   hasAiToolBridge,
   hasDbBridge,
+  hasDiagnosticsBridge,
   pickFile,
   pickSavePath,
 } from '../services/electronBridge.js';
-
-const ASSISTANT_TYPE_INTERVAL_MS = 18;
-const ASSISTANT_TYPE_CHUNK_SIZE = 4;
-const ASSISTANT_TYPE_LONG_TEXT_LIMIT = 1200;
-const ASSISTANT_TYPE_LONG_TEXT_CHUNK_SIZE = 8;
-
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+import { buildAgentArtifactPayload, parseAgentArtifactResult } from '../core/agent/artifactUtils.js';
+import { buildAgentHealthSnapshot, runSafeRepair } from '../core/agent/appSupport.js';
+import {
+  loadKnowledgeSources,
+  saveKnowledgeSources,
+} from '../core/agent/knowledgeSources.js';
+import { searchExternalKnowledge } from '../services/externalKnowledgeService.js';
 
 /** 把工作区文件树拍平成文件数组（web 端搜索兜底用） */
 const flattenFiles = (node, acc = []) => {
@@ -98,75 +119,63 @@ const buildRefReason = (ref, keywords) => {
   return hits.length ? `关键词：${hits.join('、')}` : '与当前稿件主题相关';
 };
 
-/** 把 tool 消息里最后一条 running 改成 done */
-const markLastToolDone = (messages, label) => {
+const getArtifactResultForMessage = (result) => {
+  const artifact = parseAgentArtifactResult(result);
+  if (!artifact) return '';
+  return JSON.stringify({
+    kind: 'agent_artifact',
+    ok: true,
+    artifactType: artifact.artifactType,
+    artifactLabel: artifact.artifactLabel,
+    fileId: artifact.fileId,
+    name: artifact.name,
+  });
+};
+
+const TOOL_ERROR_RESULT_PATTERN = /^\s*(?:工具「[^」]+」(?:执行出错|不可用)|[^\n：:]{0,24}(?:失败|出错|错误|不可用)[：:]|server 工具通道不可用|未知工具|当前工作区不可用|当前环境不支持|当前没有.*无法)/i;
+
+const getToolCompletionStatus = (result) => {
+  const text = String(result ?? '').trim();
+  if (!text) return 'done';
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.ok === false) return 'error';
+  } catch {
+    /* 普通文本结果继续按前缀判断 */
+  }
+  return TOOL_ERROR_RESULT_PATTERN.test(text) ? 'error' : 'done';
+};
+
+/** 用 callId 精确收口工具步骤，兼容旧事件的 label 匹配。 */
+const finishToolMessage = (messages, { callId, label, status, result = '' }) => {
   const next = [...messages];
   for (let i = next.length - 1; i >= 0; i -= 1) {
-    if (next[i].role === 'tool' && next[i].label === label && next[i].status === 'running') {
-      next[i] = { ...next[i], status: 'done' };
+    const item = next[i];
+    const matchesCall = callId ? item.callId === callId : item.label === label;
+    if (item.role === 'tool' && matchesCall && item.status === 'running') {
+      next[i] = { ...item, status, result };
       break;
     }
   }
   return next;
 };
 
-const updateTypingAssistantMessage = (messages, patch) => {
-  const next = [...messages];
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    if (next[i].role === 'assistant' && next[i].typing) {
-      next[i] = { ...next[i], ...patch };
-      return next;
-    }
-  }
-  return [...next, { role: 'assistant', text: patch.text ?? '', typing: patch.typing ?? false }];
-};
+const finishRunningTools = (messages, status) => messages.map((item) => (
+  item.role === 'tool' && item.status === 'running'
+    ? { ...item, status }
+    : item
+));
 
-const stripPartialChoiceProtocol = (text) =>
-  String(text ?? '').replace(/<!--\s*agent-choice[\s\S]*$/i, '').trimEnd();
-
-const buildAssistantRenderPayload = (message) => {
-  if (message.typing) {
-    return {
-      displayText: stripPartialChoiceProtocol(message.text),
-      choices: [],
-    };
-  }
-  return parseAssistantChoiceCards(message.text);
-};
-
-const appendTypedAssistantMessage = async ({
-  sessionId,
-  text,
-  signal,
-  appendAgentMessage,
-  updateAgentMessages,
-}) => {
-  const fullText = String(text ?? '');
-  if (!fullText) return;
-
-  appendAgentMessage(sessionId, { role: 'assistant', text: '', typing: true });
-
-  const chunkSize = fullText.length > ASSISTANT_TYPE_LONG_TEXT_LIMIT
-    ? ASSISTANT_TYPE_LONG_TEXT_CHUNK_SIZE
-    : ASSISTANT_TYPE_CHUNK_SIZE;
-
-  for (let end = chunkSize; end < fullText.length; end += chunkSize) {
-    if (signal?.aborted) {
-      updateAgentMessages(sessionId, (msgs) =>
-        updateTypingAssistantMessage(msgs, {
-          text: fullText.slice(0, Math.max(0, end - chunkSize)),
-          typing: false,
-        }));
-      throw new Error('已取消');
-    }
-    updateAgentMessages(sessionId, (msgs) =>
-      updateTypingAssistantMessage(msgs, { text: fullText.slice(0, end), typing: true }));
-    await wait(ASSISTANT_TYPE_INTERVAL_MS);
-  }
-
-  updateAgentMessages(sessionId, (msgs) =>
-    updateTypingAssistantMessage(msgs, { text: fullText, typing: false }));
-};
+const requestSafeRepairApproval = ({ title, description }) => new Promise((resolve) => {
+  Modal.confirm({
+    title,
+    content: description,
+    okText: '确认修复',
+    cancelText: '取消',
+    onOk: () => resolve(true),
+    onCancel: () => resolve(false),
+  });
+});
 
 const formatAgentError = (error) => {
   const raw = String(error?.message ?? error ?? '').trim();
@@ -203,6 +212,27 @@ const recallDocsForContext = async ({
     reason: buildRefReason(ref, keywords),
   }));
 };
+
+/** AI 请求删除条目时的强制确认框：列出全部名称，用户点确认才继续 */
+const confirmAgentDelete = (names, reason) => new Promise((resolve) => {
+  Modal.confirm({
+    title: `AI 助手请求删除 ${names.length} 个条目`,
+    content: (
+      <div>
+        {reason ? <p style={{ marginBottom: 8 }}>原因：{reason}</p> : null}
+        <ul style={{ paddingLeft: 18, maxHeight: 200, overflow: 'auto' }}>
+          {names.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}
+        </ul>
+        <p style={{ marginTop: 8 }}>删除后不可恢复，确认继续吗？</p>
+      </div>
+    ),
+    okText: '确认删除',
+    okButtonProps: { danger: true },
+    cancelText: '取消',
+    onOk: () => resolve(true),
+    onCancel: () => resolve(false),
+  });
+});
 
 const CONTENT_ENTRY_PRESETS = Object.freeze({
   topic: {
@@ -242,22 +272,91 @@ const TOPIC_SELECTION_SKILL_PROMPT = [
 ].join('\n');
 const TOPIC_SELECTION_SKILL = Object.freeze({
   id: 'topic-entry',
-  type: 'insert',
+  type: 'agent',
   label: '选题',
   icon: ApartmentOutlined,
   tone: 'teal',
   category: '项目 skill',
   description: '从旧文、素材和趋势整理选题',
   aliases: ['topic', 'idea', '选题库', '旧文', '新闻', '热点', '趋势'],
-  insertText: TOPIC_SELECTION_SKILL_PROMPT,
+  promptText: TOPIC_SELECTION_SKILL_PROMPT,
+});
+
+const APP_DIAGNOSTICS_SKILL_PROMPT = [
+  '请帮我排查 MD Render 当前的问题。',
+  '先调用 inspect_app_health 读取脱敏运行快照，再区分配置、数据、服务或代码故障。',
+  '只有诊断结果返回 availableRepairs 时，才能调用 apply_safe_repair；修复后必须复检。',
+  '如果不能在本机安全修复，请用 create_agent_artifact 创建 incident_report，写清复现、环境、证据、归属层、临时方案和验收标准。',
+].join('\n');
+const APP_DIAGNOSTICS_SKILL = Object.freeze({
+  id: 'app-diagnostics',
+  type: 'agent',
+  label: '应用体检',
+  icon: Activity,
+  tone: 'rose',
+  category: 'App 专家',
+  description: '诊断发布版环境并尝试安全修复',
+  aliases: ['diagnostics', 'health', 'bug', '故障', '修复', '体检'],
+  promptText: APP_DIAGNOSTICS_SKILL_PROMPT,
+});
+
+// AI 编辑部：prompt 正文来自 core/agent/editorialBoard.js（事实源是 .agents/skills/ai-editorial-board/SKILL.md）
+const EDITORIAL_REVIEW_SKILL = Object.freeze({
+  id: 'editorial-review',
+  type: 'agent',
+  label: '编辑部审稿',
+  icon: ShieldCheck,
+  tone: 'violet',
+  category: 'AI 编辑部',
+  description: '9 个编辑角色评审当前稿件',
+  aliases: ['审稿', '编辑部', '评审', '总编辑', 'review', 'editorial'],
+  promptText: EDITORIAL_REVIEW_PROMPT,
+});
+
+const EDITORIAL_SKILLS = Object.freeze([
+  EDITORIAL_REVIEW_SKILL,
+  {
+    id: 'editorial-headline',
+    type: 'agent',
+    label: '标题分析',
+    icon: HighlightOutlined,
+    tone: 'cyan',
+    category: 'AI 编辑部',
+    description: '分析原标题并给多渠道版本',
+    aliases: ['标题分析', '标题编辑', 'headline', '起标题'],
+    promptText: HEADLINE_ANALYSIS_PROMPT,
+  },
+  {
+    id: 'editorial-retro',
+    type: 'agent',
+    label: '发布复盘',
+    icon: Activity,
+    tone: 'amber',
+    category: 'AI 编辑部',
+    description: '按后台数据复盘并沉淀经验',
+    aliases: ['复盘', '数据复盘', 'retro', '阅读量', '发布后'],
+    promptText: PUBLISH_RETRO_PROMPT,
+  },
+]);
+
+const DELIVERABLE_SKILL = Object.freeze({
+  id: 'create-deliverable',
+  type: 'agent',
+  label: '生成交付物',
+  icon: PackageCheck,
+  tone: 'teal',
+  category: '产出物',
+  description: '将结果另存为有来源关系的文档',
+  aliases: ['artifact', 'deliverable', '交付', '报告', '方案'],
+  promptText: '请先理解当前稿件、相关旧文和我指定的资料，完成后调用 create_agent_artifact 把结果另存为一份可复用的交付物。',
 });
 
 const WELCOME_SUGGESTIONS = Object.freeze([
+  EDITORIAL_REVIEW_SKILL,
+  APP_DIAGNOSTICS_SKILL,
+  DELIVERABLE_SKILL,
   { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.POLISH, label: '润色一下这段文字' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.SUMMARIZE, label: '帮我总结一下' },
   { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼关键要点' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS, label: '想几个标题' },
 ]);
 
 const COMPOSER_SHORTCUTS = Object.freeze([
@@ -395,127 +494,130 @@ const EXTRA_PLATFORM_SLASH_SKILLS = Object.freeze([
 ]);
 
 const PROJECT_SLASH_SKILLS = Object.freeze([
+  ...EDITORIAL_SKILLS,
+  APP_DIAGNOSTICS_SKILL,
+  DELIVERABLE_SKILL,
   TOPIC_SELECTION_SKILL,
   {
     id: 'draft-entry',
-    type: 'insert',
+    type: 'agent',
     label: '新稿件',
     icon: FileTextOutlined,
     tone: 'blue',
     category: '项目 skill',
     description: '新建一篇稿件',
     aliases: ['draft', '稿件', '文章'],
-    insertText: '帮我新建一篇稿件：',
+    promptText: '请直接调用 create_content_entry 创建 kind=draft 的稿件，使用默认名称，不要先询问。',
   },
   {
     id: 'material-entry',
-    type: 'insert',
+    type: 'agent',
     label: '资料单',
     icon: FileTextOutlined,
     tone: 'amber',
     category: '项目 skill',
     description: '新建一个资料单',
     aliases: ['material', '资料', '素材'],
-    insertText: '帮我新建一个资料单：',
+    promptText: '请直接调用 create_content_entry 创建 kind=material 的资料单，使用默认名称，不要先询问。',
   },
   {
     id: 'ready-entry',
-    type: 'insert',
+    type: 'agent',
     label: '待发布稿',
     icon: FileTextOutlined,
     tone: 'green',
     category: '项目 skill',
     description: '新建一篇待发布稿',
     aliases: ['ready', '发布', '平台稿'],
-    insertText: '帮我新建一篇待发布稿：',
+    promptText: '请直接调用 create_content_entry 创建 kind=ready 的待发布稿，使用默认名称，不要先询问。',
   },
   {
     id: 'daily-task',
-    type: 'insert',
+    type: 'agent',
     label: '今日任务',
     icon: Check,
     tone: 'cyan',
     category: '项目 skill',
     description: '往今日速记添加一条任务',
     aliases: ['daily', 'task', '待办'],
-    insertText: '帮我在今日速记里加一条任务：',
+    promptText: '帮我在今日速记里加一条任务。如果缺少任务内容，请直接问我。',
   },
   {
     id: 'daily-note',
-    type: 'insert',
+    type: 'agent',
     label: '今日笔记',
     icon: MessageSquareQuote,
     tone: 'slate',
     category: '项目 skill',
     description: '往今日速记添加一条笔记',
     aliases: ['daily', 'note', '速记'],
-    insertText: '帮我在今日速记里记一条笔记：',
+    promptText: '帮我在今日速记里记一条笔记。如果缺少笔记内容，请直接问我。',
   },
   {
     id: 'todo-pool',
-    type: 'insert',
+    type: 'agent',
     label: '待办池',
     icon: Check,
     tone: 'violet',
     category: '项目 skill',
     description: '往待办池添加一条待办',
     aliases: ['todo', 'pool', '稍后处理'],
-    insertText: '帮我往待办池加一条待办：',
+    promptText: '帮我往待办池加一条待办。如果缺少待办内容，请直接问我。',
   },
   {
     id: 'canvas-flow',
-    type: 'insert',
+    type: 'agent',
     label: '白板流程图',
     icon: ArrowsAltOutlined,
     tone: 'rose',
     category: '项目 skill',
     description: '切到白板并生成流程图',
     aliases: ['白板', '流程图', 'canvas', 'flow'],
-    insertText: '请切到灵感白板，并画一个流程图：',
+    promptText: '请切到灵感白板，并根据当前稿件或上下文画一个流程图。',
   },
   {
     id: 'canvas-cards',
-    type: 'insert',
+    type: 'agent',
     label: '白板卡片',
     icon: PlusOutlined,
     tone: 'teal',
     category: '项目 skill',
     description: '往白板追加几张卡片',
     aliases: ['卡片', '点子', 'brainstorm'],
-    insertText: '请切到灵感白板，并追加几张卡片：',
+    promptText: '请切到灵感白板，并根据当前稿件或上下文追加几张卡片。',
   },
   {
     id: 'related-docs',
-    type: 'insert',
+    type: 'agent',
     label: '相关旧文',
     icon: FileText,
     tone: 'slate',
     category: '项目 skill',
     description: '召回和当前文档相关的旧文',
     aliases: ['参考', '召回', '旧文', 'related'],
-    insertText: '帮我找和当前文档相关的旧文参考',
+    promptText: '帮我找和当前文档相关的旧文参考。',
   },
   {
     id: 'workspace-brief',
-    type: 'insert',
+    type: 'agent',
     label: '工作区概览',
     icon: Bot,
     tone: 'gray',
     category: '项目 skill',
     description: '先概览当前工作区再继续',
     aliases: ['workspace', 'overview', '概览'],
-    insertText: '先帮我概览一下当前工作区，然后再继续：',
+    promptText: '请概览当前工作区，总结近期内容、重要主题和建议的下一步。',
   },
   {
     id: 'new-folder',
-    type: 'insert',
+    type: 'agent',
     label: '新建文件夹',
     icon: Plus,
     tone: 'purple',
     category: '项目 skill',
     description: '在当前位置新建文件夹',
     aliases: ['folder', '目录', '整理'],
-    insertText: '帮我在当前位置新建一个文件夹，名字叫：',
+    promptText: '请直接调用 create_folder 在当前位置创建文件夹，使用默认名称，不要先询问。',
   },
 ]);
 
@@ -678,25 +780,39 @@ export default function AgentPanel({ onClose }) {
   const [providerId, setProviderId] = useState(() => getActiveProviderId());
   const [cfg, setCfg] = useState(() => readProviderConfig());
   const [aiServerBase, setAiServerBase] = useState(() => readAiServerBase());
+  const [knowledgeSources, setKnowledgeSources] = useState(() => loadKnowledgeSources());
   const [serverProvidersReady, setServerProvidersReady] = useState(false);
+  const abortRef = useRef(null);
+  const activeRunIdRef = useRef(0);
+  const runLockRef = useRef(false);
+  const inputRef = useRef(null);
+  const messagesRef = useRef(null);
+  const shouldFollowMessagesRef = useRef(true);
+  const forceScrollToBottomRef = useRef(false);
 
   // 启动时从主进程获取内置 provider 列表
   useEffect(() => {
     fetchServerProviders().then(() => setServerProvidersReady(true));
   }, []);
+  useEffect(() => () => {
+    activeRunIdRef.current += 1;
+    runLockRef.current = false;
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
   useEffect(() => {
     setLastContextPacket(null);
+    shouldFollowMessagesRef.current = true;
+    forceScrollToBottomRef.current = true;
   }, [activeSessionId]);
   const isChatTab = activePanelTab === 'chat';
   const isWelcomeMode = isChatTab && messages.length === 0 && !showSettings && !showSessions;
-
-  const abortRef = useRef(null);
-  const inputRef = useRef(null);
-  const messagesRef = useRef(null);
+  const isActiveSessionRunning = running && runningSessionId === activeSessionId;
+  const isOtherSessionRunning = running && runningSessionId !== activeSessionId;
 
   const isShortcutDisabled = useCallback((item) => {
-    return running && (item.type === 'quick' || item.type === 'platform');
-  }, [aiServerBase, running]);
+    return running && ['agent', 'quick', 'platform'].includes(item.type);
+  }, [running]);
 
   const composerPlusMenuItems = useMemo(() => {
     const shortcuts = COMPOSER_PLUS_SHORTCUTS.map((item) => {
@@ -747,9 +863,62 @@ export default function AgentPanel({ onClose }) {
         contextNodeId: selectedId,
         meta: { targetPlatforms, sourceMaterialIds },
       });
-      return result?.ok
-        ? `已新建文档「${result.name}」，原文未改动。`
-        : `新建文档失败：${result?.error || '未知错误'}`;
+      return JSON.stringify(result?.ok
+        ? { ok: true, fileId: result.fileId, name: result.name, message: '原文未改动。' }
+        : { ok: false, error: result?.error || '未知错误' });
+    },
+    createAgentArtifact: async (args = {}) => {
+      const prepared = buildAgentArtifactPayload(args);
+      if (!prepared.ok) return JSON.stringify({ ok: false, error: prepared.error });
+
+      const result = await createGeneratedFile({
+        name: prepared.artifact.name,
+        content: prepared.artifact.content,
+        contextNodeId: selectedId,
+        meta: prepared.artifact.meta,
+      });
+      return JSON.stringify(result?.ok
+        ? {
+          kind: 'agent_artifact',
+          ok: true,
+          artifactType: prepared.artifact.type,
+          artifactLabel: prepared.artifact.label,
+          fileId: result.fileId,
+          name: result.name,
+        }
+        : { kind: 'agent_artifact', ok: false, error: result?.error || '未知错误' });
+    },
+    inspectAppHealth: async () => {
+      const aiConfiguration = getAiServerConfiguration();
+      const runtimeSnapshot = hasDiagnosticsBridge()
+        ? await getDiagnosticsSnapshot({ aiProxyBase: aiConfiguration.resolved })
+        : {
+          ok: false,
+          error: '当前不在 Electron 环境，无法读取本机运行快照。',
+          aiProxy: { reachable: false },
+        };
+      return buildAgentHealthSnapshot({
+        runtimeSnapshot,
+        aiConfiguration,
+        workspaceBrief: buildWorkspaceToolBrief(workspace, selectedId),
+        activeDoc: buildActiveDocMeta(activeFile, markdown ?? ''),
+        currentSurface: getSurfaceLabel(surface, activeFile),
+      });
+    },
+    applySafeRepair: async ({ repairId = '' } = {}) => {
+      const result = await runSafeRepair({
+        repairId,
+        aiConfiguration: getAiServerConfiguration(),
+        confirm: requestSafeRepairApproval,
+        clearAiServerOverride,
+        restoreAiServerOverride: saveAiServerBase,
+        verify: async (nextBase) => {
+          if (!hasDiagnosticsBridge()) return { aiProxy: { reachable: false } };
+          return getDiagnosticsSnapshot({ aiProxyBase: nextBase });
+        },
+      });
+      setAiServerBase(readAiServerBase());
+      return JSON.stringify(result);
     },
     addDailyEntry: async ({ type = 'task', text = '', dateKey = '' } = {}) => {
       const cleanText = String(text ?? '').trim();
@@ -835,6 +1004,7 @@ export default function AgentPanel({ onClose }) {
       summary = '',
       content = '',
       targetPlatforms = [],
+      sourceMaterialIds = [],
     } = {}) => {
       const preset = CONTENT_ENTRY_PRESETS[kind] || CONTENT_ENTRY_PRESETS.topic;
       const finalContent = String(content ?? '').trim()
@@ -847,6 +1017,7 @@ export default function AgentPanel({ onClose }) {
           draftStatus: preset.draftStatus,
           summary,
           targetPlatforms,
+          sourceMaterialIds,
         },
       });
       return result?.ok
@@ -862,6 +1033,87 @@ export default function AgentPanel({ onClose }) {
         ...buildActiveDocMeta(file, file.content ?? ''),
         content: file.content ?? '',
       };
+    },
+    moveWorkspaceItem: async ({ id, targetFolderId } = {}) => {
+      const state = useEditorStore.getState();
+      const node = findNodeById(state.workspace, id);
+      if (!node) return `移动失败：未找到 id 为「${id}」的条目。`;
+      const resolvedTargetId = targetFolderId === AGENT_META_FOLDER_NAME
+        ? state.ensureAgentMetaFolder()
+        : targetFolderId;
+      const target = findNodeById(useEditorStore.getState().workspace, resolvedTargetId);
+      if (!target || target.type !== 'folder') return '移动失败：目标不是有效文件夹。';
+      const ok = useEditorStore.getState().moveNodeToFolderById(id, resolvedTargetId);
+      return ok
+        ? `已把「${node.name}」移动到「${target.name}」。`
+        : `移动失败：「${node.name}」可能已在目标文件夹里，或该条目不支持移动（如磁盘挂载项目、目标在其子树内）。`;
+    },
+    renameWorkspaceItem: async ({ id, name } = {}) => {
+      const state = useEditorStore.getState();
+      const node = findNodeById(state.workspace, id);
+      if (!node) return `重命名失败：未找到 id 为「${id}」的条目。`;
+      const oldName = node.name;
+      const ok = state.applyRename(id, name);
+      return ok
+        ? `已把「${oldName}」重命名为「${name}」。`
+        : '重命名失败：名称无效或该条目不支持重命名（如磁盘挂载项目）。';
+    },
+    deleteWorkspaceItems: async ({ ids = [], reason = '' } = {}) => {
+      const state = useEditorStore.getState();
+      const looked = ids.map((id) => ({ id, node: findNodeById(state.workspace, id) }));
+      const found = looked.filter((item) => item.node && item.id !== 'root');
+      const missing = looked.filter((item) => !item.node).map((item) => item.id);
+      if (!found.length) return '删除失败：没有找到任何对应条目，请先用 search_docs 确认 id。';
+
+      const confirmed = await confirmAgentDelete(found.map((item) => item.node.name), reason);
+      if (!confirmed) return '用户取消了删除，未做任何改动。';
+
+      const removedNames = [];
+      const failedNames = [];
+      for (const item of found) {
+        const ok = useEditorStore.getState().deleteNode(item.id);
+        (ok ? removedNames : failedNames).push(item.node.name);
+      }
+      return [
+        removedNames.length ? `已删除 ${removedNames.length} 个条目：${removedNames.map((n) => `「${n}」`).join('、')}。` : '',
+        failedNames.length ? `删除失败：${failedNames.map((n) => `「${n}」`).join('、')}（可能是磁盘挂载项目，需在侧栏手动处理）。` : '',
+        missing.length ? `未找到 id：${missing.join('、')}。` : '',
+      ].filter(Boolean).join(' ');
+    },
+    // 记忆读写必须用 getState() 拿实时 workspace：同一轮 agent run 会连续多次读写，
+    // useMemo 闭包里的 workspace 是本轮开始时的旧快照，用它判断「文件是否存在」会重复建档。
+    readEditorialMemory: async () => {
+      const ws = useEditorStore.getState().workspace;
+      const file = findAgentMetaFile(ws, EDITORIAL_MEMORY_DOC_NAME)
+        ?? findEditorialMemoryFile(collectFiles(ws)); // 兼容旧版散落在笔记区的记忆
+      if (!file) return null;
+      return { id: file.id, name: file.name, content: file.content ?? '' };
+    },
+    updateEditorialMemory: async ({ category, text } = {}) => {
+      const state = useEditorStore.getState();
+      const metaFile = findAgentMetaFile(state.workspace, EDITORIAL_MEMORY_DOC_NAME);
+      const legacyFile = metaFile ? null : findEditorialMemoryFile(collectFiles(state.workspace));
+      const base = metaFile ?? legacyFile;
+
+      const next = appendMemoryEntry(base?.content ?? '', {
+        category,
+        text,
+        dateKey: getTodayDateKey(),
+      });
+      if (!next.ok) return `更新失败：${next.error}`;
+
+      const result = state.upsertAgentMetaFile({
+        name: EDITORIAL_MEMORY_DOC_NAME,
+        content: next.content,
+        summary: 'AI 编辑部的长期知识库（只追加，不改写）',
+      });
+      if (!result?.ok) return `写入记忆失败：${result?.error || '未知错误'}`;
+
+      const location = `${AGENT_META_FOLDER_NAME}/${EDITORIAL_MEMORY_DOC_NAME}`;
+      return [
+        `已把新经验追加到「${MEMORY_CATEGORIES[category]}」（${location}）。`,
+        legacyFile ? '旧位置的记忆内容已并入 .agent 目录，散落的旧「编辑部记忆」文档可以删除了。' : '',
+      ].filter(Boolean).join(' ');
     },
     openWorkspaceItem: async ({ id = '' } = {}) => {
       const targetId = String(id ?? '').trim();
@@ -894,23 +1146,36 @@ export default function AgentPanel({ onClose }) {
       return buildWorkspaceToolBrief(workspace, selectedId);
     },
     searchDocs: async (query) => {
+      // .agent 等隐藏目录里的元数据不进搜索/召回结果
+      const hiddenIds = collectHiddenFileIds(workspace);
       if (hasDbBridge()) {
         try {
           const res = await dbSearch(query);
-          return (res?.results ?? []).map((r) => ({
-            title: r.title ?? r.name ?? '未命名',
-            snippet: r.snippet ?? r.excerpt ?? '',
-            id: r.id,
-          }));
+          return (res?.results ?? []).filter((r) => !hiddenIds.has(r?.id)).map((r) => {
+            const node = collectFiles(workspace).find((file) => file?.id === r.id);
+            return buildContentAssetPointer({
+              ...(node ?? {}),
+              ...r,
+              title: r.title ?? r.name ?? node?.name ?? '未命名',
+              snippet: r.snippet ?? r.excerpt ?? node?.summary ?? '',
+              id: r.id ?? node?.id,
+            });
+          });
         } catch {
           /* 落到内存兜底 */
         }
       }
       const q = String(query).toLowerCase();
       return collectFiles(workspace)
-        .filter((f) => `${f.name ?? ''}${f.content ?? ''}`.toLowerCase().includes(q))
-        .map((f) => ({ title: f.name ?? '未命名', snippet: String(f.content ?? '').slice(0, 200), id: f.id }));
+        .filter((f) => !hiddenIds.has(f?.id))
+        .filter((f) => getFileKnowledgeSearchText(f).includes(q))
+        .map((f) => buildContentAssetPointer(f, { content: String(f.content ?? '').slice(0, 200) }));
     },
+    searchExternalKnowledge: async ({ query } = {}) => searchExternalKnowledge({
+      query,
+      sources: knowledgeSources,
+      aiProxyBase: aiServerBase,
+    }),
     /**
      * 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等）。
      * 走 IPC → ai-proxy server → spawn 脚本。
@@ -954,6 +1219,9 @@ export default function AgentPanel({ onClose }) {
     setDailyCurrentDate,
     setSurface,
     aiServerBase,
+    activeFile,
+    surface,
+    knowledgeSources,
   ]);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
@@ -977,10 +1245,16 @@ export default function AgentPanel({ onClose }) {
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
+    activeRunIdRef.current += 1;
+    runLockRef.current = false;
+    abortRef.current = null;
+    if (runningSessionId) {
+      updateAgentMessages(runningSessionId, (items) => finishRunningTools(items, 'interrupted'));
+    }
     setAssistantActivity(null);
     setRunningSessionId(null);
     setRunning(false);
-  }, []);
+  }, [runningSessionId, updateAgentMessages]);
 
   // 复制某条 AI 回复文本，2 秒内显示「已复制」反馈。
   // 优先用 clipboard API；非安全上下文（如 file:// 下的 Electron）会抛错，
@@ -1110,7 +1384,7 @@ export default function AgentPanel({ onClose }) {
     selectionText = '',
     pinnedFiles = [],
   }) => {
-    if (running) return;
+    if (running || runLockRef.current) return;
     if (!isAiConfigured()) {
       setShowSettings(true);
       return;
@@ -1118,6 +1392,12 @@ export default function AgentPanel({ onClose }) {
     const sessionId = activeSessionId;
     if (!sessionId) return;
 
+    runLockRef.current = true;
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
+    const ownsRun = () => activeRunIdRef.current === runId;
+    forceScrollToBottomRef.current = true;
+    shouldFollowMessagesRef.current = true;
     appendAgentMessage(sessionId, { role: 'user', text: displayText, files: fileNames });
     setRunning(true);
     setAssistantActivity('thinking');
@@ -1127,6 +1407,7 @@ export default function AgentPanel({ onClose }) {
 
     try {
       const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
+      if (!ownsRun() || controller.signal.aborted) return;
       setLastContextPacket(taskContext);
       const { finalText, history } = await runAgent({
         userInput: promptText,
@@ -1137,33 +1418,46 @@ export default function AgentPanel({ onClose }) {
         serverTools,
         taskContext,
         onEvent: (ev) => {
+          if (!ownsRun() || controller.signal.aborted) return;
           if (ev.type === 'tool_start') {
-            appendAgentMessage(sessionId, { role: 'tool', label: ev.label, status: 'running' });
+            setAssistantActivity('working');
+            appendAgentMessage(sessionId, {
+              role: 'tool',
+              callId: ev.callId,
+              label: ev.label,
+              status: 'running',
+            });
           } else if (ev.type === 'tool_done') {
-            updateAgentMessages(sessionId, (msgs) => markLastToolDone(msgs, ev.label));
+            setAssistantActivity('finalizing');
+            updateAgentMessages(sessionId, (items) => finishToolMessage(items, {
+              callId: ev.callId,
+              label: ev.label,
+              status: getToolCompletionStatus(ev.result),
+              result: getArtifactResultForMessage(ev.result),
+            }));
           }
         },
       });
+      if (!ownsRun() || controller.signal.aborted) return;
       setAgentHistory(sessionId, history);
       if (finalText) {
-        setAssistantActivity('typing');
-        await appendTypedAssistantMessage({
-          sessionId,
-          text: finalText,
-          signal: controller.signal,
-          appendAgentMessage,
-          updateAgentMessages,
-        });
+        setAssistantActivity(null);
+        appendAgentMessage(sessionId, { role: 'assistant', text: finalText });
       }
     } catch (error) {
+      if (!ownsRun()) return;
       if (String(error?.message ?? '') !== '已取消') {
+        updateAgentMessages(sessionId, (items) => finishRunningTools(items, 'error'));
         appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${formatAgentError(error)}` });
       }
     } finally {
-      setAssistantActivity(null);
-      setRunningSessionId(null);
-      setRunning(false);
-      abortRef.current = null;
+      if (ownsRun()) {
+        runLockRef.current = false;
+        setAssistantActivity(null);
+        setRunningSessionId(null);
+        setRunning(false);
+        if (abortRef.current === controller) abortRef.current = null;
+      }
     }
   }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, serverTools, buildTurnContext]);
 
@@ -1233,11 +1527,34 @@ export default function AgentPanel({ onClose }) {
     focusInput();
   }, [focusInput]);
 
+  // Agent skill：内部 prompt 不进入输入框；点击后直接携带当前附件/选区运行。
+  const handleAgentSkill = useCallback((item) => {
+    if (running) return;
+    const instruction = String(item?.promptText ?? '').trim();
+    if (!instruction) return;
+
+    const selectionAttachment = quotedSelection
+      ? { id: 'selection', name: '选中内容', content: quotedSelection }
+      : null;
+    const files = selectionAttachment ? [selectionAttachment, ...attachedFiles] : attachedFiles;
+
+    setInput('');
+    setAttachedFiles([]);
+    clearAiQuotedSelection();
+    setActivePanelTab('chat');
+    runTurn({
+      promptText: buildInputWithAttachments(instruction, files),
+      displayText: item.label || '执行技能',
+      fileNames: files.map((file) => file.name),
+      selectionText: quotedSelection,
+      pinnedFiles: attachedFiles,
+    });
+  }, [running, quotedSelection, attachedFiles, clearAiQuotedSelection, runTurn]);
+
   const handleShortcutClick = useCallback((item) => {
     setActivePanelTab('chat');
-    if (item.type === 'insert') {
-      setInput(item.insertText ?? '');
-      focusInput();
+    if (item.type === 'agent') {
+      handleAgentSkill(item);
       return;
     }
     if (item.type === 'quick') {
@@ -1262,7 +1579,7 @@ export default function AgentPanel({ onClose }) {
     if (item.type === 'settings') {
       setShowSettings((v) => !v);
     }
-  }, [focusInput, handleInsertMention, handlePlatformVariant, handleQuickAction]);
+  }, [handleAgentSkill, handleInsertMention, handlePlatformVariant, handleQuickAction]);
 
   const handleWelcomeSuggestion = useCallback((item) => {
     handleShortcutClick(item);
@@ -1315,9 +1632,8 @@ export default function AgentPanel({ onClose }) {
   const handlePickSkill = useCallback((item) => {
     closeSkillPicker();
     setActivePanelTab('chat');
-    if (item.type === 'insert') {
-      setInput(item.insertText ?? '');
-      focusInput();
+    if (item.type === 'agent') {
+      handleAgentSkill(item);
       return;
     }
 
@@ -1338,7 +1654,7 @@ export default function AgentPanel({ onClose }) {
     if (item.type === 'script') {
       handleScriptTool(item);
     }
-  }, [closeSkillPicker, focusInput, handlePlatformVariant, handleQuickAction, handleScriptTool]);
+  }, [closeSkillPicker, focusInput, handleAgentSkill, handlePlatformVariant, handleQuickAction, handleScriptTool]);
 
   const handlePanelTabChange = useCallback((tabId) => {
     setActivePanelTab(tabId);
@@ -1389,10 +1705,14 @@ export default function AgentPanel({ onClose }) {
     setActiveProvider(providerId);
     saveProviderConfig(providerId, { model: cfg.model });
     saveAiServerBase(aiServerBase);
+    if (!saveKnowledgeSources(knowledgeSources)) {
+      message.error('外挂知识库配置保存失败');
+      return;
+    }
     setCfg(readProviderConfig(providerId));
     setAiServerBase(readAiServerBase());
     setShowSettings(false);
-  }, [providerId, cfg, aiServerBase]);
+  }, [providerId, cfg, aiServerBase, knowledgeSources]);
 
   const handleKeyDown = useCallback((e) => {
     if (showSkillPicker && filteredSkills.length > 0) {
@@ -1431,17 +1751,37 @@ export default function AgentPanel({ onClose }) {
     setActiveSkillIndex((prev) => Math.min(prev, Math.max(filteredSkills.length - 1, 0)));
   }, [showSkillPicker, filteredSkills]);
 
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldFollowMessagesRef.current = distanceToBottom <= 64;
+  }, []);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
+
   useEffect(() => {
     if (!isChatTab) return;
     const el = messagesRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const forceScroll = forceScrollToBottomRef.current;
+    forceScrollToBottomRef.current = false;
+    if (!forceScroll && !shouldFollowMessagesRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [messages, assistantActivity, isChatTab]);
 
   return (
     <div className="agent-panel">
       <div className="agent-panel__header">
-        <span className="agent-panel__title"><Bot size={16} /> AI 助手</span>
+        <span className="agent-panel__title"><Bot size={16} /> MD Render Agent</span>
         <div className="agent-panel__header-actions">
           <button className="agent-panel__icon-btn" onClick={() => setShowSessions((v) => !v)} title="会话列表">
             <MessagesSquare size={16} />
@@ -1530,6 +1870,10 @@ export default function AgentPanel({ onClose }) {
             <input value={aiServerBase} placeholder="http://你的服务器:8788"
               onChange={(e) => setAiServerBase(e.target.value)} />
           </label>
+          <AgentKnowledgeSources
+            sources={knowledgeSources}
+            onChange={setKnowledgeSources}
+          />
           <button className="agent-panel__save-btn" onClick={handleSaveSettings}>保存</button>
         </div>
       )}
@@ -1540,11 +1884,17 @@ export default function AgentPanel({ onClose }) {
           ref={messagesRef}
           role="tabpanel"
           aria-label="对话"
+          onScroll={handleMessagesScroll}
         >
           {isWelcomeMode && (
             <div className="agent-panel__welcome">
-              <h2 className="agent-panel__welcome-title">有什么我能帮你的吗？</h2>
-              <p className="agent-panel__welcome-subtitle">直接提需求，或者先从下面这些常用动作开始。</p>
+              <h2 className="agent-panel__welcome-title">我会先理解你的工作，再动手</h2>
+              <p className="agent-panel__welcome-subtitle">我懂当前稿件、工作区和应用状态；改文有 diff 确认，交付物默认保留原稿。</p>
+              <div className="agent-panel__expert-badges">
+                <span><ShieldCheck size={13} /> 可审计操作</span>
+                <span><Activity size={13} /> 可体检运行状态</span>
+                <span><PackageCheck size={13} /> 产出物留来源</span>
+              </div>
               <div className="agent-panel__welcome-grid">
                 {WELCOME_SUGGESTIONS.map((item) => (
                   <button
@@ -1563,83 +1913,17 @@ export default function AgentPanel({ onClose }) {
           {!isWelcomeMode && messages.length === 0 && (
             <div className="agent-panel__empty">问我点什么，比如「帮我把当前文档压缩到三段」。</div>
           )}
-          {!isWelcomeMode && messages.map((m, i) => {
-            if (m.role === 'tool') {
-              return (
-                <div key={i} className="agent-panel__tool">
-                  {m.status === 'running'
-                    ? <Loader2 size={14} className="agent-panel__spin" />
-                    : <Wrench size={14} />}
-                  <span>{m.label}{m.status === 'done' ? ' ✓' : '…'}</span>
-                </div>
-              );
-            }
-            const parsed = m.role === 'assistant'
-              ? buildAssistantRenderPayload(m)
-              : { displayText: m.text, choices: [] };
-            return (
-              <div key={i} className={`agent-panel__msg agent-panel__msg--${m.role}`}>
-                <span className="agent-panel__avatar">
-                  {m.role === 'user' ? <User size={14} /> : <Bot size={14} />}
-                </span>
-                <div className="agent-panel__bubble">
-                  {m.files?.length > 0 && (
-                    <div className="agent-panel__msg-files">
-                      {m.files.map((name, k) => (
-                        <span key={k} className="agent-panel__msg-file"><FileText size={11} /> {name}</span>
-                      ))}
-                    </div>
-                  )}
-                  {parsed.displayText}
-                  {m.role === 'assistant' && m.typing && (
-                    <span className="agent-panel__typing-cursor" aria-hidden="true" />
-                  )}
-                  {parsed.choices.length > 0 && (
-                    <div className="agent-panel__choice-cards">
-                      {parsed.choices.map((choice) => (
-                        <button
-                          key={`${choice.label}-${choice.title}`}
-                          type="button"
-                          className="agent-panel__choice-card"
-                          disabled={running}
-                          onClick={() => handleChoiceCardClick(choice)}
-                        >
-                          <span className="agent-panel__choice-label">{choice.label}</span>
-                          <span className="agent-panel__choice-main">
-                            {choice.title && <span className="agent-panel__choice-title">{choice.title}</span>}
-                            {choice.description && (
-                              <span className="agent-panel__choice-desc">{choice.description}</span>
-                            )}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {m.role === 'assistant' && !m.typing && parsed.displayText && (
-                    <button
-                      type="button"
-                      className={`agent-panel__copy-btn${copiedIndex === i ? ' is-copied' : ''}`}
-                      title={copiedIndex === i ? '已复制' : '复制'}
-                      onClick={() => handleCopy(i, parsed.displayText)}
-                    >
-                      {copiedIndex === i ? <Check size={13} /> : <Copy size={13} />}
-                      <span className="agent-panel__copy-label">
-                        {copiedIndex === i ? '已复制' : '复制'}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {running && assistantActivity === 'thinking' && runningSessionId === activeSessionId && (
-            <div className="agent-panel__activity" aria-live="polite">
-              <Loader2 size={14} className="agent-panel__spin" />
-              <span>AI 正在思考</span>
-              <span className="agent-panel__typing-dots" aria-hidden="true">
-                <span>.</span><span>.</span><span>.</span>
-              </span>
-            </div>
+          {!isWelcomeMode && (
+            <AgentConversation
+              messages={messages}
+              running={running}
+              showActivity={isActiveSessionRunning}
+              activity={assistantActivity}
+              copiedIndex={copiedIndex}
+              onChoice={handleChoiceCardClick}
+              onCopy={handleCopy}
+              onOpenArtifact={(fileId) => host.openWorkspaceItem({ id: fileId })}
+            />
           )}
         </div>
       )}
@@ -1778,21 +2062,26 @@ export default function AgentPanel({ onClose }) {
             ref={inputRef}
             className="agent-panel__input"
             value={input}
-            placeholder="发消息，输入 / 选 skill，或输入 @ 引用工作区文件"
+            placeholder={isActiveSessionRunning
+              ? '正在处理，可继续编辑下一条消息'
+              : isOtherSessionRunning
+                ? '另一会话正在处理，请先停止或切回查看'
+                : '发消息，输入 / 选 skill，或输入 @ 引用工作区文件'}
             rows={1}
-            onInput={(e) => {
-              e.target.style.height = 'auto';
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-            }}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
           />
           {running ? (
-            <button className="agent-panel__send-btn" onClick={handleStop} title="停止">
+            <button
+              type="button"
+              className="agent-panel__send-btn is-stop"
+              onClick={handleStop}
+              title={isActiveSessionRunning ? '停止当前任务' : '停止运行中的会话'}
+            >
               <Square size={16} />
             </button>
           ) : (
-            <button className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
+            <button type="button" className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
               <SendOutlined />
             </button>
           )}

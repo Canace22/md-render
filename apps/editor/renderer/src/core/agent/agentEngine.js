@@ -17,6 +17,11 @@ import {
   getToolLabel,
   registerServerToolLabels,
 } from './toolRegistry.js';
+import { APP_KNOWLEDGE_PROMPT } from './appKnowledge.js';
+import {
+  EMPTY_ASSISTANT_RESPONSE,
+  normalizeAssistantContent,
+} from './assistantResponse.js';
 import { formatTaskContextPacket } from './taskContext.js';
 
 const DEFAULT_MAX_STEPS = 8;
@@ -34,44 +39,46 @@ const ROLE_RULES = [
   '关键规则：当用户的意图是改动当前正文（如润色、改写、压缩、扩写、整理、续写、翻译、替换某段），',
   '处理完后必须调用 write_active_doc 把结果写回文档，而不是只在对话里输出文字。',
   '写入会先给用户一张 diff 卡片确认，所以放心调用。',
-  '当用户明确要求保留原稿、另存为新文档、生成平台版本但不要覆盖当前文档时，必须调用 create_new_doc，新建文件，不要改写当前文档。',
+  '当用户明确要求保留原稿、另存为新文档或生成平台版本时，必须新建资产，不要改写当前文档；平台版本优先调用 create_agent_artifact，artifactType=platform_draft。',
   '当用户要求添加今日任务、事件、今日记录或待办时，优先调用 add_daily_entry 或 add_todo_entry，直接落到 Daily 面板。',
   '当用户要求开选题、开稿、建资料单或建待发布稿时，优先调用 create_content_entry，而不是只给建议。',
   '当用户要求打开白板、往白板加卡片、在灵感白板上画流程/关系图时，优先调用 open_canvas、append_canvas_cards、replace_canvas 或 clear_canvas。',
   '如果用户明确要“画到白板上”“操作白板”，不要只返回 Mermaid 或文字步骤，要直接调用白板工具落到页面。',
-  '当用户问「有没有相关旧文」「帮我找参考」，或需要补充上下文 / 引用既有内容时，调用 recall_related_docs 主动召回工作区里的相关旧文。',
-  '你还能调用 server 端注册的脚本工具（如 pdf_to_docx、video_to_audio 等）来处理本地文件操作，',
-  '遇到需要转换文件格式、提取音视频、处理本地资源的任务时优先考虑用工具，而不是给出用户手动操作的步骤。',
+  '当用户问「我写过类似文章吗」「有没有相关旧文」「帮我找参考」，或需要补充上下文时，调用 recall_related_docs；它会同时查询工作区和已启用的外挂知识库，两类结果都要检查。',
+  '当问题需要查询公开的外部知识、项目经验或用户配置的网站资料时，调用 search_external_knowledge；工作区文档仍用 search_docs，不要混淆两类来源。',
+  '使用外挂知识库结果回答时，保留来源标题和 URL；来源不可用或没有命中时要如实说明，不要把检索摘要扩写成未经证实的事实。',
+  '当用户要求移动、重命名、删除、归档或整理工作区条目时，调用 move_workspace_item / rename_workspace_item / delete_workspace_items 完成文件操作，不要用 write_active_doc 往正文里写字来代替。',
+  '删除前先用 search_docs 或 list_recent_docs 确认条目 id 和名称；delete_workspace_items 会由宿主弹确认框，用户确认前不会有任何改动，取消了就如实告知。',
+  '当用户要求迁移或整理「编辑部记忆」时：update_editorial_memory 会自动把旧位置的记忆并入 .agent 目录；散落的重复副本先用 read_doc_by_id 检查、把有价值的条目并入记忆，再用 delete_workspace_items 请求清理。',
+  '完整的方案、简报、调研、清单等独立产出物，优先调用 create_agent_artifact 选择对应 artifactType，保留原稿和来源关系。',
+  '用户报告 app 异常、崩溃、连接失败或发版后 bug 时，必须先调用 inspect_app_health 采集证据，不要直接重置数据或宣称已修复。',
+  '只能把 inspect_app_health 最近一次返回的 availableRepairs 中的修复 id 交给 apply_safe_repair；用户确认由宿主强制处理，不得绕过。',
+  '执行 apply_safe_repair 后必须再调用 inspect_app_health 验证；没有安全修复、验证失败或判定为代码缺陷时，调用 create_agent_artifact 生成 artifactType=incident_report 的 Bug 报告。',
+  'Bug 报告至少记录：症状、复现步骤、预期与实际结果、环境与精确错误、诊断证据、已尝试修复及验证结果。',
+  '不得尝试自行修改已安装的 app、asar 或签名包；代码级修复应由 Bug 报告进入仓库、验证和正式发版流程。',
+  'server 端注册的脚本工具（如 pdf_to_docx、video_to_audio）在 ai-proxy 所在环境执行，只用于其声明的转换任务。',
+  '不要把 server 脚本工具当成用户本机的日志、文件系统、安装包或运行环境修复工具。',
   '只有当用户明确是提问、要建议、要标题候选等「不改动正文」的需求时，才直接在对话里回答。',
   '当你需要用户在 2-6 个选项里做选择时，先用一句话说明要选什么，然后在回复末尾追加一个 HTML 注释协议，格式必须是：',
   '<!-- agent-choice',
   '{"options":[{"label":"A","title":"选项标题","description":"一句话说明","prompt":"我选择 A：选项标题"}]}',
   '-->',
   '这个协议只用于界面渲染选择卡片；JSON 必须合法，不要放 Markdown 代码块里。没有明确选择需求时不要输出该协议。',
+  '只输出给用户看的最终结论；不要输出内部推理，不要输出 <think> 或 <analysis> 标签。',
   '回答用中文，简洁直接，不要解释你调用了哪些工具。',
 ].join('\n');
 
-const APP_BRIEF = [
-  '产品知识：md-render 是本地优先的内容创作工作台，不是通用聊天框。',
-  '模式分流：文档工作区偏创作；其它界面偏工作台操作。',
-  '主要界面：总览、文档工作区、今日速记、灵感白板、创作看板、发布队列、知识库搜索、关系图谱、同步中心、设置。',
-  '核心对象：当前稿件、工作区知识库、相关旧文、平台版本、Daily 速记、新生成文档、工作区目录。',
-  '核心任务：写作、改写、引用旧文、生成平台版本、整理知识库内容、记录今日事项、创建选题与稿件、切换界面、打开条目。',
-  '行为边界：知识库搜索结果不等于当前正文；没有明确要求时不要覆盖原文；用户要求保留原稿时优先新建文档。',
-  '取数原则：先看系统给的任务简报，再决定是否调用工具读取全文或更多元数据。',
-].join('\n');
-
 const buildSystemPrompt = (taskContext) => {
-  const sections = [ROLE_RULES, APP_BRIEF];
+  const sections = [ROLE_RULES, APP_KNOWLEDGE_PROMPT];
   const contextText = formatTaskContextPacket(taskContext);
   if (contextText) sections.push(contextText);
   return sections.join('\n\n');
 };
 
 /** 把模型返回的 assistant 消息规整成可追加进历史的对象 */
-const toAssistantMessage = (message) => ({
+const toAssistantMessage = (message, content) => ({
   role: 'assistant',
-  content: message.content ?? '',
+  content,
   ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}),
 });
 
@@ -90,8 +97,8 @@ const toAssistantMessage = (message) => ({
  *
  * onEvent 事件类型：
  *   { type: 'assistant_text', text }           模型的中间/最终文字
- *   { type: 'tool_start', name, label, args }  开始执行某工具
- *   { type: 'tool_done', name, label, result } 工具执行完成
+ *   { type: 'tool_start', callId, name, label, step }  开始执行某工具
+ *   { type: 'tool_done', callId, name, label, step, result } 工具执行完成
  *   { type: 'error', message }
  *   { type: 'done', finalText }
  */
@@ -132,14 +139,17 @@ export const runAgent = async ({
       config,
       signal,
     });
+    if (signal?.aborted) throw new Error('已取消');
 
-    messages.push(toAssistantMessage(message));
-
-    const toolCalls = message.tool_calls;
+    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    const assistantContent = normalizeAssistantContent(message.content, {
+      fallback: toolCalls.length ? '' : EMPTY_ASSISTANT_RESPONSE,
+    });
+    messages.push(toAssistantMessage(message, assistantContent));
 
     // 没有工具调用 → 这是最终答复，结束循环
-    if (!toolCalls || !toolCalls.length) {
-      finalText = message.content ?? '';
+    if (!toolCalls.length) {
+      finalText = assistantContent;
       if (finalText) onEvent({ type: 'assistant_text', text: finalText });
       onEvent({ type: 'done', finalText });
       break;
@@ -147,18 +157,22 @@ export const runAgent = async ({
 
     // 有工具调用 → 逐个执行，把结果回填进历史
     for (const call of toolCalls) {
+      // Electron IPC 请求本身尚不支持中途取消；模型返回后至少不再执行新工具。
+      if (signal?.aborted) throw new Error('已取消');
+
       const name = call.function?.name;
       const label = getToolLabel(name);
-      let args = {};
-      try {
-        args = JSON.parse(call.function?.arguments || '{}');
-      } catch {
-        args = {};
-      }
 
-      onEvent({ type: 'tool_start', name, label, args });
+      const eventBase = {
+        callId: call.id,
+        name,
+        label,
+        step: step + 1,
+      };
+      onEvent({ type: 'tool_start', ...eventBase });
       const result = await executeTool(call, host);
-      onEvent({ type: 'tool_done', name, label, result });
+      if (signal?.aborted) throw new Error('已取消');
+      onEvent({ type: 'tool_done', ...eventBase, result });
 
       messages.push({
         role: 'tool',

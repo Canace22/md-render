@@ -248,7 +248,7 @@ export default function KnowledgeMetaPanel({
           </div>
         )}
 
-        {hasElectronDb() && (
+        {hasDbBridge() && (
           <div className="knowledge-meta-field">
             <span className="knowledge-meta-label">
               <Link size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
@@ -278,7 +278,7 @@ export default function KnowledgeMetaPanel({
           </div>
         )}
 
-        {hasElectronDb() && versions.length > 0 && (
+        {hasDbBridge() && versions.length > 0 && (
           <div className="knowledge-meta-field">
             <span className="knowledge-meta-label">
               <Clock size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />

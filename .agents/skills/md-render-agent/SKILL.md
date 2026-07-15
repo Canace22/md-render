@@ -39,11 +39,27 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 4. 如果工具需要新的宿主能力，在 `AgentPanel.jsx` 的 `host` 对象里补对应方法，对接 store/IPC。
 5. **执行器只通过 host 拿能力，不要 import store 或 window.electronAPI**——否则单测没法注入假 host。
 
+## App 专家、诊断与安全自愈
+
+当 Agent 需要理解 md-render 自身、排查发布后问题或产出可复用文档时，优先使用已有产品契约，不要在单个组件里临时加 prompt：
+
+- 产品事实和边界在 `core/agent/appKnowledge.js`，由 `agentEngine.js` 注入 system prompt。
+- 内容指针来自 `taskContext.js`，必须带稳定 `id` 和有界元数据；正文只能通过工具按需读取。
+- 方案、简报、调研、清单、平台稿、事故报告使用 `create_agent_artifact`，走 `createGeneratedFile` 并保留 `sourceMaterialIds`。
+- 发生应用异常时先调用 `inspect_app_health`；只能把 `availableRepairs` 返回的 id 交给 `apply_safe_repair`，由 host 强制确认并复检/回滚。
+- 运行诊断放在 Main IPC，必须脱敏路径、凭证和正文。远端 `ai-proxy` 不是用户本机的修复通道。
+- 已打包客户端不能自改 asar；代码缺陷应生成 `incident_report`，再进入仓库 Agent、CI 与签名发版。
+
+安全修复流程固定为：`inspect → confirm → apply → verify → rollback on failure`。不要新增通用 shell、任意路径或自由 patch 工具。
+
+文件管理工具（move / rename / delete_workspace_items）同理是**按 id 的受限树操作**，不是自由路径操作：删除必须走宿主的 `confirmAgentDelete` 确认框（列全名单、用户确认前零改动、取消如实回报），单次上限 10 条；跨目录移动走 `moveNodeToFolderById`（防环、磁盘挂载节点拒绝）。新增破坏性工具时沿用这个「执行器校验 → host 确认 → 如实回报部分失败」模式。
+
 ## 改内置 slash skill
 
 - 输入框里的 `/skill` 列表在 `AgentPanel.jsx` 的 `PROJECT_SLASH_SKILLS` 等常量里，不会自动读取 `.agents/skills/`。
-- `type: 'insert'` 的项目 skill 只是把 `insertText` 填进输入框；真正执行仍靠 agent prompt 和 `toolRegistry` 工具。
-- 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `insertText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
+- 例外模式（长 prompt 且要跨工具共用时用）：`core/agent/editorialBoard.js` 通过 Vite `?raw` 在构建期内联 `.agents/skills/ai-editorial-board/SKILL.md` 作为单一事实源，JS 侧只叠加 app 工具指令；SKILL.md 本体保持工具无关，外部 agent 产品（Claude Code / Cursor 等）打开工作空间可直接用。
+- `type: 'agent'` 的项目 skill 把 `promptText` 当内部指令；点击后必须直接进入 `runTurn`，用户消息只显示 skill 名称，不得把 prompt 填入输入框。
+- 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `promptText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
 - 需要结构化落库时，再扩展 `create_content_entry` 参数、执行器和 `AgentPanel` host，仍保持执行器只通过 host 取能力。
 
 ## 会话管理（全局，不持久化）
@@ -57,10 +73,21 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - AI 助手入口不在 `AgentPanel.jsx` 内：打开/关闭由 `MarkdownEditor.jsx` 持有状态，全局顶部按钮走 `TabBar` 的 `trailing` 区。只改入口位置时优先改 shell/titlebar，面板内容和 agent loop 不动。
 - 面板里的「对话 / 上下文 / 技能」这类纯 UI 切换用 `AgentPanel.jsx` 局部 state，不进 `useEditorStore`，也不要改 `agentEngine`。
 - `AgentDocMeta.jsx` 负责当前稿件、本轮上下文、相关旧文召回展示；不要把这些展示块重新堆回消息流顶部。
-- 技能页或 `/skill` picker 选中 `insert` 类型时，只把 `insertText` 填进输入框并切回对话；真正执行仍由用户发送后进入 agent loop。
+- 技能页、欢迎页或 `/skill` picker 选中 `agent` 类型时，立即调用 `runTurn`；带上当前 @附件和选区，然后清空输入态。
 - 技能页触发 `quick` / `platform` / `script` 时复用现有 handler，不新增一套执行入口。
 - AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
 - AI 响应态属于 `AgentPanel.jsx` 展示层：模型没有流式输出时，也可以在 `runAgent` 返回 `finalText` 后本地打字式填充同一条 assistant 消息；等待模型时在消息列表底部显示 loading。打字过程中要隐藏未闭合的 `agent-choice` 注释协议，避免把内部 JSON 闪给用户。
+
+## Codex 式任务反馈与响应安全
+
+- 把模型 `assistant.content` 当成不可信输入：在 `agentEngine` 写入 history、发事件和返回 `finalText` **之前**，先用 `assistantResponse.js` 清理回复开头的 `<think>` / `<analysis>` 私有推理块；UI 复用同一函数兼容旧会话。
+- 只识别回复开头的精确标签，不要全局删除，否则会误伤 XML / 代码示例和 `<analysis-result>` 这类正常标签。opening tag 或 reasoning 块未闭合时不回显原文，给可重试的安全兜底。
+- Assistant 正文用 `AgentMessageContent.jsx` 安全渲染 Markdown：禁用原始 HTML，不自动加载模型给出的远程图片。不要复用现有 `MarkdownRenderer + dangerouslySetInnerHTML`，因为它不适合直接注入模型输出。
+- 工具过程和最终答复分层：连续 tool 消息聚合成可折叠的工作记录，最终答复始终独立；产出物卡片放在折叠区外，避免完成瞬间被隐藏。工具运行时不再叠加通用“思考中”。
+- `tool_start` / `tool_done` 必须带稳定 `callId`，UI 按 `callId` 收口步骤，不按会重复的 label 猜。不要默认展示原始 args / result，其中可能有正文、路径或诊断信息；只留白名单的产出物元数据。
+- 停止与重入要双重防护：`runLockRef` 防同一渲染帧内双启动，`runId` 防旧请求清掉新请求的状态；`callChatCompletion` 返回后再检查一次 `AbortSignal`，丢弃迟到响应。
+- Electron IPC / 已启动工具不一定能物理取消。Stop 只能保证不再执行后续步骤和不再回流迟到答复；在途步骤显示 `interrupted / 结果未确认`，不得误报“操作已停止”。
+- 没有真实流式通道时，优先展示结构化进度，最终答复到达后立即呈现；不要用长时间的“假逐字”代替真进度。真流式属于 proxy / Main IPC / Renderer 的独立改造。
 
 ## @文件（引用工作区文件作上下文）
 
@@ -70,7 +97,22 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - 当前只列 `.md` 文件、单文件超 `MAX_ATTACH_CHARS`(6000) 截断、附件去重。
 - **扩展引用类型**（@文件夹 / @搜索结果 / @整个工作区）时：在 `sessionUtils` 加新的拼接函数或扩展 `buildInputWithAttachments`，保持"拼接逻辑是纯函数、UI 只负责选"的分工。
 
+## 外挂知识库（公开网页 / Wiki）
+
+外挂知识和工作区知识是两条链路：工作区仍用 `search_docs / recall_related_docs`，公开网页用 `search_external_knowledge`，不要把网页结果伪装成可打开、可编辑的本地文档。
+
+- 内置来源和用户手动添加的来源统一在 `core/agent/knowledgeSources.js` 归一化；Agent 私有配置可沿用 `md-renderer-agent-*` localStorage，不要为面板配置新建全局 store。
+- 网络调用放 `services/externalKnowledgeService.js`：Electron 走 preload → Main → ai-proxy，Web 才直接请求 ai-proxy；组件不直接写 IPC 或第三方 fetch。
+- 工具定义/执行器仍只依赖 host；`AgentPanel` host 注入已启用来源和 AI 代理地址。
+- ai-proxy 的网页抓取必须限制为公开 `http/https` 文本资源，校验重定向并拒绝本机、内网、账号 URL，避免把服务变成 SSRF 入口。
+- 返回结果必须包含来源名、标题和 URL；Agent prompt 要求保留引用，来源失败或未命中时如实说明。
+- 新增来源优先复用同一查询契约 `{ query, sources }`，不要每接一个站点就新增一套 IPC 或工具。
+- 「我写过类似文章吗 / 有没有相关旧文」属于跨来源召回：`recall_related_docs` 应在一个执行器里同时查工作区和外挂知识库，返回分组结果。不要只靠 system prompt 要求模型先后调用两个工具，否则模型很容易只完成本地搜索。
+
 ## 不看代码想不到的坑
+
+- **host 闭包里的 workspace 是本轮开始时的旧快照**：AgentPanel 的 host 用 useMemo 构建，同一轮 agent run 内连续调用工具时，靠捕获的 `workspace` 判断「文件是否存在」会误判并重复建档（曾造成一轮建出 6 个「编辑部记忆」副本）。工具执行器里凡是「先查再写」的逻辑，必须用 `useEditorStore.getState()` 拿实时状态。
+- **agent 元数据（记忆等）统一放 `.agent` 隐藏目录**（工作区根下，`agentMetaFolder` 标记，类似 `.claude` 约定）：store 走 `upsertAgentMetaFile`，纯函数 `findAgentMetaFolder / findAgentMetaFile / collectHiddenFileIds` 在 workspaceUtils。隐藏节点不进目录树（`sortTreeChildren` 过滤）、不进搜索/召回/最近文档；不要用 `create_new_doc` 往笔记区写元数据。
 
 - preload 暴露的是 `window.electronAPI`（不是 `window.electron`）；搜索是 `await window.electronAPI.db.search(query)`，返回 `{ results: [...] }`。
 - 截图里如果只显示 `fetch failed` 或打包 app 仍连 `localhost:8788`，先查主进程是否拿到了正确的 `aiProxyBase`，不要只按前端 CORS 排查。当前友好错误在 `apps/editor/main/aiRequest.js` 和 `AgentPanel.jsx` 两层兜底。
@@ -85,3 +127,5 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - 工具/引擎：read 拿到内容、write 真改文档、空内容被拒、search 有/无结果、未知工具、坏 JSON、完整 loop。
 - 会话（sessionUtils）：新建独立 id、删非激活/删激活跳下一个/删空补新、标题派生、mapSession 不可变。
 - @文件（buildInputWithAttachments）：无附件原样、单/多附件含文件名+内容、用户话在末尾、超长截断、空内容不崩。
+- 产出物：未知类型和空内容拒绝，来源 id 去重，平台元数据保留，原文不覆盖，成功结果可按 id 重新打开。
+- 诊断/修复：Web 只读降级，代理不可达时才提供可用修复，用户取消不改配置，复检失败自动回滚。

@@ -27,12 +27,13 @@ describe('buildPlatformVariantInstruction 平台版本指令', () => {
     expect(text).toContain('论证');
   });
 
-  it('所有平台指令都带读取与写回引导', () => {
+  it('所有平台指令都带读取与派生产出物引导', () => {
     [PLATFORM_VARIANT_KEYS.WECHAT, PLATFORM_VARIANT_KEYS.XIAOHONGSHU, PLATFORM_VARIANT_KEYS.ZHIHU]
       .forEach((value) => {
         const text = buildPlatformVariantInstruction(value);
         expect(text).toContain('read_active_doc');
-        expect(text).toContain('write_active_doc');
+        expect(text).toContain('create_agent_artifact');
+        expect(text).toContain('platform_draft');
       });
   });
 
@@ -48,7 +49,7 @@ describe('buildPlatformVariantInstruction 平台版本指令', () => {
   it('未知平台默认兜底到微信版本（不抛错）', () => {
     const text = buildPlatformVariantInstruction('douyin');
     expect(text).toContain('微信公众号');
-    expect(text).toContain('write_active_doc');
+    expect(text).toContain('create_agent_artifact');
   });
 
   it('未知平台 + strict 抛清晰错误', () => {

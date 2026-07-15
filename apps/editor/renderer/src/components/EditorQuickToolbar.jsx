@@ -113,7 +113,8 @@ export default function EditorQuickToolbar({
   const handleCopy = async () => {
     if (!onCopyWeChat) return;
     try {
-      await onCopyWeChat();
+      const ok = await onCopyWeChat();
+      if (ok === false) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -124,7 +125,8 @@ export default function EditorQuickToolbar({
   const handleCopyRichText = async () => {
     if (!onCopyRichText) return;
     try {
-      await onCopyRichText();
+      const ok = await onCopyRichText();
+      if (ok === false) return;
       setRichCopied(true);
       setTimeout(() => setRichCopied(false), 2000);
     } catch {

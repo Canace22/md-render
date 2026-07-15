@@ -43,6 +43,7 @@ import {
   META_FILTER_STATUS_NONE,
   META_FILTER_STATUS_NONE_LABEL,
   getNodeSortTime,
+  isHiddenWorkspaceNode,
 } from '../store/workspaceUtils.js';
 import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
@@ -142,9 +143,14 @@ const getRenameDraftValue = (node, fallbackName = '') => {
   return next || name;
 };
 
-/** 置顶节点优先，同组内按 updatedAt（最近活跃，缺失时用 createdAt）降序 */
-const sortTreeChildren = (children) => {
-  if (!Array.isArray(children) || children.length <= 1) return children ?? [];
+/**
+ * 置顶节点优先，同组内按 updatedAt（最近活跃，缺失时用 createdAt）降序。
+ * .agent 等隐藏元数据节点（点开头命名 / agentMetaFolder 标记）不进目录树。
+ */
+const sortTreeChildren = (childrenRaw) => {
+  const children = (Array.isArray(childrenRaw) ? childrenRaw : [])
+    .filter((child) => !isHiddenWorkspaceNode(child));
+  if (children.length <= 1) return children;
   const indexed = children.map((child, index) => ({ child, index }));
   const byActivityDesc = (a, b) => {
     const diff = getNodeSortTime(b.child) - getNodeSortTime(a.child);
@@ -291,13 +297,18 @@ const TreeNode = ({
     }
   };
 
-  const sharedProps = allowStructureActions && !isRoot && !node.projectRootPath ? {
-    draggable: true,
-    onDragStart: handleDragStart,
-    onDragOver: handleDragOver,
-    onDragLeave: handleDragLeave,
-    onDrop: handleDrop,
-  } : {};
+  // 拖拽源：普通节点和磁盘文件/文件夹都可拖，项目挂载根和工作区根不可拖
+  const canDrag = allowStructureActions && !isRoot && !isLocalProjectRoot;
+  // 放置目标：文件夹（含项目根）可接收「移入」，文件可接收「同级排序」；是否合法由 onMoveNode 判定
+  const canDrop = allowStructureActions && (isFolder || !isRoot);
+  const sharedProps = {
+    ...(canDrag ? { draggable: true, onDragStart: handleDragStart } : {}),
+    ...(canDrop ? {
+      onDragOver: handleDragOver,
+      onDragLeave: handleDragLeave,
+      onDrop: handleDrop,
+    } : {}),
+  };
 
   return (
     <div key={node.id} className={nodeClass} {...sharedProps}>

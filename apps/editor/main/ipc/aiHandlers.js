@@ -1,5 +1,10 @@
 import { listAvailableProviders } from '../aiConfig.js';
-import { requestChatCompletion, requestToolExec, requestToolSchema } from '../aiRequest.js';
+import {
+  requestChatCompletion,
+  requestKnowledgeSearch,
+  requestToolExec,
+  requestToolSchema,
+} from '../aiRequest.js';
 
 export function registerAiHandlers({ ipcMain, resolveAiProxyBase }) {
   ipcMain.handle('ai:chat', async (_event, payload = {}) => {
@@ -31,6 +36,15 @@ export function registerAiHandlers({ ipcMain, resolveAiProxyBase }) {
       return await requestToolSchema({ aiProxyBase });
     } catch (err) {
       return { tools: [], error: err.message };
+    }
+  });
+
+  ipcMain.handle('ai:searchKnowledge', async (_event, payload = {}) => {
+    try {
+      const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
+      return await requestKnowledgeSearch({ ...payload, aiProxyBase });
+    } catch (err) {
+      return { ok: false, results: [], error: err.message };
     }
   });
 }
