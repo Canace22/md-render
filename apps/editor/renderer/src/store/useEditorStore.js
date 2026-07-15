@@ -1607,6 +1607,10 @@ export const useEditorStore = create(
           if (useDiskFor(fileId)) return false;
           if (keepLocalFor(fileId)) return true;
           if (conflictResolution !== 'auto') return false;
+          // 文件监听（auto）回灌：正在编辑的当前文件永远保留本地内容，不从磁盘重载。
+          // 否则自己保存触发的 watcher echo 会重建编辑器 → 丢焦点/光标，无法正常编辑。
+          // 当前文件的外部改动改由手动同步 / 冲突弹窗处理，避免把正在编辑的文档冲掉。
+          if (fileId === state.selectedId) return true;
           return Boolean(state.diskSavePendingFileIds[fileId]);
         };
 
@@ -1656,9 +1660,21 @@ export const useEditorStore = create(
           return;
         }
 
-        const selectedFile = findNodeById(nextWorkspace, state.selectedId);
+        let selectedFile = findNodeById(nextWorkspace, state.selectedId);
         const patch = { workspace: nextWorkspace };
-        if (selectedFile?.type === 'file' && !shouldPreserveFile(state.selectedId)) {
+        if (selectedFile?.type === 'file' && shouldPreserveFile(state.selectedId)) {
+          // 保留当前编辑文件：把本地内容写回磁盘树对应节点，避免被回灌内容覆盖。
+          // （磁盘树按 relativePath 派生 id，preserveDirtyInTree 可能匹配不到，这里兜底。）
+          const localContent = state.markdown;
+          if ((selectedFile.content ?? '') !== localContent) {
+            nextWorkspace = updateNodeById(nextWorkspace, state.selectedId, (node) => ({
+              ...node,
+              content: localContent,
+            }));
+            patch.workspace = nextWorkspace;
+            selectedFile = findNodeById(nextWorkspace, state.selectedId);
+          }
+        } else if (selectedFile?.type === 'file') {
           patch.markdown = selectedFile.content ?? '';
           patch.editorReloadToken = state.editorReloadToken + 1;
         }
