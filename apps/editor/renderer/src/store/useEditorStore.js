@@ -45,6 +45,7 @@ import {
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
+import { getDiskFileContent } from '../utils/localProjectConflict.js';
 import {
   createLocalProjectFileOnDisk,
   ensureMdRenderWorkspace,
@@ -1438,6 +1439,25 @@ export const useEditorStore = create(
           : { workspace: updated });
       },
 
+      /**
+       * 保存成功后，把"刚写下去的磁盘正文"记为该文件的新基线（diskContentSnapshot）。
+       * 供文件监听回灌时识别自写 echo：磁盘内容 == 基线 → 忽略，不重载编辑器。
+       * 注意 diskMarkdown 必须是写盘的正文（不含 frontmatter），与磁盘回读内容一致。
+       */
+      markLocalFileDiskSaved: (fileId, diskMarkdown) => {
+        if (!fileId) return;
+        const { workspace } = get();
+        const node = findNodeById(workspace, fileId);
+        if (!node || node.type !== 'file') return;
+        const nextSnapshot = diskMarkdown ?? '';
+        if ((node.diskContentSnapshot ?? '') === nextSnapshot) return;
+        const updated = updateNodeById(workspace, fileId, (current) => ({
+          ...current,
+          diskContentSnapshot: nextSnapshot,
+        }));
+        set({ workspace: updated });
+      },
+
       /** 设置某文件的标签（去重、去空、去首尾空格） */
       setFileTags: (fileId, tags) => {
         const { workspace } = get();
@@ -1603,15 +1623,33 @@ export const useEditorStore = create(
         const keepLocalFor = (fileId) => (
           conflictResolution === 'keep-local' && conflictIdSet.has(fileId)
         );
+
+        const mountedRoot = findLocalProjectRoot(state.workspace);
+        const isTreeMount = mountedRoot?.localProjectRoot
+          && mountedRoot.projectRootPath === projectRootPath;
+        const diskPayload = { workspace: diskTree, projectsChildren };
+
+        // 自写 echo 识别：磁盘正文 == 该文件上次保存记录的基线（diskContentSnapshot），
+        // 说明这次磁盘变更就是我们自己保存产生的，不是外部改动 → 保留本地、不重载。
+        // 这里比对的是"磁盘现在 vs 上次写下去"，两边都是正文 Markdown，格式一致。
+        const isDiskEcho = (fileId) => {
+          const localNode = findNodeById(state.workspace, fileId);
+          if (localNode?.type !== 'file' || !localNode.relativePath) return false;
+          if (localNode.diskContentSnapshot == null) return false;
+          const diskContent = getDiskFileContent(diskPayload, localNode.relativePath, isTreeMount);
+          if (diskContent === undefined) return false; // 磁盘已删除 → 交给正常流程
+          return normalizeMarkdown(diskContent) === normalizeMarkdown(localNode.diskContentSnapshot);
+        };
+
         const shouldPreserveFile = (fileId) => {
           if (useDiskFor(fileId)) return false;
           if (keepLocalFor(fileId)) return true;
           if (conflictResolution !== 'auto') return false;
-          // 文件监听（auto）回灌：正在编辑的当前文件永远保留本地内容，不从磁盘重载。
-          // 否则自己保存触发的 watcher echo 会重建编辑器 → 丢焦点/光标，无法正常编辑。
-          // 当前文件的外部改动改由手动同步 / 冲突弹窗处理，避免把正在编辑的文档冲掉。
-          if (fileId === state.selectedId) return true;
-          return Boolean(state.diskSavePendingFileIds[fileId]);
+          // 有在途保存 → 保留本地（避免半写状态被覆盖）。
+          if (state.diskSavePendingFileIds[fileId]) return true;
+          // 文件监听自写 echo → 保留本地、不重建编辑器（否则会抢焦点）。
+          // 真·外部改动（磁盘 != 基线）不在此保留，走下方重载分支，实现外部改动热更新。
+          return isDiskEcho(fileId);
         };
 
         const preserveDirtyInTree = (node) => {
@@ -1630,10 +1668,6 @@ export const useEditorStore = create(
           }
           return node;
         };
-
-        const mountedRoot = findLocalProjectRoot(state.workspace);
-        const isTreeMount = mountedRoot?.localProjectRoot
-          && mountedRoot.projectRootPath === projectRootPath;
 
         let nextWorkspace = state.workspace;
         if (isTreeMount && diskTree) {

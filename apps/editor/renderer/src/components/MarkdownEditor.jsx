@@ -1284,6 +1284,8 @@ function MarkdownEditor() {
           relativePath: sourceFile.relativePath,
           content: diskMarkdown,
         }));
+        // 同步更新基线，避免图片地址写回落盘被文件监听当外部改动重载。
+        useEditorStore.getState().markLocalFileDiskSaved(resolvedFileId, diskMarkdown);
       }
 
       const latest = useEditorStore.getState();
@@ -1551,6 +1553,9 @@ function MarkdownEditor() {
             relativePath: selectedFile.relativePath,
             content: diskMarkdown,
           }));
+          // 记录"刚写下去的磁盘正文"为新基线：稍后文件监听回灌时可据此识别为自写 echo，
+          // 从而只重载真·外部改动、忽略自己保存产生的变更（不再抢焦点）。
+          useEditorStore.getState().markLocalFileDiskSaved(selectedFile.id, diskMarkdown);
           const latest = useEditorStore.getState();
           if (latest.notionAutoPushEnabled && latest.notionToken && latest.notionDatabaseId) {
             notionAutoPushRef.current?.schedule({

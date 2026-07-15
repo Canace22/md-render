@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useEditorStore } from '../renderer/src/store/useEditorStore.js';
 import { findNodeById } from '../renderer/src/store/workspaceUtils.js';
 
-// 回归：本地项目文件监听（auto）回灌时，绝不能重建“当前正在编辑文件”的编辑器。
-// 否则自己保存触发的 watcher echo 会 bump editorReloadToken → BlockNote 整体重建 → 丢焦点。
+// 本地项目「读写 + 文件监听回灌」的核心约定：
+// - 自写 echo（磁盘 == 上次保存的基线）→ 保留本地、不重建编辑器（否则抢焦点）。
+// - 真·外部改动（磁盘 != 基线、无在途保存）→ 重载并采用磁盘内容（外部改动热更新）。
+// - 有在途保存（未落盘的编辑）→ 保留本地，避免半写覆盖。
+// - 手动 use-disk 同步 → 明确采用磁盘、重建编辑器。
 const ROOT = '/proj';
 
-// 原始磁盘树（未标记），交给 store 自行 markLocalProjectNode 派生稳定 id。
 const rawDiskTree = (fileContent) => ({
   id: 'proj-root',
   type: 'folder',
@@ -23,49 +25,71 @@ const rawDiskTree = (fileContent) => ({
   ],
 });
 
-describe('文件监听回灌保护当前编辑文件', () => {
+const refresh = (payload) => useEditorStore.getState().refreshDiskBackedProject({
+  projectRootPath: ROOT,
+  workspace: rawDiskTree(payload.disk),
+  conflictResolution: payload.conflictResolution ?? 'auto',
+  conflictFileIds: payload.conflictFileIds ?? [],
+});
+
+describe('本地项目读写 / 文件监听回灌', () => {
   beforeEach(() => {
     useEditorStore.getState().openLocalProjectWorkspace(rawDiskTree('磁盘原文'), ROOT);
   });
 
-  it('auto 刷新不 bump editorReloadToken，且保留本地内容（模拟自写 echo 竞态）', () => {
-    const store = useEditorStore.getState();
-    const selectedId = store.selectedId;
-
-    // 用户编辑后已保存完成：pending 标志已清除（这正是 echo 到达时的竞态窗口）。
-    store.updateSelectedFileContent('本地编辑内容');
-    expect(useEditorStore.getState().diskSavePendingFileIds[selectedId]).toBeFalsy();
-
+  it('自写 echo：磁盘 == 保存后的基线 → 不重建编辑器、保留本地内容', () => {
+    const selectedId = useEditorStore.getState().selectedId;
+    // 模拟一次完整保存：内容落盘为 "已保存正文"，并把基线更新为该正文。
+    useEditorStore.getState().updateSelectedFileContent('已保存正文');
+    useEditorStore.getState().markLocalFileDiskSaved(selectedId, '已保存正文');
     const tokenBefore = useEditorStore.getState().editorReloadToken;
 
-    // 监听回灌：磁盘上是我们刚写回的内容（这里用不同串代表任意回灌）。
-    useEditorStore.getState().refreshDiskBackedProject({
-      projectRootPath: ROOT,
-      workspace: rawDiskTree('磁盘变更'),
-      conflictResolution: 'auto',
-    });
+    // 文件监听回灌：磁盘上正是我们刚写下去的内容（自写 echo）。
+    refresh({ disk: '已保存正文' });
 
     const after = useEditorStore.getState();
-    expect(after.editorReloadToken).toBe(tokenBefore); // 编辑器未被重建
-    const node = findNodeById(after.workspace, selectedId);
-    expect(node.content).toBe('本地编辑内容'); // 本地内容保留，未被磁盘冲掉
+    expect(after.editorReloadToken).toBe(tokenBefore); // 编辑器未重建
+    expect(findNodeById(after.workspace, selectedId).content).toBe('已保存正文');
   });
 
-  it('手动 use-disk 同步仍然采用磁盘内容并重建编辑器', () => {
-    const store = useEditorStore.getState();
-    const selectedId = store.selectedId;
-    store.updateSelectedFileContent('本地编辑内容');
+  it('真·外部改动：磁盘 != 基线且无在途保存 → 重载并采用磁盘内容', () => {
+    const selectedId = useEditorStore.getState().selectedId;
+    useEditorStore.getState().updateSelectedFileContent('已保存正文');
+    useEditorStore.getState().markLocalFileDiskSaved(selectedId, '已保存正文');
     const tokenBefore = useEditorStore.getState().editorReloadToken;
 
-    useEditorStore.getState().refreshDiskBackedProject({
-      projectRootPath: ROOT,
-      workspace: rawDiskTree('磁盘最新'),
-      conflictResolution: 'use-disk',
-      conflictFileIds: [selectedId],
-    });
+    // 外部程序改了这个文件：磁盘内容和基线不一致。
+    refresh({ disk: '外部改动内容' });
 
     const after = useEditorStore.getState();
-    expect(after.editorReloadToken).toBe(tokenBefore + 1); // 明确要求用磁盘 → 重建
+    expect(after.editorReloadToken).toBe(tokenBefore + 1); // 重载编辑器
+    expect(after.markdown).toBe('外部改动内容');
+    expect(findNodeById(after.workspace, selectedId).content).toBe('外部改动内容');
+  });
+
+  it('有在途保存（未落盘编辑）→ 保留本地、不重建，即便磁盘不同', () => {
+    const selectedId = useEditorStore.getState().selectedId;
+    useEditorStore.getState().updateSelectedFileContent('正在编辑未保存');
+    useEditorStore.getState().setDiskSavePending(selectedId, true);
+    const tokenBefore = useEditorStore.getState().editorReloadToken;
+
+    refresh({ disk: '磁盘上的旧内容' });
+
+    const after = useEditorStore.getState();
+    expect(after.editorReloadToken).toBe(tokenBefore); // 未重建
+    expect(findNodeById(after.workspace, selectedId).content).toBe('正在编辑未保存');
+  });
+
+  it('手动 use-disk 同步 → 采用磁盘内容并重建编辑器', () => {
+    const selectedId = useEditorStore.getState().selectedId;
+    useEditorStore.getState().updateSelectedFileContent('本地编辑内容');
+    useEditorStore.getState().markLocalFileDiskSaved(selectedId, '本地编辑内容');
+    const tokenBefore = useEditorStore.getState().editorReloadToken;
+
+    refresh({ disk: '磁盘最新', conflictResolution: 'use-disk', conflictFileIds: [selectedId] });
+
+    const after = useEditorStore.getState();
+    expect(after.editorReloadToken).toBe(tokenBefore + 1);
     expect(findNodeById(after.workspace, selectedId).content).toBe('磁盘最新');
   });
 });
