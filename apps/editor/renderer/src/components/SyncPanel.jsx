@@ -292,10 +292,31 @@ function BackupGroup({ onImport, onExport }) {
   );
 }
 
+/** 顶部同步总开关：关闭后不执行任何同步 */
+function SyncMasterSwitch({ enabled, onChange }) {
+  return (
+    <div className="settings-group sync-master-switch">
+      <label className="notion-field notion-field-inline">
+        <input
+          type="checkbox"
+          checked={Boolean(enabled)}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span>启用同步</span>
+      </label>
+      <p className="notion-hint small">
+        总开关。关闭后不执行任何同步（自动推送、Notion 手动推拉、云端），也不再弹同步失败提示。
+      </p>
+    </div>
+  );
+}
+
 export default function SyncPanel({
   initialChannel = 'doc',
   selectedFileName,
   localProjectSupported = false,
+  masterEnabled = true,
+  onMasterEnabledChange,
   onClose,
   onOpenSettings,
   notion,
@@ -320,6 +341,16 @@ export default function SyncPanel({
         <SyncStatusBar notion={notion} cloud={cloud} />
       </div>
 
+      {onMasterEnabledChange && (
+        <SyncMasterSwitch enabled={masterEnabled} onChange={onMasterEnabledChange} />
+      )}
+
+      {!masterEnabled ? (
+        <p className="notion-hint sync-config-hint" role="status">
+          同步已关闭。打开上方「启用同步」后即可进行拉取、推送与云端同步。
+        </p>
+      ) : (
+      <>
       <div className="sync-channel-tabs" role="tablist">
         {CHANNELS.map(({ id, label, icon: Icon }) => (
           <button
@@ -352,6 +383,8 @@ export default function SyncPanel({
           </>
         )}
       </div>
+      </>
+      )}
     </section>
   );
 }

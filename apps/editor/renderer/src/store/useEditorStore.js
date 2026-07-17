@@ -98,6 +98,8 @@ const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
 // 与 notionService.js 中同名常量保持一致：服务层直接从这个 key 读运行时反代地址
 const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
 const NOTION_AUTO_PUSH_STORAGE_KEY = 'md-renderer-notion-auto-push';
+// 同步总开关：关闭时不执行任何同步（自动推送 / Notion 手动推拉 / 云端）
+const SYNC_ENABLED_STORAGE_KEY = 'md-renderer-sync-enabled';
 const CLOUD_SYNC_BASE_URL_STORAGE_KEY = 'md-renderer-cloud-sync-base-url';
 const CLOUD_WORKSPACE_ID_STORAGE_KEY = 'md-renderer-cloud-workspace-id';
 const CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY = 'md-renderer-cloud-last-synced-revision';
@@ -189,6 +191,7 @@ const readNotionPersistSnapshot = () => {
       notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
       notionProxyBase: typeof notionProxyBase === 'string' ? notionProxyBase : '',
       notionAutoPushEnabled: window.localStorage.getItem(NOTION_AUTO_PUSH_STORAGE_KEY) === '1',
+      syncEnabled: window.localStorage.getItem(SYNC_ENABLED_STORAGE_KEY) === '1',
     };
   } catch {
     return {
@@ -197,6 +200,7 @@ const readNotionPersistSnapshot = () => {
       notionDatabaseId: '',
       notionProxyBase: '',
       notionAutoPushEnabled: false,
+      syncEnabled: false,
     };
   }
 };
@@ -235,6 +239,12 @@ const persistNotionSnapshot = (state) => {
     persistNotionStringField(
       NOTION_AUTO_PUSH_STORAGE_KEY,
       state.notionAutoPushEnabled ? '1' : '0',
+    );
+  }
+  if (state.syncEnabled != null) {
+    persistNotionStringField(
+      SYNC_ENABLED_STORAGE_KEY,
+      state.syncEnabled ? '1' : '0',
     );
   }
 };
@@ -349,6 +359,7 @@ const buildStateFromDb = (raw) => {
       notionProxyBase:
         typeof raw.notion_proxy_base === 'string' ? raw.notion_proxy_base : '',
       notionAutoPushEnabled: raw.notion_auto_push === '1',
+      syncEnabled: raw.sync_enabled === '1',
     },
     version: 0,
   };
@@ -378,6 +389,9 @@ const buildStateMap = (state) => {
   if (state.notionProxyBase != null) map.notion_proxy_base = state.notionProxyBase;
   if (state.notionAutoPushEnabled != null) {
     map.notion_auto_push = state.notionAutoPushEnabled ? '1' : '0';
+  }
+  if (state.syncEnabled != null) {
+    map.sync_enabled = state.syncEnabled ? '1' : '0';
   }
   if (state.cloudSyncBaseUrl != null) map.cloud_sync_base_url = normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl);
   if (state.cloudWorkspaceId != null) map.cloud_workspace_id = String(state.cloudWorkspaceId);
@@ -644,6 +658,7 @@ const persistConfig = {
     notionDatabaseId: state.notionDatabaseId,
     notionProxyBase: state.notionProxyBase,
     notionAutoPushEnabled: state.notionAutoPushEnabled,
+    syncEnabled: state.syncEnabled,
   }),
 };
 
@@ -937,6 +952,8 @@ export const useEditorStore = create(
       notionProxyBase: '',
       /** 保存本地文件后自动推送到 Notion 数据库 */
       notionAutoPushEnabled: false,
+      /** 同步总开关：默认关闭，开启后各同步能力才生效 */
+      syncEnabled: false,
       cloudSyncBaseUrl: getDefaultCloudSyncBaseUrl(),
       cloudWorkspaceId: '',
       cloudLastSyncedRevision: 0,
@@ -951,6 +968,7 @@ export const useEditorStore = create(
       setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
       setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),
       setNotionAutoPushEnabled: (enabled) => set({ notionAutoPushEnabled: Boolean(enabled) }),
+      setSyncEnabled: (enabled) => set({ syncEnabled: Boolean(enabled) }),
       // 立即写一份到 localStorage，让 notionService 当次请求即可读到新地址
       setNotionProxyBase: (notionProxyBase) => {
         const next = (notionProxyBase ?? '').trim();

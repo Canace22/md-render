@@ -411,6 +411,8 @@ function MarkdownEditor() {
     dismissLocalProjectConflict,
     notionAutoPushEnabled,
     setNotionAutoPushEnabled,
+    syncEnabled,
+    setSyncEnabled,
     importWorkspace,
     importBookmarks,
     insertWorkspaceNode,
@@ -683,7 +685,8 @@ function MarkdownEditor() {
     notionAutoPushRef.current = createAutoPushScheduler({
       pushFile: async (snapshot) => {
         const state = useEditorStore.getState();
-        if (!state.notionAutoPushEnabled || !state.notionToken) return;
+        // 同步总开关关闭时不推送、不弹失败提示
+        if (!state.syncEnabled || !state.notionAutoPushEnabled || !state.notionToken) return;
         try {
           const mappedPageId = state.notionFilePages?.[snapshot.fileId];
           // 没配数据库但有页面映射（如 Web 端从数据库拉下来的页面）→ 直接写回页面
@@ -2943,6 +2946,8 @@ function MarkdownEditor() {
             initialChannel={syncChannel}
             selectedFileName={selectedFile?.name}
             localProjectSupported={localProjectSupported}
+            masterEnabled={syncEnabled}
+            onMasterEnabledChange={setSyncEnabled}
             onClose={() => setSurface(lastContentSurfaceRef.current)}
             onOpenSettings={() => setSurface('settings')}
             notion={{

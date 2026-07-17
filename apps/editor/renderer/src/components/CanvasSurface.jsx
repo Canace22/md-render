@@ -8,6 +8,7 @@ import {
   buildExcalidrawElementsFromItems,
   buildInitialExcalidrawData,
   getCanvasSourceIdFromElement,
+  getViewportCenterPosition,
 } from '../utils/excalidrawCanvas.js';
 
 const CANVAS_TITLE = '灵感白板';
@@ -187,23 +188,37 @@ export default function CanvasSurface({
     if (!api) return;
 
     const currentElements = api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements?.() ?? [];
-    const nextElements = buildExcalidrawElementsFromItems([item], {
-      startIndex: currentElements.length + index,
-    });
+    const appState = api.getAppState?.() ?? {};
+    // 直接在当前视口中心新建，卡片就出现在用户正看着的地方；视口未测量时回退到默认网格坐标
+    const position = getViewportCenterPosition(appState, { offsetIndex: currentElements.length });
+    const nextElements = buildExcalidrawElementsFromItems(
+      [position ? { ...item, position } : item],
+      { startIndex: currentElements.length + index },
+    );
+    const mergedElements = [...currentElements, ...nextElements];
     api.updateScene({
-      elements: [...currentElements, ...nextElements],
+      elements: mergedElements,
       appState: {
-        ...api.getAppState?.(),
+        ...appState,
         selectedElementIds: Object.fromEntries(nextElements.map((element) => [element.id, true])),
       },
     });
-    scheduleSceneSave(
-      [...currentElements, ...nextElements],
-      api.getAppState?.() ?? {},
-      api.getFiles?.() ?? {},
-    );
+    // 立即把带新卡片的场景写回父层，不等 420ms 防抖：
+    // 否则窗口期内任何一次对 workspace 的写入都会让 canvasState 回流成「没有这张卡片」，
+    // syncSceneFromProps 再据此刷新画布，新卡片就会闪一下被覆盖掉。
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    latestSceneRef.current = {
+      elements: mergedElements,
+      appState: api.getAppState?.() ?? {},
+      files: api.getFiles?.() ?? {},
+    };
+    setSceneHasContent(true);
+    flushScene();
     setIsLibraryOpen(false);
-  }, [scheduleSceneSave]);
+  }, [flushScene]);
 
   const handleCreateBlankCard = useCallback(() => {
     const id = `blank-${Date.now().toString(36)}`;

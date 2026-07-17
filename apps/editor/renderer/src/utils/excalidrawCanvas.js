@@ -23,7 +23,36 @@ const EXCALIDRAW_APP_STATE_FIELDS = [
   'name',
 ];
 
+// 连续新建时逐张错开的像素步长，避免完全叠在一起
+const CARD_STACK_OFFSET = 28;
+
 const trimText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * 按 Excalidraw 当前视口，算出「视口中心」对应的卡片左上角场景坐标。
+ * 用 appState 的 scrollX/scrollY/zoom/width/height 反推：
+ *   sceneCenter = (viewportSize / 2) / zoom - scroll
+ * width/height 尚未测量（为 0）时返回 null，由调用方回退到默认网格坐标。
+ * @param {object} appState - api.getAppState()
+ * @param {{offsetIndex?: number}} [options] - 连续新建时的错开序号
+ */
+export const getViewportCenterPosition = (appState = {}, { offsetIndex = 0 } = {}) => {
+  const zoom = Number(appState?.zoom?.value ?? appState?.zoom) || 1;
+  const width = Number(appState?.width);
+  const height = Number(appState?.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+  const scrollX = Number(appState?.scrollX) || 0;
+  const scrollY = Number(appState?.scrollY) || 0;
+  const sceneCenterX = width / 2 / zoom - scrollX;
+  const sceneCenterY = height / 2 / zoom - scrollY;
+  const step = (Math.max(0, Math.floor(offsetIndex)) % 8) * CARD_STACK_OFFSET;
+  return {
+    x: sceneCenterX - CARD_WIDTH / 2 + step,
+    y: sceneCenterY - CARD_HEIGHT / 2 + step,
+  };
+};
 
 const getItemTitle = (item, index = 0) => {
   return trimText(item?.title ?? item?.name ?? item?.label) || `未命名卡片 ${index + 1}`;
