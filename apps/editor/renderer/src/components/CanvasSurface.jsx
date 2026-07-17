@@ -69,6 +69,7 @@ export default function CanvasSurface({
   const excalidrawApiRef = useRef(null);
   const saveTimerRef = useRef(null);
   const latestSceneRef = useRef(null);
+  const lastFlushedSceneSignatureRef = useRef('');
   const lastHitRef = useRef({ elementId: '', occurredAt: 0 });
   const processedLibraryIdsRef = useRef(new Set());
   const librarySyncReadyRef = useRef(false);
@@ -112,8 +113,10 @@ export default function CanvasSurface({
 
   const flushScene = useCallback(() => {
     if (!latestSceneRef.current) return;
-    onChange?.(buildExcalidrawCanvasState(latestSceneRef.current));
+    const nextCanvasState = buildExcalidrawCanvasState(latestSceneRef.current);
+    lastFlushedSceneSignatureRef.current = JSON.stringify(nextCanvasState.excalidraw ?? null);
     latestSceneRef.current = null;
+    onChange?.(nextCanvasState);
   }, [onChange]);
 
   const syncSceneFromProps = useCallback(() => {
@@ -131,16 +134,33 @@ export default function CanvasSurface({
     const currentAppState = api.getAppState?.() ?? {};
     const currentFiles = api.getFiles?.() ?? {};
 
-    if (buildSceneSignature({
+    const currentSceneSignature = buildSceneSignature({
       elements: currentElements,
       appState: currentAppState,
       files: currentFiles,
-    }) === buildSceneSignature({
+    });
+    const nextSceneSignature = buildSceneSignature({
       elements: nextElements,
       appState: nextAppState,
       files: nextFiles,
-    })) {
+    });
+
+    if (currentSceneSignature === nextSceneSignature) {
+      if (nextSceneSignature === lastFlushedSceneSignatureRef.current) {
+        lastFlushedSceneSignatureRef.current = '';
+      }
       setSceneHasContent(hasVisibleElements(nextElements));
+      return;
+    }
+
+    // 本地编辑尚在防抖窗口内时，props 仍可能携带旧场景，不能反向覆盖当前输入。
+    if (latestSceneRef.current) return;
+
+    // Zustand 回传刚刚保存的场景属于本地保存回声。当前 Excalidraw 可能已经进入
+    // 下一次交互，跳过 updateScene / scrollToContent，避免视口抖动和编辑焦点被打断。
+    if (nextSceneSignature === lastFlushedSceneSignatureRef.current) {
+      lastFlushedSceneSignatureRef.current = '';
+      setSceneHasContent(hasVisibleElements(currentElements));
       return;
     }
 

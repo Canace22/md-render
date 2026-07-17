@@ -1,0 +1,4 @@
+interface:
+  display_name: "MdRender 无限画布"
+  short_description: "安全修改 Excalidraw 画布同步、保存与交互逻辑"
+  default_prompt: "Use $md-render-excalidraw-canvas to diagnose and fix the infinite canvas interaction issue."

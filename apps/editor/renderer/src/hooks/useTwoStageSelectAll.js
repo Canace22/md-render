@@ -14,9 +14,11 @@ const TEXT_EDITING_TARGET_SELECTOR = [
   'select',
   '[contenteditable]:not([contenteditable="false"])',
 ].join(',');
+const EXTERNAL_EDITOR_TARGET_SELECTOR = '.excalidraw';
 
 const getTextEditingTarget = (target) => target?.closest?.(TEXT_EDITING_TARGET_SELECTOR) ?? null;
 const isTextEditingTarget = (target) => Boolean(getTextEditingTarget(target));
+const isExternalEditorTarget = (target) => Boolean(target?.closest?.(EXTERNAL_EDITOR_TARGET_SELECTOR));
 
 const selectTextEditingTargetContent = (target) => {
   const editingTarget = getTextEditingTarget(target);
@@ -191,7 +193,8 @@ export function useTwoStageSelectAll(editor) {
       if (!isSelectAllShortcut(event)
         || !editorDom?.isConnected
         || editorDom.contains(event.target)
-        || isTextEditingTarget(event.target)) return;
+        || isTextEditingTarget(event.target)
+        || isExternalEditorTarget(event.target)) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -219,6 +222,11 @@ export function useTwoStageSelectAll(editor) {
     if (!editorDom.contains(activeTarget) && isTextEditingTarget(activeTarget)) {
       resetSelectAllState();
       selectTextEditingTargetContent(activeTarget);
+      return;
+    }
+
+    if (!editorDom.contains(activeTarget) && isExternalEditorTarget(activeTarget)) {
+      resetSelectAllState();
       return;
     }
 
