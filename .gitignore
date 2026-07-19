@@ -57,3 +57,6 @@ apps/*/build/
 
 # 工具/进程在仓库根目录残留的临时文件（如 _tmp_34_<hash>）
 /_tmp_*
+
+# Claude Code 本地设置（个人环境，不入库；.claude/skills 符号链接需要入库）
+.claude/settings.local.json

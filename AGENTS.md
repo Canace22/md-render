@@ -37,6 +37,7 @@
 | `.agents/skills/<name>/SKILL.md` | Skill 正文（frontmatter、触发词、步骤、约束、示例） |
 | `.agents/skills/<name>/scripts/` | 可选脚本（如 `pre-commit-secrets` 扫描脚本） |
 | `.agents/skills/<name>/agents/openai.yaml` | 可选，OpenAI/Codex 界面元信息；不强制补齐 |
+| `.claude/skills` | 符号链接 → `.agents/skills`，让 Claude Code 原生自动发现 skills；正文仍只维护在 `.agents/skills/` |
 
 新增 Skill 时：**先写** `.agents/skills/<name>/SKILL.md`，并在下表登记；按 [`skill-harvest`](.agents/skills/skill-harvest/SKILL.md) 规范判断是否值得沉淀。
 
