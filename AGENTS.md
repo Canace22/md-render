@@ -1,7 +1,8 @@
 # md-render 开发规范（根）
 
-> 本文件是所有 AI 协作工具（Claude Code / Cursor / Codex 等）的**规则真相源**。
-> 各工具只通过指针引用，**不复制正文**：Claude → 根 `CLAUDE.md`；Cursor → `.cursor/rules/base.mdc`。
+> 本文件是所有 AI 协作工具（Claude Code / Cursor / Codex / Copilot 等）的**规则真相源**。
+> 各工具只通过指针引用，**不复制正文**：Claude → 根 `CLAUDE.md`；Cursor → `.cursor/rules/base.mdc`；
+> Copilot → `.github/copilot-instructions.md`；Codex 原生读取本文件。
 >
 > 本文件只放**跨模块通用规则**。区域专属规则按目录分层，碰到该区域才加载：
 > - Electron 主进程规则 → [`apps/editor/main/AGENTS.md`](apps/editor/main/AGENTS.md)
@@ -35,6 +36,7 @@
 |------|------|
 | `.agents/skills/<name>/SKILL.md` | Skill 正文（frontmatter、触发词、步骤、约束、示例） |
 | `.agents/skills/<name>/scripts/` | 可选脚本（如 `pre-commit-secrets` 扫描脚本） |
+| `.agents/skills/<name>/agents/openai.yaml` | 可选，OpenAI/Codex 界面元信息；不强制补齐 |
 
 新增 Skill 时：**先写** `.agents/skills/<name>/SKILL.md`，并在下表登记；按 [`skill-harvest`](.agents/skills/skill-harvest/SKILL.md) 规范判断是否值得沉淀。
 
@@ -151,10 +153,15 @@ apps/
     │       └── styles/
     └── tests/                   # app 相关测试
 packages/
-└── markdown-core/
-    └── src/
-        ├── parser.js            # Markdown 解析器 → token 数组
-        └── renderer.js          # token 数组 → HTML 字符串
+├── markdown-core/
+│   └── src/
+│       ├── parser.js            # Markdown 解析器 → token 数组
+│       └── renderer.js          # token 数组 → HTML 字符串
+└── blocknote-core/              # BlockNote 底层机制包（@narrative/blocknote-core）
+server/
+├── cloud-sync/                  # 自建云同步服务端（server.js 等）
+├── ai-proxy/                    # AI 请求代理
+└── notion-proxy/                # Notion API 代理
 ```
 
 ### 模块职责

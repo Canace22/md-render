@@ -29,6 +29,9 @@ pnpm test:e2e     # E2E 测试（playwright）
 | Notion 集成 | `apps/editor/renderer/src/utils/notionService.js` + `apps/editor/renderer/src/utils/notionConverter.js` |
 | Notion 自动推送 / 懒加载工作区 | `apps/editor/renderer/src/utils/notionAutoPush.js` + `apps/editor/renderer/src/utils/notionWorkspace.js` |
 | 本地文件桥接（Electron/Web 路由） | `apps/editor/renderer/src/utils/localProjectBridge.js` + `apps/editor/renderer/src/utils/webFsBridge.js` |
+| AI 助手（agent 引擎/工具/面板） | `apps/editor/renderer/src/core/agent/`（`agentEngine.js` + `toolRegistry.js`） |
+| 云同步 / 代理服务端 | `server/cloud-sync/server.js` + `server/ai-proxy/` + `server/notion-proxy/` |
+| BlockNote 底层机制包 | `packages/blocknote-core/` |
 | 小说辅助 | `apps/editor/renderer/src/core/novel/` |
 | CSS 变量 | `apps/editor/renderer/src/styles/design-tokens.css` |
 
