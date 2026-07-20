@@ -1,7 +1,7 @@
-import { listAvailableProviders } from '../aiConfig.js';
 import {
   requestChatCompletion,
   requestKnowledgeSearch,
+  requestProviders,
   requestToolExec,
   requestToolSchema,
 } from '../aiRequest.js';
@@ -17,8 +17,22 @@ export function registerAiHandlers({ ipcMain, resolveAiProxyBase }) {
     }
   });
 
-  ipcMain.handle('ai:getConfig', () => {
-    return listAvailableProviders();
+  // provider 列表由 ai-proxy server 提供，主进程只做转发和字段映射。
+  ipcMain.handle('ai:getConfig', async (_event, payload = {}) => {
+    try {
+      const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
+      const providers = await requestProviders({ aiProxyBase });
+      return providers.map(({ id, label, baseURL, defaultModel, hasKey }) => ({
+        id,
+        label,
+        baseURL,
+        defaultModel,
+        hasBuiltinKey: Boolean(hasKey),
+      }));
+    } catch {
+      // server 没起来时返回空列表，前端会回落到「需手填 key」的自定义流程
+      return [];
+    }
   });
 
   ipcMain.handle('ai:execTool', async (_event, payload = {}) => {

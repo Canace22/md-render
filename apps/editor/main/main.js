@@ -25,7 +25,6 @@ import {
   readLocalProjectFileContent,
 } from './localProject.js';
 import { requestChatCompletion, requestToolExec, requestToolSchema } from './aiRequest.js';
-import { listAvailableProviders } from './aiConfig.js';
 import {
   watchLocalProjectRoot,
   markLocalProjectWriteIgnored,

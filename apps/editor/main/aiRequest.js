@@ -143,6 +143,19 @@ export async function requestToolSchema({ aiProxyBase }) {
 }
 
 /**
+ * 获取 server 已配置的 provider 列表（含 key 的才会返回 hasKey: true）。
+ * 唯一数据源是 server/ai-proxy/providers.js，主进程不再维护副本。
+ */
+export async function requestProviders({ aiProxyBase }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  const url = `${normalizeAiProxyBase(aiProxyBase)}/api/providers`;
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok) throw new Error(`获取 provider 列表失败 (${res.status})`);
+  const data = await res.json();
+  return Array.isArray(data?.providers) ? data.providers : [];
+}
+
+/**
  * 通过 ai-proxy 检索公开的外挂知识库。
  */
 export async function requestKnowledgeSearch({ aiProxyBase, query, sources }) {

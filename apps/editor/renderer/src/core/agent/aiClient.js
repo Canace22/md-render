@@ -92,7 +92,9 @@ export const fetchServerProviders = async () => {
   if (!hasAiBridge()) return [];
   try {
     const list = await window.electronAPI.ai.getConfig();
-    _serverProvidersCache = Array.isArray(list) ? list : [];
+    // 空列表通常意味着 ai-proxy 还没起来，不缓存，下次重试
+    if (!Array.isArray(list) || list.length === 0) return [];
+    _serverProvidersCache = list;
     return _serverProvidersCache;
   } catch {
     return [];

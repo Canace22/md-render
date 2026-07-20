@@ -5,6 +5,12 @@ const PROVIDERS = {
     defaultModel: 'MiniMax-M3',
     apiKeyEnv: 'MINIMAX_API_KEY',
   },
+  deepseek: {
+    label: 'DeepSeek',
+    baseURL: 'https://api.deepseek.com/v1',
+    defaultModel: 'deepseek-chat',
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+  },
 };
 
 function resolveProvider(providerId) {
