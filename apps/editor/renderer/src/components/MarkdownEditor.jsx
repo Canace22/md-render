@@ -11,6 +11,7 @@ import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
+import DocEmptyState from './DocEmptyState.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
 import CreationBoardPanel from './CreationBoardPanel.jsx';
 import CanvasSurface from './CanvasSurface.jsx';
@@ -47,6 +48,8 @@ import {
   looksLikeMarkdownCodeFenceClipboardText,
   looksLikeMarkdownClipboardText,
   looksLikePlainTextHtml,
+  isVsCodeMarkdownClipboard,
+  normalizeFrontmatterForPaste,
   normalizeMarkdown,
 } from '../utils/markdownUtils';
 import { applyThemeToBody } from '../utils/themeUtils';
@@ -154,6 +157,11 @@ import '../styles/styles.css';
 const JsonTool = lazy(() => import('@md-render/json-tool').then((module) => ({
   default: module.JsonTool,
 })));
+
+// 只有真正在看文档/文件夹时才显示文档标签页。
+// 其余都是独立空间：overview(内容创作首页)/daily/canvas/creation-board/
+// publishing/json-tool/search/graph/settings/sync/notion
+const DOC_TAB_SURFACES = new Set(['paper', 'folder']);
 
 const CODE_BLOCK_LANGUAGES = {
   text: { name: 'Plain Text', aliases: ['txt', 'plaintext'] },
@@ -453,7 +461,10 @@ function MarkdownEditor() {
     [selectedFolder],
   );
   const allFiles = useMemo(() => collectFiles(workspace), [workspace]);
+  // 只有文档相关的 surface 才显示文档标签页（今日/画布/搜索/关系图等空间不显示）
+  const showDocTabs = DOC_TAB_SURFACES.has(surface);
   const displayTabs = useMemo(() => {
+    if (!showDocTabs) return [];
     return openTabs.map((tab) => {
       const node = findNodeById(workspace, tab.id);
       return {
@@ -462,7 +473,7 @@ function MarkdownEditor() {
         url: node?.type === 'file' ? String(node.url ?? '').trim() : '',
       };
     });
-  }, [openTabs, workspace]);
+  }, [showDocTabs, openTabs, workspace]);
   const recentDrafts = useMemo(() => {
     return collectRecentDrafts(allFiles, 4).map((file) => ({
       id: file.id,
@@ -1353,17 +1364,25 @@ function MarkdownEditor() {
           return true;
         }
 
-        // 先保留 BlockNote/VS Code/Markdown 的明确 MIME 语义，避免内部复制被启发式判断降级。
-        if (shouldUseDefaultPasteMime(clipboardData)) {
-          return useDefaultPaste();
-        }
-
         // BlockNote 在代码块内会强制按纯文本粘贴，不让 Markdown 记号改变块结构。
         if (pasteEditor.getTextCursorPosition()?.block?.type === 'codeBlock') {
           return useDefaultPaste();
         }
 
         const plainText = clipboardData?.getData('text/plain') ?? '';
+
+        // VS Code 里复制 .md 源码：按 Markdown 解析，
+        // 否则逐行高亮的 HTML 会让每行变成一个块、空行变成空段落。
+        if (isVsCodeMarkdownClipboard(clipboardData) && plainText.trim()) {
+          pasteEditor.pasteMarkdown(normalizeFrontmatterForPaste(plainText));
+          return true;
+        }
+
+        // 其余情况保留 BlockNote/VS Code/Markdown 的明确 MIME 语义，避免内部复制被启发式判断降级。
+        if (shouldUseDefaultPasteMime(clipboardData)) {
+          return useDefaultPaste();
+        }
+
         const htmlText = clipboardData?.getData('text/html') ?? '';
         const hasHtmlCodeBlock = looksLikeCodeBlockClipboardHtml(htmlText);
         const hasPlainTextHtml = looksLikePlainTextHtml(htmlText);
@@ -1384,7 +1403,7 @@ function MarkdownEditor() {
         }
 
         if (looksLikeMarkdownClipboardText(plainText) && (!htmlText.trim() || hasPlainTextHtml)) {
-          pasteEditor.pasteMarkdown(plainText);
+          pasteEditor.pasteMarkdown(normalizeFrontmatterForPaste(plainText));
           return true;
         }
 
@@ -3090,6 +3109,8 @@ function MarkdownEditor() {
             onOpenSurface={setSurface}
             onImportBookmarks={() => setBookmarkImportOpen(true)}
           />
+        ) : !selectedFile ? (
+          <DocEmptyState onCreate={() => handleCreateDraftFromDashboard('draft')} />
         ) : selectedUsesBookmarkCard ? (
           <BookmarkCard file={selectedFile} />
         ) : selectedNeedsConversion ? (

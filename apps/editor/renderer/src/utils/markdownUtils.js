@@ -2,6 +2,8 @@
  * Markdown 文本处理工具
  */
 
+import { parseMarkdownFrontmatter } from '../../../shared/frontmatter.js';
+
 export const normalizeMarkdown = (value) => {
   const str = value ?? '';
   return str.replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ').trimEnd();
@@ -34,6 +36,68 @@ export const looksLikeMarkdownCodeFenceClipboardText = (value = '') => {
   const text = normalizeMarkdown(value);
   if (!text) return false;
   return /(^|\n) {0,3}```[\s\S]*?```(?:\n|$)/.test(text);
+};
+
+// 粘贴时保留展示的 frontmatter 字段（顺序即展示顺序）；
+// comments / toc 这类站点配置字段不进正文。
+const PASTE_META_LABELS = {
+  author: '作者',
+  date: '日期',
+  published: '发布',
+  created: '创建',
+  categories: '分类',
+  source: '来源',
+  description: '摘要',
+  tags: '标签',
+};
+
+const metaValueToText = (value) => (
+  Array.isArray(value) ? value.join('、') : String(value ?? '')
+).trim();
+
+/**
+ * 粘贴整篇 Markdown 时改写顶部 YAML frontmatter：
+ * title 变成 H1，其余可展示字段合并成一个引用块，其余配置字段丢弃。
+ * 原样粘贴时 `---` 会被解析成分隔线 + setext 标题，正文顶部多出一坨元数据。
+ */
+export const normalizeFrontmatterForPaste = (value = '') => {
+  const text = normalizeMarkdown(value);
+  const { hasFrontmatter, frontmatter, content } = parseMarkdownFrontmatter(text);
+  if (!hasFrontmatter) return text;
+
+  const title = metaValueToText(frontmatter.title);
+  const metaLines = Object.entries(PASTE_META_LABELS)
+    .map(([key, label]) => {
+      const item = metaValueToText(frontmatter[key]);
+      return item ? `> ${label}：${item}` : null;
+    })
+    .filter(Boolean);
+
+  const parts = [
+    title ? `# ${title}` : '',
+    // 行尾两空格＝硬换行，让多个字段在同一个引用块里分行显示
+    metaLines.length ? metaLines.join('  \n') : '',
+    content.replace(/^\n+/, ''),
+  ].filter(Boolean);
+
+  return parts.join('\n\n');
+};
+
+const VSCODE_MARKDOWN_MODES = new Set(['markdown', 'mdx']);
+
+/**
+ * 判断剪贴板是否来自 VS Code 的 Markdown 文件。
+ * VS Code 会附带 vscode-editor-data（含 mode 字段）和逐行高亮的 text/html，
+ * 若按默认富文本粘贴，源码的每一行会变成一个块、空行会变成空段落。
+ */
+export const isVsCodeMarkdownClipboard = (clipboardData) => {
+  const raw = clipboardData?.getData?.('vscode-editor-data');
+  if (!raw) return false;
+  try {
+    return VSCODE_MARKDOWN_MODES.has(JSON.parse(raw)?.mode);
+  } catch {
+    return false;
+  }
 };
 
 const IGNORED_CLIPBOARD_ELEMENT_TAGS = new Set(['META']);

@@ -265,12 +265,14 @@ export function findParentId(node, targetId, parentId = null) {
   return null;
 }
 
-export function findFirstFileId(node) {
+/** 找第一篇可见文档；.agent 等隐藏节点不作为兜底选中项 */
+export function findFirstFileId(node, isRoot = true) {
   if (!node) return null;
+  if (!isRoot && isHiddenWorkspaceNode(node)) return null;
   if (node.type === 'file') return node.id;
   if (node.type === 'folder' && Array.isArray(node.children)) {
     for (const child of node.children) {
-      const result = findFirstFileId(child);
+      const result = findFirstFileId(child, false);
       if (result) return result;
     }
   }

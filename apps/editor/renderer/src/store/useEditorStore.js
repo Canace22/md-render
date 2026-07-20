@@ -110,6 +110,15 @@ const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
 
+/** 关闭 tab 后的空状态：停留在文档区，不选中任何文件 */
+const EMPTY_DOC_PATCH = {
+  selectedId: null,
+  markdown: '',
+  activeBlockId: null,
+  activeBlockDraft: '',
+  surface: 'paper',
+};
+
 /** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
 const hasElectronDb = () =>
   typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
@@ -1250,32 +1259,21 @@ export const useEditorStore = create(
         return { openTabs: [...state.openTabs, { id: fileId, title: title || '未命名' }] };
       }),
 
-      /** 关闭标签页，若关闭的是当前激活的，切换到相邻标签 */
+      /** 关闭标签页；关闭的是当前激活的则停在文档空状态，不自动跳到别的文档 */
       closeTab: (fileId) => set((state) => {
-        const idx = state.openTabs.findIndex((t) => t.id === fileId);
-        if (idx === -1) return {};
         const nextTabs = state.openTabs.filter((t) => t.id !== fileId);
+        if (nextTabs.length === state.openTabs.length) return {};
         if (state.selectedId !== fileId) return { openTabs: nextTabs };
-        // 关闭的是当前激活的 tab，切换到相邻
-        if (nextTabs.length === 0) return { openTabs: nextTabs, surface: 'overview' };
-        const nextIdx = Math.min(idx, nextTabs.length - 1);
-        const nextTab = nextTabs[nextIdx];
-        const node = findNodeById(state.workspace, nextTab.id);
-        return {
-          openTabs: nextTabs,
-          selectedId: nextTab.id,
-          markdown: node?.content ?? '',
-          surface: node?.type === 'folder' ? 'folder' : 'paper',
-        };
+        return { openTabs: nextTabs, ...EMPTY_DOC_PATCH };
       }),
 
       /** 关闭所有标签页 */
-      closeAllTabs: () => set({ openTabs: [], surface: 'overview' }),
+      closeAllTabs: () => set({ openTabs: [], ...EMPTY_DOC_PATCH }),
 
       /** 关闭其他标签页（保留指定 tab） */
       closeOtherTabs: (fileId) => set((state) => {
         const kept = state.openTabs.filter((t) => t.id === fileId);
-        if (kept.length === 0) return { openTabs: [], surface: 'overview' };
+        if (kept.length === 0) return { openTabs: [], ...EMPTY_DOC_PATCH };
         // 若保留的不是当前激活的，切换过去
         if (state.selectedId === fileId) return { openTabs: kept };
         const node = findNodeById(state.workspace, fileId);
@@ -1730,7 +1728,8 @@ export const useEditorStore = create(
           patch.markdown = selectedFile.content ?? '';
           patch.editorReloadToken = state.editorReloadToken + 1;
         }
-        if (!findNodeById(nextWorkspace, state.selectedId)) {
+        // selectedId 为 null 是「关闭全部标签」后的空状态，别自动挑一篇文档打开
+        if (state.selectedId && !findNodeById(nextWorkspace, state.selectedId)) {
           const nextFileId = findFirstFileId(nextWorkspace);
           if (nextFileId) {
             const nextNode = findNodeById(nextWorkspace, nextFileId);
@@ -2246,11 +2245,11 @@ export const useEditorStore = create(
 
       syncSelectedIdFromWorkspace: () => {
         const { workspace, selectedId } = get();
-        const selectedNode = findNodeById(workspace, selectedId);
-        if (!selectedNode) {
-          const firstFileId = findFirstFileId(workspace);
-          if (firstFileId) set({ selectedId: firstFileId, surface: 'paper' });
-        }
+        // selectedId 为 null 是「关闭全部标签」后的空状态，别自动挑一篇文档打开
+        if (!selectedId) return;
+        if (findNodeById(workspace, selectedId)) return;
+        const firstFileId = findFirstFileId(workspace);
+        if (firstFileId) set({ selectedId: firstFileId, surface: 'paper' });
       },
     }),
     persistConfig,
