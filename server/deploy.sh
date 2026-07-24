@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# 一键部署 server/ 下所有 Node 服务（notion-proxy + ai-proxy）
+# 一键部署 server/ 下所有 Node 服务（notion-proxy + ai-proxy + cloud-sync）
+# 并把本地用的 mcp-bridge 依赖装好（它由 Claude Desktop 本地按需拉起，不进 PM2）。
 #
 # 在服务器上执行（先 git clone / rsync 代码到服务器）：
 #   cd /path/to/md-render/server
@@ -9,14 +10,18 @@
 # 可选环境变量：
 #   NOTION_PROXY_PORT=8787   notion-proxy 端口
 #   AI_PROXY_PORT=8788       ai-proxy 端口
+#   CLOUD_SYNC_PORT=8791     cloud-sync 端口
+#   CLOUD_SYNC_TOKEN=xxx     cloud-sync 鉴权 token（不设则不鉴权）
 #   INSTALL_DEPS=1           尝试安装系统依赖（需 root）
 #   SKIP_FIREWALL=1          跳过防火墙放行
 #   SKIP_PYTHON=1            跳过 ai-proxy Python 工具依赖
+#   SKIP_MCP=1               跳过 mcp-bridge 依赖安装
 #
 # 可选参数：
 #   --install-deps           同 INSTALL_DEPS=1
 #   --skip-firewall
 #   --skip-python
+#   --skip-mcp
 #   --help
 #
 set -euo pipefail
@@ -24,9 +29,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTION_PORT="${NOTION_PROXY_PORT:-8787}"
 AI_PORT="${AI_PROXY_PORT:-8788}"
+CLOUD_SYNC_PORT="${CLOUD_SYNC_PORT:-8791}"
 INSTALL_DEPS="${INSTALL_DEPS:-0}"
 SKIP_FIREWALL="${SKIP_FIREWALL:-0}"
 SKIP_PYTHON="${SKIP_PYTHON:-0}"
+SKIP_MCP="${SKIP_MCP:-0}"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=9
 
@@ -41,12 +48,14 @@ usage() {
   cat <<'EOF'
 用法: bash deploy.sh [选项]
 
-部署 server/ 下所有 Node 服务（notion-proxy、ai-proxy），用 PM2 常驻。
+部署 server/ 下所有 Node 服务（notion-proxy、ai-proxy、cloud-sync），用 PM2 常驻；
+并安装本地 mcp-bridge 的依赖（该进程由 Claude Desktop 本地按需拉起，不用 PM2 守护）。
 
 选项:
   --install-deps    尝试安装 node / python3 / ffmpeg / pm2（需 root）
   --skip-firewall   跳过 firewalld / ufw 放行端口
   --skip-python     跳过 ai-proxy 的 Python venv 与工具依赖
+  --skip-mcp        跳过 mcp-bridge 依赖安装
   --help            显示本帮助
 
 说明:
@@ -58,6 +67,8 @@ usage() {
 环境变量:
   NOTION_PROXY_PORT   notion-proxy 端口（默认 8787）
   AI_PROXY_PORT       ai-proxy 端口（默认 8788）
+  CLOUD_SYNC_PORT     cloud-sync 端口（默认 8791）
+  CLOUD_SYNC_TOKEN    cloud-sync 鉴权 token（不设则不鉴权）
 EOF
 }
 
@@ -66,6 +77,7 @@ for arg in "$@"; do
     --install-deps) INSTALL_DEPS=1 ;;
     --skip-firewall) SKIP_FIREWALL=1 ;;
     --skip-python) SKIP_PYTHON=1 ;;
+    --skip-mcp) SKIP_MCP=1 ;;
     --help|-h) usage; exit 0 ;;
     *) red "未知参数: $arg"; usage; exit 1 ;;
   esac
@@ -88,6 +100,7 @@ service_port() {
   case "$1" in
     notion-proxy) echo "$NOTION_PORT" ;;
     ai-proxy) echo "$AI_PORT" ;;
+    cloud-sync) echo "$CLOUD_SYNC_PORT" ;;
     *) echo "" ;;
   esac
 }
@@ -98,6 +111,7 @@ service_health_url() {
   case "$name" in
     notion-proxy) echo "http://127.0.0.1:${port}/v1/users/me" ;;
     ai-proxy) echo "http://127.0.0.1:${port}/api/health" ;;
+    cloud-sync) echo "http://127.0.0.1:${port}/" ;;
     *) echo "" ;;
   esac
 }
@@ -106,6 +120,8 @@ service_health_expect() {
   case "$1" in
     notion-proxy) echo "401" ;;  # 无 token 时 Notion 返回 401 = 代理通了
     ai-proxy) echo "200" ;;
+    # 设了 token：裸请求 401；没设 token：根路径无匹配路由 404。两者都说明服务活着。
+    cloud-sync) [ -n "${CLOUD_SYNC_TOKEN:-}" ] && echo "401" || echo "404" ;;
     *) echo "200" ;;
   esac
 }
@@ -308,6 +324,34 @@ setup_python_tools() {
   fi
 }
 
+# ── mcp-bridge（本地 MCP server，供别的 AI 操作 app） ──
+# 不进 PM2：它是 stdio 进程，由 Claude Desktop / Cursor 等本地按需拉起，
+# 且依赖桌面版 app 正在运行。这里只把依赖装好，让它随时可用。
+setup_mcp_bridge() {
+  if [ "$SKIP_MCP" = "1" ]; then
+    yellow "  跳过 mcp-bridge 依赖安装（--skip-mcp）"
+    return 0
+  fi
+
+  local mcp_dir="$SCRIPT_DIR/mcp-bridge"
+  if [ ! -f "$mcp_dir/package.json" ]; then
+    yellow "  未找到 mcp-bridge，跳过"
+    return 0
+  fi
+
+  step "安装 mcp-bridge 依赖"
+  if ! command -v npm >/dev/null 2>&1; then
+    yellow "  未找到 npm，跳过 mcp-bridge（需要时手动 cd mcp-bridge && npm install）"
+    return 0
+  fi
+
+  if (cd "$mcp_dir" && npm install --omit=dev >/dev/null 2>&1); then
+    green "  mcp-bridge 依赖已就绪"
+  else
+    yellow "  mcp-bridge 依赖安装失败，可稍后手动 cd mcp-bridge && npm install"
+  fi
+}
+
 # ── 防火墙 ─────────────────────────────────────────────
 open_firewall_port() {
   local port="$1"
@@ -331,9 +375,10 @@ setup_firewall() {
     return 0
   fi
 
-  step "放行防火墙端口 ${NOTION_PORT}, ${AI_PORT}"
+  step "放行防火墙端口 ${NOTION_PORT}, ${AI_PORT}, ${CLOUD_SYNC_PORT}"
   open_firewall_port "$NOTION_PORT"
   open_firewall_port "$AI_PORT"
+  open_firewall_port "$CLOUD_SYNC_PORT"
   yellow "  云服务器还需在控制台安全组放行上述端口"
 }
 
@@ -344,6 +389,8 @@ deploy_pm2() {
 
   export NOTION_PROXY_PORT="$NOTION_PORT"
   export AI_PROXY_PORT="$AI_PORT"
+  export CLOUD_SYNC_PORT="$CLOUD_SYNC_PORT"
+  export CLOUD_SYNC_TOKEN="${CLOUD_SYNC_TOKEN:-}"
 
   pm2 startOrReload ecosystem.config.cjs --update-env
   pm2 save
@@ -388,16 +435,23 @@ print_summary() {
   echo "服务地址："
   echo "  Notion 代理: http://${ip}:${NOTION_PORT}/v1"
   echo "  AI 代理:     http://${ip}:${AI_PORT}"
+  echo "  云同步:      http://${ip}:${CLOUD_SYNC_PORT}"
   echo
   echo "前端配置（apps/editor/.env）："
   echo "  VITE_NOTION_PROXY=http://${ip}:${NOTION_PORT}/v1"
   echo "  AI_PROXY_BASE=http://${ip}:${AI_PORT}"
+  echo "  （云同步地址在 app 内「同步中心」设置里填 http://${ip}:${CLOUD_SYNC_PORT}）"
   echo
   echo "常用命令："
   echo "  pm2 status"
   echo "  pm2 logs ai-proxy"
   echo "  pm2 restart all"
   echo "  pm2 startup    # 开机自启（按提示执行生成的命令）"
+  echo
+  echo "mcp-bridge（让别的 AI 操作 app，本地用，不在 PM2 里）："
+  echo "  依赖已装好。在你自己的电脑上，把下面这段加进 Claude Desktop 配置："
+  echo '    "md-render": { "command": "node", "args": ["'"$SCRIPT_DIR"'/mcp-bridge/index.js"] }'
+  echo "  前提：MD Render 桌面版在该电脑上运行（它会写握手文件供 mcp-bridge 连接）。"
   echo
 
   for name in "${SERVICES[@]}"; do
@@ -429,6 +483,7 @@ main() {
   check_pm2
   setup_ai_proxy_env
   setup_python_tools
+  setup_mcp_bridge
   setup_firewall
   deploy_pm2
   print_summary
