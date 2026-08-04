@@ -259,6 +259,7 @@ For parser / renderer internals, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 | Topic | Doc |
 |-------|-----|
+| **Feature guide** (what each surface does, in Chinese) | [docs/产品功能说明.md](./docs/产品功能说明.md) |
 | **Content creation roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 | Daily notebook categories | [docs/daily-notebook-task-category.md](./docs/daily-notebook-task-category.md) |
 | AI assistant quality checklist | [docs/ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md) |

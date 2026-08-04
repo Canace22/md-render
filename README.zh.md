@@ -259,6 +259,7 @@ md-render/
 
 | 主题 | 文档 |
 |------|------|
+| **产品功能说明**（按界面逐个讲能干什么） | [docs/产品功能说明.md](./docs/产品功能说明.md) |
 | **内容创作路线图** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 | 今日速记类别说明 | [docs/daily-notebook-task-category.md](./docs/daily-notebook-task-category.md) |
 | AI 助手验收清单 | [docs/ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md) |
