@@ -93,6 +93,7 @@ export function getDatabaseDiagnostics() {
     return {
       ok: false,
       initialized: false,
+      readable: false,
       quickCheck: null,
       counts: null,
       error: {
@@ -103,32 +104,28 @@ export function getDatabaseDiagnostics() {
   }
 
   try {
-    const quickCheck = String(db.pragma('quick_check', { simple: true }) ?? '');
-    const counts = db.prepare(`
-      SELECT
-        (SELECT COUNT(*) FROM app_state) AS appState,
-        (SELECT COUNT(*) FROM documents) AS documents,
-        (SELECT COUNT(*) FROM links) AS links,
-        (SELECT COUNT(*) FROM versions) AS versions
-    `).get();
-    const ok = quickCheck.toLowerCase() === 'ok';
+    // 健康快照运行在 Electron 主线程，不能执行会扫描整库的 quick_check / COUNT(*)。
+    // schema_version 只读取数据库头，足以确认当前连接仍可读，耗时不随数据库体积增长。
+    const schemaVersion = Number(db.pragma('schema_version', { simple: true }));
+    const readable = Number.isFinite(schemaVersion);
 
     return {
-      ok,
+      ok: readable,
       initialized: true,
-      quickCheck,
-      counts,
-      error: ok
-        ? null
-        : {
-          code: 'DB_QUICK_CHECK_FAILED',
-          message: '数据库快速检查未通过。',
-        },
+      readable,
+      schemaVersion,
+      quickCheck: null,
+      counts: null,
+      error: readable ? null : {
+        code: 'DB_READ_CHECK_FAILED',
+        message: '数据库轻量可读性检查未通过。',
+      },
     };
   } catch (error) {
     return {
       ok: false,
       initialized: true,
+      readable: false,
       quickCheck: null,
       counts: null,
       error: {
