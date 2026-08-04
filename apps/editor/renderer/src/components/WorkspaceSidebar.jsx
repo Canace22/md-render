@@ -785,8 +785,8 @@ const WorkspaceSidebar = ({
               type="button"
               className={`sidebar-rail-btn ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
               onClick={onOpenCurrentContent}
-              title="当前内容"
-              aria-label="当前内容"
+              title="文档"
+              aria-label="文档"
             >
               <FileText size={18} strokeWidth={1.6} />
             </button>

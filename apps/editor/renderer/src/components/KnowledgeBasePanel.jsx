@@ -316,7 +316,7 @@ export default function KnowledgeBasePanel({
               <div className="knowledge-card-head">
                 <div>
                   <span className="knowledge-card-kicker">知识库总览</span>
-                  <h2>当前内容焦点</h2>
+                  <h2>当前焦点</h2>
                 </div>
                 {selectedFile ? (
                   <button
