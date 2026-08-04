@@ -19,7 +19,6 @@ import DailyNotebook from './DailyNotebook.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import PublishingQueuePanel from './PublishingQueuePanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
-import SyncPanel from './SyncPanel.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import ImageLightbox from './ImageLightbox.jsx';
@@ -57,26 +56,6 @@ import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { copyToWeChat } from '../utils/wechatCopy';
 import { copyHtmlWithExecCommand } from '../utils/clipboardUtils.js';
 import { getTemplateById } from '../utils/wechatTemplates';
-import { blocksToMarkdown, markdownToNotionPayload } from '../utils/notionConverter.js';
-import {
-  cleanPageId,
-  extractPageTitle,
-  fetchBlocks,
-  isNotionAvailable,
-  queryDatabase,
-  updatePageBlocks,
-} from '../utils/notionService.js';
-import { incrementalPull } from '../utils/notionIncrementalSync.js';
-import { batchPull, batchPush } from '../utils/notionBatchSync.js';
-import {
-  createAutoPushScheduler,
-  pushFileToNotionDatabase,
-  pushMarkdownToNotionPage,
-} from '../utils/notionAutoPush.js';
-import {
-  openNotionDatabaseWorkspace,
-  fetchNotionPageMarkdown,
-} from '../utils/notionWorkspace.js';
 import { MarkdownParser, MarkdownRenderer } from '../core';
 import { useMacTitlebarInset } from '../hooks/useMacTitlebarInset.js';
 import {
@@ -133,10 +112,6 @@ import {
 import { getTodayDateKey } from '../utils/dailyWorkspace.js';
 import { exportDocument } from '../utils/exportService.js';
 import {
-  fetchCloudWorkspaceSnapshot,
-  uploadCloudWorkspaceSnapshot,
-} from '../utils/cloudSyncService.js';
-import {
   createLocalProjectFileOnDisk,
   createLocalProjectFolderOnDisk,
   deleteLocalProjectEntryOnDisk,
@@ -160,7 +135,7 @@ const JsonTool = lazy(() => import('@md-render/json-tool').then((module) => ({
 
 // 只有真正在看文档/文件夹时才显示文档标签页。
 // 其余都是独立空间：overview(内容创作首页)/daily/canvas/creation-board/
-// publishing/json-tool/search/graph/settings/sync/notion
+// publishing/json-tool/search/graph/settings
 const DOC_TAB_SURFACES = new Set(['paper', 'folder']);
 
 const CODE_BLOCK_LANGUAGES = {
@@ -237,17 +212,6 @@ const PROJECT_SAVE_DEBOUNCE_MS = 400;
 const shouldUseDefaultPasteMime = (clipboardData) => (
   Array.from(clipboardData?.types ?? []).some((type) => DEFAULT_PASTE_MIME_TYPES.has(type))
 );
-
-const formatBatchFailures = (failed, fallbackName = '项目') => {
-  const items = failed ?? [];
-  if (!items.length) return '';
-  const preview = items
-    .slice(0, 3)
-    .map((item) => item.fileName || item.title || fallbackName)
-    .join('、');
-  const suffix = items.length > 3 ? ' 等' : '';
-  return `${items.length} 项失败：${preview}${suffix}`;
-};
 
 const hasLocalProjectNode = (node) => {
   if (!node) return false;
@@ -360,14 +324,6 @@ function MarkdownEditor() {
     surface,
     dailyWorkspace,
     publishingPlatforms,
-    notionToken,
-    notionFilePages,
-    notionDatabaseId,
-    notionProxyBase,
-    cloudSyncBaseUrl,
-    cloudWorkspaceId,
-    cloudLastSyncedRevision,
-    cloudLastSyncedAt,
     setTheme,
     setCopyStyle,
     setPublishingPlatforms,
@@ -388,23 +344,12 @@ function MarkdownEditor() {
     updateTodoItemCategory,
     hydrateDailyWorkspaceFromDisk,
     setWorkspaceCanvas,
-    setNotionToken,
-    setNotionDatabaseId,
-    setNotionProxyBase,
-    setFileNotionPageId,
-    setCloudSyncBaseUrl,
-    setCloudWorkspaceId,
-    buildCloudSyncPayload,
-    markCloudSyncSuccess,
-    applyCloudWorkspacePayload,
     setFileTags,
     setFileKnowledgeMeta,
-    mergeNotionFilePages,
     toggleSidebarCollapsed,
     toggleTocCollapsed,
     updateSelectedFileContent,
     selectNode,
-    selectNodeKeepSurface,
     openLocalProjectWorkspace,
     addFile,
     addFolder,
@@ -417,10 +362,6 @@ function MarkdownEditor() {
     localProjectConflict,
     resolveLocalProjectConflict,
     dismissLocalProjectConflict,
-    notionAutoPushEnabled,
-    setNotionAutoPushEnabled,
-    syncEnabled,
-    setSyncEnabled,
     importWorkspace,
     importBookmarks,
     insertWorkspaceNode,
@@ -622,8 +563,6 @@ function MarkdownEditor() {
       })
       .filter(Boolean);
   }, [canvasItems, canvasState.nodes]);
-  const linkedNotionPageId = selectedFile ? notionFilePages[selectedFile.id] ?? '' : '';
-  const notionAvailable = isNotionAvailable();
   const importInputRef = useRef(null);
   const markdownImportInputRef = useRef(null);
   const projectSaveTimersRef = useRef(new Map());
@@ -690,46 +629,6 @@ function MarkdownEditor() {
   // 监听本地项目磁盘变化：外部改动自动刷新，编辑冲突时弹窗
   useLocalProjectWatcher();
 
-  // 保存后自动推送 Notion：按文件防抖，成功新建页面后登记映射
-  const notionAutoPushRef = useRef(null);
-  if (!notionAutoPushRef.current) {
-    notionAutoPushRef.current = createAutoPushScheduler({
-      pushFile: async (snapshot) => {
-        const state = useEditorStore.getState();
-        // 同步总开关关闭时不推送、不弹失败提示
-        if (!state.syncEnabled || !state.notionAutoPushEnabled || !state.notionToken) return;
-        try {
-          const mappedPageId = state.notionFilePages?.[snapshot.fileId];
-          // 没配数据库但有页面映射（如 Web 端从数据库拉下来的页面）→ 直接写回页面
-          if (!state.notionDatabaseId) {
-            if (mappedPageId) {
-              await pushMarkdownToNotionPage({
-                pageId: mappedPageId,
-                markdown: snapshot.markdown,
-                token: state.notionToken,
-              });
-            }
-            return;
-          }
-          const result = await pushFileToNotionDatabase({
-            databaseId: state.notionDatabaseId,
-            token: state.notionToken,
-            fileName: snapshot.fileName,
-            relativePath: snapshot.relativePath,
-            markdown: snapshot.markdown,
-            pageId: state.notionFilePages?.[snapshot.fileId],
-          });
-          if (result.created) {
-            state.mergeNotionFilePages({ [snapshot.fileId]: result.pageId });
-          }
-        } catch (error) {
-          console.error('自动推送 Notion 失败:', error);
-          message.warning(`自动推送 Notion 失败：${error?.message || '未知错误'}`);
-        }
-      },
-    });
-  }
-  useEffect(() => () => notionAutoPushRef.current?.dispose(), []);
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
   const handleCanvasChange = useCallback((nextCanvasState, edges) => {
     if (
@@ -988,7 +887,6 @@ function MarkdownEditor() {
         deletedFromDisk = true;
         (node.type === 'file' ? [node] : collectFiles(node))
           .forEach((file) => setDiskSavePending(file.id, false));
-        notionAutoPushRef.current?.cancel(targetId);
         removeDiskBackedNode(targetId);
         setContentResetKey((k) => k + 1);
       } catch (error) {
@@ -1123,7 +1021,6 @@ function MarkdownEditor() {
     saveNodeContentAfterPathChange,
     setDiskSavePending,
   ]);
-  const [syncChannel, setSyncChannel] = useState('doc');
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
@@ -1141,19 +1038,7 @@ function MarkdownEditor() {
   }, []);
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
-  const [notionMessage, setNotionMessage] = useState('');
-  const [notionError, setNotionError] = useState('');
-  const [notionPullLoading, setNotionPullLoading] = useState(false);
-  const [notionPushLoading, setNotionPushLoading] = useState(false);
-  const [batchPullLoading, setBatchPullLoading] = useState(false);
-  const [batchPushLoading, setBatchPushLoading] = useState(false);
-  const [incrementalPullLoading, setIncrementalPullLoading] = useState(false);
-  const [batchProgress, setBatchProgress] = useState(null);
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
-  const [cloudSyncLoading, setCloudSyncLoading] = useState(false);
-  const [cloudSyncMessage, setCloudSyncMessage] = useState('');
-  const [cloudSyncError, setCloudSyncError] = useState('');
-  const [cloudSyncConflict, setCloudSyncConflict] = useState(null);
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
       || (selectedFile?.projectRootPath && selectedFile?.name && needsConversion(selectedFile.name)),
@@ -1302,15 +1187,6 @@ function MarkdownEditor() {
         useEditorStore.getState().markLocalFileDiskSaved(resolvedFileId, diskMarkdown);
       }
 
-      const latest = useEditorStore.getState();
-      if (latest.notionAutoPushEnabled && latest.notionToken) {
-        notionAutoPushRef.current?.schedule({
-          fileId: resolvedFileId,
-          fileName: sourceFile.name,
-          relativePath: sourceFile.relativePath,
-          markdown: diskMarkdown,
-        });
-      }
       return true;
     } catch (error) {
       diskSaveFailed = true;
@@ -1464,10 +1340,17 @@ function MarkdownEditor() {
   const selectedContentSurface = selectedFolder ? 'folder' : selectedFile ? 'paper' : 'overview';
 
   useEffect(() => {
-    if (surface !== 'settings' && surface !== 'notion' && surface !== 'sync') {
+    if (surface !== 'settings') {
       lastContentSurfaceRef.current = surface;
     }
   }, [surface]);
+
+  // 冷启动时若上次停在设置页，ref 初值就是 'settings'（上面的 effect 又跳过 settings，
+  // 永远刷不新），直接回它等于原地不动。此时回落到当前选中项对应的内容视图。
+  const leaveSettings = useCallback(() => {
+    const last = lastContentSurfaceRef.current;
+    setSurface(last === 'settings' ? selectedContentSurface : last);
+  }, [selectedContentSurface, setSurface]);
 
   useEffect(() => {
     if (surface !== 'daily') return;
@@ -1487,16 +1370,6 @@ function MarkdownEditor() {
     const timerRef = { current: scheduleMidnightUpdate() };
     return () => clearTimeout(timerRef.current);
   }, [setDailyCurrentDate, surface]);
-
-  // 同步页打开时，点左侧目录只更新选中态、保留同步页；
-  // 点「返回」后再切到选中目标。其它情况按正常逻辑直接打开。
-  const handleSidebarSelect = useCallback((nodeId) => {
-    if (surface === 'sync') {
-      selectNodeKeepSurface(nodeId);
-    } else {
-      selectNode(nodeId);
-    }
-  }, [surface, selectNode, selectNodeKeepSurface]);
 
   const tryConvertTypedMarkdownCodeFence = useCallback(() => {
     const cursorPosition = editor.getTextCursorPosition();
@@ -1578,15 +1451,6 @@ function MarkdownEditor() {
           // 记录"刚写下去的磁盘正文"为新基线：稍后文件监听回灌时可据此识别为自写 echo，
           // 从而只重载真·外部改动、忽略自己保存产生的变更（不再抢焦点）。
           useEditorStore.getState().markLocalFileDiskSaved(selectedFile.id, diskMarkdown);
-          const latest = useEditorStore.getState();
-          if (latest.notionAutoPushEnabled && latest.notionToken && latest.notionDatabaseId) {
-            notionAutoPushRef.current?.schedule({
-              fileId: selectedFile.id,
-              fileName: selectedFile.name,
-              relativePath: selectedFile.relativePath,
-              markdown: diskMarkdown,
-            });
-          }
         } catch (error) {
           console.error('保存本地项目文件失败:', error);
           alert(error?.message || '保存本地项目文件失败');
@@ -1598,20 +1462,6 @@ function MarkdownEditor() {
         }
       }, PROJECT_SAVE_DEBOUNCE_MS);
       projectSaveTimersRef.current.set(selectedFile.id, timerId);
-    } else if (selectedFile && !selectedFile.notionLazy) {
-      // 内存工作区文件（如 Web 端从 Notion 数据库拉取的页面）：
-      // 已有页面映射且开了自动推送时，编辑后防抖写回 Notion。
-      // notionLazy（正文还没拉下来）时绝不写回，避免空内容覆盖远端。
-      const latest = useEditorStore.getState();
-      const mappedPageId = latest.notionFilePages?.[selectedFile.id];
-      if (mappedPageId && latest.notionAutoPushEnabled && latest.notionToken) {
-        notionAutoPushRef.current?.schedule({
-          fileId: selectedFile.id,
-          fileName: selectedFile.name,
-          relativePath: selectedFile.relativePath,
-          markdown: normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document)),
-        });
-      }
     }
   };
 
@@ -2097,109 +1947,6 @@ function MarkdownEditor() {
     workspace,
   ]);
 
-  const handleCloudUpload = useCallback(async ({ baseRevision } = {}) => {
-    setCloudSyncLoading(true);
-    setCloudSyncMessage('');
-    setCloudSyncError('');
-    setCloudSyncConflict(null);
-    try {
-      const state = useEditorStore.getState();
-      const { payload, hash } = state.buildCloudSyncPayload();
-      const result = await uploadCloudWorkspaceSnapshot({
-        baseUrl: state.cloudSyncBaseUrl,
-        workspaceId: state.cloudWorkspaceId,
-        payload,
-        baseRevision: baseRevision ?? state.cloudLastSyncedRevision,
-        clientId: state.cloudClientId,
-      });
-      const nextRevision = result.revision ?? result.snapshot?.revision ?? state.cloudLastSyncedRevision + 1;
-      const updatedAt = result.updatedAt ?? result.snapshot?.updatedAt ?? new Date().toISOString();
-      state.markCloudSyncSuccess({ revision: nextRevision, updatedAt, hash });
-      setCloudSyncMessage(`已上传到云端，revision ${nextRevision}。`);
-      message.success('已上传到云端');
-    } catch (error) {
-      if (error?.status === 409) {
-        const remoteRevision = error.body?.revision ?? error.body?.snapshot?.revision ?? error.body?.remoteRevision;
-        setCloudSyncConflict({
-          type: 'upload',
-          remoteRevision,
-          remoteSnapshot: error.body?.snapshot ?? error.body,
-        });
-        setCloudSyncError('云端已有更新，已阻止覆盖。请选择使用云端版本或覆盖云端。');
-      } else {
-        console.error('上传云端工作区失败:', error);
-        setCloudSyncError(error?.message || '上传失败');
-      }
-    } finally {
-      setCloudSyncLoading(false);
-    }
-  }, []);
-
-  const applyRemoteCloudSnapshot = useCallback((snapshot) => {
-    const payload = snapshot?.payload ?? snapshot?.workspace?.payload;
-    const revision = snapshot?.revision ?? snapshot?.workspace?.revision ?? 0;
-    const updatedAt = snapshot?.updatedAt ?? snapshot?.workspace?.updatedAt ?? '';
-    const result = applyCloudWorkspacePayload(payload, { revision, updatedAt });
-    setContentResetKey((k) => k + 1);
-    setCloudSyncConflict(null);
-    setCloudSyncMessage(`已从云端拉取，revision ${revision}。`);
-    message.success('已从云端拉取');
-    return result;
-  }, [applyCloudWorkspacePayload]);
-
-  const handleCloudPull = useCallback(async ({ force = false } = {}) => {
-    setCloudSyncLoading(true);
-    setCloudSyncMessage('');
-    setCloudSyncError('');
-    if (!force) setCloudSyncConflict(null);
-    try {
-      const state = useEditorStore.getState();
-      const snapshot = await fetchCloudWorkspaceSnapshot({
-        baseUrl: state.cloudSyncBaseUrl,
-        workspaceId: state.cloudWorkspaceId,
-      });
-      const remoteRevision = snapshot?.revision ?? snapshot?.workspace?.revision ?? 0;
-      const { hash } = state.buildCloudSyncPayload();
-      const hasLocalChanges = Boolean(state.cloudLastSyncedHash && hash !== state.cloudLastSyncedHash);
-      if (!force && hasLocalChanges) {
-        setCloudSyncConflict({
-          type: 'pull',
-          remoteRevision,
-          remoteSnapshot: snapshot,
-        });
-        setCloudSyncError('本地有未上传改动，已阻止云端覆盖。请选择使用云端版本或先上传本地版本。');
-        return;
-      }
-      applyRemoteCloudSnapshot(snapshot);
-    } catch (error) {
-      console.error('拉取云端工作区失败:', error);
-      setCloudSyncError(error?.message || '拉取失败');
-    } finally {
-      setCloudSyncLoading(false);
-    }
-  }, [applyRemoteCloudSnapshot]);
-
-  const handleCloudUseRemote = useCallback(() => {
-    if (!cloudSyncConflict?.remoteSnapshot) return;
-    try {
-      applyRemoteCloudSnapshot(cloudSyncConflict.remoteSnapshot);
-    } catch (error) {
-      console.error('应用云端工作区失败:', error);
-      setCloudSyncError(error?.message || '应用云端版本失败');
-    }
-  }, [applyRemoteCloudSnapshot, cloudSyncConflict]);
-
-  const handleCloudForceUpload = useCallback(() => {
-    const remoteRevision = cloudSyncConflict?.remoteRevision;
-    if (!Number.isFinite(Number(remoteRevision))) {
-      setCloudSyncError('缺少云端 revision，无法确认覆盖。');
-      return;
-    }
-    const confirmed = window.confirm(`确定用本地快照覆盖云端 revision ${remoteRevision} 吗？`);
-    if (!confirmed) return;
-    handleCloudUpload({ baseRevision: remoteRevision });
-  }, [cloudSyncConflict, handleCloudUpload]);
-
   const handleRemoveLocalProject = useCallback((nodeId) => {
     const node = findNodeById(workspace, nodeId);
     if (!node?.localProjectRoot) return;
@@ -2229,257 +1976,6 @@ function MarkdownEditor() {
       message.error(error?.message || '打开失败');
     }
   }, [workspace, localProjectSupported]);
-
-  const handleNotionPull = useCallback(async () => {
-    if (!notionAvailable || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
-    setNotionError('');
-    setNotionMessage('');
-    setNotionPullLoading(true);
-    try {
-      const id = cleanPageId(linkedNotionPageId);
-      const blocks = await fetchBlocks(id, notionToken);
-      const md = normalizeMarkdown(blocksToMarkdown(blocks));
-      updateSelectedFileContent(md);
-      if (canSaveLocalProjectFile) {
-        await saveLocalProjectFile({
-          projectRootPath: selectedProjectRootPath,
-          relativePath: selectedFile.relativePath,
-          content: md,
-        });
-      }
-      setContentResetKey((k) => k + 1);
-      setNotionMessage('已从 Notion 拉取并覆盖当前文档。');
-    } catch (e) {
-      setNotionError(e?.message || '拉取失败');
-    } finally {
-      setNotionPullLoading(false);
-    }
-  }, [
-    notionAvailable,
-    canSaveLocalProjectFile,
-    selectedProjectRootPath,
-    selectedFile,
-    notionToken,
-    linkedNotionPageId,
-    updateSelectedFileContent,
-  ]);
-
-  const handleNotionPush = useCallback(async () => {
-    if (!notionAvailable || !selectedFile || !notionToken?.trim() || !linkedNotionPageId?.trim()) return;
-    setNotionError('');
-    setNotionMessage('');
-    setNotionPushLoading(true);
-    try {
-      const id = cleanPageId(linkedNotionPageId);
-      // 单文件目标是独立页面：带上目录块 + 元数据卡片（属性列只对数据库页面有效，这里不传）
-      const { blocks } = markdownToNotionPayload(resolvedMarkdown);
-      await updatePageBlocks(id, blocks, notionToken);
-      setNotionMessage('已推送到 Notion。');
-    } catch (e) {
-      setNotionError(e?.message || '推送失败');
-    } finally {
-      setNotionPushLoading(false);
-    }
-  }, [notionAvailable, selectedFile, notionToken, linkedNotionPageId, resolvedMarkdown, updateSelectedFileContent]);
-
-  /**
-   * Notion 即工作区：只查数据库页面清单秒开成懒加载树，点开文件才拉正文。
-   * 编辑写回由自动推送按映射原地更新页面。
-   */
-  const handleOpenNotionWorkspace = useCallback(async () => {
-    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
-    setNotionError('');
-    setNotionMessage('');
-    setBatchPullLoading(true);
-    try {
-      const result = await openNotionDatabaseWorkspace(notionDatabaseId, notionToken);
-      const { workspace: ws } = useEditorStore.getState();
-      const folder = {
-        ...result.folder,
-        name: buildUniqueName(ws, result.folder.name),
-      };
-      insertWorkspaceNode(folder);
-      mergeNotionFilePages(result.mappings);
-      setNotionMessage(
-        `已打开「${folder.name}」（${Object.keys(result.mappings).length} 个页面，点开时自动拉取正文）。`,
-      );
-    } catch (e) {
-      setNotionError(e?.message || '打开 Notion 工作区失败');
-    } finally {
-      setBatchPullLoading(false);
-    }
-  }, [notionAvailable, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
-
-  // 懒加载：选中 Notion 工作区文件且正文未拉取时，自动拉取并回填
-  useEffect(() => {
-    const file = selectedFile;
-    if (!file?.notionLazy) return undefined;
-    const state = useEditorStore.getState();
-    const pageId = state.notionFilePages?.[file.id];
-    if (!pageId || !state.notionToken) return undefined;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const md = await fetchNotionPageMarkdown(pageId, state.notionToken);
-        if (!cancelled) {
-          useEditorStore.getState().hydrateNotionFileContent(file.id, md);
-        }
-      } catch (error) {
-        console.error('拉取 Notion 页面正文失败:', error);
-        if (!cancelled) {
-          message.error(`拉取 Notion 页面失败：${error?.message || '未知错误'}`);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedFile?.id, selectedFile?.notionLazy]);
-
-  const handleBatchPull = useCallback(async () => {
-    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
-    setNotionError('');
-    setNotionMessage('');
-    setBatchPullLoading(true);
-    setBatchProgress(null);
-    try {
-      const result = await batchPull(notionDatabaseId, notionToken, (current, total, title) => {
-        setBatchProgress({ current, total, title });
-      });
-      const { workspace: ws } = useEditorStore.getState();
-      const folder = {
-        ...result.folder,
-        name: buildUniqueName(ws, result.folder.name),
-      };
-      insertWorkspaceNode(folder);
-      mergeNotionFilePages(result.mappings);
-      const pulledCount = Object.keys(result.mappings).length;
-      setNotionMessage(`已从数据库拉取 ${pulledCount} 个页面到「${folder.name}」。`);
-      const failureText = formatBatchFailures(result.failed, '页面');
-      if (failureText) {
-        setNotionError(failureText);
-      }
-    } catch (e) {
-      setNotionError(e?.message || '批量拉取失败');
-    } finally {
-      setBatchPullLoading(false);
-      setBatchProgress(null);
-    }
-  }, [notionAvailable, notionToken, notionDatabaseId, insertWorkspaceNode, mergeNotionFilePages]);
-
-  /**
-   * 增量拉取：落盘到本地目录，按 last_edited_time 比对，只更新变更页。
-   * 目录：Projects/notion-sync/<数据库ID> 下，附 .notion-sync.json 索引。
-   */
-  const handleIncrementalPull = useCallback(async () => {
-    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
-    if (!desktopProjectSupported) {
-      setNotionError('增量拉取仅支持桌面版应用。');
-      return;
-    }
-    setNotionError('');
-    setNotionMessage('');
-    setIncrementalPullLoading(true);
-    setBatchProgress(null);
-    try {
-      const projectRootPath = await ensureLocalMdRenderWorkspace();
-      if (!projectRootPath) {
-        setNotionError('无法初始化本地 Projects 目录，请稍后重试。');
-        return;
-      }
-
-      const dbId = cleanPageId(notionDatabaseId);
-      const dbDirRelative = `Projects/notion-sync/${dbId}`;
-
-      // IO 适配器：把统一接口映射到现有本地项目桥接
-      const io = {
-        ensureDir: (rel) =>
-          createLocalProjectFolderOnDisk({ projectRootPath, relativePath: rel }),
-        readFile: async (rel) => {
-          try {
-            const res = await readLocalProjectFileContent({ projectRootPath, relativePath: rel });
-            return res?.encoding === 'utf8' ? res.data : null;
-          } catch {
-            return null; // 文件不存在等价于首次拉取
-          }
-        },
-        writeFile: (rel, content) =>
-          saveLocalProjectFile({ projectRootPath, relativePath: rel, content }),
-      };
-
-      const notion = {
-        queryPages: (id) => queryDatabase(id, notionToken),
-        extractTitle: (page) => extractPageTitle(page),
-        fetchPageMarkdown: async (pageId) => {
-          const blocks = await fetchBlocks(cleanPageId(pageId), notionToken);
-          return normalizeMarkdown(blocksToMarkdown(blocks));
-        },
-      };
-
-      const result = await incrementalPull({
-        databaseId: dbId,
-        dbDirRelative,
-        io,
-        notion,
-        onProgress: (current, total, title) => setBatchProgress({ current, total, title }),
-      });
-
-      // 拉完刷新本地目录树，新增/更新的文件才会出现在侧栏
-      const disk = await readLocalProjectDisk(projectRootPath, 'projects');
-      if (disk?.projectsChildren) {
-        hydrateProjectsWorkspace({ projectRootPath, projectsChildren: disk.projectsChildren });
-      }
-
-      setNotionMessage(
-        `增量同步完成：新增 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped}` +
-          (result.deleted ? `，远端已删 ${result.deleted}（本地保留）` : ''),
-      );
-      const failureText = formatBatchFailures(result.failed, '页面');
-      if (failureText) setNotionError(failureText);
-    } catch (e) {
-      setNotionError(e?.message || '增量拉取失败');
-    } finally {
-      setIncrementalPullLoading(false);
-      setBatchProgress(null);
-    }
-  }, [
-    notionAvailable,
-    notionToken,
-    notionDatabaseId,
-    desktopProjectSupported,
-    ensureLocalMdRenderWorkspace,
-    hydrateProjectsWorkspace,
-  ]);
-
-  const handleBatchPush = useCallback(async () => {
-    if (!notionAvailable || !notionToken?.trim() || !notionDatabaseId?.trim()) return;
-    // 推送当前选中的文件夹，若没选文件夹则推送整个工作区
-    const pushTarget = selectedFolder ?? workspace;
-    setNotionError('');
-    setNotionMessage('');
-    setBatchPushLoading(true);
-    setBatchProgress(null);
-    try {
-      const { newMappings, updated, created, failed } = await batchPush(
-        notionDatabaseId, pushTarget, notionFilePages, notionToken,
-        (current, total, title) => {
-          setBatchProgress({ current, total, title });
-        },
-      );
-      if (Object.keys(newMappings).length > 0) {
-        mergeNotionFilePages(newMappings);
-      }
-      setNotionMessage(`已推送到数据库：更新 ${updated} 个，新建 ${created} 个。`);
-      const failureText = formatBatchFailures(failed, '文件');
-      if (failureText) {
-        setNotionError(failureText);
-      }
-    } catch (e) {
-      setNotionError(e?.message || '批量推送失败');
-    } finally {
-      setBatchPushLoading(false);
-      setBatchProgress(null);
-    }
-  }, [notionAvailable, notionToken, notionDatabaseId, selectedFolder, workspace, notionFilePages, mergeNotionFilePages]);
 
   const handleOpenBookmarkTabExternal = useCallback((tab) => {
     const url = String(tab?.url ?? '').trim();
@@ -2672,13 +2168,6 @@ function MarkdownEditor() {
   }, [theme]);
 
   useEffect(() => {
-    if (surface !== 'notion') {
-      setNotionMessage('');
-      setNotionError('');
-    }
-  }, [surface]);
-
-  useEffect(() => {
     return () => {
       for (const timerId of projectSaveTimersRef.current.values()) {
         window.clearTimeout(timerId);
@@ -2869,7 +2358,7 @@ function MarkdownEditor() {
       <WorkspaceSidebar
         workspace={workspace}
         selectedId={selectedId}
-        onSelect={handleSidebarSelect}
+        onSelect={selectNode}
         onRemoveLocalProject={handleRemoveLocalProject}
         onManualSyncLocalProject={handleManualSyncLocalProject}
         onAddFile={handleAddFile}
@@ -2899,17 +2388,8 @@ function MarkdownEditor() {
         onOpenCurrentContent={() => setSurface(selectedContentSurface)}
         searchQuery={knowledgeSearchQuery}
         onSearchQueryChange={setKnowledgeSearchQuery}
-        onOpenSettings={() => setSurface(surface === 'settings' ? lastContentSurfaceRef.current : 'settings')}
-        onOpenSync={() => {
-          if (surface === 'sync') {
-            setSurface(lastContentSurfaceRef.current);
-          } else {
-            setSyncChannel('doc');
-            setSurface('sync');
-          }
-        }}
+        onOpenSettings={() => (surface === 'settings' ? leaveSettings() : setSurface('settings'))}
         settingsActive={surface === 'settings'}
-        syncActive={surface === 'sync'}
         platformOptions={publishingPlatforms}
       />
       <div className="right-area immersive-main">
@@ -2950,67 +2430,9 @@ function MarkdownEditor() {
             publishingPlatforms={publishingPlatforms}
             storageMode={visibleStorageMode}
             projectRootPath={visibleProjectRootPath}
-            notionProxyBase={notionProxyBase}
-            onNotionProxyBaseChange={setNotionProxyBase}
-            notionToken={notionToken}
-            onNotionTokenChange={setNotionToken}
-            cloudSyncBaseUrl={cloudSyncBaseUrl}
-            onCloudSyncBaseUrlChange={setCloudSyncBaseUrl}
             onCopyStyleChange={setCopyStyle}
             onPublishingPlatformsChange={setPublishingPlatforms}
-            onClose={() => setSurface(lastContentSurfaceRef.current)}
-          />
-        ) : surface === 'sync' ? (
-          <SyncPanel
-            initialChannel={syncChannel}
-            selectedFileName={selectedFile?.name}
-            localProjectSupported={localProjectSupported}
-            masterEnabled={syncEnabled}
-            onMasterEnabledChange={setSyncEnabled}
-            onClose={() => setSurface(lastContentSurfaceRef.current)}
-            onOpenSettings={() => setSurface('settings')}
-            notion={{
-              canSync: Boolean(selectedFile),
-              token: notionToken,
-              pageId: linkedNotionPageId,
-              databaseId: notionDatabaseId,
-              onTokenChange: setNotionToken,
-              onPageIdChange: (v) => {
-                if (selectedFile) setFileNotionPageId(selectedFile.id, v);
-              },
-              onDatabaseIdChange: setNotionDatabaseId,
-              onPull: handleNotionPull,
-              onPush: handleNotionPush,
-              onDatabasePull: desktopProjectSupported ? handleIncrementalPull : handleBatchPull,
-              onDatabasePush: handleBatchPush,
-              pullLoading: notionPullLoading,
-              pushLoading: notionPushLoading,
-              databasePullLoading: desktopProjectSupported ? incrementalPullLoading : batchPullLoading,
-              databasePushLoading: batchPushLoading,
-              incrementalActive: desktopProjectSupported,
-              batchProgress,
-              message: notionMessage,
-              error: notionError,
-              autoPushEnabled: notionAutoPushEnabled,
-              onAutoPushChange: setNotionAutoPushEnabled,
-              onOpenNotionWorkspace: handleOpenNotionWorkspace,
-            }}
-            cloud={{
-              baseUrl: cloudSyncBaseUrl,
-              workspaceId: cloudWorkspaceId,
-              lastSyncedRevision: cloudLastSyncedRevision,
-              lastSyncedAt: cloudLastSyncedAt,
-              loading: cloudSyncLoading,
-              message: cloudSyncMessage,
-              error: cloudSyncError,
-              conflict: cloudSyncConflict,
-              onBaseUrlChange: setCloudSyncBaseUrl,
-              onWorkspaceIdChange: setCloudWorkspaceId,
-              onUpload: handleCloudUpload,
-              onPull: handleCloudPull,
-              onForceUpload: handleCloudForceUpload,
-              onUseRemote: handleCloudUseRemote,
-            }}
+            onClose={leaveSettings}
             local={{
               localProjectSupported,
               canSyncFromDisk: canSyncWorkspaceFromDisk,
@@ -3018,7 +2440,7 @@ function MarkdownEditor() {
               onOpenLocalProject: handleOpenLocalProject,
               onSyncFromDisk: () => handleManualSyncLocalProject(currentWorkspaceProjectRoot),
             }}
-            workspace={{
+            backup={{
               onImport: () => importInputRef.current?.click(),
               onExport: handleExport,
             }}
@@ -3134,8 +2556,6 @@ function MarkdownEditor() {
               selectedFile={selectedFile}
               allFiles={allFiles}
               platformOptions={publishingPlatforms}
-              onOpenNotion={() => { setSyncChannel('notion'); setSurface('sync'); }}
-              notionLinked={Boolean(notionAvailable && linkedNotionPageId && notionToken?.trim())}
               onTagsChange={setFileTags}
               onKnowledgeMetaChange={setFileKnowledgeMeta}
               onOpenFile={selectNode}

@@ -520,48 +520,6 @@ export function remapDiskPathReferences({
   return { selectedId: nextSelectedId, openTabs: nextOpenTabs };
 }
 
-/**
- * 磁盘文件重命名/移动后，迁移 notionFilePages 映射的 key（纯函数）。
- * key 形如 `project:<root>:file:<relativePath>`；旧路径本身或其子路径下的映射都跟着迁移。
- * 无需变更时返回原对象引用，调用方可据此跳过写入。
- */
-export function remapNotionFilePagesAfterPathChange(
-  notionFilePages,
-  projectRootPath,
-  oldRelativePath,
-  newRelativePath,
-) {
-  if (!notionFilePages || !projectRootPath || !oldRelativePath || !newRelativePath) {
-    return notionFilePages;
-  }
-
-  const prefix = `project:${projectRootPath}:file:`;
-  let changed = false;
-  const next = {};
-
-  for (const [key, pageId] of Object.entries(notionFilePages)) {
-    if (!key.startsWith(prefix)) {
-      next[key] = pageId;
-      continue;
-    }
-    const rel = key.slice(prefix.length);
-    let nextRel = null;
-    if (rel === oldRelativePath) {
-      nextRel = newRelativePath;
-    } else if (rel.startsWith(`${oldRelativePath}/`)) {
-      nextRel = `${newRelativePath}${rel.slice(oldRelativePath.length)}`;
-    }
-    if (nextRel) {
-      next[`${prefix}${nextRel}`] = pageId;
-      changed = true;
-    } else {
-      next[key] = pageId;
-    }
-  }
-
-  return changed ? next : notionFilePages;
-}
-
 export function findNodeIdByRelativePath(node, relativePath) {
   if (!node) return null;
   if (node.relativePath === relativePath) return node.id;
@@ -1242,11 +1200,10 @@ export function resolveTargetFolderId(workspace, selectedId) {
 
 /**
  * 外部渠道根目录的来源标签（纯函数）。
- * 仅标注从本地项目、Notion 等外部渠道挂载的顶层文件夹；本系统新建的目录返回 null。
+ * 仅标注从本地项目挂载的顶层文件夹；本系统新建的目录返回 null。
  */
 export function getFolderChannelLabel(node) {
   if (!node || node.type !== 'folder') return null;
   if (node.localProjectRoot) return '本地';
-  if (node.notionSyncRoot) return 'Notion';
   return null;
 }

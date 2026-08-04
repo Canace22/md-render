@@ -1,7 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // 暴露安全的桥接 API 给渲染进程
-// 后续集成 Notion OAuth、本地文件读写等功能时在这里扩展
 contextBridge.exposeInMainWorld('electronAPI', {
   // 平台信息
   platform: process.platform,

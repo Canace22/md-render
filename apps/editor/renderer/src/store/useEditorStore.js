@@ -41,7 +41,6 @@ import {
   moveNodeToFolder,
   moveDiskNodeToFolder,
   remapDiskPathReferences,
-  remapNotionFilePagesAfterPathChange,
 } from './workspaceUtils.js';
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
@@ -73,12 +72,6 @@ import {
   updateTodoPoolItemCategory,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
-import {
-  buildCloudWorkspacePayload,
-  getDefaultCloudSyncBaseUrl,
-  getCloudPayloadHash,
-  normalizeCloudSyncBaseUrl,
-} from '../utils/cloudSyncService.js';
 import { createAgentSlice } from './slices/agentSlice.js';
 import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
 
@@ -92,20 +85,6 @@ const KNOWLEDGE_HOME_MIGRATION_KEY = 'md-renderer-knowledge-home-v1';
 const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
 const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const DAILY_WORKSPACE_STORAGE_KEY = 'md-renderer-daily-workspace';
-const NOTION_TOKEN_STORAGE_KEY = 'md-renderer-notion-token';
-const NOTION_FILE_PAGES_STORAGE_KEY = 'md-renderer-notion-file-pages';
-const NOTION_DATABASE_ID_STORAGE_KEY = 'md-renderer-notion-database-id';
-// 与 notionService.js 中同名常量保持一致：服务层直接从这个 key 读运行时反代地址
-const NOTION_PROXY_STORAGE_KEY = 'md-renderer-notion-proxy';
-const NOTION_AUTO_PUSH_STORAGE_KEY = 'md-renderer-notion-auto-push';
-// 同步总开关：关闭时不执行任何同步（自动推送 / Notion 手动推拉 / 云端）
-const SYNC_ENABLED_STORAGE_KEY = 'md-renderer-sync-enabled';
-const CLOUD_SYNC_BASE_URL_STORAGE_KEY = 'md-renderer-cloud-sync-base-url';
-const CLOUD_WORKSPACE_ID_STORAGE_KEY = 'md-renderer-cloud-workspace-id';
-const CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY = 'md-renderer-cloud-last-synced-revision';
-const CLOUD_LAST_SYNCED_AT_STORAGE_KEY = 'md-renderer-cloud-last-synced-at';
-const CLOUD_CLIENT_ID_STORAGE_KEY = 'md-renderer-cloud-client-id';
-const CLOUD_LAST_SYNCED_HASH_STORAGE_KEY = 'md-renderer-cloud-last-synced-hash';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
@@ -132,26 +111,6 @@ const safeParseJSON = (value, fallback) => {
   }
 };
 
-const readPersistedString = (key) => {
-  try {
-    return window.localStorage.getItem(key) ?? '';
-  } catch {
-    return '';
-  }
-};
-
-const createCloudClientId = () => {
-  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
-    return `md-render-${window.crypto.randomUUID()}`;
-  }
-  return `md-render-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
-};
-
-const sanitizeCloudRevision = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-};
-
 const VALID_SURFACES = new Set([
   'overview',
   'daily',
@@ -164,8 +123,6 @@ const VALID_SURFACES = new Set([
   'paper',
   'folder',
   'settings',
-  'notion',
-  'sync',
 ]);
 
 const normalizeSurface = (surface, fallback = 'overview') => {
@@ -183,84 +140,8 @@ const buildGeneratedFileName = (folder, desiredName, fallbackBase = 'AI 生成')
   return buildUniqueNameInFolder(folder, baseName, MARKDOWN_FILE_EXTENSION);
 };
 
-/** 避免启动时用空 Notion 配置覆盖 localStorage 中已有值 */
-let editorPersistHydrated = false;
-
-const readNotionPersistSnapshot = () => {
-  try {
-    const notionToken = window.localStorage.getItem(NOTION_TOKEN_STORAGE_KEY) ?? '';
-    const notionFilePagesRaw = window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY);
-    const notionFilePages = safeParseJSON(notionFilePagesRaw, {});
-    const notionDatabaseId = window.localStorage.getItem(NOTION_DATABASE_ID_STORAGE_KEY) ?? '';
-    const notionProxyBase = window.localStorage.getItem(NOTION_PROXY_STORAGE_KEY) ?? '';
-    return {
-      notionToken: typeof notionToken === 'string' ? notionToken : '',
-      notionFilePages:
-        notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
-      notionDatabaseId: typeof notionDatabaseId === 'string' ? notionDatabaseId : '',
-      notionProxyBase: typeof notionProxyBase === 'string' ? notionProxyBase : '',
-      notionAutoPushEnabled: window.localStorage.getItem(NOTION_AUTO_PUSH_STORAGE_KEY) === '1',
-      syncEnabled: window.localStorage.getItem(SYNC_ENABLED_STORAGE_KEY) === '1',
-    };
-  } catch {
-    return {
-      notionToken: '',
-      notionFilePages: {},
-      notionDatabaseId: '',
-      notionProxyBase: '',
-      notionAutoPushEnabled: false,
-      syncEnabled: false,
-    };
-  }
-};
-
-const persistNotionStringField = (key, nextValue) => {
-  if (nextValue == null) return;
-  const next = String(nextValue);
-  if (!editorPersistHydrated) {
-    const existing = window.localStorage.getItem(key) ?? '';
-    if (next === '' && existing !== '') return;
-  }
-  window.localStorage.setItem(key, next);
-};
-
-const persistNotionFilePagesField = (nextPages) => {
-  if (nextPages == null) return;
-  if (!editorPersistHydrated) {
-    const existing = safeParseJSON(
-      window.localStorage.getItem(NOTION_FILE_PAGES_STORAGE_KEY),
-      {},
-    );
-    const hasExisting = existing && typeof existing === 'object' && Object.keys(existing).length > 0;
-    const hasNext =
-      nextPages && typeof nextPages === 'object' && Object.keys(nextPages).length > 0;
-    if (!hasNext && hasExisting) return;
-  }
-  window.localStorage.setItem(NOTION_FILE_PAGES_STORAGE_KEY, JSON.stringify(nextPages));
-};
-
-const persistNotionSnapshot = (state) => {
-  persistNotionStringField(NOTION_TOKEN_STORAGE_KEY, state.notionToken);
-  persistNotionFilePagesField(state.notionFilePages);
-  persistNotionStringField(NOTION_DATABASE_ID_STORAGE_KEY, state.notionDatabaseId);
-  persistNotionStringField(NOTION_PROXY_STORAGE_KEY, state.notionProxyBase);
-  if (state.notionAutoPushEnabled != null) {
-    persistNotionStringField(
-      NOTION_AUTO_PUSH_STORAGE_KEY,
-      state.notionAutoPushEnabled ? '1' : '0',
-    );
-  }
-  if (state.syncEnabled != null) {
-    persistNotionStringField(
-      SYNC_ENABLED_STORAGE_KEY,
-      state.syncEnabled ? '1' : '0',
-    );
-  }
-};
-
 /** 从 localStorage 构建标准 state 对象（在非 Electron 或 Electron 迁移时使用） */
 const buildStateFromLocalStorage = () => {
-  const notionSnapshot = readNotionPersistSnapshot();
   const workspaceRaw = window.localStorage.getItem(STORAGE_KEY);
   const selectedId = window.localStorage.getItem(SELECTED_ID_STORAGE_KEY);
   const theme = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -271,7 +152,6 @@ const buildStateFromLocalStorage = () => {
   const knowledgeHomeMigrated = window.localStorage.getItem(KNOWLEDGE_HOME_MIGRATION_KEY) === 'done';
   const storageMode = window.localStorage.getItem(STORAGE_MODE_STORAGE_KEY);
   const projectRootPath = window.localStorage.getItem(PROJECT_ROOT_STORAGE_KEY) ?? '';
-  const cloudClientId = readPersistedString(CLOUD_CLIENT_ID_STORAGE_KEY) || createCloudClientId();
 
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
@@ -305,15 +185,6 @@ const buildStateFromLocalStorage = () => {
       surface: migratedSurface,
       publishingPlatforms,
       dailyWorkspace,
-      cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(
-        readPersistedString(CLOUD_SYNC_BASE_URL_STORAGE_KEY) || getDefaultCloudSyncBaseUrl(),
-      ),
-      cloudWorkspaceId: readPersistedString(CLOUD_WORKSPACE_ID_STORAGE_KEY).trim(),
-      cloudLastSyncedRevision: sanitizeCloudRevision(readPersistedString(CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY)),
-      cloudLastSyncedAt: readPersistedString(CLOUD_LAST_SYNCED_AT_STORAGE_KEY),
-      cloudClientId,
-      cloudLastSyncedHash: readPersistedString(CLOUD_LAST_SYNCED_HASH_STORAGE_KEY),
-      ...notionSnapshot,
     },
     version: 0,
   };
@@ -328,17 +199,12 @@ const buildStateFromDb = (raw) => {
   const selId = raw.selected_id || DEFAULT_FILE_ID;
   const selectedNode = findNodeById(ws, selId);
   const markdown = selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
-  const notionFilePages = safeParseJSON(raw.notion_file_pages, {});
   const publishingPlatforms = sanitizePublishingPlatforms(
     safeParseJSON(raw.publishing_platforms, null),
   );
   const dailyWorkspace = normalizeDailyWorkspace(
     safeParseJSON(raw.daily_workspace_json, null),
   );
-  const cloudClientId =
-    typeof raw.cloud_client_id === 'string' && raw.cloud_client_id.trim()
-      ? raw.cloud_client_id
-      : createCloudClientId();
   return {
     state: {
       workspace: ws,
@@ -354,21 +220,6 @@ const buildStateFromDb = (raw) => {
       surface: normalizeSurface(raw.surface, 'overview'),
       publishingPlatforms,
       dailyWorkspace,
-      cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(raw.cloud_sync_base_url || getDefaultCloudSyncBaseUrl()),
-      cloudWorkspaceId: typeof raw.cloud_workspace_id === 'string' ? raw.cloud_workspace_id : '',
-      cloudLastSyncedRevision: sanitizeCloudRevision(raw.cloud_last_synced_revision),
-      cloudLastSyncedAt: typeof raw.cloud_last_synced_at === 'string' ? raw.cloud_last_synced_at : '',
-      cloudClientId,
-      cloudLastSyncedHash: typeof raw.cloud_last_synced_hash === 'string' ? raw.cloud_last_synced_hash : '',
-      notionToken: typeof raw.notion_token === 'string' ? raw.notion_token : '',
-      notionFilePages:
-        notionFilePages && typeof notionFilePages === 'object' ? notionFilePages : {},
-      notionDatabaseId:
-        typeof raw.notion_database_id === 'string' ? raw.notion_database_id : '',
-      notionProxyBase:
-        typeof raw.notion_proxy_base === 'string' ? raw.notion_proxy_base : '',
-      notionAutoPushEnabled: raw.notion_auto_push === '1',
-      syncEnabled: raw.sync_enabled === '1',
     },
     version: 0,
   };
@@ -392,24 +243,6 @@ const buildStateMap = (state) => {
   }
   if (state.storageMode) map.storage_mode = state.storageMode;
   if (state.projectRootPath != null) map.project_root_path = state.projectRootPath;
-  if (state.notionToken != null) map.notion_token = state.notionToken;
-  if (state.notionFilePages != null) map.notion_file_pages = JSON.stringify(state.notionFilePages);
-  if (state.notionDatabaseId != null) map.notion_database_id = state.notionDatabaseId;
-  if (state.notionProxyBase != null) map.notion_proxy_base = state.notionProxyBase;
-  if (state.notionAutoPushEnabled != null) {
-    map.notion_auto_push = state.notionAutoPushEnabled ? '1' : '0';
-  }
-  if (state.syncEnabled != null) {
-    map.sync_enabled = state.syncEnabled ? '1' : '0';
-  }
-  if (state.cloudSyncBaseUrl != null) map.cloud_sync_base_url = normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl);
-  if (state.cloudWorkspaceId != null) map.cloud_workspace_id = String(state.cloudWorkspaceId);
-  if (state.cloudLastSyncedRevision != null) {
-    map.cloud_last_synced_revision = String(sanitizeCloudRevision(state.cloudLastSyncedRevision));
-  }
-  if (state.cloudLastSyncedAt != null) map.cloud_last_synced_at = String(state.cloudLastSyncedAt);
-  if (state.cloudClientId != null) map.cloud_client_id = String(state.cloudClientId);
-  if (state.cloudLastSyncedHash != null) map.cloud_last_synced_hash = String(state.cloudLastSyncedHash);
   return map;
 };
 
@@ -488,7 +321,6 @@ const editorStorage = {
       return buildStateFromLocalStorage();
     } catch (e) {
       console.error('加载编辑器状态失败:', e);
-      const notionSnapshot = readNotionPersistSnapshot();
       return {
         state: {
           workspace: createDefaultWorkspace(),
@@ -501,13 +333,6 @@ const editorStorage = {
           surface: 'overview',
           publishingPlatforms: sanitizePublishingPlatforms([]),
           dailyWorkspace: normalizeDailyWorkspace(null),
-          cloudSyncBaseUrl: getDefaultCloudSyncBaseUrl(),
-          cloudWorkspaceId: '',
-          cloudLastSyncedRevision: 0,
-          cloudLastSyncedAt: '',
-          cloudClientId: createCloudClientId(),
-          cloudLastSyncedHash: '',
-          ...notionSnapshot,
         },
         version: 0,
       };
@@ -527,7 +352,6 @@ const editorStorage = {
       }
       // 同时写 localStorage 作为快速回退（数据量小的字段）
       try {
-        persistNotionSnapshot(state);
         if (state.theme) window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
         if (state.copyStyle) window.localStorage.setItem(COPY_STYLE_STORAGE_KEY, state.copyStyle);
         if (state.surface) window.localStorage.setItem(SURFACE_STORAGE_KEY, state.surface);
@@ -543,37 +367,12 @@ const editorStorage = {
             JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
           );
         }
-        if (state.cloudSyncBaseUrl != null) {
-          window.localStorage.setItem(
-            CLOUD_SYNC_BASE_URL_STORAGE_KEY,
-            normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl),
-          );
-        }
-        if (state.cloudWorkspaceId != null) {
-          window.localStorage.setItem(CLOUD_WORKSPACE_ID_STORAGE_KEY, String(state.cloudWorkspaceId));
-        }
-        if (state.cloudLastSyncedRevision != null) {
-          window.localStorage.setItem(
-            CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY,
-            String(sanitizeCloudRevision(state.cloudLastSyncedRevision)),
-          );
-        }
-        if (state.cloudLastSyncedAt != null) {
-          window.localStorage.setItem(CLOUD_LAST_SYNCED_AT_STORAGE_KEY, String(state.cloudLastSyncedAt));
-        }
-        if (state.cloudClientId != null) {
-          window.localStorage.setItem(CLOUD_CLIENT_ID_STORAGE_KEY, String(state.cloudClientId));
-        }
-        if (state.cloudLastSyncedHash != null) {
-          window.localStorage.setItem(CLOUD_LAST_SYNCED_HASH_STORAGE_KEY, String(state.cloudLastSyncedHash));
-        }
       } catch { /* ignore */ }
       return;
     }
 
     // Web 环境：原有 localStorage 逻辑
     try {
-      persistNotionSnapshot(state);
       if (state.workspace) {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.workspace));
       }
@@ -607,30 +406,6 @@ const editorStorage = {
           JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
         );
       }
-      if (state.cloudSyncBaseUrl != null) {
-        window.localStorage.setItem(
-          CLOUD_SYNC_BASE_URL_STORAGE_KEY,
-          normalizeCloudSyncBaseUrl(state.cloudSyncBaseUrl),
-        );
-      }
-      if (state.cloudWorkspaceId != null) {
-        window.localStorage.setItem(CLOUD_WORKSPACE_ID_STORAGE_KEY, String(state.cloudWorkspaceId));
-      }
-      if (state.cloudLastSyncedRevision != null) {
-        window.localStorage.setItem(
-          CLOUD_LAST_SYNCED_REVISION_STORAGE_KEY,
-          String(sanitizeCloudRevision(state.cloudLastSyncedRevision)),
-        );
-      }
-      if (state.cloudLastSyncedAt != null) {
-        window.localStorage.setItem(CLOUD_LAST_SYNCED_AT_STORAGE_KEY, String(state.cloudLastSyncedAt));
-      }
-      if (state.cloudClientId != null) {
-        window.localStorage.setItem(CLOUD_CLIENT_ID_STORAGE_KEY, String(state.cloudClientId));
-      }
-      if (state.cloudLastSyncedHash != null) {
-        window.localStorage.setItem(CLOUD_LAST_SYNCED_HASH_STORAGE_KEY, String(state.cloudLastSyncedHash));
-      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -641,11 +416,6 @@ const editorStorage = {
 const persistConfig = {
   name: 'md-renderer-editor',
   storage: editorStorage,
-  onRehydrateStorage: () => {
-    return () => {
-      editorPersistHydrated = true;
-    };
-  },
   partialize: (state) => ({
     workspace: state.workspace,
     selectedId: state.selectedId,
@@ -656,18 +426,6 @@ const persistConfig = {
     surface: state.surface,
     publishingPlatforms: state.publishingPlatforms,
     dailyWorkspace: state.dailyWorkspace,
-    cloudSyncBaseUrl: state.cloudSyncBaseUrl,
-    cloudWorkspaceId: state.cloudWorkspaceId,
-    cloudLastSyncedRevision: state.cloudLastSyncedRevision,
-    cloudLastSyncedAt: state.cloudLastSyncedAt,
-    cloudClientId: state.cloudClientId,
-    cloudLastSyncedHash: state.cloudLastSyncedHash,
-    notionToken: state.notionToken,
-    notionFilePages: state.notionFilePages,
-    notionDatabaseId: state.notionDatabaseId,
-    notionProxyBase: state.notionProxyBase,
-    notionAutoPushEnabled: state.notionAutoPushEnabled,
-    syncEnabled: state.syncEnabled,
   }),
 };
 
@@ -954,137 +712,10 @@ export const useEditorStore = create(
       openTabs: [],
       /** 编辑器模式：'edit' | 'preview' */
       editorMode: 'edit',
-      notionToken: '',
-      notionFilePages: {},
-      notionDatabaseId: '',
-      // Notion 反代地址（运行时可配，不打进构建产物）。空 = 未配置，走 dev 回退。
-      notionProxyBase: '',
-      /** 保存本地文件后自动推送到 Notion 数据库 */
-      notionAutoPushEnabled: false,
-      /** 同步总开关：默认关闭，开启后各同步能力才生效 */
-      syncEnabled: false,
-      cloudSyncBaseUrl: getDefaultCloudSyncBaseUrl(),
-      cloudWorkspaceId: '',
-      cloudLastSyncedRevision: 0,
-      cloudLastSyncedAt: '',
-      cloudClientId: createCloudClientId(),
-      cloudLastSyncedHash: '',
       activeBlockId: null,
       activeBlockDraft: '',
 
       ...createAgentSlice(set, get),
-
-      setNotionToken: (notionToken) => set({ notionToken: notionToken ?? '' }),
-      setNotionDatabaseId: (notionDatabaseId) => set({ notionDatabaseId: notionDatabaseId ?? '' }),
-      setNotionAutoPushEnabled: (enabled) => set({ notionAutoPushEnabled: Boolean(enabled) }),
-      setSyncEnabled: (enabled) => set({ syncEnabled: Boolean(enabled) }),
-      // 立即写一份到 localStorage，让 notionService 当次请求即可读到新地址
-      setNotionProxyBase: (notionProxyBase) => {
-        const next = (notionProxyBase ?? '').trim();
-        if (typeof window !== 'undefined') {
-          try {
-            window.localStorage.setItem(NOTION_PROXY_STORAGE_KEY, next);
-          } catch {
-            /* localStorage 不可用时忽略，状态仍生效 */
-          }
-        }
-        set({ notionProxyBase: next });
-      },
-      setFileNotionPageId: (fileId, pageId) =>
-        set((state) => {
-          const next = { ...(state.notionFilePages ?? {}) };
-          if (!pageId?.trim()) {
-            delete next[fileId];
-          } else {
-            next[fileId] = pageId.trim();
-          }
-          return { notionFilePages: next };
-        }),
-      /** 批量合并 notionFilePages 映射（用于批量同步后注册新映射） */
-      mergeNotionFilePages: (newMappings) =>
-        set((state) => ({
-          notionFilePages: { ...(state.notionFilePages ?? {}), ...newMappings },
-        })),
-      /** Notion 懒加载文件拉到正文后回填内容；若正被选中则同步编辑器并强制重载 */
-      hydrateNotionFileContent: (fileId, content) => {
-        const { workspace, selectedId, editorReloadToken } = get();
-        const node = findNodeById(workspace, fileId);
-        if (!node || node.type !== 'file') return false;
-        const nextWorkspace = updateNodeById(workspace, fileId, (current) => ({
-          ...current,
-          content: content ?? '',
-          notionLazy: false,
-        }));
-        const patch = { workspace: nextWorkspace };
-        if (selectedId === fileId) {
-          patch.markdown = content ?? '';
-          patch.editorReloadToken = editorReloadToken + 1;
-        }
-        persistWorkspace(nextWorkspace);
-        set(patch);
-        return true;
-      },
-
-      setCloudSyncBaseUrl: (cloudSyncBaseUrl) => set({
-        cloudSyncBaseUrl: normalizeCloudSyncBaseUrl(cloudSyncBaseUrl) || getDefaultCloudSyncBaseUrl(),
-      }),
-      setCloudWorkspaceId: (cloudWorkspaceId) => set({
-        cloudWorkspaceId: String(cloudWorkspaceId ?? '').trim(),
-      }),
-      buildCloudSyncPayload: () => {
-        const state = get();
-        const payload = buildCloudWorkspacePayload({
-          workspace: state.workspace,
-          dailyWorkspace: state.dailyWorkspace,
-          publishingPlatforms: state.publishingPlatforms,
-          selectedId: state.selectedId,
-        });
-        return { payload, hash: getCloudPayloadHash(payload) };
-      },
-      markCloudSyncSuccess: ({ revision, updatedAt, hash } = {}) => set((state) => ({
-        cloudLastSyncedRevision: sanitizeCloudRevision(revision),
-        cloudLastSyncedAt: updatedAt ? String(updatedAt) : new Date().toISOString(),
-        cloudLastSyncedHash: hash ?? state.cloudLastSyncedHash,
-      })),
-      applyCloudWorkspacePayload: (payload, meta = {}) => {
-        if (!payload || payload.schemaVersion !== 1 || !payload.workspace) {
-          throw new Error('云端工作区快照格式不受支持。');
-        }
-
-        const normalizedWorkspace = ensureFileTimestamps(ensureKnowledgeFields(payload.workspace));
-        const nextDailyWorkspace = normalizeDailyWorkspace(payload.dailyWorkspace, null);
-        const nextPublishingPlatforms = sanitizePublishingPlatforms(payload.publishingPlatforms);
-        const preferredId = payload.selectedId || meta.selectedId;
-        const initialId = findNodeById(normalizedWorkspace, preferredId)
-          ? preferredId
-          : (findFirstFileId(normalizedWorkspace) ?? normalizedWorkspace.id);
-        const selectedNode = findNodeById(normalizedWorkspace, initialId);
-        const hash = getCloudPayloadHash(buildCloudWorkspacePayload({
-          workspace: normalizedWorkspace,
-          dailyWorkspace: nextDailyWorkspace,
-          publishingPlatforms: nextPublishingPlatforms,
-          selectedId: initialId,
-        }));
-
-        persistWorkspace(normalizedWorkspace);
-        persistDailyWorkspaceBackup(nextDailyWorkspace);
-        set({
-          workspace: normalizedWorkspace,
-          dailyWorkspace: nextDailyWorkspace,
-          publishingPlatforms: nextPublishingPlatforms,
-          selectedId: initialId,
-          markdown: selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '',
-          storageMode: 'local',
-          projectRootPath: '',
-          surface: selectedNode?.type === 'folder' ? 'folder' : 'paper',
-          activeBlockId: null,
-          activeBlockDraft: '',
-          cloudLastSyncedRevision: sanitizeCloudRevision(meta.revision),
-          cloudLastSyncedAt: meta.updatedAt ? String(meta.updatedAt) : new Date().toISOString(),
-          cloudLastSyncedHash: hash,
-        });
-        return { hash };
-      },
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -1990,14 +1621,8 @@ export const useEditorStore = create(
           selectedId,
           openTabs,
         });
-        const nextNotionFilePages = remapNotionFilePagesAfterPathChange(
-          get().notionFilePages,
-          node.projectRootPath,
-          node.relativePath,
-          newRelativePath,
-        );
         persistWorkspace(nextWorkspace);
-        set({ workspace: nextWorkspace, notionFilePages: nextNotionFilePages, ...refs });
+        set({ workspace: nextWorkspace, ...refs });
         return true;
       },
 
@@ -2081,12 +1706,6 @@ export const useEditorStore = create(
           workspace: updated,
           selectedId: nextSelectedId,
           openTabs: nextOpenTabs,
-          notionFilePages: remapNotionFilePagesAfterPathChange(
-            get().notionFilePages,
-            node.projectRootPath,
-            oldRelativePath,
-            newRelativePath,
-          ),
         };
         if (updatedAt != null) {
           const renamedNode = findNodeById(updated, newRootId);

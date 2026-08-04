@@ -89,18 +89,6 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       // Electron 模式下不自动打开浏览器
       open: !isElectron,
-      proxy: {
-        '/notion-api': {
-          target: 'https://api.notion.com',
-          changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/notion-api/, ''),
-        },
-        '/cloud-sync-api': {
-          target: process.env.CLOUD_SYNC_DEV_TARGET || 'http://localhost:8791',
-          changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/cloud-sync-api/, ''),
-        },
-      },
     },
   };
 });

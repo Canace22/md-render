@@ -10,7 +10,7 @@ describe('architecture boundaries', () => {
   it('keeps renderer persistence keys sourced from shared editor keys', () => {
     expect(RENDERER_STATE_KEYS).toBe(EDITOR_STATE_KEYS);
     expect(RENDERER_STATE_KEYS).toContain('workspace_json');
-    expect(RENDERER_STATE_KEYS).toContain('cloud_last_synced_hash');
+    expect(RENDERER_STATE_KEYS).toContain('daily_workspace_json');
   });
 
   it('keeps the composed store default workspace and legacy actions available', () => {

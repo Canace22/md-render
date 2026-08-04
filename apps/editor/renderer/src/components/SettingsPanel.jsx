@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft, Cloud, Download, Loader2, Plus, Trash2, Upload,
+} from 'lucide-react';
 import { TEMPLATES } from '../utils/wechatTemplates';
 
 export default function SettingsPanel({
@@ -8,55 +10,18 @@ export default function SettingsPanel({
   publishingPlatforms = [],
   storageMode,
   projectRootPath,
-  notionProxyBase = '',
-  onNotionProxyBaseChange,
-  notionToken = '',
-  onNotionTokenChange,
-  cloudSyncBaseUrl = '',
-  onCloudSyncBaseUrlChange,
+  local,
+  backup,
   onCopyStyleChange,
   onPublishingPlatformsChange,
   onClose,
 }) {
   const [platformDrafts, setPlatformDrafts] = useState(publishingPlatforms);
   const [newPlatformLabel, setNewPlatformLabel] = useState('');
-  const [proxyDraft, setProxyDraft] = useState(notionProxyBase);
-  const [tokenDraft, setTokenDraft] = useState(notionToken);
-  const [cloudUrlDraft, setCloudUrlDraft] = useState(cloudSyncBaseUrl);
 
   useEffect(() => {
     setPlatformDrafts(publishingPlatforms);
   }, [publishingPlatforms]);
-
-  useEffect(() => {
-    setProxyDraft(notionProxyBase);
-  }, [notionProxyBase]);
-
-  useEffect(() => {
-    setTokenDraft(notionToken);
-  }, [notionToken]);
-
-  useEffect(() => {
-    setCloudUrlDraft(cloudSyncBaseUrl);
-  }, [cloudSyncBaseUrl]);
-
-  const commitProxyDraft = () => {
-    const next = proxyDraft.trim();
-    if (next === (notionProxyBase ?? '').trim()) return;
-    onNotionProxyBaseChange?.(next);
-  };
-
-  const commitTokenDraft = () => {
-    const next = tokenDraft.trim();
-    if (next === (notionToken ?? '').trim()) return;
-    onNotionTokenChange?.(next);
-  };
-
-  const commitCloudUrlDraft = () => {
-    const next = cloudUrlDraft.trim();
-    if (next === (cloudSyncBaseUrl ?? '').trim()) return;
-    onCloudSyncBaseUrlChange?.(next);
-  };
 
   const handlePlatformDraftChange = (value, index) => {
     setPlatformDrafts((current) => current.map((item, itemIndex) => {
@@ -196,85 +161,66 @@ export default function SettingsPanel({
         </div>
       </div>
 
-      <div className="settings-group">
-        <div className="settings-group-title">Notion 反代地址</div>
-        <input
-          className="settings-platform-input"
-          data-testid="notion-proxy-input"
-          value={proxyDraft}
-          placeholder="https://你的服务器/notion-api/v1"
-          onChange={(event) => setProxyDraft(event.target.value)}
-          onBlur={commitProxyDraft}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              commitProxyDraft();
-            }
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              setProxyDraft(notionProxyBase);
-            }
-          }}
-        />
-        <div className="settings-platform-hint">
-          填你自己部署的 Notion 转发服务地址（末尾到 <code>/v1</code>），用于绕过浏览器跨域限制。
-          只保存在本机、不会打进安装包；留空则仅本机开发模式可用。部署见 <code>server/notion-proxy/README.md</code>。
+      {local?.localProjectSupported && (
+        <div className="settings-group">
+          <div className="settings-group-title">本地项目目录</div>
+          <div className="settings-platform-hint">
+            把本地文件夹作为工作区，编辑直接落盘；也可从磁盘把外部改动同步回编辑器。
+            版本管理交给该目录自己的 Git 仓库。
+          </div>
+          <div className="settings-action-list">
+            <button
+              type="button"
+              className="settings-action-btn"
+              data-testid="open-local-project"
+              onClick={local.onOpenLocalProject}
+              title="打开本地项目文件夹"
+            >
+              <Upload size={16} strokeWidth={1.6} />
+              <span>打开本地项目文件夹</span>
+            </button>
+            <button
+              type="button"
+              className="settings-action-btn"
+              data-testid="sync-from-disk"
+              onClick={() => local.onSyncFromDisk?.()}
+              disabled={!local.canSyncFromDisk || local.syncLoading}
+              title={local.canSyncFromDisk ? '把当前工作区从磁盘同步最新内容' : '工作区里还没有本地项目'}
+            >
+              {local.syncLoading
+                ? <Loader2 className="settings-btn-spinner" size={16} />
+                : <Cloud size={16} strokeWidth={1.6} />}
+              <span>从磁盘同步</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="settings-group">
-        <div className="settings-group-title">同步连接</div>
-        <label className="notion-field">
-          <span>Notion Integration Secret（Token）</span>
-          <input
-            type="password"
-            className="settings-platform-input"
-            data-testid="notion-token-input"
-            autoComplete="off"
-            placeholder="secret_…"
-            value={tokenDraft}
-            onChange={(event) => setTokenDraft(event.target.value)}
-            onBlur={commitTokenDraft}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                commitTokenDraft();
-              }
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                setTokenDraft(notionToken);
-              }
-            }}
-          />
-        </label>
-        <div className="settings-platform-hint">
-          在 Notion 集成中创建并授予目标页面访问权限，「同步」页的拉取/推送都用这一个 Token。
+      {backup && (
+        <div className="settings-group">
+          <div className="settings-group-title">备份（JSON）</div>
+          <div className="settings-action-list">
+            <button
+              type="button"
+              className="settings-action-btn"
+              data-testid="import-workspace-json"
+              onClick={backup.onImport}
+            >
+              <Upload size={16} strokeWidth={1.6} />
+              <span>导入工作区 JSON</span>
+            </button>
+            <button
+              type="button"
+              className="settings-action-btn"
+              data-testid="export-workspace-json"
+              onClick={backup.onExport}
+            >
+              <Download size={16} strokeWidth={1.6} />
+              <span>导出当前工作区</span>
+            </button>
+          </div>
         </div>
-        <label className="notion-field">
-          <span>云端同步服务地址</span>
-          <input
-            className="settings-platform-input"
-            data-testid="cloud-sync-url-input"
-            placeholder="留空则使用 VITE_CLOUD_SYNC_API"
-            value={cloudUrlDraft}
-            onChange={(event) => setCloudUrlDraft(event.target.value)}
-            onBlur={commitCloudUrlDraft}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                commitCloudUrlDraft();
-              }
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                setCloudUrlDraft(cloudSyncBaseUrl);
-              }
-            }}
-          />
-        </label>
-        <div className="settings-platform-hint">
-          工作区云端快照的上传/拉取地址，通常由 <code>.env</code> 提供，这里填写会临时覆盖。
-        </div>
-      </div>
+      )}
 
     </section>
   );

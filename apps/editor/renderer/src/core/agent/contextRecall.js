@@ -9,8 +9,7 @@
  *
  * 扩展点（TODO，本期不实现）：
  *   - 书签召回：把浏览器书签 / 剪藏作为候选源参与 rankRelatedDocs。
- *   - Notion 召回：把 Notion 页面标题 / 摘要作为候选源参与排序。
- *   两者只要按 candidate 形状 { title, content/snippet, id } 喂进来即可复用排序。
+ *   只要按 candidate 形状 { title, content/snippet, id } 喂进来即可复用排序。
  */
 
 // 召回相关常量

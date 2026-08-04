@@ -42,8 +42,7 @@
 
 | Skill | 覆盖范围 |
 |---|---|
-| `md-render-cloud-sync` | 自建服务器的工作区同步、revision 冲突、`VITE_CLOUD_SYNC_API` |
-| `md-render-external-api-proxy` | 前端调第三方 HTTP API（如 Notion）的代理化，解决 CORS 和「只在 dev 能用」 |
+| `md-render-external-api-proxy` | 前端调第三方 HTTP API 的代理化，解决 CORS 和「只在 dev 能用」 |
 
 ---
 

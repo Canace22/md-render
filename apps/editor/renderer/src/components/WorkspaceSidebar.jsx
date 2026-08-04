@@ -19,7 +19,6 @@ import {
   Video,
   Music,
   Settings,
-  Cloud,
   Upload,
   FileOutput,
   Search,
@@ -516,9 +515,7 @@ const WorkspaceSidebar = ({
   searchQuery,
   onSearchQueryChange,
   onOpenSettings,
-  onOpenSync,
   settingsActive,
-  syncActive,
   platformOptions = PUBLISHING_PLATFORM_OPTIONS,
 }) => {
   const [metaFilters, setMetaFilters] = useState(EMPTY_META_FILTERS);
@@ -832,20 +829,6 @@ const WorkspaceSidebar = ({
           >
             <Settings size={18} strokeWidth={1.5} />
           </button>
-
-          {onOpenSync && (
-            <button
-              type="button"
-              className="sidebar-rail-btn"
-              data-testid="open-sync"
-              data-active={syncActive ? 'true' : 'false'}
-              onClick={onOpenSync}
-              title="渠道同步"
-              aria-label="渠道同步"
-            >
-              <Cloud size={18} strokeWidth={1.5} />
-            </button>
-          )}
 
           <a
             href={GITHUB_URL}

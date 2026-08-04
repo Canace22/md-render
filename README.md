@@ -13,7 +13,7 @@ Built with **React + Vite + Electron**. The product has evolved from a Markdown 
 | **Version** | `1.0.12` — [release process](./docs/release-process.md) |
 | **Roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
 
-The product goal is to connect **plan → collect → write → revise → finalize → publish** into one workflow: Daily handles today's work, the editor handles long-form writing, the AI assistant rewrites and operates the app, the knowledge base holds your library, and WeChat / Notion handle outbound publishing.
+The product goal is to connect **plan → collect → write → revise → finalize → publish** into one workflow: Daily handles today's work, the editor handles long-form writing, the AI assistant rewrites and operates the app, the knowledge base holds your library, and WeChat formatting plus multi-format export handle outbound publishing.
 
 ---
 
@@ -51,10 +51,9 @@ The product goal is to connect **plan → collect → write → revise → final
 - Bookmark import; preview non-Markdown files (Office, PDF, etc.)
 - Metadata filters (status, platform, doc type, tags); import / export workspace
 
-### Publish & sync
+### Publish & export
 
 - WeChat Official Account formatting with preview modal and multiple layout templates — primary differentiator
-- Notion push / pull and batch sync
 - Export current document as MD / HTML / PDF / DOCX
 - GitHub Pages deployment via GitHub Actions
 
@@ -76,10 +75,9 @@ Per the [content creation roadmap](./docs/content-creation-roadmap.md), the foun
 
 | Gap | Planned direction |
 |-----|-------------------|
-| Inbox is still early | Unified triage: paste / Notion pull → inbox → attach to topic or convert to draft |
+| Inbox is still early | Unified triage: paste / clipping → inbox → attach to topic or convert to draft |
 | AI action quality & consistency | More reliable surface routing and tool execution (see [ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md)) |
 | Review layer is thin | Revision checklist, version diff preview, publish archive |
-| Cloud sync | Read-only snapshots and conflict strategy (see [cloud-sync-technical-plan.md](./docs/cloud-sync-technical-plan.md)) |
 | Ecosystem | Web Clipper, plugin system |
 
 **Near-term priority:** material inbox triage + review layer + AI assistant regression quality — before plugins or a generic AI chat panel.
@@ -152,13 +150,11 @@ Notes:
 
 Open **Settings → 工作区** to import / export workspace data.
 
-### Notion sync
+### Local project folder
 
-1. Open **Settings → Notion** and enter your integration token.
-2. Link a document to a Notion page, then push or pull blocks.
-3. Batch sync is available from the Notion panel or **渠道同步**.
-
-See `apps/editor/renderer/src/utils/notionService.js` for API details.
+1. Open **Settings → 本地项目目录** and pick a local folder as your workspace.
+2. Edits are written straight to disk as `.md`; use "从磁盘同步" to pull in external changes.
+3. Multi-device sync and version history are handled by that folder's own Git repository.
 
 ## Testing
 
@@ -317,7 +313,7 @@ Built on the creation foundation with Daily, AI assistant, and board UI:
 - **AI assistant**: paragraph rewrites, platform variants, surface switching and workspace actions
 - **Creation board & publishing queue**: status lanes, scheduling, pre-publish checklist
 - **Knowledge base P1 complete**: SQLite, FTS5, wikilinks, backlinks, graph, version history
-- WeChat formatting, Notion sync, bookmark import, multi-format export, inspiration canvas
+- WeChat formatting, bookmark import, multi-format export, inspiration canvas
 
 Next focus per [roadmap §7–§8](./docs/content-creation-roadmap.md): material inbox triage, review layer, AI assistant regression quality.
 

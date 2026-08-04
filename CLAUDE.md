@@ -6,7 +6,7 @@ IMPORTANT:
 
 ## 项目概述
 
-Markdown 内容创作工具，支持 Markdown 编辑/预览、微信公众号格式化、Notion 导出等功能。
+Markdown 内容创作工具，支持 Markdown 编辑/预览、微信公众号格式化、本地项目目录（工作区落盘，版本管理交给 Git）等功能。
 
 ## 快速上手
 
@@ -26,11 +26,9 @@ pnpm test:e2e     # E2E 测试（playwright）
 | Electron 主进程 | `apps/editor/main/main.js` + `apps/editor/main/preload.js` |
 | Markdown 解析/渲染 | `packages/markdown-core/src/parser.js` + `packages/markdown-core/src/renderer.js` |
 | 微信格式化 | `apps/editor/renderer/src/utils/wechatCopy.js` + `apps/editor/renderer/src/utils/wechatTemplates.js` |
-| Notion 集成 | `apps/editor/renderer/src/utils/notionService.js` + `apps/editor/renderer/src/utils/notionConverter.js` |
-| Notion 自动推送 / 懒加载工作区 | `apps/editor/renderer/src/utils/notionAutoPush.js` + `apps/editor/renderer/src/utils/notionWorkspace.js` |
 | 本地文件桥接（Electron/Web 路由） | `apps/editor/renderer/src/utils/localProjectBridge.js` + `apps/editor/renderer/src/utils/webFsBridge.js` |
 | AI 助手（agent 引擎/工具/面板） | `apps/editor/renderer/src/core/agent/`（`agentEngine.js` + `toolRegistry.js`） |
-| 云同步 / 代理服务端 | `server/cloud-sync/server.js` + `server/ai-proxy/` + `server/notion-proxy/` |
+| 代理服务端 | `server/ai-proxy/` + `server/mcp-bridge/` |
 | BlockNote 底层机制包 | `packages/blocknote-core/` |
 | CSS 变量 | `apps/editor/renderer/src/styles/design-tokens.css` |
 

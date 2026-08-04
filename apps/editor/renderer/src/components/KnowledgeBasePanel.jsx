@@ -148,7 +148,6 @@ export default function KnowledgeBasePanel({
   const tags = useMemo(() => collectTags(workspace), [workspace]);
   const folderCount = useMemo(() => Math.max(0, countFolderNodes(workspace) - 1), [workspace]);
   const localRootCount = useMemo(() => countMountedRoots(workspace, 'localProjectRoot'), [workspace]);
-  const notionRootCount = useMemo(() => countMountedRoots(workspace, 'notionSyncRoot'), [workspace]);
 
   const recentFiles = useMemo(() => {
     return files
@@ -306,7 +305,7 @@ export default function KnowledgeBasePanel({
               </div>
               <div className="knowledge-stat-card">
                 <span className="knowledge-stat-label">外部来源</span>
-                <strong>{localRootCount + notionRootCount}</strong>
+                <strong>{localRootCount}</strong>
               </div>
             </div>
           </div>
@@ -433,10 +432,6 @@ export default function KnowledgeBasePanel({
                 <div className="knowledge-source-row">
                   <span>本地目录挂载</span>
                   <strong>{localRootCount}</strong>
-                </div>
-                <div className="knowledge-source-row">
-                  <span>Notion 同步根</span>
-                  <strong>{notionRootCount}</strong>
                 </div>
                 <div className="knowledge-source-row">
                   <span>可搜索文档</span>

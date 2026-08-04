@@ -71,7 +71,6 @@
 | `md-render-store` | 改全局状态（zustand） |
 | `md-render-wechat` | 微信公众号格式化 |
 | `md-render-external-api-proxy` | 前端调第三方 API 的代理化（CORS、可配置） |
-| `md-render-cloud-sync` | 自建云同步服务端与工作区快照同步 |
 | `md-render-binary-asset` | 二进制媒体存盘与 local-media:// 引用 |
 | `md-render-daily` | 今日速记面板（切日期 / carryOver 约定） |
 | `md-render-blocknote-core` | BlockNote 底层接入与避坑 |
@@ -159,16 +158,15 @@ packages/
 │       └── renderer.js          # token 数组 → HTML 字符串
 └── blocknote-core/              # BlockNote 底层机制包（@narrative/blocknote-core）
 server/
-├── cloud-sync/                  # 自建云同步服务端（server.js 等）
 ├── ai-proxy/                    # AI 请求代理
-└── notion-proxy/                # Notion API 代理
+└── mcp-bridge/                  # Agent 控制桥 MCP server
 ```
 
 ### 模块职责
 
 - **Main Service**（main.js）：窗口管理、文件系统操作，不依赖 UI
 - **IPC Handler**（preload.js）：仅做 bridge 转发，**不写业务逻辑**
-- **Renderer Utils/Service**：IPC 客户端，封装调用（如 `notionService.js`）
+- **Renderer Utils/Service**：IPC 客户端，封装调用（如 `localProjectBridge.js`）
 - **Component**：纯 UI，不直接调用 IPC
 
 ## 代码组织规范
@@ -213,10 +211,6 @@ import { SubComponent } from './components/SubComponent';
 - `packages/markdown-core/src/parser.js` 只负责文本 → token，无副作用
 - `packages/markdown-core/src/renderer.js` 只负责 token → HTML 字符串，无副作用
 - 新增语法支持：先在 parser 中加 token 类型，再在 renderer 中加对应渲染方法
-
-### notionService.js
-
-Notion API 调用统一封装在此文件，组件不直接调用 Notion API。
 
 ### wechatCopy.js / wechatTemplates.js
 

@@ -3,7 +3,6 @@
 > 说明「今日速记」中**今日任务**、**笔记**与**待办池**的类别标注能力：有哪些类别、怎么用、数据怎么存、代码在哪改。
 >
 > 相关文档：
-> - [cloud-sync-technical-plan.md](./cloud-sync-technical-plan.md) — Daily 数据同步
 > - [ai-assistant-quality-checklist.md](./ai-assistant-quality-checklist.md) — AI 助手在今日速记场景的验收项
 
 ---
@@ -198,7 +197,6 @@ styles.css                 .daily-notebook-category-* 样式
 | 筛选 / 分组 | 无 | 任务区 / 待办池顶部按类别 chip 筛选 |
 | 自定义类别 | 固定 5 类 | 用户配置 + 持久化到 workspace 或 settings |
 | 事件 | 无类别 | 若需求明确可单独设计 |
-| 云同步 | 随 `dailyWorkspace` JSON 同步 | 无额外协议变更 |
 
 ---
 

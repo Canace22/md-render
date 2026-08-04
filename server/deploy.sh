@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 一键部署 server/ 下所有 Node 服务（notion-proxy + ai-proxy + cloud-sync）
+# 一键部署 server/ 下所有 Node 服务（ai-proxy）
 # 并把本地用的 mcp-bridge 依赖装好（它由 Claude Desktop 本地按需拉起，不进 PM2）。
 #
 # 在服务器上执行（先 git clone / rsync 代码到服务器）：
@@ -8,10 +8,7 @@
 #   bash deploy.sh
 #
 # 可选环境变量：
-#   NOTION_PROXY_PORT=8787   notion-proxy 端口
 #   AI_PROXY_PORT=8788       ai-proxy 端口
-#   CLOUD_SYNC_PORT=8791     cloud-sync 端口
-#   CLOUD_SYNC_TOKEN=xxx     cloud-sync 鉴权 token（不设则不鉴权）
 #   INSTALL_DEPS=1           尝试安装系统依赖（需 root）
 #   SKIP_FIREWALL=1          跳过防火墙放行
 #   SKIP_PYTHON=1            跳过 ai-proxy Python 工具依赖
@@ -27,9 +24,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NOTION_PORT="${NOTION_PROXY_PORT:-8787}"
 AI_PORT="${AI_PROXY_PORT:-8788}"
-CLOUD_SYNC_PORT="${CLOUD_SYNC_PORT:-8791}"
 INSTALL_DEPS="${INSTALL_DEPS:-0}"
 SKIP_FIREWALL="${SKIP_FIREWALL:-0}"
 SKIP_PYTHON="${SKIP_PYTHON:-0}"
@@ -48,7 +43,7 @@ usage() {
   cat <<'EOF'
 用法: bash deploy.sh [选项]
 
-部署 server/ 下所有 Node 服务（notion-proxy、ai-proxy、cloud-sync），用 PM2 常驻；
+部署 server/ 下所有 Node 服务（ai-proxy），用 PM2 常驻；
 并安装本地 mcp-bridge 的依赖（该进程由 Claude Desktop 本地按需拉起，不用 PM2 守护）。
 
 选项:
@@ -65,10 +60,7 @@ usage() {
   或手动安装 python3.11 / python3.9 后重跑 deploy.sh。
 
 环境变量:
-  NOTION_PROXY_PORT   notion-proxy 端口（默认 8787）
   AI_PROXY_PORT       ai-proxy 端口（默认 8788）
-  CLOUD_SYNC_PORT     cloud-sync 端口（默认 8791）
-  CLOUD_SYNC_TOKEN    cloud-sync 鉴权 token（不设则不鉴权）
 EOF
 }
 
@@ -98,9 +90,7 @@ discover_services() {
 
 service_port() {
   case "$1" in
-    notion-proxy) echo "$NOTION_PORT" ;;
     ai-proxy) echo "$AI_PORT" ;;
-    cloud-sync) echo "$CLOUD_SYNC_PORT" ;;
     *) echo "" ;;
   esac
 }
@@ -109,19 +99,14 @@ service_health_url() {
   local name="$1" port
   port="$(service_port "$name")"
   case "$name" in
-    notion-proxy) echo "http://127.0.0.1:${port}/v1/users/me" ;;
     ai-proxy) echo "http://127.0.0.1:${port}/api/health" ;;
-    cloud-sync) echo "http://127.0.0.1:${port}/" ;;
     *) echo "" ;;
   esac
 }
 
 service_health_expect() {
   case "$1" in
-    notion-proxy) echo "401" ;;  # 无 token 时 Notion 返回 401 = 代理通了
     ai-proxy) echo "200" ;;
-    # 设了 token：裸请求 401；没设 token：根路径无匹配路由 404。两者都说明服务活着。
-    cloud-sync) [ -n "${CLOUD_SYNC_TOKEN:-}" ] && echo "401" || echo "404" ;;
     *) echo "200" ;;
   esac
 }
@@ -375,10 +360,8 @@ setup_firewall() {
     return 0
   fi
 
-  step "放行防火墙端口 ${NOTION_PORT}, ${AI_PORT}, ${CLOUD_SYNC_PORT}"
-  open_firewall_port "$NOTION_PORT"
+  step "放行防火墙端口 ${AI_PORT}"
   open_firewall_port "$AI_PORT"
-  open_firewall_port "$CLOUD_SYNC_PORT"
   yellow "  云服务器还需在控制台安全组放行上述端口"
 }
 
@@ -387,10 +370,7 @@ deploy_pm2() {
   step "PM2 启动/更新服务"
   cd "$SCRIPT_DIR"
 
-  export NOTION_PROXY_PORT="$NOTION_PORT"
   export AI_PROXY_PORT="$AI_PORT"
-  export CLOUD_SYNC_PORT="$CLOUD_SYNC_PORT"
-  export CLOUD_SYNC_TOKEN="${CLOUD_SYNC_TOKEN:-}"
 
   pm2 startOrReload ecosystem.config.cjs --update-env
   pm2 save
@@ -433,14 +413,10 @@ print_summary() {
   blue "════════════════════════════════════════"
   echo
   echo "服务地址："
-  echo "  Notion 代理: http://${ip}:${NOTION_PORT}/v1"
   echo "  AI 代理:     http://${ip}:${AI_PORT}"
-  echo "  云同步:      http://${ip}:${CLOUD_SYNC_PORT}"
   echo
   echo "前端配置（apps/editor/.env）："
-  echo "  VITE_NOTION_PROXY=http://${ip}:${NOTION_PORT}/v1"
   echo "  AI_PROXY_BASE=http://${ip}:${AI_PORT}"
-  echo "  （云同步地址在 app 内「同步中心」设置里填 http://${ip}:${CLOUD_SYNC_PORT}）"
   echo
   echo "常用命令："
   echo "  pm2 status"
@@ -468,7 +444,7 @@ print_summary() {
 main() {
   blue "md-render server 统一部署"
   echo "  目录: $SCRIPT_DIR"
-  echo "  端口: notion-proxy=$NOTION_PORT, ai-proxy=$AI_PORT"
+  echo "  端口: ai-proxy=$AI_PORT"
   echo
 
   discover_services

@@ -14,7 +14,6 @@
 | 文件树 + 文件夹管理 | `WorkspaceSidebar` + `workspaceUtils` | ✅ 生产可用 |
 | 本地项目挂载 + 文件监听 | `localProject` + `localProjectWatcher` | ✅ 生产可用 |
 | 微信公众号格式化 | `wechatCopy` + `wechatTemplates` | ✅ 生产可用 |
-| Notion 同步导出 | `notionService` + `notionConverter` | ✅ 生产可用 |
 | 标签系统 | `TagBar` + store `tags` 字段 | ✅ 基础可用 |
 | 知识元数据（类型/摘要/别名/关联） | `KnowledgeMetaPanel` + `knowledgeFields` | ⚠️ 初步框架 |
 | 关键词搜索 | `KnowledgeBasePanel` 内搜索 | ⚠️ 简单实现 |

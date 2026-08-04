@@ -4,7 +4,6 @@
 
 | 目录 | 端口 | 说明 |
 |------|------|------|
-| `notion-proxy/` | 8787 | Notion API 透明转发 |
 | `ai-proxy/` | 8788 | AI 代理（Provider 模式 + 透明 /v1 模式 + Python 工具） |
 
 ## 一键部署（推荐）
@@ -19,16 +18,16 @@ bash deploy.sh
 脚本会：
 
 1. 扫描所有含 `server.js` 的子目录并注册为服务
-2. 用 **PM2** 启动/更新 `notion-proxy`、`ai-proxy`
+2. 用 **PM2** 启动/更新 `ai-proxy`
 3. 创建 `ai-proxy/.venv` 并安装 pdf-to-docx 等 Python 依赖（**需 Python 3.9+**，PyMuPDF 1.26.x 不支持系统自带的 3.6）
 4. 尝试放行 firewalld / ufw 端口
-5. curl 自检两个服务
+5. curl 自检服务
 
 ### 常用选项
 
 ```bash
 # 自定义端口
-NOTION_PROXY_PORT=9000 AI_PROXY_PORT=9001 bash deploy.sh
+AI_PROXY_PORT=9001 bash deploy.sh
 
 # 首次部署时顺带装系统依赖（需 root）
 sudo bash deploy.sh --install-deps
@@ -44,11 +43,10 @@ bash deploy.sh --skip-firewall --skip-python
 3. 在开发机 `apps/editor/.env` 填入：
 
 ```env
-VITE_NOTION_PROXY=http://你的服务器IP:8787/v1
 AI_PROXY_BASE=http://你的服务器IP:8788
 ```
 
-4. 云服务器控制台安全组放行 **8787、8788**
+4. 云服务器控制台安全组放行 **8788**
 
 ### 开机自启
 
@@ -59,7 +57,6 @@ pm2 save
 
 ## 单独部署
 
-- Notion 仅用 Nginx、不跑 Node：见 [`notion-proxy/DEPLOY-centos-nginx.md`](notion-proxy/DEPLOY-centos-nginx.md)
 - 各服务手动启动：见各子目录 `README.md`
 
 ## 新增服务
