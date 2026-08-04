@@ -6,7 +6,7 @@ IMPORTANT:
 
 ## 项目概述
 
-Markdown 内容创作工具，支持 Markdown 编辑/预览、微信公众号格式化、Notion 导出、小说写作辅助等功能。
+Markdown 内容创作工具，支持 Markdown 编辑/预览、微信公众号格式化、Notion 导出等功能。
 
 ## 快速上手
 
@@ -32,7 +32,6 @@ pnpm test:e2e     # E2E 测试（playwright）
 | AI 助手（agent 引擎/工具/面板） | `apps/editor/renderer/src/core/agent/`（`agentEngine.js` + `toolRegistry.js`） |
 | 云同步 / 代理服务端 | `server/cloud-sync/server.js` + `server/ai-proxy/` + `server/notion-proxy/` |
 | BlockNote 底层机制包 | `packages/blocknote-core/` |
-| 小说辅助 | `apps/editor/renderer/src/core/novel/` |
 | CSS 变量 | `apps/editor/renderer/src/styles/design-tokens.css` |
 
 ## 项目总结约定

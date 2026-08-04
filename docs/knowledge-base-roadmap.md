@@ -18,7 +18,6 @@
 | 标签系统 | `TagBar` + store `tags` 字段 | ✅ 基础可用 |
 | 知识元数据（类型/摘要/别名/关联） | `KnowledgeMetaPanel` + `knowledgeFields` | ⚠️ 初步框架 |
 | 关键词搜索 | `KnowledgeBasePanel` 内搜索 | ⚠️ 简单实现 |
-| 小说实体提取 | `core/novel/` | ✅ 生产可用 |
 | Electron 桌面端 | `main.js` + `preload.js` | ✅ 生产可用 |
 
 ### 1.2 缺失能力（做知识库必须补的）
@@ -194,7 +193,7 @@ CREATE TABLE versions (
 
 **实现思路**：
 
-1. **编辑器层**：在 BlockNote 中注册 `[[` 触发的 mention 补全（类似现有小说实体的 `NovelMentionMenu`），用户输入 `[[` 弹出文档列表。
+1. **编辑器层**：在 BlockNote 中注册 `[[` 触发的 mention 补全，用户输入 `[[` 弹出文档列表。
 2. **解析层**：`parser.js` 新增 `wikilink` token 类型，匹配 `[[文档名]]` 或 `[[文档名|显示文本]]`。
 3. **存储层**：每次保存文档时，解析内容中的 `[[]]` 链接，更新 `links` 表。
 4. **UI 层**：在 `KnowledgeMetaPanel` 中新增「反向链接」区域，展示所有链接到当前文档的其他文档。
@@ -213,7 +212,7 @@ flowchart TD
     style F fill:#2ed573,color:#fff
 ```
 
-**可复用**：`NovelMentionMenu` 的 mention 交互模式可以直接复用，改成搜索全部文档即可。
+**说明**：mention 交互需要新建，`[[` 触发后搜索全部文档。
 
 #### 3.3.2 全文搜索（FTS5）
 

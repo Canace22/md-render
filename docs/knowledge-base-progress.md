@@ -199,7 +199,7 @@ P3 生态扩展   ░░░░░░░░░░░░░░░░░░░░  
 
 | 项目 | 优先级 | 说明 |
 |------|--------|------|
-| `[[` 编辑器自动补全 | 中 | BlockNote mention 触发，参考 `NovelMentionMenu` |
+| `[[` 编辑器自动补全 | 中 | BlockNote mention 触发 |
 | 版本 diff 预览 | 低 | 恢复前展示内容差异 |
 | 图谱节点过滤 | 低 | 按 nodeType / 标签过滤显示 |
 | FTS 中文分词 | 低 | 初期 unicode61 够用，后续可换 jieba |

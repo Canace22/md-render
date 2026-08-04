@@ -92,7 +92,7 @@
 - **React 18** - 函数式组件 + Hooks
 - **JavaScript（JSX）** - 纯 JS，**禁止引入 TypeScript**（`.ts` / `.tsx`）
 - **Zustand 5.x** - 全局状态管理
-- **@blocknote/react 0.47.x** - 富文本块编辑器（Novel 模式）
+- **@blocknote/react 0.47.x** - 富文本块编辑器
 - **Ant Design 5.x** - UI 组件
 - **shiki 3.x** - 代码语法高亮
 - **lucide-react** - 图标库
@@ -145,7 +145,6 @@ apps/
     │   ├── index.html
     │   └── src/
     │       ├── components/      # React 组件
-    │       ├── core/novel/      # 小说辅助（实体抽取、场景分析等）
     │       ├── hooks/
     │       ├── store/
     │       │   ├── useEditorStore.js  # 全局状态（zustand + persist）

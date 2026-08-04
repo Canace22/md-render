@@ -84,7 +84,6 @@ flowchart LR
         MAIN["src/main.jsx"]
         EDITOR["src/components/MarkdownEditor.jsx"]
         STORE["src/store/useEditorStore.js"]
-        NOVEL["src/core/novel/"]
         ELECTRON["main/main.js + preload.js"]
     end
 
@@ -96,7 +95,6 @@ flowchart LR
     HTML --> MAIN
     MAIN --> EDITOR
     EDITOR --> STORE
-    EDITOR --> NOVEL
     EDITOR --> PARSER
     EDITOR --> RENDERER
     ELECTRON --> HTML

@@ -32,7 +32,7 @@ flowchart LR
 2. **前端 service**：`NOTION_PROXY_BASE` 这类常量改成 `resolveProxyBase()`；`isLocalDevMode` 改成 `isXxxAvailable`。其余请求函数不动（都是 `${base}/...` 拼接，相对/绝对地址都成立）。
 3. **组件层**：把 `dev` / `xxxLocalDev` 判断换成 `isXxxAvailable()`，更新过时的提示文案（指向 `server/<name>-proxy/README.md` 和 `VITE_XXX_PROXY`）。
 4. **配置**：`apps/editor/.env.example` 加 `VITE_XXX_PROXY` 说明（末尾 `/v1`、不带尾斜杠、生产用 https）。确认 `.gitignore` 已忽略 `.env`。
-5. **单测**：`pnpm test:unit`，确认相关转换/解析测试不受影响。注意项目里有几个**预先存在的失败**（novel-entity-extract / knowledge-graph-sync / canvas-bookmark），与本类改动无关，别误判成自己引入——可 stash 改动重跑那几个文件确认。
+5. **单测**：`pnpm test:unit`，确认相关转换/解析测试不受影响。注意项目里有几个**预先存在的失败**（knowledge-graph-sync / canvas-bookmark / excalidraw-canvas-agent），与本类改动无关，别误判成自己引入——可 stash 改动重跑那几个文件确认。
 
 ## 易漏点
 

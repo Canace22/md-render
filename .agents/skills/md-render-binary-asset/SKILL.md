@@ -59,7 +59,7 @@ flowchart TD
 
 改完假定 10 条 case 给预期（粘贴 PNG/JPEG、连续多张不覆盖、拖入、内置文档降级、纯文本/代码块走原 pasteHandler 不变、base64 空/损坏降级提示、越界路径被拦、关闭重开靠 `local-media://` 重新加载）。
 
-单测**默认不主动跑，用户要求时再跑**（`pnpm test:unit`）。注意有几个预先存在的失败（`canvas-bookmark`/`knowledge-graph-sync`/`novel-entity-extract`），用 `git stash` 对比基线确认自己零新增失败，别误判。
+单测**默认不主动跑，用户要求时再跑**（`pnpm test:unit`）。注意有几个预先存在的失败（`canvas-bookmark`/`excalidraw-canvas-agent`/`knowledge-graph-sync`），用 `git stash` 对比基线确认自己零新增失败，别误判。
 
 ## 完成标准
 
