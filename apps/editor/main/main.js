@@ -51,6 +51,7 @@ import {
 } from './database.js';
 import { writeBuiltInDocsToDisk } from './mdSync.js';
 import { registerIpcHandlers } from './ipc/registerIpcHandlers.js';
+import { startAgentBridge } from './agentBridge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -510,6 +511,14 @@ app.whenReady().then(async () => {
   createMenu();
   createTray();
   await createWindow();
+
+  // 启动 Agent 控制桥，让「别的 AI」经 MCP 调用本 app 的安全工具。
+  // 失败不影响主流程（只是外部 AI 接入不可用）。
+  try {
+    startAgentBridge({ getMainWindow: () => mainWindow, ipcMain, app });
+  } catch (error) {
+    console.warn('[agent-bridge] failed to start:', error?.message);
+  }
 
   // 生产环境下启动自动更新检查
   if (!process.env.VITE_DEV_SERVER_URL) {

@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSnapshot: (payload) => ipcRenderer.invoke('diagnostics:get-snapshot', payload),
   },
 
+  // Agent 控制桥：主进程收到「别的 AI」的工具请求后转发到 renderer，
+  // renderer 用现有 host+executeTool 执行完再回帖。
+  agentBridge: {
+    onInvoke: (callback) => {
+      const sub = (_event, payload) => callback(payload);
+      ipcRenderer.on('agent-bridge:invoke', sub);
+      return () => ipcRenderer.removeListener('agent-bridge:invoke', sub);
+    },
+    reply: (payload) => ipcRenderer.send('agent-bridge:reply', payload),
+  },
+
   // SQLite 数据库 IPC
   db: {
     isMigrated: () => ipcRenderer.invoke('db:is-migrated'),

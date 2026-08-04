@@ -1,0 +1,16 @@
+{
+  "name": "@md-render/mcp-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server that lets external AI (Claude Desktop / Cursor 等) operate the MD Render app via its local agent bridge.",
+  "bin": {
+    "md-render-mcp": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

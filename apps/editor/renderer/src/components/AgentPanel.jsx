@@ -38,7 +38,8 @@ import {
   appendMemoryEntry,
   findEditorialMemoryFile,
 } from '../core/agent/editorialMemory.js';
-import { fetchServerTools } from '../core/agent/toolRegistry.js';
+import { fetchServerTools, executeTool, TOOL_DEFINITIONS } from '../core/agent/toolRegistry.js';
+import { installAgentBridgeListener } from '../core/agent/bridgeListener.js';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
   buildActiveDocMeta,
@@ -367,7 +368,7 @@ const COMPOSER_SHORTCUTS = Object.freeze([
     label: '标题建议',
     icon: FileTextOutlined,
     tone: 'cyan',
-    description: '给当前内容想几个标题',
+    description: '给当前文稿想几个标题',
     aliases: ['标题', 'title'],
   },
   {
@@ -401,7 +402,7 @@ const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
     label: '提纲',
     icon: ApartmentOutlined,
     tone: 'teal',
-    description: '按当前内容整理结构提纲',
+    description: '按当前文稿整理结构提纲',
     aliases: ['大纲', 'outline'],
   },
   {
@@ -411,7 +412,7 @@ const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
     label: '扩写',
     icon: ArrowsAltOutlined,
     tone: 'blue',
-    description: '把当前内容扩充展开',
+    description: '把当前文稿扩充展开',
     aliases: ['展开', 'expand'],
   },
   {
@@ -1223,6 +1224,21 @@ export default function AgentPanel({ onClose }) {
     surface,
     knowledgeSources,
   ]);
+
+  // Agent 控制桥：把 host 存进 ref，让「别的 AI」经 MCP 转发来的工具请求，
+  // 始终用最新的 host + 现成 executeTool 执行。只挂一次，靠 ref 拿最新闭包。
+  const hostRef = useRef(host);
+  hostRef.current = host;
+  useEffect(() => {
+    const api = typeof window !== 'undefined' ? window.electronAPI : null;
+    if (!api?.agentBridge) return undefined;
+    return installAgentBridgeListener({
+      electronAPI: api,
+      getHost: () => hostRef.current,
+      executeTool,
+      toolDefs: TOOL_DEFINITIONS,
+    });
+  }, []);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
   const [serverTools, setServerTools] = useState([]);
