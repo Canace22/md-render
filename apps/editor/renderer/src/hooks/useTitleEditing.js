@@ -8,11 +8,9 @@ import { stripFileExtension } from '../utils/fileDisplayName.js';
  */
 export function useTitleEditing(selectedFile, applyRename) {
   const titleInputRef = useRef(null);
-  const titleMeasureRef = useRef(null);
   const isCommittingRef = useRef(false);
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
-  const [titleInputWidth, setTitleInputWidth] = useState(160);
   const selectedFileDisplayName = stripFileExtension(selectedFile?.name, '');
 
   const startTitleEditing = useCallback(() => {
@@ -60,12 +58,6 @@ export function useTitleEditing(selectedFile, applyRename) {
   }, [isTitleEditing]);
 
   useEffect(() => {
-    if (!isTitleEditing || !titleMeasureRef.current) return;
-    const measuredWidth = Math.ceil(titleMeasureRef.current.getBoundingClientRect().width) + 8;
-    setTitleInputWidth(Math.max(120, measuredWidth));
-  }, [isTitleEditing, titleDraft]);
-
-  useEffect(() => {
     if (!selectedFile) return;
     if (!isTitleEditing) setTitleDraft(selectedFileDisplayName);
   }, [selectedFile, selectedFileDisplayName, isTitleEditing]);
@@ -73,9 +65,7 @@ export function useTitleEditing(selectedFile, applyRename) {
   return {
     isTitleEditing,
     titleDraft,
-    titleInputWidth,
     titleInputRef,
-    titleMeasureRef,
     startTitleEditing,
     commitTitleEditing,
     cancelTitleEditing,

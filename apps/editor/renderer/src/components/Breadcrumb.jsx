@@ -5,9 +5,11 @@ import { stripFileExtension } from '../utils/fileDisplayName.js';
 
 /**
  * 面包屑导航 — 显示当前文件的路径层级
- * @param {{ workspace: object, selectedId: string, onNavigate: function }} props
+ *
+ * currentSlot 用于把末级替换成自定义节点（顶栏把它换成「当前文档下拉」）。
+ * @param {{ workspace: object, selectedId: string, onNavigate: function, currentSlot?: React.ReactNode }} props
  */
-export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
+export default function Breadcrumb({ workspace, selectedId, onNavigate, currentSlot = null }) {
   const pathChain = useMemo(() => {
     if (!workspace || !selectedId) return [];
     const chain = [];
@@ -39,9 +41,11 @@ export default function Breadcrumb({ workspace, selectedId, onNavigate }) {
         <span key={item.id} className="breadcrumb-segment">
           {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="breadcrumb-sep" aria-hidden />}
           {item.id === currentNodeId ? (
-            <span className="breadcrumb-current" aria-current="page" title={fullPathLabel}>
-              {item.displayName}
-            </span>
+            currentSlot ?? (
+              <span className="breadcrumb-current" aria-current="page" title={fullPathLabel}>
+                {item.displayName}
+              </span>
+            )
           ) : (
             <button
               type="button"

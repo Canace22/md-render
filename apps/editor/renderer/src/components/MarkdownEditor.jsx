@@ -5,7 +5,6 @@ import { BlockNoteEditor, createCodeBlockSpec } from '@blocknote/core';
 import { buildSchema } from '@narrative/blocknote-core';
 import { BlockNoteView } from '@blocknote/mantine';
 import { zh } from '@blocknote/core/locales';
-import { Bot } from 'lucide-react';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
@@ -28,9 +27,7 @@ import FilePreviewPanel from './FilePreviewPanel.jsx';
 import TocPanel from './TocPanel.jsx';
 import AgentPanel from './AgentPanel.jsx';
 import DiffOverlay from './DiffOverlay.jsx';
-import TabBar from './TabBar.jsx';
-import ThemeToggleButton from './ThemeToggleButton.jsx';
-import Breadcrumb from './Breadcrumb.jsx';
+import EditorTopBar from './EditorTopBar.jsx';
 import StatusBar from './StatusBar.jsx';
 import UpdateNotifier from './UpdateNotifier.jsx';
 import {
@@ -391,6 +388,12 @@ function MarkdownEditor() {
   const selectedReadOnly = Boolean(selectedFile?.readOnly);
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
+  // 标题下方元信息里的「所属目录」
+  const selectedParentLabel = useMemo(() => {
+    const parentId = findParentId(workspace, selectedId);
+    if (!parentId || parentId === 'root') return '';
+    return findNodeById(workspace, parentId)?.name ?? '';
+  }, [workspace, selectedId]);
   const selectedProjectRootPath = selectedFile?.projectRootPath ?? '';
   const manualSyncProjectRootPath = selectedFolder?.projectRootPath ?? '';
   const selectedInLocalProject = Boolean(selectedNode?.projectRootPath);
@@ -2394,31 +2397,23 @@ function MarkdownEditor() {
       />
       <div className="right-area immersive-main">
         <UpdateNotifier />
-        {/* Obsidian 风格标签页栏 */}
-        <TabBar
+        {/* 唯一顶栏：折叠 + 面包屑 + 当前文档下拉 | AI 助手 + 主题 */}
+        <EditorTopBar
+          workspace={workspace}
+          selectedId={selectedId}
+          onNavigate={selectNode}
           tabs={displayTabs}
-          activeId={selectedId}
-          onSelect={selectNode}
-          onClose={closeTab}
-          onCloseAll={closeAllTabs}
-          onCloseOthers={closeOtherTabs}
-          onCloseToTheRight={closeTabsToTheRight}
-          onOpenExternal={handleOpenBookmarkTabExternal}
-          trailing={(
-            <div className="tab-bar-actions">
-              <button
-                type="button"
-                className={`theme-toggle-btn titlebar-agent-toggle${agentPanelOpen ? ' is-open' : ''}`}
-                onClick={() => setAgentPanelOpen((v) => !v)}
-                aria-label={agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}
-                aria-pressed={agentPanelOpen}
-                title={`${agentPanelOpen ? '关闭 AI 助手' : '打开 AI 助手'}（⌘/Ctrl+J）`}
-              >
-                <Bot size={18} strokeWidth={1.7} />
-              </button>
-              <ThemeToggleButton theme={theme} onThemeChange={setTheme} />
-            </div>
-          )}
+          onCloseTab={closeTab}
+          onCloseOtherTabs={closeOtherTabs}
+          onCloseAllTabs={closeAllTabs}
+          onCloseTabsToTheRight={closeTabsToTheRight}
+          onOpenTabExternal={handleOpenBookmarkTabExternal}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebarCollapsed}
+          theme={theme}
+          onThemeChange={setTheme}
+          agentPanelOpen={agentPanelOpen}
+          onToggleAgentPanel={() => setAgentPanelOpen((v) => !v)}
         />
 
         <div className="immersive-main-row">
@@ -2547,34 +2542,33 @@ function MarkdownEditor() {
           />
         ) : (
           <>
-            {/* 面包屑 */}
-            <div className="obsidian-header-bar">
-              <Breadcrumb workspace={workspace} selectedId={selectedId} onNavigate={selectNode} />
-            </div>
-
-            <DocHeader
-              selectedFile={selectedFile}
-              allFiles={allFiles}
-              platformOptions={publishingPlatforms}
-              onTagsChange={setFileTags}
-              onKnowledgeMetaChange={setFileKnowledgeMeta}
-              onOpenFile={selectNode}
-              onRestoreVersion={updateSelectedFileContent}
-              titleEditable={!selectedInLocalProject || localProjectSupported}
-              {...titleEditing}
-            />
-            <EditorQuickToolbar
-              editor={editor}
-              disabled={!selectedFile}
-              onPreviewWeChat={() => setWechatPreviewOpen(true)}
-              onCopyWeChat={handleCopyToWeChat}
-              onCopyRichText={handleCopyRichText}
-              copyStyleName={getTemplateById(copyStyle).name}
-            />
             <div className="editor-layout">
+              {/* 文档级动作：悬浮在正文右上，不再单独占一条横栏 */}
+              <EditorQuickToolbar
+                editor={editor}
+                disabled={!selectedFile}
+                onPreviewWeChat={() => setWechatPreviewOpen(true)}
+                onCopyWeChat={handleCopyToWeChat}
+                onCopyRichText={handleCopyRichText}
+                copyStyleName={getTemplateById(copyStyle).name}
+              />
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
                   <DiffOverlay />
+                  {/* 标题下沉进纸面，与正文同列 */}
+                  <DocHeader
+                    selectedFile={selectedFile}
+                    parentLabel={selectedParentLabel}
+                    content={resolvedMarkdown}
+                    allFiles={allFiles}
+                    platformOptions={publishingPlatforms}
+                    onTagsChange={setFileTags}
+                    onKnowledgeMetaChange={setFileKnowledgeMeta}
+                    onOpenFile={selectNode}
+                    onRestoreVersion={updateSelectedFileContent}
+                    titleEditable={!selectedInLocalProject || localProjectSupported}
+                    {...titleEditing}
+                  />
                   {editorMode === 'preview' ? (
                     <div
                       id="markdown-output"
@@ -2612,7 +2606,7 @@ function MarkdownEditor() {
                 </div>
               </div>
               <TocPanel
-                markdown={markdown}
+                markdown={resolvedMarkdown}
                 collapsed={tocCollapsed}
                 onToggle={toggleTocCollapsed}
               />
