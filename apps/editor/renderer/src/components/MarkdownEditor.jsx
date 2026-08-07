@@ -2400,7 +2400,7 @@ function MarkdownEditor() {
         {/* 唯一顶栏：折叠 + 面包屑 + 当前文档下拉 | AI 助手 + 主题 */}
         <EditorTopBar
           workspace={workspace}
-          selectedId={selectedId}
+          selectedId={showDocTabs ? selectedId : null}
           onNavigate={selectNode}
           tabs={displayTabs}
           onCloseTab={closeTab}
