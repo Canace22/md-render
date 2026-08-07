@@ -49,6 +49,9 @@ React 前端：UI 渲染与状态管理。**禁止使用任何 Node.js API**，�
 - 优先使用 CSS class，不写大段内联 style
 - 主题颜色通过 CSS 变量控制，不硬编码
 - 需要考虑暗色 / 亮色主题
+- 改样式后要确认规则**真的生效**：`styles.css` 里残留不少 id 选择器（如 `#markdown-output`），
+  优先级高于同名的 class 规则，容易让新写的 class 声明静默失效。同理，组件迁到通用实现后
+  DOM 类名会变，旧类名的规则（尤其 `body.theme-dark` 那几条）会变成死规则
 
 ## 错误处理
 
