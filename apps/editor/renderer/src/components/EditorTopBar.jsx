@@ -31,6 +31,7 @@ export default function EditorTopBar({
   onCloseAllTabs,
   onCloseTabsToTheRight,
   onOpenTabExternal,
+  showDocumentContext,
   sidebarCollapsed,
   onToggleSidebar,
   theme,
@@ -121,23 +122,27 @@ export default function EditorTopBar({
   return (
     <div className="editor-top-bar">
       <div className="editor-top-bar-lead">
-        <button
-          type="button"
-          className="editor-top-bar-collapse"
-          onClick={onToggleSidebar}
-          aria-label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
-          title={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
-        >
-          {sidebarCollapsed
-            ? <PanelLeftOpen size={17} strokeWidth={1.6} />
-            : <PanelLeftClose size={17} strokeWidth={1.6} />}
-        </button>
-        <Breadcrumb
-          workspace={workspace}
-          selectedId={selectedId}
-          onNavigate={onNavigate}
-          currentSlot={docSwitcher}
-        />
+        {showDocumentContext && (
+          <>
+            <button
+              type="button"
+              className="editor-top-bar-collapse"
+              onClick={onToggleSidebar}
+              aria-label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
+              title={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
+            >
+              {sidebarCollapsed
+                ? <PanelLeftOpen size={17} strokeWidth={1.6} />
+                : <PanelLeftClose size={17} strokeWidth={1.6} />}
+            </button>
+            <Breadcrumb
+              workspace={workspace}
+              selectedId={selectedId}
+              onNavigate={onNavigate}
+              currentSlot={docSwitcher}
+            />
+          </>
+        )}
       </div>
       <div className="editor-top-bar-actions">
         <button

@@ -2408,6 +2408,7 @@ function MarkdownEditor() {
           onCloseAllTabs={closeAllTabs}
           onCloseTabsToTheRight={closeTabsToTheRight}
           onOpenTabExternal={handleOpenBookmarkTabExternal}
+          showDocumentContext={showDocTabs}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={toggleSidebarCollapsed}
           theme={theme}
