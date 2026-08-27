@@ -14,7 +14,6 @@ import {
 const CANVAS_TITLE = '灵感白板';
 const SAVE_DEBOUNCE_MS = 420;
 const DOUBLE_CLICK_INTERVAL_MS = 320;
-const DEFAULT_LIBRARY_OPEN = false;
 const LIBRARY_PREVIEW_LENGTH = 96;
 const BLANK_CARD_TITLE = '空白卡片';
 
@@ -75,7 +74,6 @@ export default function CanvasSurface({
   const librarySyncReadyRef = useRef(false);
   const sourceItems = items ?? [];
   const libraryItems = addableItems ?? sourceItems;
-  const [isLibraryOpen, setIsLibraryOpen] = useState(DEFAULT_LIBRARY_OPEN);
   const [libraryQuery, setLibraryQuery] = useState('');
 
   const initialData = useMemo(() => {
@@ -83,6 +81,13 @@ export default function CanvasSurface({
   }, [canvasState, edges, sourceItems]);
   const [sceneHasContent, setSceneHasContent] = useState(() => {
     return hasVisibleElements(initialData.elements);
+  });
+
+  // 空白画布默认把文档库摊开：卡片来源是工作区里的文档，
+  // 不展开的话第一眼只有一张空白板，这个画布看起来就跟文档没关系了。
+  // 已经有内容时保持收起，不打扰。
+  const [isLibraryOpen, setIsLibraryOpen] = useState(() => {
+    return !hasVisibleElements(initialData.elements);
   });
 
   const filteredLibraryItems = useMemo(() => {
