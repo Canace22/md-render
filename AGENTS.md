@@ -80,6 +80,7 @@
 | `md-render-kb-source` | 知识库新增节点类型 / 外部来源 |
 | `md-render-asset-derivation` | 派生资产：保留原稿、生成新稿、记录来源素材 |
 | `md-render-architecture-boundary` | 跨 renderer/main/server 的架构边界重整 |
+| `md-render-electron-startup` | Electron 开发启动、白屏、preload 与 ESM/CJS 崩溃诊断 |
 | `skill-harvest` | 判断并生成新 skill（沉淀机制执行器） |
 | `pre-commit-secrets` | 提交/push 前扫描敏感信息 |
 
