@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Dropdown, Popover, Select } from 'antd';
+import { Popover, Select } from 'antd';
 import logoUrl from '../assets/logo.png';
 import {
   File,
   Folder,
   FolderOpen,
-  LayoutGrid,
   Network,
   Pencil,
   Trash2,
@@ -19,16 +18,12 @@ import {
   Video,
   Music,
   Settings,
-  Upload,
-  FileOutput,
   Search,
   Pin,
   PinOff,
   RefreshCw,
-  ChevronDown,
   CalendarDays,
   SlidersHorizontal,
-  Braces,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -127,13 +122,6 @@ const getFileIcon = (filename) => {
       return File;
   }
 };
-
-const EXPORT_OPTIONS = [
-  { key: 'md', label: 'Markdown (.md)' },
-  { key: 'html', label: 'HTML (.html)' },
-  { key: 'pdf', label: 'PDF (.pdf)' },
-  { key: 'docx', label: 'Word (.docx)' },
-];
 
 const getRenameDraftValue = (node, fallbackName = '') => {
   const name = String(node?.name ?? fallbackName ?? '');
@@ -499,18 +487,12 @@ const WorkspaceSidebar = ({
   onMoveNode,
   onPinNode,
   onRevealLocalProjectEntry,
-  onImportMarkdown,
-  onExportMarkdown,
-  onExportAs,
   collapsed,
   onToggleCollapse,
   surface,
   onOpenDaily,
-  onOpenOverview,
-  onOpenCanvas,
   onOpenSearch,
   onOpenGraph,
-  onOpenJsonTool,
   onOpenCurrentContent,
   searchQuery,
   onSearchQueryChange,
@@ -536,7 +518,9 @@ const WorkspaceSidebar = ({
   const isSearching = Boolean(searchKeyword.trim());
   const isMetaFiltering = hasActiveMetaFilters(metaFilters);
   const allowStructureActions = true;
-  const showWorkspaceTree = surface === 'paper' || surface === 'folder';
+  // 图谱是文件树的另一种看法，右侧换成图谱时左边的树要留着，
+  // 否则进了图谱就找不到回去的入口，也看不出自己还在文档这条腿上。
+  const showWorkspaceTree = surface === 'paper' || surface === 'folder' || surface === 'graph';
 
   const handleStartRename = (nodeId, currentName) => {
     const node = findNodeById(workspace, nodeId);
@@ -758,7 +742,8 @@ const WorkspaceSidebar = ({
             <img src={logoUrl} alt="" className="sidebar-rail-logo-img" />
           </button>
 
-          {/* 视图导航 */}
+          {/* 视图导航：只留两条腿 —— 每天开合一次的 Daily，进去待很久的文档。
+              创作首页 / 画布 / 图谱 / JSON 已下沉，图谱移到文件树，其余走 Cmd+K 命令面板。 */}
           <nav className="sidebar-rail-nav" aria-label="创作与知识视图">
             <button
               type="button"
@@ -771,48 +756,12 @@ const WorkspaceSidebar = ({
             </button>
             <button
               type="button"
-              className={`sidebar-rail-btn ${surface === 'overview' ? 'active' : ''}`}
-              onClick={onOpenOverview}
-              title="创作首页"
-              aria-label="创作首页"
-            >
-              <LayoutGrid size={18} strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
-              className={`sidebar-rail-btn ${surface === 'paper' || surface === 'folder' ? 'active' : ''}`}
+              className={`sidebar-rail-btn ${showWorkspaceTree ? 'active' : ''}`}
               onClick={onOpenCurrentContent}
               title="文档"
               aria-label="文档"
             >
               <FileText size={18} strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
-              className={`sidebar-rail-btn ${surface === 'canvas' ? 'active' : ''}`}
-              onClick={onOpenCanvas}
-              title="画布工作台"
-              aria-label="画布工作台"
-            >
-              <Pencil size={18} strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
-              className={`sidebar-rail-btn ${surface === 'graph' ? 'active' : ''}`}
-              onClick={onOpenGraph}
-              title="图谱视图"
-              aria-label="图谱视图"
-            >
-              <Network size={18} strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
-              className={`sidebar-rail-btn ${surface === 'json-tool' ? 'active' : ''}`}
-              onClick={onOpenJsonTool}
-              title="JSON 解析器"
-              aria-label="JSON 解析器"
-            >
-              <Braces size={18} strokeWidth={1.6} />
             </button>
           </nav>
         </div>
@@ -969,6 +918,16 @@ const WorkspaceSidebar = ({
           <div className="sidebar-docs-header">
             <span className="sidebar-section-title">文档目录</span>
             <div className="sidebar-add-icons">
+              {/* 图谱是"这些文档之间的关系"，属于文件树而不是和文档平级的空间 */}
+              <button
+                type="button"
+                className={`sidebar-add-icon${surface === 'graph' ? ' is-active' : ''}`}
+                onClick={onOpenGraph}
+                title="关系图谱"
+                aria-label="关系图谱"
+              >
+                <Network size={16} strokeWidth={1.5} />
+              </button>
               <button
                 type="button"
                 className="sidebar-add-icon"
@@ -1000,49 +959,6 @@ const WorkspaceSidebar = ({
                   aria-label="新建文件夹"
                 >
                   <Folder size={18} strokeWidth={1.5} />
-                </button>
-              )}
-              {allowStructureActions && onImportMarkdown && (
-                <button
-                  type="button"
-                  className="sidebar-add-icon"
-                  onClick={onImportMarkdown}
-                  title="导入为新建 Markdown 文档"
-                  aria-label="导入为新建 Markdown 文档"
-                  data-testid="sidebar-import-markdown"
-                >
-                  <Upload size={18} strokeWidth={1.5} />
-                </button>
-              )}
-              {onExportAs ? (
-                <Dropdown
-                  trigger={['click']}
-                  menu={{
-                    items: EXPORT_OPTIONS,
-                    onClick: ({ key }) => onExportAs(key),
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="sidebar-add-icon with-caret"
-                    title="导出当前文档"
-                    aria-label="导出当前文档"
-                    data-testid="sidebar-export-dropdown"
-                  >
-                    <FileOutput size={18} strokeWidth={1.5} />
-                    <ChevronDown size={12} strokeWidth={1.8} />
-                  </button>
-                </Dropdown>
-              ) : onExportMarkdown && (
-                <button
-                  type="button"
-                  className="sidebar-add-icon"
-                  onClick={onExportMarkdown}
-                  title="导出当前文档为 .md"
-                  aria-label="导出 Markdown"
-                  data-testid="sidebar-export-markdown"
-                >
-                  <FileOutput size={18} strokeWidth={1.5} />
                 </button>
               )}
             </div>

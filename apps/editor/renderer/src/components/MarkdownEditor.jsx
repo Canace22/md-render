@@ -96,7 +96,6 @@ import {
   ensureRenameFileName,
   resolveLocalProjectCreateTarget,
 } from '../store/workspaceUtils.js';
-import { downloadMarkdownFile, ensureMarkdownDownloadName } from '../utils/markdownIO.js';
 import { convertToMarkdown, IMPORT_ACCEPT, needsConversion } from '../utils/fileConverters.js';
 import {
   buildBookmarkClipMarkdown,
@@ -1528,27 +1527,6 @@ function MarkdownEditor() {
     }
   };
 
-  const handleExportMarkdown = useCallback(() => {
-    const state = useEditorStore.getState();
-    const node = findNodeById(state.workspace, state.selectedId);
-    if (node?.type !== 'file') {
-      alert('请先选中一个文档后再导出 Markdown。');
-      return;
-    }
-    const filename = ensureMarkdownDownloadName(node.name);
-    // content 可能是 BlockNote JSON，需先转为纯 Markdown
-    const rawContent = state.markdown;
-    let md;
-    if (isBlockNoteContent(rawContent)) {
-      const blocks = parseBlockNoteContent(rawContent);
-      const tempEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
-      md = normalizeMarkdown(tempEditor.blocksToMarkdownLossy(blocks ?? []));
-    } else {
-      md = normalizeMarkdown(rawContent);
-    }
-    downloadMarkdownFile(md, filename);
-  }, []);
-
   const handleExportAs = useCallback(async (format) => {
     const state = useEditorStore.getState();
     const node = findNodeById(state.workspace, state.selectedId);
@@ -1672,6 +1650,15 @@ function MarkdownEditor() {
     }
     event.target.value = '';
   }, [localProjectSupported, desktopProjectSupported, insertLocalProjectNode, resolveLocalCreateTarget]);
+
+  // 唤起隐藏的 file input。本地项目里的文档要靠本地文件能力落盘，浏览器不支持时直接提示。
+  const triggerImportMarkdown = () => {
+    if (!localProjectSupported && selectedInLocalProject) {
+      message.warning('当前环境不支持导入到本地项目，请先选中非本地项目的位置。');
+      return;
+    }
+    markdownImportInputRef.current?.click();
+  };
 
   const handleAddFile = useCallback(async (contextNodeId) => {
     if (localProjectSupported) {
@@ -2410,11 +2397,6 @@ function MarkdownEditor() {
         onRevealLocalProjectEntry={desktopProjectSupported ? handleRevealLocalProjectEntry : null}
         onRename={handleRename}
         onDelete={handleDelete}
-        onImportMarkdown={localProjectSupported || !selectedInLocalProject
-          ? () => markdownImportInputRef.current?.click()
-          : null}
-        onExportMarkdown={handleExportMarkdown}
-        onExportAs={handleExportAs}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
         surface={surface}
@@ -2422,11 +2404,8 @@ function MarkdownEditor() {
           setDailyCurrentDate(getTodayDateKey());
           setSurface('daily');
         }}
-        onOpenOverview={() => setSurface('overview')}
-        onOpenCanvas={() => setSurface('canvas')}
         onOpenSearch={() => setSurface('search')}
         onOpenGraph={() => setSurface('graph')}
-        onOpenJsonTool={() => setSurface('json-tool')}
         onOpenCurrentContent={() => setSurface(selectedContentSurface)}
         searchQuery={knowledgeSearchQuery}
         onSearchQueryChange={setKnowledgeSearchQuery}

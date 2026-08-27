@@ -125,6 +125,8 @@ export const VALID_SURFACES = new Set([
   'settings',
 ]);
 
+export const DEFAULT_LANDING_SURFACE = 'daily';
+
 const normalizeSurface = (surface, fallback = 'overview') => {
   return VALID_SURFACES.has(surface) ? surface : fallback;
 };
@@ -330,7 +332,7 @@ const editorStorage = {
           copyStyle: 'default',
           storageMode: 'local',
           projectRootPath: '',
-          surface: 'overview',
+          surface: DEFAULT_LANDING_SURFACE,
           publishingPlatforms: sanitizePublishingPlatforms([]),
           dailyWorkspace: normalizeDailyWorkspace(null),
         },
@@ -707,7 +709,7 @@ export const useEditorStore = create(
       /** 通知渲染进程取消待写入磁盘的定时器 */
       diskSaveCancelSeq: 0,
       diskSaveCancelFileIds: [],
-      surface: 'overview',
+      surface: DEFAULT_LANDING_SURFACE,
       /** Obsidian 风格多标签页：已打开的文件 tab 列表 [{id, title}] */
       openTabs: [],
       /** 编辑器模式：'edit' | 'preview' */

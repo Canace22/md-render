@@ -10120,3 +10120,8 @@ body.theme-dark .file-preview-iframe {
     font-size: var(--text-body);
 }
 
+/* 文件树标题栏里的图谱入口：选中态跟 rail 按钮保持一致 */
+.sidebar-add-icon.is-active {
+    color: var(--color-text-active);
+    background: var(--color-bg-active);
+}
