@@ -30,6 +30,7 @@ import DiffOverlay from './DiffOverlay.jsx';
 import EditorTopBar from './EditorTopBar.jsx';
 import StatusBar from './StatusBar.jsx';
 import UpdateNotifier from './UpdateNotifier.jsx';
+import CommandPalette from './CommandPalette.jsx';
 import {
   buildCodeBlockClipboardHtml,
   createEmptyDocument,
@@ -67,6 +68,8 @@ import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
+import useCommandPalette from '../hooks/useCommandPalette.js';
+import { createCommands } from '../core/commands/commandRegistry.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
@@ -2339,6 +2342,42 @@ function MarkdownEditor() {
     };
   }, [setAiQuotedSelection, shouldSuppressSelectAllKeyUp]);
 
+  // 命令面板：把散落各处的入口收成一份可搜索清单，Cmd/Ctrl+K 唤起。
+  // 部分 handler（如复制公众号）闭包里带着随渲染变化的正文，统一走 ref 取最新版本，
+  // 否则 useMemo 缓存住的会是旧闭包，复制到的是过期内容。
+  const { open: commandPaletteOpen, close: closeCommandPalette } = useCommandPalette();
+  const commandHandlersRef = useRef(null);
+  commandHandlersRef.current = {
+    openCurrentContent: () => setSurface(selectedContentSurface),
+    openDaily: () => {
+      setDailyCurrentDate(getTodayDateKey());
+      setSurface('daily');
+    },
+    toggleAgentPanel: () => setAgentPanelOpen((v) => !v),
+    openWechatPreview: () => setWechatPreviewOpen(true),
+    openBookmarkImport: () => setBookmarkImportOpen(true),
+    importMarkdown: triggerImportMarkdown,
+    copyToWechat: handleCopyToWeChat,
+    exportAs: handleExportAs,
+    toggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+    toggleSidebar: toggleSidebarCollapsed,
+    syncFromDisk: () => handleManualSyncLocalProject(currentWorkspaceProjectRoot),
+  };
+  const commands = useMemo(() => createCommands({
+    openSurface: setSurface,
+    openCurrentContent: () => commandHandlersRef.current.openCurrentContent(),
+    openDaily: () => commandHandlersRef.current.openDaily(),
+    toggleAgentPanel: () => commandHandlersRef.current.toggleAgentPanel(),
+    openWechatPreview: () => commandHandlersRef.current.openWechatPreview(),
+    openBookmarkImport: () => commandHandlersRef.current.openBookmarkImport(),
+    importMarkdown: () => commandHandlersRef.current.importMarkdown(),
+    copyToWechat: () => commandHandlersRef.current.copyToWechat(),
+    exportAs: (format) => commandHandlersRef.current.exportAs(format),
+    toggleTheme: () => commandHandlersRef.current.toggleTheme(),
+    toggleSidebar: () => commandHandlersRef.current.toggleSidebar(),
+    syncFromDisk: () => commandHandlersRef.current.syncFromDisk(),
+  }), [setSurface]);
+
   return (
     <div className={`container immersive-shell${macWindowed ? ' mac-windowed' : ''}`}>
       <input
@@ -2397,6 +2436,11 @@ function MarkdownEditor() {
       />
       <div className="right-area immersive-main">
         <UpdateNotifier />
+        <CommandPalette
+          open={commandPaletteOpen}
+          onClose={closeCommandPalette}
+          commands={commands}
+        />
         {/* 唯一顶栏：折叠 + 面包屑 + 当前文档下拉 | AI 助手 + 主题 */}
         <EditorTopBar
           workspace={workspace}

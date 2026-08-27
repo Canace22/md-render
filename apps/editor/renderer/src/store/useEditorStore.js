@@ -111,7 +111,7 @@ const safeParseJSON = (value, fallback) => {
   }
 };
 
-const VALID_SURFACES = new Set([
+export const VALID_SURFACES = new Set([
   'overview',
   'daily',
   'canvas',

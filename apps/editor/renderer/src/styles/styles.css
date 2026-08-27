@@ -10043,3 +10043,80 @@ body.theme-dark .file-preview-iframe {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 命令面板（Cmd/Ctrl+K）─────────────────────────────────────────────── */
+.command-palette-wrap .ant-modal {
+    top: 12vh;
+}
+
+.command-palette {
+    background: var(--color-bg-surface);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+}
+
+.command-palette-search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.command-palette-search-icon {
+    color: var(--color-icon-neutral);
+    flex-shrink: 0;
+}
+
+.command-palette-search .ant-input {
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: var(--text-body);
+    padding: var(--space-xs) 0;
+}
+
+.command-palette-list {
+    list-style: none;
+    margin: 0;
+    padding: var(--space-xs);
+    max-height: 52vh;
+    overflow-y: auto;
+}
+
+.command-palette-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+    border-radius: var(--radius-m);
+    cursor: pointer;
+    color: var(--color-text-primary);
+}
+
+.command-palette-item.is-active {
+    background: var(--color-bg-active);
+    color: var(--color-text-active);
+}
+
+.command-palette-item-title {
+    flex: 1;
+    font-size: var(--text-body);
+}
+
+.command-palette-item-group {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.command-palette-item-enter {
+    color: var(--color-text-active);
+    flex-shrink: 0;
+}
+
+.command-palette-empty {
+    padding: var(--space-l) var(--space-m);
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-size: var(--text-body);
+}
+
