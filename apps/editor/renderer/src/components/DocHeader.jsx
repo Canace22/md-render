@@ -1,19 +1,17 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
-import { countWords } from '../utils/wordCount.js';
 import DocMetaPanel from './DocMetaPanel.jsx';
 
 /**
  * 文档标题块 —— 下沉进纸面，与正文同列。
  *
- * 标题下是一行弱化的元信息（所属目录 · 字数 · 字符数），元数据面板收在同一行的开关里，
- * 顶部因此不再需要单独的「标题 + 字数」横栏。
+ * 标题下保留所属目录，元数据面板收在同一行的开关里；
+ * 字数与字符数统一由底部状态栏展示。
  */
 export default function DocHeader({
   selectedFile,
   parentLabel,
-  content = '',
   allFiles,
   platformOptions,
   onTagsChange,
@@ -76,15 +74,7 @@ export default function DocHeader({
       </h1>
       {selectedFile && (
         <div className="doc-title-meta">
-          {parentLabel && (
-            <>
-              <span>{parentLabel}</span>
-              <span className="doc-title-meta-sep" aria-hidden="true">·</span>
-            </>
-          )}
-          <span data-testid="doc-wordcount">{countWords(content)} 字</span>
-          <span className="doc-title-meta-sep" aria-hidden="true">·</span>
-          <span>{content.length} 字符</span>
+          {parentLabel && <span>{parentLabel}</span>}
           <button
             type="button"
             className={`doc-meta-toggle${metaOpen ? ' is-open' : ''}`}

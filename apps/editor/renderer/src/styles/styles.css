@@ -1593,7 +1593,7 @@ a.sidebar-rail-btn:hover {
 
 /* ── 纸面内的文档标题块 ─────────────────────────────────────────────────── */
 .doc-title-block {
-    padding: 72px 104px 0;
+    padding: 40px 104px 0;
     background: var(--paper-bg);
 }
 
@@ -3672,7 +3672,7 @@ body.theme-light #markdown-output code {
     position: relative;
     width: min(980px, calc(100vw - 88px));
     margin: 0 auto;
-    background: transparent;
+    background: var(--paper-bg);
     padding: 0;
 }
 
@@ -4394,7 +4394,10 @@ body.theme-light #markdown-output code {
 /* 通用的 `#markdown-output { padding: 30px }` 是 id 选择器，优先级更高；
    这里同样按 id 限定，才能让正文和纸面里的标题块落在同一列上 */
 #markdown-output.paper-content {
+    margin-top: -1px;
     padding: 32px 104px 104px;
+    border-top: 0;
+    background: var(--paper-bg);
 }
 
 .blocknote-paper {

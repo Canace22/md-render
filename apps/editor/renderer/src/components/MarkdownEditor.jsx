@@ -2560,7 +2560,6 @@ function MarkdownEditor() {
                   <DocHeader
                     selectedFile={selectedFile}
                     parentLabel={selectedParentLabel}
-                    content={resolvedMarkdown}
                     allFiles={allFiles}
                     platformOptions={publishingPlatforms}
                     onTagsChange={setFileTags}
