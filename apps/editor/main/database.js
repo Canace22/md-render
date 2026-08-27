@@ -1,4 +1,7 @@
-import Database from 'better-sqlite3';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const Database = require('better-sqlite3');
 import path from 'path';
 import { app } from 'electron';
 import { EDITOR_STATE_KEYS } from '../shared/stateKeys.js';

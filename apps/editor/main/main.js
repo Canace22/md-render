@@ -1,7 +1,9 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, protocol } from 'electron';
+import { createRequire } from 'node:module';
 
 app.commandLine.appendSwitch('remote-debugging-port', '9222');
-import pkg from 'electron-updater';
+const require = createRequire(import.meta.url);
+const pkg = require('electron-updater');
 const { autoUpdater } = pkg;
 import path from 'path';
 import fs from 'fs/promises';
