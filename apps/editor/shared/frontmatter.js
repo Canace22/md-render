@@ -1,6 +1,7 @@
+import { parseFrontmatterDocument } from './frontmatterDocument.js';
+
 const FRONTMATTER_OPEN = '---';
 const FRONTMATTER_CLOSE = '---';
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?/;
 const KNOWN_FRONTMATTER_ORDER = [
   'title',
   'cover',
@@ -73,43 +74,6 @@ const normalizeStringArray = (value) => {
   return Array.from(new Set(list.map((item) => cleanString(item)).filter(Boolean)));
 };
 
-const parseFrontmatterObject = (rawFrontmatter = '') => {
-  const result = {};
-  const lines = String(rawFrontmatter ?? '').replace(/\r\n/g, '\n').split('\n');
-  let currentKey = null;
-
-  lines.forEach((line) => {
-    const listMatch = line.match(/^\s*-\s*(.+)\s*$/);
-    if (listMatch && currentKey) {
-      const nextItem = cleanString(parseYamlScalar(listMatch[1]));
-      if (!Array.isArray(result[currentKey])) {
-        result[currentKey] = result[currentKey] ? [result[currentKey]] : [];
-      }
-      if (nextItem) {
-        result[currentKey].push(nextItem);
-      }
-      return;
-    }
-
-    const keyMatch = line.match(/^([A-Za-z0-9_-]+):(?:\s*(.*))?$/);
-    if (!keyMatch) {
-      if (currentKey && typeof result[currentKey] === 'string') {
-        const continuation = cleanString(line);
-        if (continuation) {
-          result[currentKey] = [result[currentKey], continuation].filter(Boolean).join('\n');
-        }
-      }
-      return;
-    }
-
-    currentKey = keyMatch[1];
-    const rawValue = keyMatch[2] ?? '';
-    result[currentKey] = parseYamlScalar(rawValue);
-  });
-
-  return result;
-};
-
 const mergeKnownKeysFirst = (frontmatter = {}) => {
   const ordered = {};
   const source = frontmatter && typeof frontmatter === 'object' ? frontmatter : {};
@@ -144,30 +108,14 @@ export const buildClippingTags = (tags = []) => {
 };
 
 export const parseMarkdownFrontmatter = (rawContent = '') => {
-  const text = String(rawContent ?? '').replace(/\r\n/g, '\n');
-  const match = text.match(FRONTMATTER_RE);
-  if (!match) {
-    return {
-      hasFrontmatter: false,
-      frontmatter: null,
-      content: text,
-    };
+  const doc = parseFrontmatterDocument(rawContent);
+  if (!doc.hasFrontmatter) {
+    return { hasFrontmatter: false, frontmatter: null, content: doc.content };
   }
-
-  const frontmatter = parseFrontmatterObject(match[1]);
-  if (Object.keys(frontmatter).length === 0) {
-    return {
-      hasFrontmatter: false,
-      frontmatter: null,
-      content: text,
-    };
-  }
-  const content = text.slice(match[0].length).replace(/^\n/, '');
-
   return {
     hasFrontmatter: true,
-    frontmatter,
-    content,
+    frontmatter: doc.frontmatter,
+    content: doc.content,
   };
 };
 

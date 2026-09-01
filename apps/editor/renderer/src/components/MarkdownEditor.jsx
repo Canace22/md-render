@@ -345,6 +345,7 @@ function MarkdownEditor() {
     setWorkspaceCanvas,
     setFileTags,
     setFileKnowledgeMeta,
+    setFileFrontmatterProperty,
     toggleSidebarCollapsed,
     toggleTocCollapsed,
     updateSelectedFileContent,
@@ -2587,6 +2588,7 @@ function MarkdownEditor() {
                     platformOptions={publishingPlatforms}
                     onTagsChange={setFileTags}
                     onKnowledgeMetaChange={setFileKnowledgeMeta}
+                    onFrontmatterPropertyChange={setFileFrontmatterProperty}
                     onOpenFile={selectNode}
                     onRestoreVersion={updateSelectedFileContent}
                     titleEditable={!selectedInLocalProject || localProjectSupported}

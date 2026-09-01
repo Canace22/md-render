@@ -16,6 +16,7 @@ export default function DocHeader({
   platformOptions,
   onTagsChange,
   onKnowledgeMetaChange,
+  onFrontmatterPropertyChange,
   onOpenFile,
   onRestoreVersion,
   titleEditable = true,
@@ -92,6 +93,7 @@ export default function DocHeader({
           allFiles={allFiles}
           platformOptions={platformOptions}
           onMetaChange={onKnowledgeMetaChange}
+          onFrontmatterPropertyChange={onFrontmatterPropertyChange}
           onTagsChange={onTagsChange}
           onOpenFile={onOpenFile}
           onRestoreVersion={onRestoreVersion}

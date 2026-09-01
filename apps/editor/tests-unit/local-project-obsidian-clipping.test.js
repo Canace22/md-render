@@ -59,7 +59,11 @@ describe('local project obsidian clipping compatibility', () => {
     expect(file?.type).toBe('file');
     expect(file?.content).toBe('You only need 1 hour.\n\n1 hour of building. 1 hour of writing.\n');
     expect(file?.diskContentSnapshot).toBe(file?.content);
+    expect(file?.title).toBe('Post by @thedankoe on X');
     expect(file?.url).toBe('https://x.com/thedankoe/status/206');
+    expect(file?.sourceAuthor).toBe('[[@thedankoe]]');
+    expect(file?.sourcePublishedAt).toBe('2026-06-07');
+    expect(file?.createdAt).toBe(Date.parse('2026-06-07'));
     expect(file?.summary).toBe('You only need 1 hour.');
     expect(file?.tags).toEqual(['clippings']);
     expect(file?.nodeType).toBe('bookmark');
@@ -98,7 +102,10 @@ describe('local project obsidian clipping compatibility', () => {
     expect(nextRaw).toContain('tags:');
     expect(nextRaw).toContain('  - clippings');
     expect(nextRaw).toContain('  - writing');
+    expect(nextRaw).toContain('title: "Post by @thedankoe on X"');
     expect(nextRaw).toContain('author: "[[@thedankoe]]"');
+    expect(nextRaw).toContain('published: 2026-06-07');
+    expect(nextRaw).toContain('created: 2026-06-07');
     expect(nextRaw).toContain('You only need 1 hour.');
   });
 });

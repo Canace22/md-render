@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
+  metadataToFrontmatterPatch,
+  normalizeDate,
+  pickCustomProperties,
+} from '../../../shared/properties.js';
+import {
   createId,
   createDefaultWorkspace,
   getDefaultMarkdown,
@@ -568,6 +573,57 @@ const areCanvasStatesEqual = (left, right) => {
   return JSON.stringify(sanitizeCanvasState(left)) === JSON.stringify(sanitizeCanvasState(right));
 };
 
+const isEmptyFrontmatterValue = (value) => (
+  value == null
+  || (typeof value === 'string' && value.trim() === '')
+  || (Array.isArray(value) && value.length === 0)
+);
+
+const CONTENT_METADATA_FRONTMATTER_KEYS = new Set([
+  'title', 'author', 'published', 'created',
+]);
+
+const pickFrontmatterBackedMetadataField = (node, field, frontmatterKey) => {
+  if (Object.prototype.hasOwnProperty.call(node?.frontmatter ?? {}, frontmatterKey)) {
+    return { [field]: node.frontmatter[frontmatterKey] };
+  }
+  if (Object.prototype.hasOwnProperty.call(node ?? {}, field)) {
+    return { [field]: node[field] };
+  }
+  return {};
+};
+
+const syncContentMetadataFrontmatter = (frontmatter = {}, metadata = {}) => {
+  let next = null;
+  Object.entries(metadataToFrontmatterPatch(metadata)).forEach(([key, value]) => {
+    if (!CONTENT_METADATA_FRONTMATTER_KEYS.has(key)) return;
+    if (!next) next = { ...(frontmatter ?? {}) };
+    if (isEmptyFrontmatterValue(value)) delete next[key];
+    else next[key] = value;
+  });
+  return next;
+};
+
+const PLATFORM_ARTICLE_FRONTMATTER_KEYS = Object.freeze([
+  'title', 'source', 'published', 'created', 'description',
+]);
+
+const isPlatformArticleNode = (node) => {
+  return Boolean(String(node?.frontmatter?.platform ?? '').trim());
+};
+
+const collectPreservedEmptyFrontmatterKeys = (node) => {
+  const keys = new Set(
+    Object.entries(node?.frontmatter ?? {})
+      .filter(([, value]) => isEmptyFrontmatterValue(value))
+      .map(([key]) => key),
+  );
+  if (isPlatformArticleNode(node)) {
+    PLATFORM_ARTICLE_FRONTMATTER_KEYS.forEach((key) => keys.add(key));
+  }
+  return [...keys];
+};
+
 const buildLocalProjectMetadataPayload = (node) => {
   if (!node || node.type !== 'file' || !node.projectRootPath || !node.relativePath) {
     return null;
@@ -576,8 +632,13 @@ const buildLocalProjectMetadataPayload = (node) => {
     projectRootPath: node.projectRootPath,
     relativePath: node.relativePath,
     metadata: {
+      ...pickFrontmatterBackedMetadataField(node, 'title', 'title'),
+      ...pickFrontmatterBackedMetadataField(node, 'sourceAuthor', 'author'),
+      ...pickFrontmatterBackedMetadataField(node, 'sourcePublishedAt', 'published'),
+      ...pickFrontmatterBackedMetadataField(node, 'createdAt', 'created'),
       nodeType: node.nodeType,
       summary: node.summary,
+      cover: node.cover,
       url: node.url,
       aliases: node.aliases,
       relatedIds: node.relatedIds,
@@ -586,14 +647,30 @@ const buildLocalProjectMetadataPayload = (node) => {
       scheduledPublishAt: node.scheduledPublishAt,
       sourceMaterialIds: node.sourceMaterialIds,
       tags: node.tags,
+      customProperties: pickCustomProperties(node.frontmatter),
+      preserveEmptyFrontmatterKeys: collectPreservedEmptyFrontmatterKeys(node),
     },
   };
 };
 
-const persistLocalProjectMetadata = (node) => {
+const saveLocalProjectMetadataAndWait = async (node, customOverride = null) => {
   const payload = buildLocalProjectMetadataPayload(node);
-  if (!payload) return;
-  saveLocalProjectMetadata(payload).catch((error) => {
+  if (!payload) return null;
+  if (customOverride) {
+    payload.metadata.customProperties = {
+      ...payload.metadata.customProperties,
+      ...customOverride,
+    };
+  }
+  const result = await saveLocalProjectMetadata(payload);
+  if (result?.ok === false) {
+    throw new Error(result.error || '本地项目元数据保存失败。');
+  }
+  return result;
+};
+
+const persistLocalProjectMetadata = (node, customOverride = null) => {
+  saveLocalProjectMetadataAndWait(node, customOverride).catch((error) => {
     console.error('[store] 本地项目元数据保存失败:', error);
   });
 };
@@ -1128,6 +1205,20 @@ export const useEditorStore = create(
         const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           const nextPatch = {};
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'title')) {
+            nextPatch.title = String(patch.title ?? '').trim();
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'sourceAuthor')) {
+            nextPatch.sourceAuthor = String(patch.sourceAuthor ?? '').trim();
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'sourcePublishedAt')) {
+            nextPatch.sourcePublishedAt = normalizeDate(patch.sourcePublishedAt);
+          }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'createdAt')) {
+            const createdDate = normalizeDate(patch.createdAt);
+            const createdAt = createdDate ? Date.parse(createdDate) : NaN;
+            nextPatch.createdAt = Number.isFinite(createdAt) ? createdAt : '';
+          }
           if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'nodeType')) {
             nextPatch.nodeType = normalizeNodeType(patch.nodeType);
           }
@@ -1152,15 +1243,50 @@ export const useEditorStore = create(
           if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'cover')) {
             nextPatch.cover = String(patch.cover ?? '').trim();
           }
+          if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'url')) {
+            nextPatch.url = String(patch.url ?? '').trim();
+          }
           if (Object.prototype.hasOwnProperty.call(patch ?? {}, 'sourceMaterialIds')) {
             nextPatch.sourceMaterialIds = sanitizeStringList(patch.sourceMaterialIds);
           }
-          return { ...node, ...createDefaultKnowledgeFields(node), ...nextPatch };
+          const nextFrontmatter = syncContentMetadataFrontmatter(node.frontmatter, nextPatch);
+          return {
+            ...node,
+            ...createDefaultKnowledgeFields(node),
+            ...nextPatch,
+            ...(nextFrontmatter ? { frontmatter: nextFrontmatter } : {}),
+          };
         });
         const nextNode = findNodeById(updated, fileId);
         persistWorkspace(updated);
         set({ workspace: updated });
         persistLocalProjectMetadata(nextNode);
+      },
+
+      /**
+       * 写用户自己加的 frontmatter 属性（内置属性走 setFileKnowledgeMeta）。
+       * 值为空表示把这一行从 frontmatter 里删掉。
+       */
+      setFileFrontmatterProperty: (fileId, key, value) => {
+        const propertyKey = String(key ?? '').trim();
+        if (!propertyKey) return;
+
+        const isEmpty = value === '' || value == null
+          || (Array.isArray(value) && value.length === 0);
+
+        const updated = updateNodeById(get().workspace, fileId, (node) => {
+          if (node.type !== 'file') return node;
+          const nextFrontmatter = { ...(node.frontmatter ?? {}) };
+          if (isEmpty) delete nextFrontmatter[propertyKey];
+          else nextFrontmatter[propertyKey] = value;
+          return { ...node, frontmatter: nextFrontmatter };
+        });
+
+        const nextNode = findNodeById(updated, fileId);
+        persistWorkspace(updated);
+        set({ workspace: updated });
+        // 删除时要显式传空值，main 才知道去掉这一行
+        persistLocalProjectMetadata(nextNode, { [propertyKey]: isEmpty ? '' : value });
       },
 
       setWorkspace: (workspace) => set({ workspace }),

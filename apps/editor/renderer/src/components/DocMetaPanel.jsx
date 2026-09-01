@@ -1,109 +1,85 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Select } from 'antd';
+import { ArrowLeft, Clock, FileText, Link, Plus } from 'lucide-react';
 import {
-  ArrowLeft, CalendarClock, Clock, FileText, GitBranch,
-  Image, Link, Link2, PackageSearch, X,
-} from 'lucide-react';
-import {
-  KNOWLEDGE_NODE_TYPE_OPTIONS,
-} from '../store/workspaceUtils.js';
+  DRAFT_STATUS_OPTIONS,
+  NODE_TYPE_OPTIONS,
+  PROPERTY_TEMPLATES,
+  resolveVisibleProperties,
+} from '../../../shared/properties.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 import {
   dbGetBacklinks,
   dbGetVersionContent,
   dbGetVersions,
-  hasCoverImagePicker,
   hasDbBridge,
-  selectCoverImage,
 } from '../services/electronBridge.js';
-import RelatedDocPicker from './RelatedDocPicker.jsx';
-
-/* ── constants ─────────────────────────────────────────────── */
-
-const DEFAULT_STATUS_OPTIONS = [
-  { value: 'idea', label: '选题中' },
-  { value: 'collecting', label: '收集中' },
-  { value: 'draft', label: '草稿' },
-  { value: 'drafting', label: '写作中' },
-  { value: 'revising', label: '修改中' },
-  { value: 'ready', label: '待发布' },
-  { value: 'published', label: '已发布' },
-];
+import PropertyField from './properties/PropertyField.jsx';
 
 /* ── pure helpers ──────────────────────────────────────────── */
-
-const toPreviewSrc = (value) => {
-  if (!value) return '';
-  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
-  // local absolute path → file:// protocol for <img> preview
-  if (value.startsWith('/') || /^[A-Z]:\\/i.test(value)) {
-    return `file://${value}`;
-  }
-  return value;
-};
 
 const formatVersionDate = (ts) => {
   if (!ts) return '';
   try {
     return new Date(ts).toLocaleString('zh-CN', {
-      month: 'numeric', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
+      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
   } catch { return ''; }
 };
 
-const normalizePlatforms = (file) => {
-  const value = file?.targetPlatforms ?? file?.platforms ?? [];
-  return Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
+const toList = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value ? [value] : [];
 };
 
-const buildPlatformPatch = (current, value) =>
-  current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
+/** 属性当前的值：内置属性读节点字段，用户自加的读 frontmatter */
+const resolvePropertyValue = (file, property) => {
+  if (property.custom) return file?.frontmatter?.[property.key] ?? '';
 
-const buildVisiblePlatformOptions = (platformOptions, currentPlatforms) => {
-  const baseOptions = Array.isArray(platformOptions) ? platformOptions : [];
-  const knownValues = new Set(baseOptions.map((option) => option.value));
-  const extraOptions = currentPlatforms
-    .filter((value) => !knownValues.has(value))
-    .map((value) => ({ value, label: value }));
-  return [...baseOptions, ...extraOptions];
+  switch (property.field) {
+    case 'title': return file?.title ?? file?.frontmatter?.title ?? '';
+    case 'createdAt': return Object.prototype.hasOwnProperty.call(file?.frontmatter ?? {}, 'created')
+      ? file.frontmatter.created
+      : (file?.createdAt ?? '');
+    case 'draftStatus': return file?.draftStatus ?? file?.status ?? 'drafting';
+    case 'nodeType': return file?.nodeType ?? 'document';
+    case 'targetPlatforms': return toList(file?.targetPlatforms ?? file?.platforms);
+    case 'scheduledPublishAt': return file?.scheduledPublishAt ?? file?.publishAt ?? '';
+    case 'relatedIds': return toList(file?.relatedIds);
+    case 'sourceMaterialIds': return toList(file?.sourceMaterialIds ?? file?.sourceMaterials);
+    case 'tags': return toList(file?.tags);
+    case 'aliases': return toList(file?.aliases);
+    default: return file?.[property.field] ?? '';
+  }
 };
 
-const getCurrentStatus = (file) => file?.draftStatus ?? file?.status ?? 'drafting';
-
-const normalizeSourceMaterials = (file, filesById) => {
-  const value = file?.sourceMaterials ?? file?.sourceMaterialIds ?? [];
-  if (!Array.isArray(value)) return [];
-  return value.map((item, index) => {
-    if (typeof item === 'string') {
-      const linked = filesById.get(item);
-      return { key: item, label: linked?.name ?? item, linkedFileId: linked?.id ?? null, tone: linked ? 'linked' : 'plain' };
-    }
-    if (!item || typeof item !== 'object') return null;
-    const linkedId = item.fileId ?? item.documentId ?? item.id ?? null;
-    const linked = linkedId ? filesById.get(linkedId) : null;
-    return {
-      key: linkedId ?? item.url ?? item.title ?? `source-${index}`,
-      label: item.title ?? item.name ?? linked?.name ?? '未命名素材',
-      linkedFileId: linked?.id ?? null,
-      tone: item.url ? 'external' : linked ? 'linked' : 'plain',
-    };
-  }).filter(Boolean);
+/** 已选但不在选项表里的值也要显示出来，否则用户会以为丢了 */
+const withUnknownOptions = (options, currentValues) => {
+  const known = new Set(options.map((option) => option.value));
+  return [
+    ...options,
+    ...currentValues.filter((value) => !known.has(value)).map((value) => ({ value, label: value })),
+  ];
 };
 
 const collectReusableTags = (allFiles) => {
   const counts = new Map();
-
   (allFiles ?? []).forEach((file) => {
     (file?.tags ?? []).forEach((tag) => {
-      if (!tag) return;
-      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     });
   });
-
   return Array.from(counts.entries())
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag]) => ({ label: tag, value: tag }));
+};
+
+const isPlatformArticle = (file) => {
+  return Boolean(String(file?.frontmatter?.platform ?? '').trim());
+};
+
+const resolveTemplateKeys = (file) => {
+  if (isPlatformArticle(file)) return PROPERTY_TEMPLATES.platformArticle;
+  return file?.nodeType === 'bookmark' ? PROPERTY_TEMPLATES.bookmark : PROPERTY_TEMPLATES.draft;
 };
 
 /* ── main component ────────────────────────────────────────── */
@@ -113,29 +89,23 @@ export default function DocMetaPanel({
   allFiles = [],
   onMetaChange,
   onTagsChange,
+  onFrontmatterPropertyChange,
   onOpenFile,
   onManageSourceMaterials,
   onManageRelatedDocs,
   onRestoreVersion,
-  statusOptions = DEFAULT_STATUS_OPTIONS,
+  statusOptions = DRAFT_STATUS_OPTIONS,
   platformOptions = PUBLISHING_PLATFORM_OPTIONS,
   disabled = false,
 }) {
-  const [summaryDraft, setSummaryDraft] = useState('');
-  const [publishAtDraft, setPublishAtDraft] = useState('');
-  const [coverDraft, setCoverDraft] = useState('');
-  const [coverError, setCoverError] = useState(false);
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
   const [restoringVersionId, setRestoringVersionId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-
-  useEffect(() => {
-    setSummaryDraft(selectedFile?.summary ?? '');
-    setPublishAtDraft(selectedFile?.scheduledPublishAt ?? selectedFile?.publishAt ?? '');
-    setCoverDraft(selectedFile?.cover ?? '');
-    setCoverError(false);
-  }, [selectedFile]);
+  const [addingProperty, setAddingProperty] = useState(false);
+  const [newPropertyName, setNewPropertyName] = useState('');
+  // 刚添加、还没填值的属性：先在面板上占位，填了值才落盘
+  const [pendingKeys, setPendingKeys] = useState([]);
 
   useEffect(() => {
     if (!selectedFile?.id || !hasDbBridge()) { setBacklinks([]); return; }
@@ -151,74 +121,66 @@ export default function DocMetaPanel({
       .catch(() => setVersions([]));
   }, [selectedFile?.id]);
 
+  useEffect(() => {
+    setAddingProperty(false);
+    setNewPropertyName('');
+    setPendingKeys([]);
+  }, [selectedFile?.id]);
+
   const filesById = useMemo(() => new Map((allFiles ?? []).map((f) => [f.id, f])), [allFiles]);
-  const currentPlatforms = useMemo(() => normalizePlatforms(selectedFile), [selectedFile]);
-  const visiblePlatformOptions = useMemo(
-    () => buildVisiblePlatformOptions(platformOptions, currentPlatforms),
-    [platformOptions, currentPlatforms],
-  );
-  const sourceMaterials = useMemo(() => normalizeSourceMaterials(selectedFile, filesById), [selectedFile, filesById]);
-  const relatedDocs = (selectedFile?.relatedIds ?? []).map((id) => filesById.get(id)).filter(Boolean);
-  const reusableTags = useMemo(
-    () => collectReusableTags(allFiles).map((item) => ({ label: item.tag, value: item.tag })),
-    [allFiles],
-  );
-  const currentStatus = getCurrentStatus(selectedFile);
+  const tagOptions = useMemo(() => collectReusableTags(allFiles), [allFiles]);
+  const properties = useMemo(() => {
+    const frontmatter = { ...(selectedFile?.frontmatter ?? {}) };
+    pendingKeys.forEach((key) => {
+      if (!(key in frontmatter)) frontmatter[key] = '';
+    });
+    return resolveVisibleProperties(frontmatter, resolveTemplateKeys(selectedFile));
+  }, [selectedFile, pendingKeys, platformOptions]);
 
-  const commitSummary = () => {
-    if (!selectedFile) return;
-    const next = summaryDraft.trim();
-    if (next === (selectedFile.summary ?? '')) return;
-    onMetaChange?.(selectedFile.id, { summary: next });
+  if (!selectedFile) return null;
+
+  const handleChange = (property, nextValue) => {
+    if (property.custom) {
+      onFrontmatterPropertyChange?.(selectedFile.id, property.key, nextValue);
+      return;
+    }
+    if (property.field === 'tags') {
+      onTagsChange?.(selectedFile.id, nextValue);
+      return;
+    }
+    onMetaChange?.(selectedFile.id, { [property.field]: nextValue });
   };
 
-  const commitPublishAt = () => {
-    if (!selectedFile) return;
-    const next = publishAtDraft.trim();
-    if (next === (selectedFile.scheduledPublishAt ?? selectedFile.publishAt ?? '')) return;
-    onMetaChange?.(selectedFile.id, { scheduledPublishAt: next });
+  const resolveOptions = (property, value) => {
+    if (property.key === 'status') return statusOptions;
+    if (property.key === 'type') return NODE_TYPE_OPTIONS;
+    if (property.key === 'platforms') return withUnknownOptions(platformOptions, value ?? []);
+    return property.options ?? [];
   };
 
-  const commitCover = () => {
-    if (!selectedFile) return;
-    const next = coverDraft.trim();
-    if (next === (selectedFile.cover ?? '')) return;
-    onMetaChange?.(selectedFile.id, { cover: next });
+  const resolveExtraAction = (property) => {
+    if (property.key === 'sources' && onManageSourceMaterials) {
+      return <button type="button" className="doc-meta-action" onClick={() => onManageSourceMaterials(selectedFile.id)} disabled={disabled}>管理</button>;
+    }
+    if (property.key === 'related' && onManageRelatedDocs) {
+      return <button type="button" className="doc-meta-action" onClick={() => onManageRelatedDocs(selectedFile.id)} disabled={disabled}>管理</button>;
+    }
+    if (property.custom) {
+      const removeProperty = () => {
+        setPendingKeys((keys) => keys.filter((key) => key !== property.key));
+        handleChange(property, '');
+      };
+      return <button type="button" className="doc-meta-action" onClick={removeProperty} disabled={disabled}>删除</button>;
+    }
+    return null;
   };
 
-  const clearCover = () => {
-    if (!selectedFile) return;
-    setCoverDraft('');
-    setCoverError(false);
-    onMetaChange?.(selectedFile.id, { cover: '' });
-  };
-
-  const selectLocalCoverImage = async () => {
-    const result = await selectCoverImage();
-    if (result?.canceled || !result?.filePath) return;
-    setCoverDraft(result.filePath);
-    setCoverError(false);
-    onMetaChange?.(selectedFile.id, { cover: result.filePath });
-  };
-
-  const handleTagsChange = (nextTags) => {
-    if (!selectedFile || !onTagsChange) return;
-    onTagsChange(selectedFile.id, nextTags);
-  };
-
-  const handlePlatformToggle = (value) => {
-    if (!selectedFile) return;
-    onMetaChange?.(selectedFile.id, { targetPlatforms: buildPlatformPatch(currentPlatforms, value) });
-  };
-
-  const addRelatedDoc = (targetId) => {
-    if (!selectedFile || !targetId) return;
-    onMetaChange?.(selectedFile.id, { relatedIds: [...(selectedFile.relatedIds ?? []), targetId] });
-  };
-
-  const removeRelatedDoc = (targetId) => {
-    if (!selectedFile) return;
-    onMetaChange?.(selectedFile.id, { relatedIds: (selectedFile.relatedIds ?? []).filter((id) => id !== targetId) });
+  const commitNewProperty = () => {
+    const key = newPropertyName.trim();
+    setAddingProperty(false);
+    setNewPropertyName('');
+    if (!key || properties.some((property) => property.key === key)) return;
+    setPendingKeys((keys) => [...keys, key]);
   };
 
   const handleRestoreVersion = async (versionId) => {
@@ -226,236 +188,62 @@ export default function DocMetaPanel({
     setRestoringVersionId(versionId);
     try {
       const res = await dbGetVersionContent(versionId);
-      if (res?.ok && res.version?.content != null) {
-        onRestoreVersion(res.version.content);
-      }
+      if (res?.ok && res.version?.content != null) onRestoreVersion(res.version.content);
     } finally {
       setRestoringVersionId(null);
     }
   };
 
-  if (!selectedFile) return null;
+  const relationContext = {
+    filesById,
+    selectedFile,
+    allFiles,
+    onOpenFile,
+  };
 
   return (
     <div className="doc-meta-panel" data-testid="doc-meta-panel">
-      {/* ── row 1: status + type + badges ── */}
-      <div className="doc-meta-row">
-        <label className="doc-meta-field doc-meta-field--half">
-          <span className="doc-meta-label">状态</span>
-          <select
-            className="doc-meta-select"
-            value={currentStatus}
-            onChange={(e) => onMetaChange?.(selectedFile.id, { draftStatus: e.target.value })}
-            disabled={disabled}
-          >
-            {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </label>
-        <label className="doc-meta-field doc-meta-field--half">
-          <span className="doc-meta-label">类型</span>
-          <select
-            className="doc-meta-select"
-            value={selectedFile.nodeType ?? 'document'}
-            onChange={(e) => onMetaChange?.(selectedFile.id, { nodeType: e.target.value })}
-            disabled={disabled}
-          >
-            {KNOWLEDGE_NODE_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </label>
-      </div>
+      {properties.map((property) => {
+        const value = resolvePropertyValue(selectedFile, property);
+        return (
+          <PropertyField
+            key={property.key}
+            property={property}
+            value={value}
+            options={resolveOptions(property, value)}
+            tagOptions={property.key === 'tags' ? tagOptions : []}
+            onChange={(next) => handleChange(property, next)}
+            disabled={disabled || (property.field === 'tags' && !onTagsChange)}
+            relationContext={relationContext}
+            extraAction={resolveExtraAction(property)}
+          />
+        );
+      })}
 
-      {/* ── row 2: summary ── */}
-      <label className="doc-meta-field">
-        <span className="doc-meta-label">摘要</span>
-        <textarea
-          className="doc-meta-textarea"
-          value={summaryDraft}
-          placeholder="一句话说清核心观点或知识点。"
-          onChange={(e) => setSummaryDraft(e.target.value)}
-          onBlur={commitSummary}
-          disabled={disabled}
-        />
-      </label>
-
-      {/* ── cover image ── */}
-      <div className="doc-meta-field">
-        <div className="doc-meta-section-head">
-          <span className="doc-meta-label">
-            <Image size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
-            封面图片
-          </span>
-          <span className="doc-meta-cover-actions">
-            {hasCoverImagePicker() && (
-              <button type="button" className="doc-meta-action" onClick={selectLocalCoverImage} disabled={disabled}>选择图片</button>
-            )}
-            {coverDraft && (
-              <button type="button" className="doc-meta-action" onClick={clearCover} disabled={disabled}>清除</button>
-            )}
-          </span>
-        </div>
-        <input
-          className="doc-meta-input"
-          value={coverDraft}
-          placeholder="输入图片 URL 或本地路径"
-          onChange={(e) => { setCoverDraft(e.target.value); setCoverError(false); }}
-          onBlur={commitCover}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); commitCover(); }
-            if (e.key === 'Escape') { e.preventDefault(); setCoverDraft(selectedFile?.cover ?? ''); setCoverError(false); }
-          }}
-          disabled={disabled}
-        />
-        {coverDraft && (
-          <div className="doc-meta-cover-preview">
-            {coverError ? (
-              <div className="doc-meta-cover-fallback">图片加载失败</div>
-            ) : (
-              <img
-                src={toPreviewSrc(coverDraft)}
-                alt="封面预览"
-                className="doc-meta-cover-thumb"
-                onError={() => setCoverError(true)}
-              />
-            )}
-          </div>
-        )}
-      </div>
-
-      {selectedFile.url && (
-        <div className="doc-meta-field">
-          <span className="doc-meta-label">
-            <Link size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
-            来源链接
-          </span>
-          <div className="doc-meta-chip-list">
-            <a
-              className="doc-meta-chip doc-meta-chip--external doc-meta-chip-link"
-              href={selectedFile.url}
-              target="_blank"
-              rel="noreferrer"
-              title={selectedFile.url}
-            >
-              <span>{selectedFile.url}</span>
-            </a>
-          </div>
-        </div>
-      )}
-
-      <div className="doc-meta-field">
-        <span className="doc-meta-label">标签</span>
-        <Select
-          mode="tags"
-          size="small"
-          className="doc-meta-tag-select"
-          value={selectedFile.tags ?? []}
-          options={reusableTags}
-          placeholder="选择已有标签或直接输入"
-          onChange={handleTagsChange}
-          disabled={disabled || !onTagsChange}
-          maxTagCount="responsive"
-          open={reusableTags.length > 0 ? undefined : false}
-          popupClassName="doc-meta-tag-select-dropdown"
-        />
-      </div>
-
-      <div className="doc-meta-divider" />
-
-      {/* ── row 4: platforms + publish time ── */}
-      <div className="doc-meta-row doc-meta-row--publish">
-        <div className="doc-meta-field doc-meta-field--grow">
-          <span className="doc-meta-label">平台</span>
-          <div className="doc-meta-platform-list" role="group" aria-label="选择目标平台">
-            {visiblePlatformOptions.map((o) => {
-              const checked = currentPlatforms.includes(o.value);
-              return (
-                <label key={o.value} className={`doc-meta-platform-chip${checked ? ' is-selected' : ''}`}>
-                  <input type="checkbox" className="doc-meta-platform-input" checked={checked} onChange={() => handlePlatformToggle(o.value)} disabled={disabled} />
-                  <span>{o.label}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-        <label className="doc-meta-field doc-meta-field--time">
-          <span className="doc-meta-label">
-            <CalendarClock size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
-            排期
-          </span>
+      {/* ── 添加属性 ── */}
+      <div className="doc-meta-field doc-meta-add-property">
+        {addingProperty ? (
           <input
             className="doc-meta-input"
-            value={publishAtDraft}
-            placeholder="周三 20:00"
-            onChange={(e) => setPublishAtDraft(e.target.value)}
-            onBlur={commitPublishAt}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); commitPublishAt(); }
-              if (e.key === 'Escape') { e.preventDefault(); setPublishAtDraft(selectedFile?.scheduledPublishAt ?? selectedFile?.publishAt ?? ''); }
+            autoFocus
+            value={newPropertyName}
+            placeholder="属性名（英文更利于 Obsidian 识别）"
+            onChange={(event) => setNewPropertyName(event.target.value)}
+            onBlur={commitNewProperty}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); commitNewProperty(); }
+              if (event.key === 'Escape') { event.preventDefault(); setAddingProperty(false); setNewPropertyName(''); }
             }}
             disabled={disabled}
           />
-        </label>
-      </div>
-
-      <div className="doc-meta-divider" />
-
-      {/* ── row 5: source materials ── */}
-      <div className="doc-meta-field">
-        <div className="doc-meta-section-head">
-          <span className="doc-meta-label">
-            <PackageSearch size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
-            来源素材
-          </span>
-          {onManageSourceMaterials && (
-            <button type="button" className="doc-meta-action" onClick={() => onManageSourceMaterials(selectedFile.id)} disabled={disabled}>管理</button>
-          )}
-        </div>
-        {sourceMaterials.length > 0 && (
-          <div className="doc-meta-chip-list">
-            {sourceMaterials.map((item) => {
-              const openable = Boolean(item.linkedFileId && onOpenFile);
-              const El = openable ? 'button' : 'span';
-              return (
-                <El key={item.key} type={openable ? 'button' : undefined} className={`doc-meta-chip doc-meta-chip--${item.tone}`} onClick={openable ? () => onOpenFile(item.linkedFileId) : undefined}>
-                  <span>{item.label}</span>
-                </El>
-              );
-            })}
-          </div>
+        ) : (
+          <button type="button" className="doc-meta-action" onClick={() => setAddingProperty(true)} disabled={disabled}>
+            <Plus size={12} strokeWidth={2} /> 添加属性
+          </button>
         )}
       </div>
 
-      {/* ── row 6: related docs ── */}
-      <div className="doc-meta-field">
-        <div className="doc-meta-section-head">
-          <span className="doc-meta-label">
-            <Link2 size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
-            关联文档
-          </span>
-          {onManageRelatedDocs && (
-            <button type="button" className="doc-meta-action" onClick={() => onManageRelatedDocs(selectedFile.id)} disabled={disabled}>管理</button>
-          )}
-        </div>
-        <RelatedDocPicker
-          key={selectedFile.id}
-          selectedFile={selectedFile}
-          allFiles={allFiles}
-          onAdd={addRelatedDoc}
-          disabled={disabled}
-        />
-        {relatedDocs.length > 0 && (
-          <div className="doc-meta-chip-list">
-            {relatedDocs.map((file) => (
-              <span key={file.id} className="doc-meta-chip doc-meta-chip--linked">
-                <GitBranch size={11} strokeWidth={1.8} />
-                <button type="button" onClick={() => onOpenFile?.(file.id)}><span>{file.name}</span></button>
-                <button type="button" onClick={() => removeRelatedDoc(file.id)} aria-label={`删除关联 ${file.name}`}><X size={11} strokeWidth={2} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── row 7: backlinks ── */}
+      {/* ── 反向链接 ── */}
       {hasDbBridge() && backlinks.length > 0 && (
         <div className="doc-meta-field">
           <span className="doc-meta-label">
@@ -463,10 +251,10 @@ export default function DocMetaPanel({
             反向链接
           </span>
           <div className="doc-meta-chip-list">
-            {backlinks.map((bl) => (
-              <button key={bl.id} type="button" className="doc-meta-chip doc-meta-chip--backlink" onClick={() => onOpenFile?.(bl.id)} title={`打开 ${bl.name}`}>
+            {backlinks.map((backlink) => (
+              <button key={backlink.id} type="button" className="doc-meta-chip doc-meta-chip--backlink" onClick={() => onOpenFile?.(backlink.id)} title={`打开 ${backlink.name}`}>
                 <FileText size={11} strokeWidth={1.8} />
-                <span>{bl.name.replace(/\.md$/i, '')}</span>
+                <span>{backlink.name.replace(/\.md$/i, '')}</span>
                 <ArrowLeft size={10} strokeWidth={2} />
               </button>
             ))}
@@ -474,15 +262,11 @@ export default function DocMetaPanel({
         </div>
       )}
 
-      {/* ── row 8: version history ── */}
+      {/* ── 版本历史 ── */}
       {hasDbBridge() && versions.length > 0 && (
         <>
           <div className="doc-meta-divider" />
-          <button
-            type="button"
-            className="doc-meta-history-toggle"
-            onClick={() => setHistoryOpen((v) => !v)}
-          >
+          <button type="button" className="doc-meta-history-toggle" onClick={() => setHistoryOpen((open) => !open)}>
             <Clock size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
             版本历史
             <span className="doc-meta-history-count">{versions.length}</span>
@@ -490,13 +274,13 @@ export default function DocMetaPanel({
           </button>
           {historyOpen && (
             <div className="doc-meta-versions-list">
-              {versions.slice(0, 10).map((ver) => (
-                <div key={ver.id} className="doc-meta-version-row">
-                  <span className="doc-meta-version-date">{formatVersionDate(ver.created_at)}</span>
-                  <span className="doc-meta-version-size">{ver.char_count} 字</span>
+              {versions.slice(0, 10).map((version) => (
+                <div key={version.id} className="doc-meta-version-row">
+                  <span className="doc-meta-version-date">{formatVersionDate(version.created_at)}</span>
+                  <span className="doc-meta-version-size">{version.char_count} 字</span>
                   {onRestoreVersion && (
-                    <button type="button" className="doc-meta-version-restore" disabled={restoringVersionId === ver.id} onClick={() => handleRestoreVersion(ver.id)}>
-                      {restoringVersionId === ver.id ? '恢复中…' : '恢复'}
+                    <button type="button" className="doc-meta-version-restore" disabled={restoringVersionId === version.id} onClick={() => handleRestoreVersion(version.id)}>
+                      {restoringVersionId === version.id ? '恢复中…' : '恢复'}
                     </button>
                   )}
                 </div>

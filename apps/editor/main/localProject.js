@@ -1,12 +1,17 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { extractKnowledgeMetadataFromFrontmatter } from '../shared/frontmatter.js';
 import {
-  applyKnowledgeMetadataToFrontmatter,
-  extractKnowledgeMetadataFromFrontmatter,
-  parseMarkdownFrontmatter,
-  serializeMarkdownFrontmatter,
-} from '../shared/frontmatter.js';
+  parseFrontmatterDocument,
+  replaceMarkdownBody,
+  updateFrontmatterInMarkdown,
+} from '../shared/frontmatterDocument.js';
+import {
+  frontmatterToMetadata,
+  metadataToFrontmatterPatch,
+} from '../shared/properties.js';
+import { syncObsidianPropertyTypes } from './obsidianTypes.js';
 
 export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
@@ -138,10 +143,46 @@ const sanitizeStringList = (values) => {
   return Array.from(new Set(values.map((item) => String(item ?? '').trim()).filter(Boolean)));
 };
 
+/**
+ * relatedIds / sourceMaterialIds 在应用里是节点 id，落盘要写成 Obsidian 认的
+ * [[相对路径]]，这里负责两边互转。
+ */
+const createLocalProjectRelation = (projectRootPath) => ({
+  idToPath: (id) => {
+    const text = String(id ?? '').trim();
+    const index = text.lastIndexOf(':file:');
+    if (index >= 0) return text.slice(index + ':file:'.length);
+    return text.startsWith('file:') ? text.slice('file:'.length) : text;
+  },
+  pathToId: (relativePath) => {
+    const text = String(relativePath ?? '').trim();
+    if (!text) return '';
+    const withExt = /\.[a-z0-9]+$/i.test(text) ? text : `${text}.md`;
+    return `project:${projectRootPath}:file:${withExt}`;
+  },
+});
+
+const hasOwnMetadataField = (metadata, field) => (
+  Object.prototype.hasOwnProperty.call(metadata ?? {}, field)
+);
+
 const normalizeLocalProjectMetadata = (metadata = {}) => {
   return {
+    ...(hasOwnMetadataField(metadata, 'title')
+      ? { title: String(metadata.title ?? '').trim() }
+      : {}),
+    ...(hasOwnMetadataField(metadata, 'sourceAuthor')
+      ? { sourceAuthor: String(metadata.sourceAuthor ?? '').trim() }
+      : {}),
+    ...(hasOwnMetadataField(metadata, 'sourcePublishedAt')
+      ? { sourcePublishedAt: String(metadata.sourcePublishedAt ?? '').trim() }
+      : {}),
+    ...(hasOwnMetadataField(metadata, 'createdAt')
+      ? { createdAt: metadata.createdAt ?? '' }
+      : {}),
     nodeType: String(metadata.nodeType ?? '').trim() || DEFAULT_NODE_TYPE,
     summary: String(metadata.summary ?? '').trim(),
+    cover: String(metadata.cover ?? '').trim(),
     url: String(metadata.url ?? metadata.source ?? '').trim(),
     aliases: sanitizeStringList(metadata.aliases),
     relatedIds: sanitizeStringList(metadata.relatedIds),
@@ -154,13 +195,71 @@ const normalizeLocalProjectMetadata = (metadata = {}) => {
       metadata.sourceMaterialIds ?? metadata.sourceMaterials,
     ),
     tags: sanitizeStringList(metadata.tags),
+    // 用户在 frontmatter 里自己加的属性，原样透传
+    customProperties: metadata.customProperties && typeof metadata.customProperties === 'object'
+      ? metadata.customProperties
+      : {},
+    preserveEmptyFrontmatterKeys: sanitizeStringList(metadata.preserveEmptyFrontmatterKeys),
   };
+};
+
+const hasMetadataPayload = (metadata) => (
+  metadata != null && typeof metadata === 'object' && !Array.isArray(metadata)
+);
+
+const buildLocalProjectFrontmatterPatch = (metadata, projectRootPath) => {
+  if (!hasMetadataPayload(metadata)) return null;
+  return metadataToFrontmatterPatch(
+    normalizeLocalProjectMetadata(metadata),
+    createLocalProjectRelation(projectRootPath),
+  );
+};
+
+const getPreserveEmptyFrontmatterKeys = (metadata) => (
+  normalizeLocalProjectMetadata(metadata).preserveEmptyFrontmatterKeys
+);
+
+const mergeMarkdownWritePayload = ({
+  rawContent = '',
+  content = '',
+  metadata,
+  projectRootPath = '',
+}) => {
+  const nextContent = replaceMarkdownBody(rawContent, content);
+  const patch = buildLocalProjectFrontmatterPatch(metadata, projectRootPath);
+  return {
+    content: patch
+      ? updateFrontmatterInMarkdown(nextContent, patch, {
+        preserveEmptyKeys: getPreserveEmptyFrontmatterKeys(metadata),
+      })
+      : nextContent,
+    patch,
+  };
+};
+
+const finishMarkdownMetadataWrite = async (filePath, projectRootPath, patch) => {
+  if (!patch) return;
+  try {
+    await syncObsidianPropertyTypes(projectRootPath, Object.keys(patch));
+  } catch (error) {
+    console.warn('[localProject] Obsidian 属性类型同步失败，文件属性已保存:', error);
+  }
+  try {
+    await deleteLocalProjectMetadataFiles(filePath);
+  } catch (error) {
+    console.warn('[localProject] 旧 metadata 清理失败，frontmatter 已保存:', error);
+  }
 };
 
 const hasMeaningfulMetadata = (metadata) => {
   if (!metadata) return false;
-  return metadata.nodeType !== DEFAULT_NODE_TYPE
+  return Boolean(metadata.title)
+    || Boolean(metadata.sourceAuthor)
+    || Boolean(metadata.sourcePublishedAt)
+    || Boolean(metadata.createdAt)
+    || metadata.nodeType !== DEFAULT_NODE_TYPE
     || Boolean(metadata.summary)
+    || Boolean(metadata.cover)
     || Boolean(metadata.url)
     || metadata.aliases.length > 0
     || metadata.relatedIds.length > 0
@@ -191,28 +290,29 @@ async function readLocalProjectMetadata(filePath) {
   return null;
 }
 
-async function writeLocalProjectMetadata(filePath, metadata) {
-  const sidecarPath = buildMetadataSidecarPath(filePath);
+/**
+ * Markdown 的属性真源是 frontmatter：无条件写入（文件没有 frontmatter 就新建），
+ * 写成功后清掉旧的 sidecar —— 老文件在第一次改属性时自然完成迁移。
+ * 非 Markdown 无处安放 frontmatter，仍然走 sidecar。
+ */
+async function writeLocalProjectMetadata(filePath, metadata, projectRootPath = '') {
   const normalized = normalizeLocalProjectMetadata(metadata);
   const fileName = path.basename(filePath);
 
   if (isMarkdownFile(fileName)) {
+    const patch = buildLocalProjectFrontmatterPatch(normalized, projectRootPath);
+    let rawContent = '';
     try {
-      const rawContent = await fs.readFile(filePath, 'utf8');
-      const parsed = parseMarkdownFrontmatter(rawContent);
-      if (parsed.hasFrontmatter) {
-        const nextFrontmatter = applyKnowledgeMetadataToFrontmatter(parsed.frontmatter, normalized);
-        await fs.writeFile(
-          filePath,
-          serializeMarkdownFrontmatter(nextFrontmatter, parsed.content),
-          'utf8',
-        );
-      }
+      rawContent = await fs.readFile(filePath, 'utf8');
     } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        console.warn('[localProject] 同步 frontmatter 失败:', filePath, error);
-      }
+      if (error?.code !== 'ENOENT') throw error;
     }
+
+    await fs.writeFile(filePath, updateFrontmatterInMarkdown(rawContent, patch, {
+      preserveEmptyKeys: normalized.preserveEmptyFrontmatterKeys,
+    }), 'utf8');
+    await finishMarkdownMetadataWrite(filePath, projectRootPath, patch);
+    return { ok: true, target: 'frontmatter' };
   }
 
   if (!hasMeaningfulMetadata(normalized)) {
@@ -220,13 +320,14 @@ async function writeLocalProjectMetadata(filePath, metadata) {
     return { ok: true, deleted: true };
   }
 
+  const sidecarPath = buildMetadataSidecarPath(filePath);
   await fs.mkdir(path.dirname(sidecarPath), { recursive: true });
   await fs.writeFile(sidecarPath, `${JSON.stringify({
     version: LOCAL_PROJECT_META_VERSION,
     metadata: normalized,
   }, null, 2)}\n`, 'utf8');
   await fs.rm(buildLegacyMetadataSidecarPath(filePath), { force: true });
-  return { ok: true, deleted: false };
+  return { ok: true, target: 'sidecar' };
 }
 
 async function readProjectNode(rootPath, currentPath, isRoot = false) {
@@ -275,9 +376,15 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
   // Markdown / 纯文本直接读取内容；其他格式只记录元信息，由 Renderer 按需转换
   if (isMarkdownFile(name)) {
     const rawContent = await fs.readFile(currentPath, 'utf8');
-    const parsed = parseMarkdownFrontmatter(rawContent);
-    const frontmatterMetadata = extractKnowledgeMetadataFromFrontmatter(parsed.frontmatter);
-    const content = parsed.hasFrontmatter ? parsed.content : rawContent;
+    const doc = parseFrontmatterDocument(rawContent);
+    // 兼容旧剪藏：source/created/author 这类字段的推断
+    const legacyMetadata = extractKnowledgeMetadataFromFrontmatter(doc.frontmatter);
+    // frontmatter 是真源，排在 sidecar 后面覆盖它
+    const frontmatterMetadata = frontmatterToMetadata(
+      doc.frontmatter,
+      createLocalProjectRelation(rootPath),
+    );
+    const content = doc.hasFrontmatter ? doc.content : rawContent;
     return {
       id: `file:${relativePath}`,
       type: 'file',
@@ -286,8 +393,10 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
       content,
       diskContentSnapshot: content,
       updatedAt: stat.mtimeMs,
-      ...frontmatterMetadata,
+      ...legacyMetadata,
       ...(metadata ?? {}),
+      ...frontmatterMetadata,
+      frontmatter: doc.frontmatter,
     };
   }
 
@@ -331,39 +440,47 @@ export function resolveProjectFilePath(projectRootPath, relativePath) {
   return targetPath;
 }
 
-export async function saveLocalProjectFile(projectRootPath, relativePath, content) {
+export async function saveLocalProjectFile(
+  projectRootPath,
+  relativePath,
+  content,
+  metadata,
+) {
   const filePath = resolveProjectFilePath(projectRootPath, relativePath);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const fileName = path.basename(filePath);
 
   if (!isMarkdownFile(fileName)) {
     await fs.writeFile(filePath, content ?? '', 'utf8');
+    if (hasMetadataPayload(metadata)) {
+      await writeLocalProjectMetadata(filePath, metadata, projectRootPath);
+    }
     return;
   }
 
+  let rawContent = '';
   try {
-    const rawContent = await fs.readFile(filePath, 'utf8');
-    const parsed = parseMarkdownFrontmatter(rawContent);
-    if (parsed.hasFrontmatter) {
-      await fs.writeFile(
-        filePath,
-        serializeMarkdownFrontmatter(parsed.frontmatter, content ?? ''),
-        'utf8',
-      );
-      return;
-    }
+    rawContent = await fs.readFile(filePath, 'utf8');
   } catch (error) {
     if (error?.code !== 'ENOENT') {
       throw error;
     }
   }
 
-  await fs.writeFile(filePath, content ?? '', 'utf8');
+  // 正文与 metadata 先合成为完整 Markdown，再执行一次写入；未知 frontmatter 原样保留。
+  const next = mergeMarkdownWritePayload({
+    rawContent,
+    content: content ?? '',
+    metadata,
+    projectRootPath,
+  });
+  await fs.writeFile(filePath, next.content, 'utf8');
+  await finishMarkdownMetadataWrite(filePath, projectRootPath, next.patch);
 }
 
 export async function saveLocalProjectMetadata(projectRootPath, relativePath, metadata) {
   const filePath = resolveProjectFilePath(projectRootPath, relativePath);
-  await writeLocalProjectMetadata(filePath, metadata);
+  await writeLocalProjectMetadata(filePath, metadata, projectRootPath);
 }
 
 export function getMdRenderRootPath() {

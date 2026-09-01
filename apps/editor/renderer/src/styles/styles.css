@@ -1285,6 +1285,28 @@ a.sidebar-rail-btn:hover {
     gap: 8px;
 }
 
+/* 勾选框类型的属性 */
+.doc-meta-checkbox {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+}
+
+.doc-meta-checkbox input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent, #6366f1);
+    cursor: pointer;
+}
+
+/* 「+ 添加属性」一行 */
+.doc-meta-add-property .doc-meta-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+}
+
 /* cover preview */
 .doc-meta-cover-preview {
     margin-top: 4px;
