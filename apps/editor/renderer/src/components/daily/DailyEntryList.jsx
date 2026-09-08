@@ -65,7 +65,7 @@ function DailyEntryList({
   onStartInlineAdd,
   onMoveItems,
   editingItemId,
-  editingDraftValue,
+  editingDraft,
   copiedId,
   ...itemProps
 }) {
@@ -157,7 +157,7 @@ function DailyEntryList({
                 key={item.id}
                 item={item}
                 isEditing={editingItemId === item.id}
-                editingDraftValue={editingDraftValue}
+                editingDraft={editingDraft}
                 copied={copiedId === item.id}
                 batchMode={batchMode}
                 isSelected={selected.has(item.id)}

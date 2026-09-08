@@ -44,6 +44,25 @@ cp src/components/*.css dist/components/   # tsc 不拷 css
 ## 验证
 
 - 真正的端到端验证是 `pnpm build`（vite 构建），能跑通才说明 alias + CJS interop + 资源都对。
-- 纯逻辑（filterSuggestionItemsByQuery / stringToBlockContent）可在 vitest node 环境直接从 `dist/utils/editorBlockInsert.js` 导入测试；**buildSchema/UI 依赖 @blocknote/core + scss，node 环境跑不动，只能靠 vite**。
+- 纯逻辑（filterSuggestionItemsByQuery / stringToBlockContent）可在 vitest node 环境直接从 `dist/utils/editorBlockInsert.js` 导入测试。
+
+### node 里能验什么（比想象中多）
+
+卡住 node 的其实是 **barrel `dist/index.js` 会连带加载 FindBar 的 `.css`**（`ERR_UNKNOWN_FILE_EXTENSION`），
+不是 `@blocknote/core` 本身。绕开 barrel 直接引子路径，就能在 node 里验不少东西：
+
+```js
+const { buildSchema } = await import('packages/blocknote-core/dist/schema/buildSchema.js');
+const { BlockNoteEditor } = await import('@blocknote/core');
+const schema = buildSchema({ blockSpecs: {}, excludeDefaultBlocks: [...] });
+const editor = BlockNoteEditor.create({ schema, initialContent });
+editor.document; // 真实文档结构，可用来验序列化/归一化往返
+```
+
+能验：schema 组装成不成功、块名对不对（`defaultBlockSpecs` 的真实 key：paragraph / heading / quote /
+bulletListItem / numberedListItem / checkListItem / toggleListItem / codeBlock / table / image / video /
+audio / file / divider）、`editor.document` 的真实形状（颜色落在 `styles.textColor`，`props` 里未设置的项
+是 `"default"` 字符串而不是缺省）。
+**不能验**：React 层（`useCreateBlockNote` / `BlockNoteView`）与样式——那部分只能靠 `pnpm build` + 手动跑。
 
 相关：[[safe-change-workflow]] [[md-render-store]]

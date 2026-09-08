@@ -9933,7 +9933,7 @@ body.theme-dark .file-preview-iframe {
 
 .daily-notebook-item-text-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -9991,7 +9991,17 @@ body.theme-dark .file-preview-iframe {
 
 .daily-notebook-item-editor-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.daily-notebook-item-editor-input {
+  min-width: 0;
+}
+
+.daily-notebook-item-editor-actions {
+  display: flex;
   align-items: center;
   gap: 8px;
 }
@@ -10004,24 +10014,20 @@ body.theme-dark .file-preview-iframe {
 }
 
 .daily-notebook-item-text {
+  flex: 1;
+  min-width: 0;
   color: var(--color-text-primary);
   line-height: 1.65;
   word-break: break-word;
 }
 
 .daily-notebook-item-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.daily-notebook-item-editor.has-meta {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .daily-notebook-item.is-done .daily-notebook-item-text {
@@ -10103,6 +10109,123 @@ body.theme-dark .file-preview-iframe {
   gap: 6px;
 }
 
+/* ── 今日速记富文本 ─────────────────────────────────────────────────────
+   色值与 @blocknote/core 的调色板逐一对齐，保证「编辑时看到的」和
+   「保存后看到的」完全一致。BlockNote 自身亮/暗主题共用同一套色值，
+   这里不另做暗色覆盖，避免出现只有速记页配色不同的割裂感。 */
+.daily-rich-content,
+.daily-notebook-rich-editor {
+  --daily-rich-text-gray: #9b9a97;
+  --daily-rich-text-brown: #64473a;
+  --daily-rich-text-red: #e03e3e;
+  --daily-rich-text-orange: #d9730d;
+  --daily-rich-text-yellow: #dfab01;
+  --daily-rich-text-green: #4d6461;
+  --daily-rich-text-blue: #0b6e99;
+  --daily-rich-text-purple: #6940a5;
+  --daily-rich-text-pink: #ad1a72;
+  --daily-rich-bg-gray: #ebeced;
+  --daily-rich-bg-brown: #e9e5e3;
+  --daily-rich-bg-red: #fbe4e4;
+  --daily-rich-bg-orange: #f6e9d9;
+  --daily-rich-bg-yellow: #fbf3db;
+  --daily-rich-bg-green: #ddedea;
+  --daily-rich-bg-blue: #ddebf1;
+  --daily-rich-bg-purple: #eae4f2;
+  --daily-rich-bg-pink: #f4dfeb;
+}
+
+.daily-rich-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-rich-content.is-placeholder {
+  display: inline;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.daily-rich-paragraph {
+  margin: 0;
+  min-height: 1em;
+  white-space: pre-wrap;
+}
+
+.daily-rich-content code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.06));
+  font-size: 0.92em;
+}
+
+.daily-rich-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-rich-list li {
+  white-space: pre-wrap;
+}
+
+.daily-rich-list.is-checklist {
+  list-style: none;
+  padding-left: 2px;
+}
+
+.daily-rich-list.is-checklist > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.daily-rich-checkbox {
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.daily-rich-checkbox.is-checked {
+  background: rgba(34, 197, 94, 0.5);
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+/* 富文本输入框：BlockNote 自带样式，这里只收口边框与内边距 */
+.daily-notebook-rich-editor {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  padding: 4px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.daily-notebook-rich-editor:focus-within {
+  border-color: var(--color-accent, #1677ff);
+}
+
+.daily-notebook-rich-editor .bn-editor {
+  padding-inline: 12px;
+  padding-block: 6px;
+}
+
+.daily-notebook-rich-editor .bn-block-content {
+  font-size: 14px;
+}
+
+.daily-notebook-editor-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
 @media (max-width: 1180px) {
   .daily-notebook-hero,
   .daily-notebook-grid {
@@ -10119,7 +10242,7 @@ body.theme-dark .file-preview-iframe {
     grid-template-columns: 1fr;
   }
 
-  .daily-notebook-item-editor {
+  .daily-notebook-item-editor-row {
     grid-template-columns: 1fr;
   }
 }

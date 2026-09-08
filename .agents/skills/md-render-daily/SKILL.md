@@ -1,6 +1,6 @@
 ---
 name: md-render-daily
-description: 在本项目改「今日速记 / Daily 速记面板」时的规范——数据模型在 apps/editor/renderer/src/utils/dailyWorkspace.js（纯函数），store 动作在 useEditorStore.js，UI 在 components/DailyNotebook.jsx。核心约定：切日期是「纯视图变更」，破坏性结转（carryOver）只在真正跨到今天时跑一次。涉及"今日速记""daily 面板""切日期数据丢了/被重置""待办池""昨天笔记带到今天""跨天结转""carryOver"时触发。略主动。
+description: 在本项目改「今日速记 / Daily 速记面板」时的规范——数据模型在 apps/editor/renderer/src/utils/dailyWorkspace.js（纯函数），store 动作在 useEditorStore.js，UI 在 components/DailyNotebook.jsx。核心约定：切日期是「纯视图变更」，破坏性结转（carryOver）只在真正跨到今天时跑一次。涉及"今日速记""daily 面板""切日期数据丢了/被重置""待办池""昨天笔记带到今天""跨天结转""carryOver""速记不能换行/富文本"时触发。略主动。
 ---
 
 # 今日速记（Daily 速记面板）改动规范
@@ -21,10 +21,13 @@ flowchart TD
 - `DailyNotebook.jsx`：`memo` 容器组件，只把用户操作转发成 store 动作，不自己算迁移逻辑。
   视图拆在 `components/daily/`：`DailyEntryList.jsx`（task/event/note 合并的单列表 + 类型筛选）、
   `DailyItemRow.jsx`（单条渲染与行内编辑）、`DailyTodoColumn.jsx`（待办池）、
-  `dailyOptions.jsx`（类型/优先级/类别选项与排序比较器 `compareDailyItems`）。
+  `dailyOptions.jsx`（类型/优先级/类别选项与排序比较器 `compareDailyItems`）、
+  `DailyContentEditor.jsx`（正文输入区，今日记录与待办池共用）、
+  `DailyRichTextEditor.jsx`（BlockNote 富文本，仅浏览器懒加载）、
+  `DailyRichContent.jsx`（只读富文本渲染）。
   三种类型共用一个列表，靠类型 Tag 区分；新增类型要同时补 `DAILY_TYPE_OPTIONS` 与排序权重。
 
-数据形状：`{ currentDate, entries: { 'YYYY-MM-DD': { date, items[] } }, todoPool[] }`。item 有 `type`（task/event/note）、`done`、`createdAt`、`updatedAt`。
+数据形状：`{ currentDate, entries: { 'YYYY-MM-DD': { date, items[] } }, todoPool[] }`。item 有 `type`（task/event/note）、`done`、`createdAt`、`updatedAt`，正文是 `text` +（可选）`richText`。
 
 ## 最关键的坑：切日期 ≠ 结转
 
@@ -46,6 +49,52 @@ const nextWs = dateKey === getTodayDateKey()
   : setDailyWorkspaceCurrentDate(state.dailyWorkspace, dateKey);
 ```
 
+## 正文是富文本：`richText` 是源，`text` 是投影
+
+条目正文有两份：
+
+- `richText`：BlockNote 的 block 数组（段落 + 三种列表），存颜色/加粗这些 Markdown 表达不了的样式。
+- `text`：由 `richText` 派生的**多行** Markdown 风格纯文本（`- ` / `1. ` / `- [ ] ` 前缀），
+  给去重、carryOver、Agent 工具、导出、搜索用。
+
+规则都收口在 `utils/dailyRichText.js`（纯函数）+ `dailyWorkspace.js` 的 `resolveContent/applyContent`：
+
+- **有 `richText` 就以它为准**，`text` 每次归一化时重新派生 → 两者永远不会漂移。
+- 单段无样式的内容**不存** `richText`（`hasRichFormatting` 判断），避免给纯文本条目白存一份结构。
+- `text` 空 → 条目被丢弃（沿用原有「清空即删除」语义）。
+- 搬运条目（move / sendToTodo / carryOver / promoteTodo）必须把 `richText` 一起带走，否则来回一趟格式就没了。
+
+### 坑 1：`normalizeText` 把换行也压掉了
+
+原来 item/todo 的 `text` 走 `String(v).replace(/\s+/g,' ')`，**`\s` 含 `\n`**，
+所以哪怕 UI 让你输入了换行，落盘也会被压成一行——这就是「速记不能换行」的真正原因。
+现在正文走 `normalizeContentText`（保留 `\n`，只压行内空白），
+`normalizeText` 只留给 `buildTodoDedupKey` 做去重（去重就是要忽略换行差异）。
+
+### 坑 2：单测是 node 环境，BlockNote 不能静态 import
+
+`apps/editor/vitest.config.js` 是 `environment: 'node'`，daily 的组件测试用 `renderToStaticMarkup` 直接渲染
+`DailyItemRow`（含 `isEditing` 分支）。BlockNote 的 React 层要 DOM，静态 import 会让**现有 daily 测试全挂**。
+
+做法：`DailyRichTextEditor.jsx` 单独一个文件，`DailyContentEditor.jsx` 里用
+`lazy(() => import(...))` + `canUseDOM` 守卫，没有 DOM 时渲染 `Input.TextArea` 降级。
+`lazy` 不渲染就不发起 import，所以 node 路径永远碰不到 BlockNote；顺带还拿到了代码分割。
+
+> 注意：**不要用 `React.lazy` 而不加 DOM 守卫**——`renderToStaticMarkup` 遇到未 resolve 的 lazy 会直接抛。
+
+### 坑 3：段落可能挂子列表，别用 `<p>` 渲染
+
+只读展示（`DailyRichContent.jsx`）按 block 结构渲染 React 元素（不走 `dangerouslySetInnerHTML`，
+所以不需要 HTML 消毒，node 环境也能静态渲染）。但段落底下可以缩进出子列表，
+`<ul>` 套在 `<p>` 里是非法嵌套、浏览器会自动断标签，所以段落用 `<div class="daily-rich-paragraph">`。
+
+### 颜色
+
+只认 BlockNote 的 9 个色名（gray/brown/red/orange/yellow/green/blue/purple/pink），
+色值在 `styles.css` 里以 `--daily-rich-text-*` / `--daily-rich-bg-*` 收口，
+**逐一对齐 `@blocknote/core` 的调色板**，保证「编辑时看到的」＝「保存后看到的」。
+BlockNote 0.47 亮/暗共用同一套色值，所以这里也不做暗色覆盖。
+
 ## 其它约定
 
 - 改数据只走 `dailyWorkspace.js` 的纯函数，再在 store 动作里 `persistDailyWorkspaceBackup`，别在组件里直接算。
@@ -63,6 +112,12 @@ const nextWs = dateKey === getTodayDateKey()
 6. 昨天 note 带到今天，重复进入今天不产生重复（幂等）
 7. 非法日期 → 回退到原 currentDate
 8. 空 workspace 进入今天 → 无害空操作
+9. 富文本条目移到待办池再取回 → `richText` 与 `text` 都还在
+10. 改回纯文本 → 旧 `richText` 被清掉，不留残影
+
+富文本相关测试参考 `apps/editor/tests-unit/daily-rich-text.test.jsx`。
+schema/文档往返可以在 node 里直接验：`BlockNoteEditor.create({ schema })` 读 `editor.document`
+（见 [[md-render-blocknote-core]] 的「node 里能验什么」）。
 
 测试参考 `apps/editor/tests-unit/dailyWorkspace-switch-date.test.js`。
 

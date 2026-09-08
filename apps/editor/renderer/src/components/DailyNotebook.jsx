@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import DailyEntryList, { ALL_TYPES_FILTER } from './daily/DailyEntryList.jsx';
 import DailyTodoColumn from './daily/DailyTodoColumn.jsx';
 import { compareDailyItems } from './daily/dailyOptions.jsx';
+import { useCopyText } from '../hooks/useCopyText.js';
 import {
   formatDailyHeading,
   getDailyEntry,
@@ -13,21 +14,9 @@ import {
 } from '../utils/dailyWorkspace.js';
 
 const DEFAULT_PRIORITY = 'medium';
-const COPY_FEEDBACK_MS = 1500;
 
 const createPendingInlineId = () =>
   `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-
-function useCopyText() {
-  const [copiedId, setCopiedId] = useState(null);
-  const copy = useCallback((id, text) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), COPY_FEEDBACK_MS);
-    });
-  }, []);
-  return { copiedId, copy };
-}
 
 function DailyNotebook({
   dailyWorkspace,
@@ -93,7 +82,7 @@ function DailyNotebook({
       { id, type, priority: type === 'task' ? DEFAULT_PRIORITY : undefined },
       ...current,
     ]);
-    setEditingItem({ id, value: '', isPending: true });
+    setEditingItem({ id, value: '', richText: [], isPending: true });
     // 当前筛选如果会把新条目挡住，就切到它所属的类型
     setTypeFilter((current) => (current === ALL_TYPES_FILTER || current === type ? current : type));
   }, []);
@@ -107,7 +96,7 @@ function DailyNotebook({
   const handleStartInlineAddTodo = useCallback(() => {
     const id = createPendingInlineId();
     setPendingTodos((current) => [{ id }, ...current]);
-    setEditingItem({ id, value: '', isPending: true, isTodo: true });
+    setEditingItem({ id, value: '', richText: [], isPending: true, isTodo: true });
   }, []);
 
   const todoItems = useMemo(() => {
@@ -116,11 +105,18 @@ function DailyNotebook({
   }, [pendingTodos, todoPool]);
 
   const handleStartEdit = useCallback((item) => {
-    setEditingItem({ id: item.id, value: item.text, isPending: Boolean(item.isPending) });
+    setEditingItem({
+      id: item.id,
+      value: item.text,
+      richText: item.richText,
+      isPending: Boolean(item.isPending),
+    });
   }, []);
 
-  const handleEditDraftChange = useCallback((value) => {
-    setEditingItem((current) => (current ? { ...current, value } : current));
+  // 富文本编辑器抛上来的是 { text, richText }：text 是纯文本投影，
+  // 仍然用它判断「空内容 → 删除」，richText 才是保存用的正文
+  const handleEditDraftChange = useCallback(({ text, richText }) => {
+    setEditingItem((current) => (current ? { ...current, value: text, richText } : current));
   }, []);
 
   const handleCancelEdit = useCallback(() => {
@@ -152,14 +148,21 @@ function DailyNotebook({
         return;
       }
       if (editingItem.isTodo) {
-        onAddTodo(nextValue);
+        onAddTodo(nextValue, undefined, editingItem.richText);
         setPendingTodos((current) => current.filter((item) => item.id !== editingItem.id));
         setEditingItem(null);
         return;
       }
       const pendingItem = pendingInlineItems.find((item) => item.id === editingItem.id);
       const type = pendingItem?.type ?? 'note';
-      onAddItem(currentDate, type, nextValue, pendingItem?.category, pendingItem?.priority);
+      onAddItem(
+        currentDate,
+        type,
+        nextValue,
+        pendingItem?.category,
+        pendingItem?.priority,
+        editingItem.richText,
+      );
       removePendingInline(editingItem.id);
       setEditingItem(null);
       return;
@@ -171,7 +174,7 @@ function DailyNotebook({
       return;
     }
 
-    onUpdateItem(currentDate, editingItem.id, nextValue);
+    onUpdateItem(currentDate, editingItem.id, nextValue, editingItem.richText);
     setEditingItem(null);
   }, [
     currentDate,
@@ -209,6 +212,11 @@ function DailyNotebook({
     onRemoveTodo(itemId);
   }, [editingItem?.id, onRemoveTodo, pendingTodos]);
 
+  const editingDraft = useMemo(
+    () => ({ text: editingItem?.value ?? '', richText: editingItem?.richText }),
+    [editingItem?.value, editingItem?.richText],
+  );
+
   return (
     <div className="daily-notebook" data-testid="daily-surface">
       <section className="daily-notebook-hero">
@@ -245,7 +253,7 @@ function DailyNotebook({
             onStartInlineAdd={handleStartInlineAdd}
             currentDate={currentDate}
             editingItemId={editingItem?.isTodo ? null : editingItem?.id ?? null}
-            editingDraftValue={editingItem?.value ?? ''}
+            editingDraft={editingDraft}
             copiedId={copiedId}
             onStartEdit={handleStartEdit}
             onEditDraftChange={handleEditDraftChange}

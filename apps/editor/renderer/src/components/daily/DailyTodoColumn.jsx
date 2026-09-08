@@ -1,6 +1,8 @@
-import { Button, Card, Empty, Input, Tag } from 'antd';
+import { Button, Card, Empty, Tag } from 'antd';
 import { Inbox, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { formatDailyMetaDate } from '../../utils/dailyWorkspace.js';
+import DailyContentEditor from './DailyContentEditor.jsx';
+import DailyRichContent from './DailyRichContent.jsx';
 import { DailyCategoryControl } from './DailyItemRow.jsx';
 
 function DailyTodoColumn({
@@ -15,7 +17,6 @@ function DailyTodoColumn({
   onDeleteTodo,
   onUpdateTodoCategory,
 }) {
-  const canSaveEdit = Boolean(editingItem?.value?.trim());
   const isEditingTodo = Boolean(editingItem?.isTodo);
 
   return (
@@ -54,33 +55,15 @@ function DailyTodoColumn({
                 <div key={item.id} className="daily-notebook-item is-empty">
                   <div className="daily-notebook-item-main">
                     <div className="daily-notebook-item-editor">
-                      <Input
-                        autoFocus
-                        value={editingItem.value}
+                      <DailyContentEditor
+                        editorKey={item.id}
+                        text={editingItem.value ?? ''}
+                        richText={editingItem.richText}
                         placeholder="手动补一条待办"
-                        onChange={(event) => onEditDraftChange(event.target.value)}
-                        onPressEnter={() => {
-                          if (canSaveEdit) onSaveEdit();
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Escape') {
-                            event.preventDefault();
-                            onCancelEdit();
-                          }
-                        }}
+                        onChange={onEditDraftChange}
+                        onSave={onSaveEdit}
+                        onCancel={onCancelEdit}
                       />
-                      <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
-                        保存
-                      </Button>
-                      {canSaveEdit ? (
-                        <Button size="small" onClick={onCancelEdit}>
-                          取消
-                        </Button>
-                      ) : (
-                        <Button size="small" danger onClick={onCancelEdit}>
-                          删除
-                        </Button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -91,7 +74,9 @@ function DailyTodoColumn({
               <div key={item.id} className={`daily-notebook-item ${isEmptyItem ? 'is-empty' : ''}`}>
                 <div className="daily-notebook-item-main">
                   <div className="daily-notebook-item-text-row">
-                    <span className="daily-notebook-item-text">{item.text}</span>
+                    <div className="daily-notebook-item-text">
+                      <DailyRichContent richText={item.richText} text={item.text} />
+                    </div>
                     <DailyCategoryControl
                       category={item.category}
                       onSelect={(value) => onUpdateTodoCategory(item.id, value)}

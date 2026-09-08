@@ -839,11 +839,11 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      addDailyItem: (dateKey, type, text, category, priority) => set((state) => {
+      addDailyItem: (dateKey, type, text, category, priority, richText) => set((state) => {
         const nextDailyWorkspace = addDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
-          { type, text, category, priority },
+          { type, text, category, priority, richText },
         );
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
@@ -866,12 +866,13 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      updateDailyItem: (dateKey, itemId, text) => set((state) => {
+      updateDailyItem: (dateKey, itemId, text, richText) => set((state) => {
         const nextDailyWorkspace = updateDailyEntryItem(
           carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
           dateKey,
           itemId,
           text,
+          richText,
         );
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
@@ -925,8 +926,8 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      addTodoItem: (text, category) => set((state) => {
-        const nextDailyWorkspace = addTodoPoolItem(state.dailyWorkspace, text, '', category);
+      addTodoItem: (text, category, richText) => set((state) => {
+        const nextDailyWorkspace = addTodoPoolItem(state.dailyWorkspace, text, '', category, richText);
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),

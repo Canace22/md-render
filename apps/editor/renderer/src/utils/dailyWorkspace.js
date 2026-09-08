@@ -1,3 +1,9 @@
+import {
+  hasRichFormatting,
+  normalizeRichText,
+  richTextToPlainText,
+} from './dailyRichText.js';
+
 const DAILY_ITEM_TYPES = new Set(['task', 'event', 'note']);
 const DAILY_PRIORITIES = new Set(['high', 'medium', 'low']);
 
@@ -34,11 +40,41 @@ const toDateAtNoon = (dateKey) => {
   return new Date(year, month - 1, day, 12, 0, 0, 0);
 };
 
+// 去重 / 索引用：压掉所有空白（含换行），保证同一条内容换行差异不会被当成两条
 const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
+// 正文用：保留换行（富文本的纯文本投影是多行的），只压缩行内空白
+const normalizeContentText = (value) => String(value ?? '')
+  .replace(/\r\n?/g, '\n')
+  .split('\n')
+  .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim())
+  .join('\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
+/**
+ * 统一解析「正文」：富文本存在时以富文本为准，纯文本投影由它派生，
+ * 保证两者永远不会漂移；只有纯文本（旧数据 / Agent 写入）时不强行造富文本。
+ */
+const resolveContent = (text, richText) => {
+  const blocks = normalizeRichText(richText);
+  if (blocks.length > 0 && hasRichFormatting(blocks)) {
+    return { text: richTextToPlainText(blocks), richText: blocks };
+  }
+  const plainText = blocks.length > 0 ? richTextToPlainText(blocks) : normalizeContentText(text);
+  return { text: plainText, richText: [] };
+};
+
+const applyContent = (target, { text, richText }) => {
+  target.text = text;
+  if (richText.length > 0) target.richText = richText;
+  else delete target.richText;
+  return target;
+};
+
 const normalizeDailyItem = (item, dateKey, index) => {
-  const text = normalizeText(item?.text);
-  if (!text) return null;
+  const content = resolveContent(item?.text, item?.richText);
+  if (!content.text) return null;
 
   const type = DAILY_ITEM_TYPES.has(item?.type) ? item.type : 'note';
   const priority = DAILY_PRIORITIES.has(item?.priority) ? item.priority : 'medium';
@@ -47,15 +83,14 @@ const normalizeDailyItem = (item, dateKey, index) => {
     : '';
   const createdAt = createTimestamp(item?.createdAt);
 
-  const normalized = {
+  const normalized = applyContent({
     id: typeof item?.id === 'string' && item.id.trim() ? item.id : `${dateKey}-${type}-${index}`,
     type,
-    text,
     priority,
     done: type === 'task' ? Boolean(item?.done) : false,
     createdAt,
     updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
-  };
+  }, content);
 
   if (DAILY_CATEGORY_ITEM_TYPES.has(type) && category) {
     normalized.category = category;
@@ -65,20 +100,19 @@ const normalizeDailyItem = (item, dateKey, index) => {
 };
 
 const normalizeTodoItem = (item, index) => {
-  const text = normalizeText(item?.text);
-  if (!text) return null;
+  const content = resolveContent(item?.text, item?.richText);
+  if (!content.text) return null;
 
   const createdAt = createTimestamp(item?.createdAt);
   const sourceDate = item?.sourceDate ? normalizeDateKey(item.sourceDate, '') : '';
   const category = DAILY_TASK_CATEGORIES.has(item?.category) ? item.category : '';
 
-  const normalized = {
+  const normalized = applyContent({
     id: typeof item?.id === 'string' && item.id.trim() ? item.id : `todo-${index}`,
-    text,
     sourceDate,
     createdAt,
     updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
-  };
+  }, content);
 
   if (category) {
     normalized.category = category;
@@ -277,6 +311,7 @@ export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
           todoPool.unshift({
             id: createDailyId('todo'),
             text: item.text,
+            ...(item.richText ? { richText: item.richText } : {}),
             sourceDate: dateKey,
             ...(item.category ? { category: item.category } : {}),
             createdAt: Date.now(),
@@ -346,18 +381,17 @@ export const addDailyEntryItem = (dailyWorkspace, dateKey, payload) => {
   const category = DAILY_CATEGORY_ITEM_TYPES.has(type) && DAILY_TASK_CATEGORIES.has(payload?.category)
     ? payload.category
     : '';
-  const text = normalizeText(payload?.text);
-  if (!text) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
+  const content = resolveContent(payload?.text, payload?.richText);
+  if (!content.text) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
 
-  const nextItem = {
+  const nextItem = applyContent({
     id: createDailyId(type),
     type,
-    text,
     priority,
     done: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-  };
+  }, content);
 
   if (category) {
     nextItem.category = category;
@@ -407,19 +441,15 @@ export const moveDailyEntryItem = (dailyWorkspace, fromDate, itemId, toDate) => 
   }));
 };
 
-export const updateDailyEntryItem = (dailyWorkspace, dateKey, itemId, text) => {
-  const nextText = normalizeText(text);
-  if (!nextText) return removeDailyEntryItem(dailyWorkspace, dateKey, itemId);
+export const updateDailyEntryItem = (dailyWorkspace, dateKey, itemId, text, richText) => {
+  const content = resolveContent(text, richText);
+  if (!content.text) return removeDailyEntryItem(dailyWorkspace, dateKey, itemId);
 
   return updateEntry(dailyWorkspace, dateKey, (entry) => ({
     ...entry,
     items: entry.items.map((item) => {
       if (item.id !== itemId) return item;
-      return {
-        ...item,
-        text: nextText,
-        updatedAt: Date.now(),
-      };
+      return applyContent({ ...item, updatedAt: Date.now() }, content);
     }),
   }));
 };
@@ -459,18 +489,17 @@ export const updateDailyEntryItemCategory = (dailyWorkspace, dateKey, itemId, ca
   }));
 };
 
-export const addTodoPoolItem = (dailyWorkspace, text, sourceDate = '', category = '') => {
-  const nextText = normalizeText(text);
-  if (!nextText) return normalizeDailyWorkspace(dailyWorkspace);
+export const addTodoPoolItem = (dailyWorkspace, text, sourceDate = '', category = '', richText) => {
+  const content = resolveContent(text, richText);
+  if (!content.text) return normalizeDailyWorkspace(dailyWorkspace);
 
   const normalized = normalizeDailyWorkspace(dailyWorkspace);
-  const nextItem = {
+  const nextItem = applyContent({
     id: createDailyId('todo'),
-    text: nextText,
     sourceDate: sourceDate ? normalizeDateKey(sourceDate, '') : '',
     createdAt: Date.now(),
     updatedAt: Date.now(),
-  };
+  }, content);
 
   if (DAILY_TASK_CATEGORIES.has(category)) {
     nextItem.category = category;
@@ -489,7 +518,7 @@ export const sendDailyEntryTaskToTodo = (dailyWorkspace, dateKey, itemId) => {
   const target = entry.items.find((item) => item.id === itemId && item.type === 'task' && !item.done);
   if (!target) return normalized;
 
-  const withTodo = addTodoPoolItem(normalized, target.text, key, target.category);
+  const withTodo = addTodoPoolItem(normalized, target.text, key, target.category, target.richText);
   return updateEntry(withTodo, key, (currentEntry) => ({
     ...currentEntry,
     items: currentEntry.items.filter((item) => item.id !== itemId),
@@ -509,6 +538,7 @@ export const promoteTodoToDaily = (dailyWorkspace, todoId, dateKey) => {
   return addDailyEntryItem(withoutTodo, dateKey, {
     type: 'task',
     text: todo.text,
+    richText: todo.richText,
     category: todo.category,
   });
 };

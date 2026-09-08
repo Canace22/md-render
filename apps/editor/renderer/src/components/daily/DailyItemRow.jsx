@@ -1,6 +1,8 @@
-import { Button, Checkbox, DatePicker, Dropdown, Input, Tag } from 'antd';
+import { Button, Checkbox, DatePicker, Dropdown, Tag } from 'antd';
 import dayjs from 'dayjs';
 import { Check, Copy, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import DailyContentEditor from './DailyContentEditor.jsx';
+import DailyRichContent from './DailyRichContent.jsx';
 import {
   buildCategoryMenuItems,
   buildPriorityMenuItems,
@@ -92,7 +94,7 @@ function DailyItemRow({
   item,
   currentDate,
   isEditing,
-  editingDraftValue,
+  editingDraft,
   batchMode,
   isSelected,
   copied,
@@ -112,7 +114,6 @@ function DailyItemRow({
 }) {
   const typeOption = getTypeOption(item.type);
   const isTask = item.type === 'task';
-  const canSaveEdit = Boolean(editingDraftValue?.trim());
   const isEmptyItem = !item.text?.trim();
 
   return (
@@ -146,7 +147,7 @@ function DailyItemRow({
           )}
           {isEditing && !item.isPending && <DailyTypeTag type={item.type} />}
           {isEditing ? (
-            <div className={`daily-notebook-item-editor ${item.isPending ? 'has-meta' : ''}`}>
+            <div className="daily-notebook-item-editor">
               {item.isPending && (
                 <div className="daily-notebook-item-editor-meta">
                   <DailyTypeTag type={item.type} />
@@ -164,45 +165,29 @@ function DailyItemRow({
                   )}
                 </div>
               )}
-              <div className="daily-notebook-item-editor-row">
-                <Input
-                  autoFocus
-                  value={editingDraftValue}
-                  placeholder={typeOption.placeholder}
-                  onChange={(event) => onEditDraftChange(event.target.value)}
-                  onPressEnter={() => {
-                    if (canSaveEdit) onSaveEdit();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      event.preventDefault();
-                      onCancelEdit();
-                    }
-                  }}
-                />
-                <Button type="primary" size="small" disabled={!canSaveEdit} onClick={onSaveEdit}>
-                  保存
-                </Button>
-                {canSaveEdit ? (
-                  <Button size="small" onClick={onCancelEdit}>
-                    取消
-                  </Button>
-                ) : (
-                  <Button size="small" danger onClick={onCancelEdit}>
-                    删除
-                  </Button>
-                )}
-              </div>
+              <DailyContentEditor
+                editorKey={item.id}
+                text={editingDraft?.text ?? ''}
+                richText={editingDraft?.richText}
+                placeholder={typeOption.placeholder}
+                onChange={onEditDraftChange}
+                onSave={onSaveEdit}
+                onCancel={onCancelEdit}
+              />
             </div>
           ) : (
             <>
               <DailyTypeTag type={item.type} />
-              <span
+              <div
                 className={`daily-notebook-item-text ${isEmptyItem ? 'is-placeholder' : ''}`}
                 onDoubleClick={() => onStartEdit(item)}
               >
-                {item.text || typeOption.placeholder}
-              </span>
+                <DailyRichContent
+                  richText={item.richText}
+                  text={item.text}
+                  placeholder={typeOption.placeholder}
+                />
+              </div>
               {supportsCategory(item.type) && (
                 <DailyCategoryControl
                   category={item.category}

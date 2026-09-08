@@ -73,7 +73,7 @@ describe('今日记录合并列表（组件静态渲染与数据动作回归）'
   it.each(TYPES)('%s 草稿有类型标签，类别和优先级按类型显示', (type) => {
     const html = renderToStaticMarkup(<DailyItemRow
       item={{ id: 'pending', type, text: '', isPending: true }}
-      currentDate={DATE} isEditing editingDraftValue=""
+      currentDate={DATE} isEditing editingDraft={{ text: '', richText: [] }}
     />);
     expect(html).toContain('daily-notebook-type-tag');
     expect(html).toMatch(/删\s*除/);
@@ -84,7 +84,7 @@ describe('今日记录合并列表（组件静态渲染与数据动作回归）'
   it.each(TYPES)('编辑已保存的 %s 时仍显示类型标签', (type) => {
     const html = renderToStaticMarkup(<DailyItemRow
       item={{ id: 'saved', type, text: TEXT[type] }}
-      currentDate={DATE} isEditing editingDraftValue={TEXT[type]}
+      currentDate={DATE} isEditing editingDraft={{ text: TEXT[type], richText: [] }}
     />);
     expect(html.match(/class="ant-tag[^\"]*daily-notebook-type-tag/g)).toHaveLength(1);
     expect(html).toMatch(/保\s*存/);
