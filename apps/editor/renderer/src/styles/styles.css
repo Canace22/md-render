@@ -9839,6 +9839,29 @@ body.theme-dark .file-preview-iframe {
   color: var(--color-text-primary);
 }
 
+/* 类型标签：三种条目合并在一个列表里，靠它区分任务 / 笔记 / 事件 */
+.daily-notebook-type-tag.ant-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--type-color) 26%, transparent);
+  background: color-mix(in srgb, var(--type-color) 10%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.daily-notebook-type-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--type-color);
+}
+
+.daily-notebook-type-filter {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
 .daily-notebook-list {
   display: flex;
   flex-direction: column;

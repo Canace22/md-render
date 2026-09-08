@@ -36,6 +36,7 @@
     "d3-force": "^3.0.0",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
+    "dayjs": "1.11.20",
     "electron-store": "^10.0.0",
     "electron-updater": "^6.3.0",
     "html-to-docx": "^1.8.0",

@@ -18,7 +18,11 @@ flowchart TD
 
 - `dailyWorkspace.js`：纯函数，输入旧 workspace 返回新 workspace，**不碰 localStorage、不发 IPC**。
 - `useEditorStore.js`：在 `set` 里调纯函数，再 `persistDailyWorkspaceBackup(...)` 落盘。
-- `DailyNotebook.jsx`：`memo` 组件，只把用户操作转发成 store 动作，不自己算迁移逻辑。
+- `DailyNotebook.jsx`：`memo` 容器组件，只把用户操作转发成 store 动作，不自己算迁移逻辑。
+  视图拆在 `components/daily/`：`DailyEntryList.jsx`（task/event/note 合并的单列表 + 类型筛选）、
+  `DailyItemRow.jsx`（单条渲染与行内编辑）、`DailyTodoColumn.jsx`（待办池）、
+  `dailyOptions.jsx`（类型/优先级/类别选项与排序比较器 `compareDailyItems`）。
+  三种类型共用一个列表，靠类型 Tag 区分；新增类型要同时补 `DAILY_TYPE_OPTIONS` 与排序权重。
 
 数据形状：`{ currentDate, entries: { 'YYYY-MM-DD': { date, items[] } }, todoPool[] }`。item 有 `type`（task/event/note）、`done`、`createdAt`、`updatedAt`。
 
