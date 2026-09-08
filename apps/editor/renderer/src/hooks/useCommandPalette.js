@@ -22,6 +22,8 @@ export default function useCommandPalette() {
   }, []);
 
   const close = useCallback(() => setOpen(false), []);
+  // 顶栏的「全部功能」按钮走这里：快捷键之外必须留一个看得见的入口，否则收进面板的命令没人找得到
+  const show = useCallback(() => setOpen(true), []);
 
-  return { open, close };
+  return { open, close, show };
 }

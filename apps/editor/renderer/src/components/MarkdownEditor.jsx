@@ -2333,7 +2333,11 @@ function MarkdownEditor() {
   // 命令面板：把散落各处的入口收成一份可搜索清单，Cmd/Ctrl+K 唤起。
   // 部分 handler（如复制公众号）闭包里带着随渲染变化的正文，统一走 ref 取最新版本，
   // 否则 useMemo 缓存住的会是旧闭包，复制到的是过期内容。
-  const { open: commandPaletteOpen, close: closeCommandPalette } = useCommandPalette();
+  const {
+    open: commandPaletteOpen,
+    close: closeCommandPalette,
+    show: showCommandPalette,
+  } = useCommandPalette();
   const commandHandlersRef = useRef(null);
   commandHandlersRef.current = {
     openCurrentContent: () => setSurface(selectedContentSurface),
@@ -2439,6 +2443,7 @@ function MarkdownEditor() {
           onThemeChange={setTheme}
           agentPanelOpen={agentPanelOpen}
           onToggleAgentPanel={() => setAgentPanelOpen((v) => !v)}
+          onOpenCommandPalette={showCommandPalette}
         />
 
         <div className="immersive-main-row">

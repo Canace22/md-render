@@ -17,7 +17,8 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
    - page 存在但 `#root` 为空：继续查 Renderer 资源和异常。
    - `#root` 已有内容：再查计算样式和合成层，不要凭白屏截图直接归因 GPU。
 5. preload 验证使用项目真实入口 `window.electronAPI`，并检查所需子能力，不要猜测变量名。
-6. 若 Electron 33/Node 20 在 `cjsPreparseModuleExports` 报 `module.exports` 异常，先检查同一 ESM 入口中的多个 CommonJS 静态 import。对确认的 CommonJS 包使用 `createRequire(import.meta.url)` 同步加载，不改动其他 ESM 依赖。
+6. 新 worktree 里 `pnpm install` 后 Vite 报 `Failed to resolve import "dayjs"`：`dayjs` 只是 antd 的传递依赖，没写进任何 package.json，主仓靠旧的扁平 node_modules 才解析得到。严格安装的新环境必然报错，且它被 `MarkdownEditor → DailyNotebook` 静态引用，整个应用都起不来。属于既有缺失依赖，不是当次改动引入的。
+7. 若 Electron 33/Node 20 在 `cjsPreparseModuleExports` 报 `module.exports` 异常，先检查同一 ESM 入口中的多个 CommonJS 静态 import。对确认的 CommonJS 包使用 `createRequire(import.meta.url)` 同步加载，不改动其他 ESM 依赖。
 
 ## 边界
 

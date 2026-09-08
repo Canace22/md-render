@@ -3,12 +3,16 @@ import { Input, Modal } from 'antd';
 import { CornerDownLeft, Search } from 'lucide-react';
 import { filterCommands } from '../core/commands/commandRegistry.js';
 import { recordCommandUse, sortByUsage } from '../utils/commandUsage.js';
+import { formatShortcut } from '../utils/shortcutLabel.js';
 
 /**
  * 命令面板 —— 所有低频入口的统一通道。
  *
  * 空查询时按历史使用次数倒序，用得多的自然浮到最上面；
  * 输入后走标题 + 关键词包含匹配，不引模糊搜索库。
+ *
+ * 面板是低频入口的唯一去处，所以底部常驻一条说明：既讲清键盘用法，
+ * 也告诉用户「界面上找不到的功能都在这儿」。
  */
 export default function CommandPalette({ open, onClose, commands = [] }) {
   const [query, setQuery] = useState('');
@@ -105,6 +109,11 @@ export default function CommandPalette({ open, onClose, commands = [] }) {
                 onClick={() => runCommand(command)}
               >
                 <span className="command-palette-item-title">{command.title}</span>
+                {command.shortcutKey && (
+                  <kbd className="command-palette-item-kbd">
+                    {formatShortcut(command.shortcutKey)}
+                  </kbd>
+                )}
                 <span className="command-palette-item-group">{command.group}</span>
                 {index === activeIndex && (
                   <CornerDownLeft size={13} strokeWidth={1.8} className="command-palette-item-enter" />
@@ -115,6 +124,13 @@ export default function CommandPalette({ open, onClose, commands = [] }) {
         ) : (
           <div className="command-palette-empty">没有匹配的命令</div>
         )}
+
+        <div className="command-palette-footer">
+          <span className="command-palette-footer-keys">
+            <kbd>↑</kbd><kbd>↓</kbd> 选择 · <kbd>↵</kbd> 执行 · <kbd>Esc</kbd> 关闭
+          </span>
+          <span className="command-palette-footer-tip">界面上没露出的功能都能在这里找到</span>
+        </div>
       </div>
     </Modal>
   );

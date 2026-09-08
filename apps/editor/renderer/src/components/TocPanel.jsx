@@ -118,7 +118,8 @@ export default function TocPanel({ markdown, collapsed, onToggle }) {
           </div>
         </nav>
       ) : (
-        <div className="toc-curtain-ruler" aria-hidden="true">
+        // 收起态只有一排刻度线，不加提示没人知道这是可展开的大纲
+        <div className="toc-curtain-ruler" title="文档大纲：鼠标移上来展开" aria-hidden="true">
           {headings.map((heading, index) => (
             <span
               key={`${heading.text}-${index}`}

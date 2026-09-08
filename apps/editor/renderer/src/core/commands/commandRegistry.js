@@ -59,6 +59,8 @@ export const createCommands = (ctx = {}) => [
     title: '打开 / 关闭 AI 助手',
     keywords: ['ai', 'agent', 'zhushou', '助手', '改稿'],
     group: '面板',
+    // shortcutKey 只做展示：面板里标出主键，让用户顺带学到快捷键，实际监听在 MarkdownEditor
+    shortcutKey: 'J',
     run: () => ctx.toggleAgentPanel?.(),
   },
   {

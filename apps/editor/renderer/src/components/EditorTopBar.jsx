@@ -6,20 +6,25 @@ import {
   Globe,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   X,
 } from 'lucide-react';
 import Breadcrumb from './Breadcrumb.jsx';
 import ThemeToggleButton from './ThemeToggleButton.jsx';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
+import { formatShortcut } from '../utils/shortcutLabel.js';
 
 /** 打开文档菜单项的 key 前缀，与批量关闭动作区分 */
 const TAB_KEY_PREFIX = 'tab:';
+
+/** 命令面板快捷键主键，与 useCommandPalette 的监听保持一致 */
+const COMMAND_PALETTE_KEY = 'K';
 
 /**
  * 编辑器唯一顶栏 —— 把原先「标签页 / 面包屑」两条横栏合成一条全局导航。
  *
  * 左：侧栏折叠 + 面包屑（末级由文档下拉接管，代替标签页栏）
- * 右：AI 助手 + 主题切换两个全局功能
+ * 右：全部功能（命令面板入口）+ AI 助手 + 主题切换
  */
 export default function EditorTopBar({
   workspace,
@@ -38,6 +43,7 @@ export default function EditorTopBar({
   onThemeChange,
   agentPanelOpen,
   onToggleAgentPanel,
+  onOpenCommandPalette,
 }) {
   const activeTab = tabs.find((tab) => tab.id === selectedId) ?? null;
   const activeIndex = tabs.findIndex((tab) => tab.id === selectedId);
@@ -145,6 +151,19 @@ export default function EditorTopBar({
         )}
       </div>
       <div className="editor-top-bar-actions">
+        {/* 导出 / 导入 / 视图切换等入口都收进了命令面板，这里是它唯一看得见的门 */}
+        <button
+          type="button"
+          className="titlebar-command-entry"
+          onClick={onOpenCommandPalette}
+          aria-label="打开命令面板，查看全部功能"
+          aria-keyshortcuts="Meta+K Control+K"
+          title={`全部功能：导入 / 导出 / 切换视图等入口都在这里（${formatShortcut(COMMAND_PALETTE_KEY)}）`}
+        >
+          <Search size={14} strokeWidth={1.7} />
+          <span className="titlebar-command-entry-text">全部功能</span>
+          <kbd className="titlebar-command-entry-kbd">{formatShortcut(COMMAND_PALETTE_KEY)}</kbd>
+        </button>
         <button
           type="button"
           className={`titlebar-agent-toggle${agentPanelOpen ? ' is-open' : ''}`}

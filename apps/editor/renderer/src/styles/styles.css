@@ -4811,6 +4811,41 @@ body.theme-light #markdown-output code {
     color: var(--color-text-primary);
 }
 
+/* 全部功能：命令面板的可见入口，低频命令收进面板后靠它被找到 */
+.titlebar-command-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    height: 28px;
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--easing), color var(--duration-fast) var(--easing),
+        border-color var(--duration-fast) var(--easing);
+}
+
+.titlebar-command-entry:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-muted);
+    background: var(--color-bg-active);
+}
+
+.titlebar-command-entry-kbd {
+    padding: 1px 5px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-s);
+    background: var(--color-bg-active);
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 /* AI 助手：顶栏右侧的全局功能，用带文字的胶囊与纯图标的主题钮区分主次 */
 .titlebar-agent-toggle {
     display: inline-flex;
@@ -10163,6 +10198,37 @@ body.theme-dark .file-preview-iframe {
     text-align: center;
     color: var(--color-text-secondary);
     font-size: var(--text-body);
+}
+
+.command-palette-item-kbd,
+.command-palette-footer kbd {
+    padding: 1px 5px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-s);
+    background: var(--color-bg-active);
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+/* 面板底部说明：讲清键盘用法，并点明「界面上没露出的功能都在这里」 */
+.command-palette-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-s);
+    flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-m);
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+
+.command-palette-footer-keys {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 /* 文件树标题栏里的图谱入口：选中态跟 rail 按钮保持一致 */
