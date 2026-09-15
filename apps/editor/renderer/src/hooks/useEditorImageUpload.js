@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import { saveBinaryAsset } from '../services/electronBridge.js';
+import { encodeLocalMediaPath } from '../utils/localMediaMarkdown.js';
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -228,12 +229,6 @@ export const insertImagesFromFiles = async (
     }
   });
 };
-
-const encodeLocalMediaPath = (value) => String(value)
-  .replace(/\\/g, '/')
-  .split('/')
-  .map((segment) => encodeURIComponent(segment))
-  .join('/');
 
 export function useEditorImageUpload({ localProjectSupported, selectedProjectRootPath }) {
   const assetProjectRootRef = useRef('');

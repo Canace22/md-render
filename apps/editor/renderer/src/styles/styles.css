@@ -4426,7 +4426,7 @@ body.theme-light #markdown-output code {
     min-height: calc(100vh - 224px);
 }
 
-/* 编辑器内图片：提示可点击放大 */
+/* 编辑器内图片：单击选中（可按删除键删除），双击放大 */
 .blocknote-editor .bn-visual-media {
     cursor: zoom-in;
 }

@@ -49,6 +49,10 @@ import {
   normalizeFrontmatterForPaste,
   normalizeMarkdown,
 } from '../utils/markdownUtils';
+import {
+  rewriteMarkdownImagesForDisk,
+  rewriteMarkdownImagesForEditor,
+} from '../utils/localMediaMarkdown.js';
 import { applyThemeToBody } from '../utils/themeUtils';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { copyToWeChat } from '../utils/wechatCopy';
@@ -194,11 +198,17 @@ const BLOCKNOTE_OPTIONS = {
   },
 };
 
-const contentToDiskMarkdown = (content) => {
+const mediaContextFromFile = (file) => ({
+  projectRootPath: file?.projectRootPath || '',
+  noteRelativePath: file?.relativePath || '',
+});
+
+const contentToDiskMarkdown = (content, mediaContext) => {
   const blocks = parseBlockNoteContent(content);
-  if (!blocks) return normalizeMarkdown(content);
-  const converter = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
-  return normalizeMarkdown(converter.blocksToMarkdownLossy(blocks));
+  const markdown = blocks
+    ? normalizeMarkdown(BlockNoteEditor.create(BLOCKNOTE_OPTIONS).blocksToMarkdownLossy(blocks))
+    : normalizeMarkdown(content);
+  return rewriteMarkdownImagesForDisk(markdown, mediaContext);
 };
 
 const DEFAULT_PASTE_MIME_TYPES = new Set([
@@ -699,7 +709,7 @@ function MarkdownEditor() {
     }
 
     setDiskSavePending(file.id, true);
-    const diskMarkdown = contentToDiskMarkdown(latestFile.content);
+    const diskMarkdown = contentToDiskMarkdown(latestFile.content, mediaContextFromFile(latestFile));
     let saveFailed = false;
     try {
       await enqueueProjectFileSave(file.id, () => saveLocalProjectFile({
@@ -737,7 +747,7 @@ function MarkdownEditor() {
         await enqueueProjectFileSave(file.id, () => saveLocalProjectFile({
           projectRootPath: file.projectRootPath,
           relativePath: file.relativePath,
-          content: contentToDiskMarkdown(file.content),
+          content: contentToDiskMarkdown(file.content, mediaContextFromFile(file)),
         }));
       } catch (error) {
         saveFailed = true;
@@ -1055,8 +1065,9 @@ function MarkdownEditor() {
   // 图片放大查看器：lightbox.index < 0 表示关闭
   const [lightbox, setLightbox] = useState({ images: [], index: -1 });
 
-  // 点击编辑器内图片：收集当前文档所有图片，打开 lightbox 并定位到被点的那张
-  const handlePaperClick = useCallback((event) => {
+  // 双击编辑器内图片：收集当前文档所有图片，打开 lightbox 并定位到被双击的那张。
+  // 单击不拦截，交给 BlockNote 选中图片块，这样键盘删除键才能删掉图片。
+  const handlePaperDoubleClick = useCallback((event) => {
     const img = event.target.closest?.('img.bn-visual-media');
     if (!img) return;
     const paper = event.currentTarget;
@@ -1064,10 +1075,15 @@ function MarkdownEditor() {
     const images = imgs.map((node) => node.currentSrc || node.src).filter(Boolean);
     const index = imgs.indexOf(img);
     if (index < 0 || !images.length) return;
+    event.preventDefault();
     setLightbox({ images, index });
   }, []);
 
-  const closeLightbox = useCallback(() => setLightbox((prev) => ({ ...prev, index: -1 })), []);
+  // 关闭大图后把焦点还给编辑器，否则键盘操作（删除等）落不到图片块上
+  const closeLightbox = useCallback(() => {
+    setLightbox((prev) => ({ ...prev, index: -1 }));
+    activeEditorRef.current?.focus?.();
+  }, []);
   const changeLightboxIndex = useCallback(
     (next) => setLightbox((prev) => ({ ...prev, index: next })),
     [],
@@ -1099,7 +1115,10 @@ function MarkdownEditor() {
       }
     }
 
-    const sourceMarkdown = normalizeMarkdown(markdown);
+    const sourceMarkdown = rewriteMarkdownImagesForEditor(
+      normalizeMarkdown(markdown),
+      mediaContextFromFile(selectedFile),
+    );
     lastSyncedMarkdownRef.current = sourceMarkdown;
 
     if (!sourceMarkdown) {
@@ -1151,7 +1170,7 @@ function MarkdownEditor() {
     // 当前编辑器的 onChange 已经落盘时不再重复保存；
     // 只处理切换文档后仍留在 store 里的占位 URL。
     state.updateFileContentById(resolvedFileId, resolvedContent);
-    const diskMarkdown = contentToDiskMarkdown(resolvedContent);
+    const diskMarkdown = contentToDiskMarkdown(resolvedContent, mediaContextFromFile(sourceFile));
 
     for (const pendingFileId of new Set([fileId, resolvedFileId])) {
       const pendingTimer = projectSaveTimersRef.current.get(pendingFileId);
@@ -1448,7 +1467,10 @@ function MarkdownEditor() {
       const timerId = window.setTimeout(async () => {
         try {
           // 磁盘 .md 文件仍写 Markdown（有损转换，但保持文件可读性）
-          const diskMarkdown = normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document));
+          const diskMarkdown = rewriteMarkdownImagesForDisk(
+            normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document)),
+            mediaContextFromFile(selectedFile),
+          );
           await enqueueProjectFileSave(selectedFile.id, () => saveLocalProjectFile({
             projectRootPath: selectedProjectRootPath,
             relativePath: selectedFile.relativePath,
@@ -2609,7 +2631,7 @@ function MarkdownEditor() {
                     <div id="markdown-output" className="paper-content">
                       <div
                         className="blocknote-paper"
-                        onClick={handlePaperClick}
+                        onDoubleClick={handlePaperDoubleClick}
                         onBlurCapture={handleSelectAllBlurCapture}
                         onKeyDownCapture={handleSelectAllKeyDownCapture}
                         onKeyUpCapture={handleSelectAllKeyUpCapture}

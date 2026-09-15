@@ -17,7 +17,7 @@ export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
 
 // 粘贴/拖入的图片素材统一存到项目根下的此目录
-const ASSETS_DIR_NAME = '素材';
+export const ASSETS_DIR_NAME = 'assets';
 // base64 mime 子类型 → 文件扩展名（仅允许图片，防止写入可执行文件）
 const ASSET_MIME_EXTENSIONS = {
   png: 'png',

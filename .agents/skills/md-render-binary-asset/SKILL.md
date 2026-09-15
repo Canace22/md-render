@@ -11,7 +11,7 @@ description: 在 renderer 里处理二进制媒体（粘贴/拖入截图、保�
 
 - **renderer 碰不到文件系统**：AGENTS.md 硬约束——渲染进程禁用 Node API，所有系统级操作必须走 IPC。所以二进制写盘只能在 main 进程做。
 - **现成的文本 IPC 不能复用**：`save-local-project-file` 走的是 `utf8` 文本路径，会把二进制写坏。必须**新增**一条二进制写盘 IPC（base64 → `Buffer` → `fs.writeFile`），不要去改文本路径。
-- **本地文件靠 `local-media://` 协议显示**：项目已注册 `local-media://` 自定义协议（见 `main.js` 的 `protocol.handle('local-media')`），renderer 用 `local-media://<绝对路径>` 就能加载本地图片/音视频，绕开 `file://` 跨域。这是引用本地媒体的**唯一正确方式**。
+- **编辑器显示用 `local-media://`，磁盘 Markdown 用相对路径**：Electron 里用 `local-media://<绝对路径>` 加载本地图（绕开 `file://` 跨域）。落盘时必须改写成相对当前笔记的路径（如 `../../assets/截图.png`），Obsidian 才认；打开时再转回 `local-media://`。转换在 `localMediaMarkdown.js`，不要把 `local-media://` 写进 `.md`。
 - **BlockNote 的入口是 `uploadFile`**：编辑器没配 `uploadFile` 时，粘贴的图会被默认内嵌成 base64 data URL，污染文档和 DB。配上 `uploadFile` 钩子，粘贴/拖入/插入图片都会先调它，把存盘和返回 URL 收敛到一处。
 
 ## 链路
@@ -21,10 +21,10 @@ flowchart TD
     A["复制截图 → 编辑器内粘贴/拖入"] --> B["BlockNote 调 uploadFile(file)"]
     B --> C["renderer: file → data URL → 拆出 base64 + mime"]
     C --> D["IPC save-binary-asset"]
-    D --> E["main: base64 → Buffer → 写入 项目/素材/"]
+    D --> E["main: base64 → Buffer → 写入 项目/assets/"]
     E --> F["返回相对路径"]
-    F --> G["renderer 拼 local-media:// 绝对路径"]
-    G --> H["图片块显示，正文只存轻量引用"]
+    F --> G["renderer 拼 local-media:// 给编辑器显示"]
+    G --> H["落盘时改写成相对路径 Markdown"]
     C -. 无项目根/失败 .-> Z["降级返回 data URL<br/>不丢图、不报错"]
 ```
 
@@ -44,7 +44,8 @@ flowchart TD
 ## 关键约束 / 易踩的坑
 
 - **不要改 `save-local-project-file`**：它是文本路径，二进制必须走新 IPC。
-- **`local-media://` 后面跟绝对路径**：`saveBinaryAsset` 返回的是相对项目根的路径，renderer 要拼成 `local-media://${projectRoot}/${relativePath}`。不要对整条路径用 `encodeURI`（它不编码 `#` / `?`），要保留 `/` 并对每个路径段分别 `encodeURIComponent`。
+- **`local-media://` 只存在编辑器内存里**：`saveBinaryAsset` 返回相对项目根的路径，renderer 拼 `local-media://${projectRoot}/${relativePath}` 给 BlockNote 显示。不要对整条路径用 `encodeURI`（它不编码 `#` / `?`），要保留 `/` 并对每个路径段分别 `encodeURIComponent`。写盘走 `rewriteMarkdownImagesForDisk`，打开走 `rewriteMarkdownImagesForEditor`。
+- **磁盘路径相对当前笔记，不要 percent-encode 中文**：`Projects/原稿/a.md` 引用 `assets/foo.png` 应写成 `../../assets/foo.png`。Obsidian 不认 `local-media://`，也不喜欢 `%E7%B4%A0%E6%9D%90` 这种编码。
 - **mime 子类型来自 data URL**：`data:image/png;base64,...` 里的 `png` 才是 mime 子类型；`jpeg` 要映射成 `.jpg`，`svg+xml` 映射成 `.svg`。
 - **降级是必须的**：内置文档没有 `projectRootPath`，不降级会直接报错丢图。
 - **异步上传前先固定粘贴现场**：`uploadFile` 一进入就快照当前项目根，不要在 `FileReader` / IPC `await` 之后再读 ref；粘贴图片时先在当前 ProseMirror 选区同步插入占位图片，再异步回填最终 URL。这样才不会因移动光标/切项目而插错位置、存错目录，多图也要一次占位保持顺序。
@@ -57,10 +58,10 @@ flowchart TD
 
 ## 验证
 
-改完假定 10 条 case 给预期（粘贴 PNG/JPEG、连续多张不覆盖、拖入、内置文档降级、纯文本/代码块走原 pasteHandler 不变、base64 空/损坏降级提示、越界路径被拦、关闭重开靠 `local-media://` 重新加载）。
+改完假定 10 条 case 给预期（粘贴 PNG/JPEG、连续多张不覆盖、拖入、内置文档降级、纯文本/代码块走原 pasteHandler 不变、base64 空/损坏降级提示、越界路径被拦、关闭重开编辑器仍能显示、磁盘 Markdown 是相对路径且 Obsidian 能出图、连续两张图落盘后分行）。
 
 单测**默认不主动跑，用户要求时再跑**（`pnpm test:unit`）。注意有几个预先存在的失败（`canvas-bookmark`/`excalidraw-canvas-agent`/`knowledge-graph-sync`），用 `git stash` 对比基线确认自己零新增失败，别误判。
 
 ## 完成标准
 
-粘贴/拖入图片自动存进工作区 `素材/`，正文只留 `local-media://` 引用；无项目根或失败时降级内嵌且有提示；现有粘贴逻辑（文本/Markdown/代码块）行为不变；零新增单测失败。
+粘贴/拖入图片自动存进工作区 `assets/`（或历史 `素材/`），编辑器里用 `local-media://` 显示，磁盘 `.md` 只留相对路径；无项目根或失败时降级内嵌且有提示；现有粘贴逻辑（文本/Markdown/代码块）行为不变；零新增单测失败。

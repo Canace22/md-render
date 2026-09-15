@@ -71,7 +71,7 @@
 | `md-render-store` | 改全局状态（zustand） |
 | `md-render-wechat` | 微信公众号格式化 |
 | `md-render-external-api-proxy` | 前端调第三方 API 的代理化（CORS、可配置） |
-| `md-render-binary-asset` | 二进制媒体存盘与 local-media:// 引用 |
+| `md-render-binary-asset` | 二进制媒体存盘；编辑器用 local-media://，磁盘写相对路径 |
 | `md-render-daily` | 今日速记面板（切日期 / carryOver 约定） |
 | `md-render-blocknote-core` | BlockNote 底层接入与避坑 |
 | `md-render-agent` | Agent 工具、引擎、面板 |

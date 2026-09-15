@@ -35,7 +35,7 @@
 | `md-render-daily` | Daily 速记面板。核心约定：切日期是**纯视图变更**，破坏性结转 carryOver 只在真正跨到今天时跑一次 |
 | `md-render-kb-source` | 给知识库加节点类型/外部来源（书签、稍后读、RSS、剪藏）。都复用 file 节点 + nodeType 区分，落 SQLite + FTS5 |
 | `md-render-excalidraw-canvas` | 无限画布的场景同步、防抖保存、卡片插入、视口交互 |
-| `md-render-binary-asset` | renderer 里处理二进制媒体：截图粘贴、存进 `素材/` 目录、`local-media://` 引用（不内嵌 base64） |
+| `md-render-binary-asset` | renderer 里处理二进制媒体：截图粘贴、存进 `assets/`，编辑器用 `local-media://` 显示，磁盘写相对路径 |
 | `md-render-asset-derivation` | 「保留原稿 + 生成派生资产 + 记录来源关系」，如生成平台版本、`sourceMaterialIds` |
 
 ## 服务端与集成
