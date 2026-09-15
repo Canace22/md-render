@@ -11,6 +11,7 @@ describe('architecture boundaries', () => {
     expect(RENDERER_STATE_KEYS).toBe(EDITOR_STATE_KEYS);
     expect(RENDERER_STATE_KEYS).toContain('workspace_json');
     expect(RENDERER_STATE_KEYS).toContain('daily_workspace_json');
+    expect(RENDERER_STATE_KEYS).toContain('sidebar_expanded_folders');
   });
 
   it('keeps the composed store default workspace and legacy actions available', () => {

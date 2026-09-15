@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Popover, Select } from 'antd';
+import { useEditorStore } from '../store/useEditorStore.js';
 import logoUrl from '../assets/logo.png';
 import {
   File,
@@ -38,6 +39,9 @@ import {
   META_FILTER_STATUS_NONE_LABEL,
   getNodeSortTime,
   isHiddenWorkspaceNode,
+  collectVisibleFolderIds,
+  SIDEBAR_FILE_KIND_ALL,
+  SIDEBAR_FILE_KIND_OPTIONS,
 } from '../store/workspaceUtils.js';
 import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
@@ -58,6 +62,10 @@ const EMPTY_META_FILTERS = { status: null, platform: null, nodeType: null, tag: 
 const META_FILTER_ALL = '__all__';
 
 const hasActiveMetaFilters = (filters) =>
+  Boolean(filters?.status || filters?.platform || filters?.nodeType || filters?.tag || filters?.fileKind);
+
+/** 搜索 / 状态等临时筛选才撑开目录；文档类型是常驻筛选，不能改展开记忆 */
+const hasTransientRevealFilters = (filters) =>
   Boolean(filters?.status || filters?.platform || filters?.nodeType || filters?.tag);
 
 const buildMetaFilterEmptyMessage = (filters, labelMaps) => {
@@ -73,6 +81,9 @@ const buildMetaFilterEmptyMessage = (filters, labelMaps) => {
   }
   if (filters.nodeType) {
     parts.push(`类型「${labelMaps.nodeType.get(filters.nodeType) ?? filters.nodeType}」`);
+  }
+  if (filters.fileKind) {
+    parts.push(`类型「${labelMaps.fileKind.get(filters.fileKind) ?? filters.fileKind}」`);
   }
   if (filters.tag) {
     parts.push(`标签「${filters.tag}」`);
@@ -173,6 +184,8 @@ const TreeNode = ({
   onCloseContextMenu,
   onRevealLocalProjectEntry,
   forceOpen,
+  expandedFolderIdSet,
+  onToggleFolder,
 }) => {
   const isFolder = node.type === 'folder';
   const isActive = node.id === selectedId;
@@ -184,12 +197,7 @@ const TreeNode = ({
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
-  const [folderOpen, setFolderOpen] = useState(false);
-
-  // 工具栏「展开/收起全部」，以及搜索/筛选时的临时展开
-  useEffect(() => {
-    if (isFolder) setFolderOpen(forceOpen);
-  }, [forceOpen, isFolder]);
+  const folderOpen = Boolean(isFolder && (forceOpen || expandedFolderIdSet?.has(node.id)));
   const [dragOver, setDragOver] = useState(false);
   const menuRef = useRef(null);
   const renameInputRef = useRef(null);
@@ -304,7 +312,7 @@ const TreeNode = ({
           className="tree-node-button"
           onClick={() => {
             onSelect(node.id);
-            if (isFolder) setFolderOpen((v) => !v);
+            if (isFolder && !forceOpen) onToggleFolder?.(node.id);
           }}
         >
           <span className="tree-node-icon">
@@ -439,6 +447,8 @@ const TreeNode = ({
               onCloseContextMenu={onCloseContextMenu}
               onRevealLocalProjectEntry={onRevealLocalProjectEntry}
               forceOpen={forceOpen}
+              expandedFolderIdSet={expandedFolderIdSet}
+              onToggleFolder={onToggleFolder}
             />
           ))}
         </div>
@@ -448,7 +458,18 @@ const TreeNode = ({
 };
 
 /** 隐藏工作区根节点，直接渲染一级目录和文档 */
-const renderTree = (workspace, selectedId, onSelect, handlers, contextMenu, onContextMenu, onCloseContextMenu, forceOpen) => {
+const renderTree = (
+  workspace,
+  selectedId,
+  onSelect,
+  handlers,
+  contextMenu,
+  onContextMenu,
+  onCloseContextMenu,
+  forceOpen,
+  expandedFolderIdSet,
+  onToggleFolder,
+) => {
   const children = workspace?.type === 'folder' && Array.isArray(workspace.children)
     ? workspace.children
     : [];
@@ -465,6 +486,8 @@ const renderTree = (workspace, selectedId, onSelect, handlers, contextMenu, onCo
       onContextMenu={onContextMenu}
       onCloseContextMenu={onCloseContextMenu}
       forceOpen={forceOpen}
+      expandedFolderIdSet={expandedFolderIdSet}
+      onToggleFolder={onToggleFolder}
     />
   ));
 };
@@ -501,17 +524,22 @@ const WorkspaceSidebar = ({
   const [renamingNodeId, setRenamingNodeId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null); // { kind, nodeId, x, y }
-  // false = 默认/全部收起，true = 全部展开；搜索/筛选时临时强制展开
-  const [forceOpen, setForceOpen] = useState(false);
   const isCommittingRenameRef = useRef(false);
-
-  const handleToggleAllFolders = useCallback(() => {
-    setForceOpen((prev) => (prev === false ? true : false));
-  }, []);
+  const sidebarFileKind = useEditorStore((s) => s.sidebarFileKind);
+  const setSidebarFileKind = useEditorStore((s) => s.setSidebarFileKind);
+  const expandedFolderIds = useEditorStore((s) => s.expandedFolderIds);
+  const setExpandedFolderIds = useEditorStore((s) => s.setExpandedFolderIds);
+  const toggleFolderExpanded = useEditorStore((s) => s.toggleFolderExpanded);
+  const fileKindFilter = sidebarFileKind === SIDEBAR_FILE_KIND_ALL ? null : sidebarFileKind;
+  const expandedFolderIdSet = useMemo(
+    () => new Set(Array.isArray(expandedFolderIds) ? expandedFolderIds : []),
+    [expandedFolderIds],
+  );
   const resizeStartRef = useRef({ pointerX: 0, width: DEFAULT_SIDEBAR_WIDTH });
   const searchKeyword = searchQuery ?? '';
   const isSearching = Boolean(searchKeyword.trim());
-  const isMetaFiltering = hasActiveMetaFilters(metaFilters);
+  const effectiveMetaFilters = { ...metaFilters, fileKind: fileKindFilter };
+  const isMetaFiltering = hasActiveMetaFilters(effectiveMetaFilters);
   const allowStructureActions = true;
   // 图谱是文件树的另一种看法，右侧换成图谱时左边的树要留着，
   // 否则进了图谱就找不到回去的入口，也看不出自己还在文档这条腿上。
@@ -556,12 +584,25 @@ const WorkspaceSidebar = ({
     onCancelRename: handleCancelRename,
   };
 
-  // 视图优先级：搜索 > 元数据筛选 > 正常
-  const filteredWorkspace = isSearching
+  // 搜索优先于状态/平台/标签；文档类型（图片/文档/视频）始终叠加在结果上
+  const baseWorkspace = isSearching
     ? filterWorkspace(workspace, searchKeyword)
-    : isMetaFiltering
+    : hasActiveMetaFilters(metaFilters)
       ? filterWorkspaceByMeta(workspace, metaFilters)
       : workspace;
+  const filteredWorkspace = fileKindFilter
+    ? filterWorkspaceByMeta(baseWorkspace, { fileKind: fileKindFilter })
+    : baseWorkspace;
+  const visibleFolderIds = useMemo(
+    () => collectVisibleFolderIds(filteredWorkspace),
+    [filteredWorkspace],
+  );
+  const allFoldersExpanded = visibleFolderIds.length > 0
+    && visibleFolderIds.every((id) => expandedFolderIdSet.has(id));
+  const handleToggleAllFolders = useCallback(() => {
+    setExpandedFolderIds(allFoldersExpanded ? [] : visibleFolderIds);
+  }, [allFoldersExpanded, visibleFolderIds, setExpandedFolderIds]);
+  const forceOpenFolders = isSearching || hasTransientRevealFilters(metaFilters);
 
   // 搜索或筛选时隐藏「最近」区，专注结果
   const recentFiles = isSearching || isMetaFiltering ? [] : collectRecentFiles(workspace, 5);
@@ -569,6 +610,7 @@ const WorkspaceSidebar = ({
     statusOptions: CREATION_STATUS_OPTIONS,
     platformOptions,
     nodeTypeOptions: KNOWLEDGE_NODE_TYPE_OPTIONS,
+    fileKindOptions: SIDEBAR_FILE_KIND_OPTIONS,
   });
   const statusLabelMap = new Map([
     ...CREATION_STATUS_OPTIONS.map((item) => [item.value, item.label]),
@@ -576,9 +618,11 @@ const WorkspaceSidebar = ({
   ]);
   const platformLabelMap = new Map(platformOptions.map((item) => [item.value, item.label]));
   const nodeTypeLabelMap = new Map(KNOWLEDGE_NODE_TYPE_OPTIONS.map((item) => [item.value, item.label]));
+  const fileKindLabelMap = new Map(SIDEBAR_FILE_KIND_OPTIONS.map((item) => [item.value, item.label]));
   const hasMetaFilterSection = !isSearching
     && (metaFilterCounts.statuses.length > 0
       || metaFilterCounts.platforms.length > 0
+      || metaFilterCounts.fileKinds.length > 0
       || metaFilterCounts.nodeTypes.length > 0
       || metaFilterCounts.tags.length > 0);
   const selectedNode = findNodeById(workspace, selectedId);
@@ -650,15 +694,22 @@ const WorkspaceSidebar = ({
   };
 
   const toggleMetaFilter = (key, value) => {
+    const next = resolveMetaFilterChange(value);
+    if (key === 'fileKind') {
+      setSidebarFileKind(next ?? SIDEBAR_FILE_KIND_ALL);
+      onSearchQueryChange?.('');
+      return;
+    }
     setMetaFilters((prev) => ({
       ...prev,
-      [key]: resolveMetaFilterChange(value),
+      [key]: next,
     }));
     onSearchQueryChange?.('');
   };
 
   const clearMetaFilters = () => {
     setMetaFilters(EMPTY_META_FILTERS);
+    setSidebarFileKind(SIDEBAR_FILE_KIND_ALL);
   };
 
   useEffect(() => {
@@ -854,9 +905,23 @@ const WorkspaceSidebar = ({
                           />
                         </label>
                       )}
-                      {metaFilterCounts.nodeTypes.length > 0 && (
+                      {metaFilterCounts.fileKinds.length > 0 && (
                         <label className="notebook-filter-field">
                           <span className="notebook-filter-field-label">文档类型</span>
+                          <Select
+                            size="small"
+                            className="notebook-filter-select"
+                            popupClassName="notebook-filter-select-popup"
+                            value={fileKindFilter ?? META_FILTER_ALL}
+                            onChange={(value) => toggleMetaFilter('fileKind', value)}
+                            options={buildMetaFilterSelectOptions(metaFilterCounts.fileKinds)}
+                            data-testid="file-kind-filter-select"
+                          />
+                        </label>
+                      )}
+                      {metaFilterCounts.nodeTypes.some((item) => item.value !== 'document') && (
+                        <label className="notebook-filter-field">
+                          <span className="notebook-filter-field-label">知识类型</span>
                           <Select
                             size="small"
                             className="notebook-filter-select"
@@ -927,8 +992,8 @@ const WorkspaceSidebar = ({
                 type="button"
                 className="sidebar-add-icon"
                 onClick={handleToggleAllFolders}
-                title={forceOpen === false ? '展开全部文件夹' : '收起全部文件夹'}
-                aria-label={forceOpen === false ? '展开全部文件夹' : '收起全部文件夹'}
+                title={allFoldersExpanded ? '收起全部文件夹' : '展开全部文件夹'}
+                aria-label={allFoldersExpanded ? '收起全部文件夹' : '展开全部文件夹'}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <rect x="2" y="7.25" width="12" height="1.5" rx="0.75" fill="currentColor"/>
@@ -983,16 +1048,19 @@ const WorkspaceSidebar = ({
                 contextMenu,
                 (nodeId, x, y) => setContextMenu({ kind: 'node', nodeId, x, y }),
                 closeContextMenu,
-                isSearching || isMetaFiltering ? true : forceOpen,
+                forceOpenFolders,
+                expandedFolderIdSet,
+                toggleFolderExpanded,
               )
               : (
                 <div className="workspace-tree-empty" data-testid="search-empty">
                   {isSearching
                     ? `没有匹配「${searchKeyword.trim()}」的笔记`
-                    : buildMetaFilterEmptyMessage(metaFilters, {
+                    : buildMetaFilterEmptyMessage(effectiveMetaFilters, {
                         status: statusLabelMap,
                         platform: platformLabelMap,
                         nodeType: nodeTypeLabelMap,
+                        fileKind: fileKindLabelMap,
                       })}
                 </div>
               )}

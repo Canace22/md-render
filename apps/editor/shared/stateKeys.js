@@ -8,4 +8,6 @@ export const EDITOR_STATE_KEYS = Object.freeze([
   'daily_workspace_json',
   'storage_mode',
   'project_root_path',
+  'sidebar_file_kind',
+  'sidebar_expanded_folders',
 ]);

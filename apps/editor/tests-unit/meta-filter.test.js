@@ -3,8 +3,14 @@ import {
   collectMetaFilterCounts,
   filterWorkspaceByMeta,
   fileMatchesMetaFilters,
+  getWorkspaceFileKind,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
   META_FILTER_STATUS_NONE,
+  SIDEBAR_FILE_KIND_DOCUMENT,
+  SIDEBAR_FILE_KIND_IMAGE,
+  SIDEBAR_FILE_KIND_VIDEO,
+  normalizeSidebarFileKind,
+  SIDEBAR_FILE_KIND_ALL,
 } from '../renderer/src/store/workspaceUtils.js';
 import { CREATION_STATUS_OPTIONS } from '../renderer/src/store/creationUtils.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../renderer/src/utils/publishingPlatforms.js';
@@ -45,6 +51,18 @@ const ws = {
           name: 'C',
           content: '',
           nodeType: 'bookmark',
+        },
+        {
+          id: 'img',
+          type: 'file',
+          name: 'Pasted image 20260910151249.png',
+          content: '',
+        },
+        {
+          id: 'vid',
+          type: 'file',
+          name: '录屏.mp4',
+          content: '',
         },
       ],
     },
@@ -116,7 +134,11 @@ describe('filterWorkspaceByMeta', () => {
   });
 
   it('filters by no status', () => {
-    expect(fileNames(filterWorkspaceByMeta(ws, { status: META_FILTER_STATUS_NONE }))).toEqual(['C']);
+    expect(fileNames(filterWorkspaceByMeta(ws, { status: META_FILTER_STATUS_NONE }))).toEqual([
+      'C',
+      'Pasted image 20260910151249.png',
+      '录屏.mp4',
+    ]);
   });
 
   it('returns original tree when no filter is active', () => {
@@ -136,5 +158,59 @@ describe('collectMetaFilterCounts', () => {
     expect(counts.nodeTypes.map((item) => item.value)).toEqual(['concept', 'document', 'bookmark']);
     expect(counts.tags.map((item) => item.value)).toEqual(['react', '前端']);
     expect(counts.tags.find((item) => item.value === 'react')?.count).toBe(2);
+    expect(counts.fileKinds).toEqual([
+      { value: 'document', label: '文档', count: 3 },
+      { value: 'image', label: '图片', count: 1 },
+      { value: 'video', label: '视频', count: 1 },
+    ]);
+  });
+});
+
+describe('getWorkspaceFileKind', () => {
+  it('classifies by extension', () => {
+    expect(getWorkspaceFileKind({ type: 'file', name: '笔记.md' })).toBe(SIDEBAR_FILE_KIND_DOCUMENT);
+    expect(getWorkspaceFileKind({ type: 'file', name: 'Pasted image.png' })).toBe(SIDEBAR_FILE_KIND_IMAGE);
+    expect(getWorkspaceFileKind({ type: 'file', name: 'demo.MP4' })).toBe(SIDEBAR_FILE_KIND_VIDEO);
+    expect(getWorkspaceFileKind({ type: 'folder', name: 'assets' })).toBeNull();
+  });
+});
+
+describe('normalizeSidebarFileKind', () => {
+  it('falls back to all for empty or unknown values', () => {
+    expect(normalizeSidebarFileKind(null)).toBe(SIDEBAR_FILE_KIND_ALL);
+    expect(normalizeSidebarFileKind('')).toBe(SIDEBAR_FILE_KIND_ALL);
+    expect(normalizeSidebarFileKind('audio')).toBe(SIDEBAR_FILE_KIND_ALL);
+    expect(normalizeSidebarFileKind('image')).toBe(SIDEBAR_FILE_KIND_IMAGE);
+  });
+});
+
+describe('filterWorkspaceByMeta fileKind', () => {
+  it('keeps markdown and bookmarks when filtering documents', () => {
+    expect(fileNames(filterWorkspaceByMeta(ws, { fileKind: SIDEBAR_FILE_KIND_DOCUMENT }))).toEqual([
+      'A',
+      'B',
+      'C',
+    ]);
+  });
+
+  it('keeps only images', () => {
+    expect(fileNames(filterWorkspaceByMeta(ws, { fileKind: SIDEBAR_FILE_KIND_IMAGE }))).toEqual([
+      'Pasted image 20260910151249.png',
+    ]);
+  });
+
+  it('keeps only videos', () => {
+    expect(fileNames(filterWorkspaceByMeta(ws, { fileKind: SIDEBAR_FILE_KIND_VIDEO }))).toEqual(['录屏.mp4']);
+  });
+
+  it('combines file kind with other filters', () => {
+    expect(fileNames(filterWorkspaceByMeta(ws, {
+      fileKind: SIDEBAR_FILE_KIND_DOCUMENT,
+      tag: 'react',
+    }))).toEqual(['A', 'B']);
+  });
+
+  it('treats all as no file-kind filter', () => {
+    expect(filterWorkspaceByMeta(ws, { fileKind: SIDEBAR_FILE_KIND_ALL })).toBe(ws);
   });
 });

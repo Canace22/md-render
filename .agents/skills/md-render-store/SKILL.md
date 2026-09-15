@@ -22,7 +22,7 @@ flowchart TD
 ```
 
 1. **唯一全局 store**：`apps/editor/renderer/src/store/useEditorStore.js`（zustand `create` + `persist`）。**绝不新建第二个全局 store**。
-2. **临时状态用 `useState`**：只在单个组件内用的状态，留在组件里，不要污染全局 store。
+2. **临时状态用 `useState`**：只在单个组件内用、卸载了也不用记住的状态，留在组件里。看起来像局部 UI、但节点会随父级收起或切页面卸载、或者用户期望下次打开还在的（例如文档目录的文件夹展开），要进 store 并 persist，不要写在 `TreeNode` 的 `useState` 里。反过来，搜索/筛选时的临时全展开只能做展示覆盖，不要写回持久化列表；尤其是常驻的「文档类型」筛选，每次启动都还在，写成 persist 会让重启后目录全部打开。
 3. **持久化 key 用常量**：所有 storage key 在 store 文件顶部定义为 `UPPER_SNAKE_CASE` 常量，命名前缀统一是 `md-renderer-`，例如 `const FOO_STORAGE_KEY = 'md-renderer-foo';`。不要散写字符串字面量。
 4. **不直接碰 localStorage**：持久化统一走 store 现有的 persist 机制（项目用的是兼容多 key 的自定义 storage）。组件里不要出现 `localStorage.getItem/setItem`。
 5. **纯函数工具放 `workspaceUtils.js`**：工作区相关的纯计算（查找节点、生成唯一名、增删节点等）放这里，例如 `findNodeById`、`buildUniqueName`、`addChildNode`。store 里只放状态和 action，复杂纯逻辑抽出去复用。

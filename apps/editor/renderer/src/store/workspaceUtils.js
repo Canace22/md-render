@@ -11,6 +11,48 @@ const DEFAULT_NODE_TYPE = 'document';
 export const META_FILTER_STATUS_NONE = '__no_status__';
 export const META_FILTER_STATUS_NONE_LABEL = '没状态';
 
+/** 侧边栏「文档类型」按文件类别筛选，和知识条目 nodeType 分开 */
+export const SIDEBAR_FILE_KIND_ALL = 'all';
+export const SIDEBAR_FILE_KIND_DOCUMENT = 'document';
+export const SIDEBAR_FILE_KIND_IMAGE = 'image';
+export const SIDEBAR_FILE_KIND_VIDEO = 'video';
+
+const IMAGE_FILE_EXTS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico',
+]);
+const VIDEO_FILE_EXTS = new Set(['.mp4', '.webm', '.ogg', '.mov']);
+
+export const SIDEBAR_FILE_KIND_OPTIONS = [
+  { value: SIDEBAR_FILE_KIND_DOCUMENT, label: '文档' },
+  { value: SIDEBAR_FILE_KIND_IMAGE, label: '图片' },
+  { value: SIDEBAR_FILE_KIND_VIDEO, label: '视频' },
+];
+
+export const normalizeSidebarFileKind = (value) => {
+  if (
+    value === SIDEBAR_FILE_KIND_DOCUMENT
+    || value === SIDEBAR_FILE_KIND_IMAGE
+    || value === SIDEBAR_FILE_KIND_VIDEO
+  ) {
+    return value;
+  }
+  return SIDEBAR_FILE_KIND_ALL;
+};
+
+const getFileExtension = (filename) => {
+  const match = String(filename ?? '').match(/\.[^.]+$/);
+  return match ? match[0].toLowerCase() : '';
+};
+
+/** 按扩展名判断文件类别：图片 / 视频 / 其余都算文档 */
+export const getWorkspaceFileKind = (node) => {
+  if (!node || node.type !== 'file') return null;
+  const ext = getFileExtension(node.name);
+  if (IMAGE_FILE_EXTS.has(ext)) return SIDEBAR_FILE_KIND_IMAGE;
+  if (VIDEO_FILE_EXTS.has(ext)) return SIDEBAR_FILE_KIND_VIDEO;
+  return SIDEBAR_FILE_KIND_DOCUMENT;
+};
+
 export const KNOWLEDGE_NODE_TYPE_OPTIONS = [
   { value: 'concept', label: '概念' },
   { value: 'method', label: '方法' },
@@ -924,6 +966,40 @@ export const AGENT_META_FOLDER_NAME = '.agent';
 export const isHiddenWorkspaceNode = (node) =>
   node?.agentMetaFolder === true || String(node?.name ?? '').startsWith('.');
 
+/** 侧边栏文件夹展开 id 列表：去空、去重，非法输入回空数组 */
+export const normalizeExpandedFolderIds = (value) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const ids = [];
+  for (const item of value) {
+    const id = String(item ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+};
+
+/**
+ * 收集目录树里可见文件夹 id（不含工作区根、隐藏节点）。
+ * 给「展开全部」和持久化展开态用。
+ */
+export const collectVisibleFolderIds = (node) => {
+  const ids = [];
+  const walk = (current) => {
+    if (!current || typeof current !== 'object') return;
+    if (isHiddenWorkspaceNode(current)) return;
+    if (current.type === 'folder' && typeof current.id === 'string' && current.id && current.id !== 'root') {
+      ids.push(current.id);
+    }
+    if (Array.isArray(current.children)) {
+      current.children.forEach(walk);
+    }
+  };
+  walk(node);
+  return ids;
+};
+
 /** 收集隐藏子树里所有文件 id（纯函数），用于搜索 / 召回 / 最近文档过滤 */
 export function collectHiddenFileIds(node, acc = new Set(), insideHidden = false) {
   if (!node) return acc;
@@ -1089,7 +1165,7 @@ export function getFileTargetPlatforms(file) {
 export function fileMatchesMetaFilters(file, filters = {}) {
   if (!file || file.type !== 'file') return false;
 
-  const { status, platform, nodeType, tag } = filters;
+  const { status, platform, nodeType, tag, fileKind } = filters;
   if (status) {
     const docStatus = getDocumentStatus(file);
     if (status === META_FILTER_STATUS_NONE) {
@@ -1101,6 +1177,9 @@ export function fileMatchesMetaFilters(file, filters = {}) {
   if (platform && !getFileTargetPlatforms(file).includes(platform)) return false;
   if (nodeType && normalizeNodeType(file.nodeType) !== nodeType) return false;
   if (tag && !(file.tags ?? []).includes(tag)) return false;
+  if (fileKind && fileKind !== SIDEBAR_FILE_KIND_ALL && getWorkspaceFileKind(file) !== fileKind) {
+    return false;
+  }
   return true;
 }
 
@@ -1109,7 +1188,10 @@ export function fileMatchesMetaFilters(file, filters = {}) {
  * filters 各字段为空时不参与筛选。
  */
 export function filterWorkspaceByMeta(node, filters = {}) {
-  const hasFilter = Boolean(filters.status || filters.platform || filters.nodeType || filters.tag);
+  const hasFileKind = Boolean(filters.fileKind && filters.fileKind !== SIDEBAR_FILE_KIND_ALL);
+  const hasFilter = Boolean(
+    filters.status || filters.platform || filters.nodeType || filters.tag || hasFileKind,
+  );
   if (!node) return null;
   if (!hasFilter) return node;
 
@@ -1130,11 +1212,17 @@ export function filterWorkspaceByMeta(node, filters = {}) {
  */
 export function collectMetaFilterCounts(
   workspace,
-  { statusOptions = [], platformOptions = [], nodeTypeOptions = [] } = {},
+  {
+    statusOptions = [],
+    platformOptions = [],
+    nodeTypeOptions = [],
+    fileKindOptions = SIDEBAR_FILE_KIND_OPTIONS,
+  } = {},
 ) {
   const statusCounts = new Map();
   const platformCounts = new Map();
   const nodeTypeCounts = new Map();
+  const fileKindCounts = new Map();
   let noStatusCount = 0;
 
   collectFiles(workspace).forEach((file) => {
@@ -1151,6 +1239,11 @@ export function collectMetaFilterCounts(
 
     const nodeType = normalizeNodeType(file.nodeType);
     nodeTypeCounts.set(nodeType, (nodeTypeCounts.get(nodeType) ?? 0) + 1);
+
+    const fileKind = getWorkspaceFileKind(file);
+    if (fileKind) {
+      fileKindCounts.set(fileKind, (fileKindCounts.get(fileKind) ?? 0) + 1);
+    }
   });
 
   const withCounts = (options, counts) =>
@@ -1175,6 +1268,7 @@ export function collectMetaFilterCounts(
     statuses,
     platforms: withCounts(platformOptions, platformCounts),
     nodeTypes: withCounts(nodeTypeOptions, nodeTypeCounts),
+    fileKinds: withCounts(fileKindOptions, fileKindCounts),
     tags: collectTags(workspace).map(({ tag, count }) => ({
       value: tag,
       label: tag,

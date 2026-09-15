@@ -36,6 +36,9 @@ import {
   remapDiskNodeAfterRename,
   findNodeIdByRelativePath,
   normalizeNodeType,
+  normalizeSidebarFileKind,
+  normalizeExpandedFolderIds,
+  SIDEBAR_FILE_KIND_ALL,
   sanitizeStringList,
   moveNodeInParent,
   togglePinNode,
@@ -90,6 +93,8 @@ const KNOWLEDGE_HOME_MIGRATION_KEY = 'md-renderer-knowledge-home-v1';
 const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
 const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const DAILY_WORKSPACE_STORAGE_KEY = 'md-renderer-daily-workspace';
+const SIDEBAR_FILE_KIND_STORAGE_KEY = 'md-renderer-sidebar-file-kind';
+const SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY = 'md-renderer-sidebar-expanded-folders';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
@@ -177,6 +182,12 @@ const buildStateFromLocalStorage = () => {
     safeParseJSON(publishingPlatformsRaw, null),
   );
   const dailyWorkspace = normalizeDailyWorkspace(safeParseJSON(dailyWorkspaceRaw, null));
+  const sidebarFileKind = normalizeSidebarFileKind(
+    window.localStorage.getItem(SIDEBAR_FILE_KIND_STORAGE_KEY),
+  );
+  const expandedFolderIds = normalizeExpandedFolderIds(
+    safeParseJSON(window.localStorage.getItem(SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY), []),
+  );
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -192,6 +203,8 @@ const buildStateFromLocalStorage = () => {
       surface: migratedSurface,
       publishingPlatforms,
       dailyWorkspace,
+      sidebarFileKind,
+      expandedFolderIds,
     },
     version: 0,
   };
@@ -227,6 +240,10 @@ const buildStateFromDb = (raw) => {
       surface: normalizeSurface(raw.surface, 'overview'),
       publishingPlatforms,
       dailyWorkspace,
+      sidebarFileKind: normalizeSidebarFileKind(raw.sidebar_file_kind),
+      expandedFolderIds: normalizeExpandedFolderIds(
+        safeParseJSON(raw.sidebar_expanded_folders, []),
+      ),
     },
     version: 0,
   };
@@ -250,6 +267,14 @@ const buildStateMap = (state) => {
   }
   if (state.storageMode) map.storage_mode = state.storageMode;
   if (state.projectRootPath != null) map.project_root_path = state.projectRootPath;
+  if (state.sidebarFileKind != null) {
+    map.sidebar_file_kind = normalizeSidebarFileKind(state.sidebarFileKind);
+  }
+  if (state.expandedFolderIds != null) {
+    map.sidebar_expanded_folders = JSON.stringify(
+      normalizeExpandedFolderIds(state.expandedFolderIds),
+    );
+  }
   return map;
 };
 
@@ -340,6 +365,8 @@ const editorStorage = {
           surface: DEFAULT_LANDING_SURFACE,
           publishingPlatforms: sanitizePublishingPlatforms([]),
           dailyWorkspace: normalizeDailyWorkspace(null),
+          sidebarFileKind: SIDEBAR_FILE_KIND_ALL,
+          expandedFolderIds: [],
         },
         version: 0,
       };
@@ -372,6 +399,18 @@ const editorStorage = {
           window.localStorage.setItem(
             DAILY_WORKSPACE_STORAGE_KEY,
             JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
+          );
+        }
+        if (state.sidebarFileKind != null) {
+          window.localStorage.setItem(
+            SIDEBAR_FILE_KIND_STORAGE_KEY,
+            normalizeSidebarFileKind(state.sidebarFileKind),
+          );
+        }
+        if (state.expandedFolderIds != null) {
+          window.localStorage.setItem(
+            SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY,
+            JSON.stringify(normalizeExpandedFolderIds(state.expandedFolderIds)),
           );
         }
       } catch { /* ignore */ }
@@ -413,6 +452,18 @@ const editorStorage = {
           JSON.stringify(normalizeDailyWorkspace(state.dailyWorkspace)),
         );
       }
+      if (state.sidebarFileKind != null) {
+        window.localStorage.setItem(
+          SIDEBAR_FILE_KIND_STORAGE_KEY,
+          normalizeSidebarFileKind(state.sidebarFileKind),
+        );
+      }
+      if (state.expandedFolderIds != null) {
+        window.localStorage.setItem(
+          SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY,
+          JSON.stringify(normalizeExpandedFolderIds(state.expandedFolderIds)),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -433,6 +484,8 @@ const persistConfig = {
     surface: state.surface,
     publishingPlatforms: state.publishingPlatforms,
     dailyWorkspace: state.dailyWorkspace,
+    sidebarFileKind: state.sidebarFileKind,
+    expandedFolderIds: state.expandedFolderIds,
   }),
 };
 
@@ -777,6 +830,8 @@ export const useEditorStore = create(
       projectRootPath: '',
       publishingPlatforms: sanitizePublishingPlatforms([]),
       dailyWorkspace: normalizeDailyWorkspace(null),
+      sidebarFileKind: SIDEBAR_FILE_KIND_ALL,
+      expandedFolderIds: [],
       /** 正在等待 debounce 写入磁盘的文件 id */
       diskSavePendingFileIds: {},
       /** 磁盘外部变更触发编辑器重载（递增） */
@@ -798,6 +853,23 @@ export const useEditorStore = create(
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setSidebarFileKind: (fileKind) => set({
+        sidebarFileKind: normalizeSidebarFileKind(fileKind),
+      }),
+      setExpandedFolderIds: (folderIds) => set({
+        expandedFolderIds: normalizeExpandedFolderIds(folderIds),
+      }),
+      toggleFolderExpanded: (folderId) => set((s) => {
+        const id = String(folderId ?? '').trim();
+        if (!id) return s;
+        const current = normalizeExpandedFolderIds(s.expandedFolderIds);
+        const has = current.includes(id);
+        return {
+          expandedFolderIds: has
+            ? current.filter((item) => item !== id)
+            : [...current, id],
+        };
+      }),
 
       toggleTocCollapsed: () => set((s) => ({ tocCollapsed: !s.tocCollapsed })),
 
