@@ -50,7 +50,6 @@ const SIDEBAR_RAIL_WIDTH = 48;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
-const DEFAULT_EXPANDED_FOLDER_DEPTH = 1;
 const FILE_MANAGER_LABEL = getPlatform() === 'darwin'
   ? '访达'
   : '文件管理器';
@@ -185,15 +184,11 @@ const TreeNode = ({
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
-  const [folderOpen, setFolderOpen] = useState(() => {
-    return isFolder && depth < DEFAULT_EXPANDED_FOLDER_DEPTH;
-  });
+  const [folderOpen, setFolderOpen] = useState(false);
 
-  // 外部全量展开/收起时同步本地状态
+  // 工具栏「展开/收起全部」，以及搜索/筛选时的临时展开
   useEffect(() => {
-    if (isFolder && forceOpen !== undefined) {
-      setFolderOpen(forceOpen);
-    }
+    if (isFolder) setFolderOpen(forceOpen);
   }, [forceOpen, isFolder]);
   const [dragOver, setDragOver] = useState(false);
   const menuRef = useRef(null);
@@ -506,8 +501,8 @@ const WorkspaceSidebar = ({
   const [renamingNodeId, setRenamingNodeId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null); // { kind, nodeId, x, y }
-  // undefined = 不强制（用户自由展开/收起），true = 全部展开，false = 全部收起
-  const [forceOpen, setForceOpen] = useState(undefined);
+  // false = 默认/全部收起，true = 全部展开；搜索/筛选时临时强制展开
+  const [forceOpen, setForceOpen] = useState(false);
   const isCommittingRenameRef = useRef(false);
 
   const handleToggleAllFolders = useCallback(() => {
@@ -988,7 +983,7 @@ const WorkspaceSidebar = ({
                 contextMenu,
                 (nodeId, x, y) => setContextMenu({ kind: 'node', nodeId, x, y }),
                 closeContextMenu,
-                forceOpen,
+                isSearching || isMetaFiltering ? true : forceOpen,
               )
               : (
                 <div className="workspace-tree-empty" data-testid="search-empty">
