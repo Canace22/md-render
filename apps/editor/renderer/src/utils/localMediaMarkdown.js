@@ -1,11 +1,15 @@
 /**
  * 编辑器显示用 local-media://，磁盘 Markdown 用相对路径（Obsidian 可识别）。
+ * 打开时把 Obsidian 图片嵌入 ![[file.png]] 转成标准 ![]()，普通 wikilink 不动。
  * renderer 不能用 Node path，这里只用 POSIX 字符串运算。
  */
 
 const LOCAL_MEDIA_SCHEME = 'local-media:';
 const REMOTE_OR_EMBEDDED_RE = /^(https?:|data:|blob:)/i;
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(\s*(<[^>\n]+>|[^\s)]+)((?:\s+"[^"]*")?)\s*\)/g;
+const WIKI_IMAGE_EMBED_RE = /!\[\[([^\]\n]+?)\]\]/g;
+const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|svg|webp|bmp|ico)$/i;
+const WIKI_SIZE_ALIAS_RE = /^\d+(?:x\d+)?$/i;
 
 export const encodeLocalMediaPath = (value) => String(value ?? '')
   .replace(/\\/g, '/')
@@ -118,6 +122,61 @@ export const toEditorImageSrc = (src, projectRootPath, noteRelativePath) => {
   return toLocalMediaUrl(projectRootPath, projectRelativePath);
 };
 
+const posixBasename = (filePath) => {
+  const posix = toPosix(filePath);
+  const index = posix.lastIndexOf('/');
+  return index < 0 ? posix : posix.slice(index + 1);
+};
+
+const formatMarkdownImage = (alt, src) => {
+  const nextRaw = /[\s()]/.test(src) ? `<${src}>` : src;
+  return `![${alt}](${nextRaw})`;
+};
+
+const parseWikiImageEmbed = (inner) => {
+  const text = String(inner ?? '').trim();
+  const pipeIndex = text.indexOf('|');
+  const target = (pipeIndex >= 0 ? text.slice(0, pipeIndex) : text).trim();
+  const alias = pipeIndex >= 0 ? text.slice(pipeIndex + 1).trim() : '';
+  return {
+    pathPart: target.split('#')[0].trim(),
+    alias,
+  };
+};
+
+const wikiImageAlt = (pathPart, alias) => {
+  if (alias && !WIKI_SIZE_ALIAS_RE.test(alias)) return alias;
+  return posixBasename(pathPart);
+};
+
+const resolveWikiImageAbsPath = (target, projectRootPath, noteRelativePath) => {
+  const posixSrc = toPosix(target).replace(/^\/+/, '');
+  if (!posixSrc || !projectRootPath) return '';
+  if (posixSrc.includes('/')) return posixJoin(projectRootPath, posixSrc);
+  return posixJoin(projectRootPath, posixDirname(noteRelativePath), posixSrc);
+};
+
+const toWikiImageSrc = (target, projectRootPath, noteRelativePath, forEditor) => {
+  const absPath = resolveWikiImageAbsPath(target, projectRootPath, noteRelativePath);
+  const projectRelativePath = toProjectRelativePath(absPath, projectRootPath);
+  if (!projectRelativePath) return '';
+  if (forEditor) return toLocalMediaUrl(projectRootPath, projectRelativePath);
+  const fromDir = posixJoin(projectRootPath, posixDirname(noteRelativePath));
+  const toPath = posixJoin(projectRootPath, projectRelativePath);
+  return posixRelative(fromDir, toPath);
+};
+
+const convertWikiImageEmbeds = (text, mapTarget) => text.replace(
+  WIKI_IMAGE_EMBED_RE,
+  (full, inner) => {
+    const { pathPart, alias } = parseWikiImageEmbed(inner);
+    if (!IMAGE_EXT_RE.test(pathPart)) return full;
+    const nextSrc = mapTarget(pathPart);
+    if (!nextSrc) return full;
+    return formatMarkdownImage(wikiImageAlt(pathPart, alias), nextSrc);
+  },
+);
+
 const replaceMarkdownImageUrls = (text, mapSrc) => text.replace(
   MARKDOWN_IMAGE_RE,
   (full, alt, rawSrc, titlePart = '') => {
@@ -144,22 +203,27 @@ const mapOutsideCodeFences = (markdown, mapText) => {
 
 const separateAdjacentImages = (text) => text.replace(/\)[ \t]*!\[/g, ')\n\n![');
 
-export const rewriteMarkdownImagesForDisk = (markdown, context = {}) => {
+const rewriteMarkdownImages = (markdown, context, forEditor) => {
   const { projectRootPath = '', noteRelativePath = '' } = context;
-  return mapOutsideCodeFences(markdown, (text) => {
-    const withUrls = replaceMarkdownImageUrls(text, (src) => (
-      toDiskImageSrc(src, projectRootPath, noteRelativePath)
+  return mapOutsideCodeFences(markdown ?? '', (text) => {
+    const withWiki = convertWikiImageEmbeds(text, (target) => (
+      toWikiImageSrc(target, projectRootPath, noteRelativePath, forEditor)
+    ));
+    const withUrls = replaceMarkdownImageUrls(withWiki, (src) => (
+      forEditor
+        ? toEditorImageSrc(src, projectRootPath, noteRelativePath)
+        : toDiskImageSrc(src, projectRootPath, noteRelativePath)
     ));
     return separateAdjacentImages(withUrls);
   });
 };
 
+export const rewriteMarkdownImagesForDisk = (markdown, context = {}) => (
+  rewriteMarkdownImages(markdown, context, false)
+);
+
 export const rewriteMarkdownImagesForEditor = (markdown, context = {}) => {
-  const { projectRootPath = '', noteRelativePath = '' } = context;
+  const { projectRootPath = '' } = context;
   if (!projectRootPath) return markdown ?? '';
-  return mapOutsideCodeFences(markdown, (text) => (
-    replaceMarkdownImageUrls(text, (src) => (
-      toEditorImageSrc(src, projectRootPath, noteRelativePath)
-    ))
-  ));
+  return rewriteMarkdownImages(markdown, context, true);
 };

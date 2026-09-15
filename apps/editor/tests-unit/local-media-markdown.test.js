@@ -81,3 +81,72 @@ describe('local-media markdown round-trip', () => {
     expect(rewriteMarkdownImagesForDisk(markdown, CONTEXT_NESTED)).toBe(markdown);
   });
 });
+
+describe('Obsidian wiki image embeds', () => {
+  const PASTED = 'Pasted image 20260909145740.png';
+  const pastedMedia = () => localMedia(`Projects/原稿/${PASTED}`);
+
+  it('同目录 ![[Pasted image xxx.png]] 打开时转成 local-media', () => {
+    const editor = rewriteMarkdownImagesForEditor(`![[${PASTED}]]`, CONTEXT_NESTED);
+    expect(editor).toBe(`![${PASTED}](${pastedMedia()})`);
+  });
+
+  it('同目录 wiki 图落盘成当前笔记相对路径，空格用 <> 包住', () => {
+    const disk = rewriteMarkdownImagesForDisk(`![[${PASTED}]]`, CONTEXT_NESTED);
+    expect(disk).toBe(`![${PASTED}](<${PASTED}>)`);
+  });
+
+  it('连续三张各占一行都能转', () => {
+    const markdown = [
+      '![[Pasted image 20260909145740.png]]',
+      '![[Pasted image 20260909145627.png]]',
+      '![[Pasted image 20260909145608.png]]',
+    ].join('\n');
+    const editor = rewriteMarkdownImagesForEditor(markdown, CONTEXT_NESTED);
+    expect(editor).toContain(localMedia('Projects/原稿/Pasted image 20260909145740.png'));
+    expect(editor).toContain(localMedia('Projects/原稿/Pasted image 20260909145627.png'));
+    expect(editor).toContain(localMedia('Projects/原稿/Pasted image 20260909145608.png'));
+    expect(editor).not.toContain('![[');
+  });
+
+  it('同一行多张 wiki 图拆开显示', () => {
+    const markdown = '![[a.png]]![[b.png]]';
+    const editor = rewriteMarkdownImagesForEditor(markdown, CONTEXT_NESTED);
+    expect(editor).toBe(`![a.png](${localMedia('Projects/原稿/a.png')})\n\n![b.png](${localMedia('Projects/原稿/b.png')})`);
+  });
+
+  it('带斜杠的 wiki 图按库根路径解析', () => {
+    const editor = rewriteMarkdownImagesForEditor('![[assets/foo.png]]', CONTEXT_NESTED);
+    expect(editor).toBe(`![foo.png](${localMedia('assets/foo.png')})`);
+    const disk = rewriteMarkdownImagesForDisk('![[assets/foo.png]]', CONTEXT_NESTED);
+    expect(disk).toBe('![foo.png](../../assets/foo.png)');
+  });
+
+  it('![[a.png|300]] 仍当图片，尺寸不当 alt', () => {
+    const editor = rewriteMarkdownImagesForEditor('![[a.png|300]]', CONTEXT_NESTED);
+    expect(editor).toBe(`![a.png](${localMedia('Projects/原稿/a.png')})`);
+  });
+
+  it('![[a.png|封面]] 用别名当 alt', () => {
+    const editor = rewriteMarkdownImagesForEditor('![[a.png|封面]]', CONTEXT_NESTED);
+    expect(editor).toBe(`![封面](${localMedia('Projects/原稿/a.png')})`);
+  });
+
+  it('普通 [[笔记]] 和笔记嵌入不转成图', () => {
+    const markdown = '见 [[判断模型降智的方式]] 和 ![[某篇笔记]]';
+    expect(rewriteMarkdownImagesForEditor(markdown, CONTEXT_NESTED)).toBe(markdown);
+    expect(rewriteMarkdownImagesForDisk(markdown, CONTEXT_NESTED)).toBe(markdown);
+  });
+
+  it('代码块里的 wiki 图保持原文', () => {
+    const markdown = ['```md', '![[a.png]]', '```'].join('\n');
+    expect(rewriteMarkdownImagesForEditor(markdown, CONTEXT_NESTED)).toBe(markdown);
+    expect(rewriteMarkdownImagesForDisk(markdown, CONTEXT_NESTED)).toBe(markdown);
+  });
+
+  it('无项目根时不改 wiki 图路径', () => {
+    const markdown = `![[${PASTED}]]`;
+    expect(rewriteMarkdownImagesForEditor(markdown, {})).toBe(markdown);
+    expect(rewriteMarkdownImagesForDisk(markdown, {})).toBe(markdown);
+  });
+});

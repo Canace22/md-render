@@ -1,6 +1,6 @@
 ---
 name: md-render-binary-asset
-description: 在 renderer 里处理二进制媒体（粘贴/拖入截图、保存图片或音视频到工作区）时的规范。涉及把图片存进项目 素材/ 目录、给 BlockNote 配 uploadFile、用 local-media:// 引用本地文件、新增二进制写盘 IPC。用户说「支持复制/粘贴图片」「截图存进来」「拖图自动保存」「图片别内嵌 base64」「加个媒体上传」时触发。略主动。
+description: 在 renderer 里处理二进制媒体（粘贴/拖入截图、保存图片或音视频到工作区）时的规范。涉及把图片存进项目 素材/ 目录、给 BlockNote 配 uploadFile、用 local-media:// 引用本地文件、新增二进制写盘 IPC、打开 Obsidian 的 ![[Pasted image.png]] wiki 嵌入。用户说「支持复制/粘贴图片」「截图存进来」「拖图自动保存」「图片别内嵌 base64」「加个媒体上传」「Obsidian 贴的图显示不出来」「![[Pasted image」时触发。略主动。
 ---
 
 # 二进制媒体存盘与引用
@@ -46,6 +46,7 @@ flowchart TD
 - **不要改 `save-local-project-file`**：它是文本路径，二进制必须走新 IPC。
 - **`local-media://` 只存在编辑器内存里**：`saveBinaryAsset` 返回相对项目根的路径，renderer 拼 `local-media://${projectRoot}/${relativePath}` 给 BlockNote 显示。不要对整条路径用 `encodeURI`（它不编码 `#` / `?`），要保留 `/` 并对每个路径段分别 `encodeURIComponent`。写盘走 `rewriteMarkdownImagesForDisk`，打开走 `rewriteMarkdownImagesForEditor`。
 - **磁盘路径相对当前笔记，不要 percent-encode 中文**：`Projects/原稿/a.md` 引用 `assets/foo.png` 应写成 `../../assets/foo.png`。Obsidian 不认 `local-media://`，也不喜欢 `%E7%B4%A0%E6%9D%90` 这种编码。
+- **Obsidian 粘贴图是 `![[Pasted image xxx.png]]`**：标准 `![]()` 改写覆盖不到。打开时在 `localMediaMarkdown.js` 把带图片后缀的 wiki 嵌入转成 `![]()` 再变 `local-media://`。只有文件名按笔记同目录解析，带 `/` 按库根路径；普通 `[[笔记]]` / `![[某篇笔记]]` 不要转成图。第一次保存可能把 wiki 图写成标准相对路径，Obsidian 也认。
 - **mime 子类型来自 data URL**：`data:image/png;base64,...` 里的 `png` 才是 mime 子类型；`jpeg` 要映射成 `.jpg`，`svg+xml` 映射成 `.svg`。
 - **降级是必须的**：内置文档没有 `projectRootPath`，不降级会直接报错丢图。
 - **异步上传前先固定粘贴现场**：`uploadFile` 一进入就快照当前项目根，不要在 `FileReader` / IPC `await` 之后再读 ref；粘贴图片时先在当前 ProseMirror 选区同步插入占位图片，再异步回填最终 URL。这样才不会因移动光标/切项目而插错位置、存错目录，多图也要一次占位保持顺序。
@@ -58,7 +59,7 @@ flowchart TD
 
 ## 验证
 
-改完假定 10 条 case 给预期（粘贴 PNG/JPEG、连续多张不覆盖、拖入、内置文档降级、纯文本/代码块走原 pasteHandler 不变、base64 空/损坏降级提示、越界路径被拦、关闭重开编辑器仍能显示、磁盘 Markdown 是相对路径且 Obsidian 能出图、连续两张图落盘后分行）。
+改完假定 10 条 case 给预期（粘贴 PNG/JPEG、连续多张不覆盖、拖入、内置文档降级、纯文本/代码块走原 pasteHandler 不变、base64 空/损坏降级提示、越界路径被拦、关闭重开编辑器仍能显示、磁盘 Markdown 是相对路径且 Obsidian 能出图、连续两张图落盘后分行、打开 `![[Pasted image xxx.png]]` 能出图、普通 `[[笔记]]` 不误转）。
 
 单测**默认不主动跑，用户要求时再跑**（`pnpm test:unit`）。注意有几个预先存在的失败（`canvas-bookmark`/`excalidraw-canvas-agent`/`knowledge-graph-sync`），用 `git stash` 对比基线确认自己零新增失败，别误判。
 
