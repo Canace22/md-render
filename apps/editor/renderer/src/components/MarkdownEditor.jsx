@@ -9,6 +9,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
+import EditorFormattingToolbarController from './EditorFormattingToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
 import DocEmptyState from './DocEmptyState.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
@@ -2643,7 +2644,7 @@ function MarkdownEditor() {
                           data-testid="blocknote-editor"
                           theme={resolvedTheme}
                           editable={Boolean(selectedFile) && !selectedReadOnly}
-                          formattingToolbar
+                          formattingToolbar={false}
                           linkToolbar
                           slashMenu
                           sideMenu={false}
@@ -2651,7 +2652,9 @@ function MarkdownEditor() {
                           tableHandles
                           emojiPicker={false}
                           onChange={handleEditorChange}
-                        />
+                        >
+                          <EditorFormattingToolbarController />
+                        </BlockNoteView>
                       </div>
                     </div>
                   )}

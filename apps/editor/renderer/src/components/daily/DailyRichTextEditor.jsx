@@ -7,6 +7,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { normalizeRichText, plainTextToRichText, richTextToPlainText } from '../../utils/dailyRichText.js';
 import { useEditorStore } from '../../store/useEditorStore.js';
+import EditorFormattingToolbarController from '../EditorFormattingToolbar.jsx';
 
 /**
  * 今日速记条目的富文本输入框（BlockNote）。
@@ -88,14 +89,16 @@ function DailyRichTextEditor({ richText, text, placeholder, onChange, onSubmit, 
         editor={editor}
         theme={theme === 'dark' ? 'dark' : 'light'}
         autoFocus
-        formattingToolbar
+        formattingToolbar={false}
         linkToolbar
         slashMenu
         sideMenu={false}
         filePanel={false}
         emojiPicker={false}
         onChange={handleChange}
-      />
+      >
+        <EditorFormattingToolbarController />
+      </BlockNoteView>
     </div>
   );
 }

@@ -32,6 +32,10 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 7. **迁到通用组件后，旧类名的样式会静默失效——先查暗色主题**。业务侧自绘按钮换成 `EditorToolbar` 渲染时，DOM 类名从业务名（如 `.editor-quick-toolbar-btn`）变成包内通用名（`.toolbar-button` / `.editor-toolbar` / `.toolbar-center`）。迁移时通常只补了亮色的作用域覆盖，`body.theme-dark` 那几条还挂在旧类名上，于是暗色下按钮保持白底浅灰字——亮色看着正常，问题能潜伏很久。改完务必 `grep` 一遍旧类名：只剩 CSS 命中、没有 JSX 命中的，就是死规则，删掉并把对应的暗色规则改挂到新类名上。
 
+8. **选区 FormattingToolbar 的文字色和背景色默认合在一个按钮里。** `ColorStyleButton` 没有 kind 参数；`ColorPicker` / `ColorIcon` 也不从 `@blocknote/react` 包入口导出。要拆开时：`formattingToolbar={false}`，子节点挂 `FormattingToolbarController`，用 `getFormattingToolbarItems()` 替换 `key === 'colorStyleButton'`。色板自己用 `Components.Generic.Menu` + `.bn-color-icon` 的 `data-text-color` / `data-background-color`，不要另造色值。现成实现：`apps/editor/renderer/src/components/EditorFormattingToolbar.jsx`。
+
+9. **工具栏 tooltip 文案会被 `#markdown-output p` 盖成正文色。** BlockNote/Mantine 的 tooltip 用 `<p>`，且 `withinPortal={false}` 还挂在编辑器里；`#markdown-output p` 是 ID 选择器，会压过 `.bn-tooltip` 的 `color`。本项目又把 tooltip 做成深底白字（暗色主题反过来），结果字和底一个色。修的时候必须用带 `#markdown-output` 的选择器把 `.bn-tooltip p` 抢回来，只改 `.bn-tooltip` 不够。
+
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
 ```bash
