@@ -2,6 +2,23 @@
 
 给要改代码、构建或发版的人看。只想使用这个 app，看 [README](../README.md) 就够了。
 
+## 命令速查
+
+日常只需要记两个：开发用 `pnpm electron:dev`，测试用 `pnpm test:unit`。其余命令偶尔才用。
+
+| 场景 | 命令 | 说明 |
+|---|---|---|
+| 日常开发 | `pnpm electron:dev` | 桌面版，最常用；本地 AI 代理没跑会自动拉起 |
+| | `pnpm dev` | 只开网页版，没有文件系统能力，改纯 UI 时更轻 |
+| 测试 | `pnpm test:unit` | 单元测试跑一遍就退出 |
+| | `pnpm test` | 单元测试监听模式，改代码自动重跑 |
+| | `pnpm test:e2e` / `test:e2e:ui` | 端到端测试 / 带图形界面调试 |
+| 打包发版 | `pnpm electron:build` | 打正式安装包（Mac 上默认 Mac 版） |
+| | `pnpm electron:build:win` | 打 Windows 安装包 |
+| | `pnpm electron:pack` | 只生成可运行的 app 目录，不做安装包，用来快速验证打包 |
+| | `pnpm release:tag` | 升版本、打 tag 并推送，先加 `-- --dry-run` 预览 |
+| 很少用 | `pnpm build` / `pnpm preview` | 只构建 / 预览网页版，桌面版打包会自动构建 |
+
 ## 本地开发
 
 ```bash
@@ -16,14 +33,16 @@ pnpm electron:dev   # 桌面版（Electron）
 pnpm --filter @md-render/editor electron:rebuild
 ```
 
-AI 助手需要另外启动 `server/ai-proxy`，做法见 [README](../README.md#想用-ai-助手要先接一个模型) 和 [server/README.md](../server/README.md)。
+`pnpm electron:dev` 会自动检查并启动本地 `server/ai-proxy`（默认 `http://127.0.0.1:8788`，可用 `AI_PROXY_BASE` 指向远程代理）；网页版 `pnpm dev` 不会，需要手动启动。模型配置见 [README](../README.md#想用-ai-助手要先接一个模型) 和 [server/README.md](../server/README.md)。
 
 ## 构建
 
 ```bash
-pnpm build            # 网页版 → apps/editor/dist/
-pnpm electron:build   # macOS 桌面版 → apps/editor/release/
-pnpm preview          # 本地预览网页版构建（默认 http://localhost:4173）
+pnpm build                # 网页版 → apps/editor/dist/
+pnpm electron:build       # 桌面版安装包（Mac 上默认 Mac 版）→ apps/editor/release/
+pnpm electron:build:win   # Windows 安装包
+pnpm electron:pack        # 只生成可运行的 app 目录，不做安装包
+pnpm preview              # 本地预览网页版构建（默认 http://localhost:4173）
 ```
 
 ## 测试
