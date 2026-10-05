@@ -1,0 +1,7 @@
+label: 发布复盘
+group: AI 编辑部
+aliases: [复盘, 数据复盘, retro, 阅读量, 发布后]
+entry: [slash]
+input: none
+tools: [read_editorial_memory, update_editorial_memory, create_agent_artifact]
+output: answer

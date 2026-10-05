@@ -1,0 +1,7 @@
+label: 编辑部审稿
+group: AI 编辑部
+aliases: [审稿, 编辑部, 评审, 总编辑, review, editorial]
+entry: [slash, welcome]
+input: active_doc
+tools: [read_editorial_memory, read_active_doc, recall_related_docs, create_agent_artifact, write_active_doc]
+output: answer

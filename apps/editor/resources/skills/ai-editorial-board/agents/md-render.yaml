@@ -1,0 +1,7 @@
+label: AI 编辑部规范
+group: AI 编辑部
+# 共享规范，不直接出现在界面；editorial-review / editorial-headline / editorial-retro 运行时拼上它
+entry: []
+input: none
+tools: []
+output: answer

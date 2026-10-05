@@ -303,7 +303,7 @@ const APP_DIAGNOSTICS_SKILL = Object.freeze({
   promptText: APP_DIAGNOSTICS_SKILL_PROMPT,
 });
 
-// AI 编辑部：prompt 正文来自 core/agent/editorialBoard.js（事实源是 .agents/skills/ai-editorial-board/SKILL.md）
+// AI 编辑部：prompt 正文来自 core/agent/editorialBoard.js（事实源是内置 skill resources/skills/ai-editorial-board）
 const EDITORIAL_REVIEW_SKILL = Object.freeze({
   id: 'editorial-review',
   type: 'agent',

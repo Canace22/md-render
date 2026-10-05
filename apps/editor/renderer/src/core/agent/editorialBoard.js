@@ -1,22 +1,28 @@
 /**
- * AI 编辑部：多角色审稿工作流的 prompt 模块。
+ * AI 编辑部：多角色审稿工作流的 prompt 拼装。
  *
- * 单一事实源是仓库根的 `.agents/skills/ai-editorial-board/SKILL.md`
- * （外部 agent 工具直接读该文件），这里通过 Vite `?raw` 在构建期内联同一份内容，
- * 再叠加 app 内工具指令（read_active_doc / recall_related_docs 等）拼成 slash skill prompt。
+ * 规范正文是内置 skill `ai-editorial-board`（resources/skills/ai-editorial-board/SKILL.md），
+ * 三个入口 skill（editorial-review / editorial-headline / editorial-retro）的正文是 app 内工具接线，
+ * 这里按入口把「接线 + 规范（或其中几节）」拼成最终 prompt。内容库里同名 skill 可覆盖任一部分。
  *
  * 纯模块：无 IPC / store / React 依赖，可直接单测。
  */
 
-import rawEditorialSkill from '../../../../../../.agents/skills/ai-editorial-board/SKILL.md?raw';
+import { BUILTIN_SKILL_ENTRIES } from './builtinSkills.js';
+import { buildSkillRegistry, findSkillById } from './skillRegistry.js';
+
+export const EDITORIAL_SPEC_SKILL_ID = 'ai-editorial-board';
+export const EDITORIAL_SKILL_IDS = Object.freeze({
+  REVIEW: 'editorial-review',
+  HEADLINE: 'editorial-headline',
+  RETRO: 'editorial-retro',
+});
 
 const FRONTMATTER_PATTERN = /^---\n[\s\S]*?\n---\n/;
 
 /** 去掉 SKILL.md 顶部 frontmatter，得到可直接给模型看的规范正文 */
 export const stripFrontmatter = (text) =>
   String(text ?? '').replace(FRONTMATTER_PATTERN, '').trim();
-
-export const EDITORIAL_BOARD_SPEC = stripFrontmatter(rawEditorialSkill);
 
 /**
  * 按标题关键字提取规范中的一节（含标题行，到下一个同级或更高级标题为止）。
@@ -56,42 +62,38 @@ export const extractEditorialSection = (text, keyword) => {
   return collected.join('\n').trim();
 };
 
-const CONSTITUTION_SECTION = extractEditorialSection(EDITORIAL_BOARD_SPEC, '编辑部宪法');
+// 每个入口用规范的哪些部分：审稿用全文，标题 / 复盘只用宪法 + 对应角色
+const SPEC_PICKERS = Object.freeze({
+  [EDITORIAL_SKILL_IDS.REVIEW]: (spec) => [spec],
+  [EDITORIAL_SKILL_IDS.HEADLINE]: (spec) => [
+    extractEditorialSection(spec, '编辑部宪法'),
+    extractEditorialSection(spec, '标题编辑'),
+  ],
+  [EDITORIAL_SKILL_IDS.RETRO]: (spec) => [
+    extractEditorialSection(spec, '编辑部宪法'),
+    extractEditorialSection(spec, '复盘编辑'),
+  ],
+});
 
-// —— app 内工具接线（外部 agent 产品不需要这些，故不写进 SKILL.md）——
+export const isEditorialSkill = (skillId) => Object.hasOwn(SPEC_PICKERS, skillId);
 
-const REVIEW_APP_RULES = [
-  '你现在是 AI 编辑部，请按下方编辑部规范完成一次完整审稿。',
-  '开始前先调用 read_editorial_memory 读取编辑部记忆（写作画像、平台经验等），作为各角色的判断依据；记忆不存在就跳过，不要因此中断。',
-  '然后调用 read_active_doc 读取当前稿件全文；再调用 recall_related_docs 召回相关旧文，供热点编辑和品牌编辑判断历史连接（没有旧文就说明「暂无历史连接」）。',
-  '审稿只输出意见，禁止调用 write_active_doc 改写正文；只有当作者明确要求应用某条修改时才写回。',
-  '信息不足时基于稿件现状直接给判断，不要抛出一长串反问。',
-  '审稿意见输出完后，用 agent-choice 协议给出后续选项：保存审稿报告（create_agent_artifact，artifactType=editorial_review，来源关联当前文档）、逐条展开「优先修改」、深入某位编辑的意见。',
-].join('\n');
+/**
+ * 拼出编辑部入口 skill 的完整 prompt。非编辑部 skill 原样返回其正文。
+ * @param {string} skillId
+ * @param {object[]} skills 当前 skill 列表（含内容库覆盖）
+ */
+export const composeEditorialPrompt = (skillId, skills) => {
+  const skill = findSkillById(skills, skillId);
+  if (!skill) return '';
+  const picker = SPEC_PICKERS[skillId];
+  if (!picker) return skill.prompt;
+  const spec = findSkillById(skills, EDITORIAL_SPEC_SKILL_ID)?.prompt || '';
+  return [skill.prompt, ...picker(spec)].filter(Boolean).join('\n\n');
+};
 
-const HEADLINE_APP_RULES = [
-  '你现在是 AI 编辑部的标题编辑，遵守编辑部宪法。',
-  '先调用 read_editorial_memory 参考平台经验库里的标题经验（不存在就跳过）；再调用 read_active_doc 读取当前稿件，从正文提炼真正价值，然后按下方职责分析标题并生成多个版本（注明各自适合的渠道）。',
-  '文档第一行的一级标题即当前标题；没有标题就直接基于正文价值给候选。不要改写正文。',
-].join('\n');
+const { skills: BUILTIN_SKILLS } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
 
-const RETRO_APP_RULES = [
-  '你现在是 AI 编辑部的复盘编辑，遵守编辑部宪法。',
-  '先调用 read_editorial_memory 了解既有经验（不存在就跳过）；再根据我提供的后台数据复盘。如果我还没给数据，先让我粘贴（阅读、分享、评论、新增关注等），不得编造数据。',
-  '复盘得出的可复用结论，调用 update_editorial_memory 写入记忆：平台规律用 category=experience，读者偏好用 persona，知识主题用 knowledge，本次复盘记录用 retro；一条一个结论，避免流水账。',
-  '写入记忆后，用 agent-choice 询问是否再保存一份复盘报告（create_agent_artifact，artifactType=editorial_review）。',
-].join('\n');
-
-export const EDITORIAL_REVIEW_PROMPT = [REVIEW_APP_RULES, EDITORIAL_BOARD_SPEC].join('\n\n');
-
-export const HEADLINE_ANALYSIS_PROMPT = [
-  HEADLINE_APP_RULES,
-  CONSTITUTION_SECTION,
-  extractEditorialSection(EDITORIAL_BOARD_SPEC, '标题编辑'),
-].join('\n\n');
-
-export const PUBLISH_RETRO_PROMPT = [
-  RETRO_APP_RULES,
-  CONSTITUTION_SECTION,
-  extractEditorialSection(EDITORIAL_BOARD_SPEC, '复盘编辑'),
-].join('\n\n');
+export const EDITORIAL_BOARD_SPEC = findSkillById(BUILTIN_SKILLS, EDITORIAL_SPEC_SKILL_ID)?.prompt || '';
+export const EDITORIAL_REVIEW_PROMPT = composeEditorialPrompt(EDITORIAL_SKILL_IDS.REVIEW, BUILTIN_SKILLS);
+export const HEADLINE_ANALYSIS_PROMPT = composeEditorialPrompt(EDITORIAL_SKILL_IDS.HEADLINE, BUILTIN_SKILLS);
+export const PUBLISH_RETRO_PROMPT = composeEditorialPrompt(EDITORIAL_SKILL_IDS.RETRO, BUILTIN_SKILLS);

@@ -1,0 +1,7 @@
+label: 标题分析
+group: AI 编辑部
+aliases: [标题分析, 标题编辑, headline, 起标题]
+entry: [slash]
+input: active_doc
+tools: [read_editorial_memory, read_active_doc]
+output: answer

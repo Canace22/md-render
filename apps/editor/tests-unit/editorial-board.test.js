@@ -92,3 +92,30 @@ describe('三个 slash skill prompt', () => {
     expect(PUBLISH_RETRO_PROMPT).toContain('category=experience');
   });
 });
+
+describe('composeEditorialPrompt（内容库覆盖）', () => {
+  it('内容库覆盖规范后，三个入口都用新规范', async () => {
+    const { buildSkillRegistry } = await import('../renderer/src/core/agent/skillRegistry.js');
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { composeEditorialPrompt } = await import('../renderer/src/core/agent/editorialBoard.js');
+    const spec = '---\nname: ai-editorial-board\n---\n## 编辑部宪法\n我的宪法\n## 标题编辑\n我的标题规则\n## 复盘编辑\n我的复盘规则';
+    const { skills } = buildSkillRegistry({
+      builtin: BUILTIN_SKILL_ENTRIES,
+      vault: [{ dirName: 'ai-editorial-board', skillMarkdown: spec, manifestYaml: 'entry: []' }],
+    });
+    const headline = composeEditorialPrompt('editorial-headline', skills);
+    expect(headline).toContain('我的宪法');
+    expect(headline).toContain('我的标题规则');
+    expect(headline).not.toContain('我的复盘规则');
+    expect(composeEditorialPrompt('editorial-review', skills)).toContain('我的复盘规则');
+  });
+
+  it('非编辑部 skill 原样返回正文，找不到返回空串', async () => {
+    const { buildSkillRegistry } = await import('../renderer/src/core/agent/skillRegistry.js');
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { composeEditorialPrompt } = await import('../renderer/src/core/agent/editorialBoard.js');
+    const { skills } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    expect(composeEditorialPrompt('polish', skills)).toContain('润色');
+    expect(composeEditorialPrompt('nope', skills)).toBe('');
+  });
+});

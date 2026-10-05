@@ -16,7 +16,7 @@
 
 | Skill | 什么时候用 |
 |---|---|
-| `ai-editorial-board` | 9 角色审稿 / 标题分析 / 发布复盘（app 内 slash skill 与外部 agent 共用） |
+| `ai-editorial-board` | 指针：9 角色审稿规范，正文在 `apps/editor/resources/skills/ai-editorial-board/`（产品 skill） |
 | `md-render-wechat` | 改微信公众号格式化。模板在 `utils/wechatTemplates.js`，转换在 `utils/wechatCopy.js`。关键约束：微信不支持外部 CSS，样式必须内联 |
 
 ## 核心模块
@@ -47,7 +47,7 @@
 
 ---
 
-**新增 skill**：走 `skill-harvest` 的规范。**改 `ai-editorial-board`**：`core/agent/editorialBoard.js` 在构建期用 `?raw` 内联 `SKILL.md`，改完跑 `pnpm test:unit`（`editorial-board.test.js` 按章节标题提取，别改标题）。
+**新增 skill**：走 `skill-harvest` 的规范。**改 AI 编辑部规范**：改 `apps/editor/resources/skills/ai-editorial-board/SKILL.md`，`core/agent/editorialBoard.js` 按章节标题拼 prompt，改完跑 `pnpm test:unit`（别改「编辑部宪法」「标题编辑」「复盘编辑」这几个标题）。
 
 ---
 
