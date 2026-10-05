@@ -45,7 +45,7 @@ describe('parseSkillManifest', () => {
   it('文件不存在时用缺省值', () => {
     const { ok, manifest } = parseSkillManifest(null);
     expect(ok).toBe(true);
-    expect(manifest).toEqual({ label: '', group: '', entry: ['slash'], input: 'none', tools: [], output: 'answer' });
+    expect(manifest).toEqual({ label: '', group: '', aliases: [], entry: ['slash'], input: 'none', tools: [], output: 'answer' });
   });
 
   it('支持行内列表、行尾注释和 - 列表', () => {
@@ -156,5 +156,27 @@ describe('toBuiltinSkillEntries', () => {
       { dirName: 'a', skillPath: 'resources/skills/a/SKILL.md', skillMarkdown: 'A', manifestYaml: 'label: 甲' },
       { dirName: 'b', skillPath: 'resources/skills/b/SKILL.md', skillMarkdown: 'B', manifestYaml: null },
     ]);
+  });
+});
+
+describe('内置 skill', () => {
+  it('内置 skill 全部能通过校验，没有警告', async () => {
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { skills, warnings } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    expect(warnings).toEqual([]);
+    expect(skills.length).toBe(BUILTIN_SKILL_ENTRIES.length);
+  });
+
+  it('平台版 skill 带上工具白名单和产出形态', async () => {
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { skills } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    ['wechat-version', 'xiaohongshu-version', 'zhihu-version'].forEach((id) => {
+      expect(findSkillById(skills, id)).toMatchObject({
+        group: '平台版本',
+        input: 'active_doc',
+        output: 'artifact',
+        tools: ['read_active_doc', 'create_agent_artifact'],
+      });
+    });
   });
 });

@@ -89,7 +89,8 @@ description: 把母稿改写成公众号版本，另存为派生稿，不改原�
 
 ```yaml
 label: 公众号版                      # 界面显示名，缺省用 name
-group: 平台版                        # 可选，界面分组
+group: 平台版本                      # 可选，界面分组
+aliases: [微信, 公众号]              # 可选，slash 搜索别名
 entry: [slash, welcome, doc-toolbar] # 出现在哪些入口
 input: active_doc                    # 运行时自动带上什么
 tools: [read_active_doc, create_agent_artifact]  # 允许调用的工具（白名单）
@@ -100,6 +101,7 @@ output: artifact                     # 产出形态
 |---|---|---|
 | `label` | 任意文本 | `name` |
 | `group` | 任意文本 | 空 |
+| `aliases` | 搜索别名列表 | `[]` |
 | `entry` | `slash`（slash 列表）· `welcome`（欢迎页建议）· `doc-toolbar`（文档工具栏） | `[slash]` |
 | `input` | `active_doc`（当前文档）· `selection`（选中文本）· `none` | `none` |
 | `tools` | 工具名列表，见 `core/agent/toolRegistry.js` | `[]`（只对话，不调工具） |

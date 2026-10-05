@@ -1,0 +1,7 @@
+label: 知乎版
+group: 平台版本
+aliases: [知乎, zhihu]
+entry: [slash, doc-toolbar]
+input: active_doc
+tools: [read_active_doc, create_agent_artifact]
+output: artifact

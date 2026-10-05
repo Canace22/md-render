@@ -17,6 +17,7 @@ export const SKILL_OUTPUTS = Object.freeze(['artifact', 'proposal', 'answer']);
 const DEFAULT_MANIFEST = Object.freeze({
   label: '',
   group: '',
+  aliases: [],
   entry: ['slash'],
   input: 'none',
   tools: [],
@@ -109,6 +110,7 @@ export const parseSkillManifest = (yamlText) => {
   const manifest = {
     label: text('label'),
     group: text('group'),
+    aliases: toList(fields.aliases),
     entry: has('entry') ? toList(fields.entry) : [...DEFAULT_MANIFEST.entry],
     input: text('input') || DEFAULT_MANIFEST.input,
     tools: has('tools') ? toList(fields.tools) : [],

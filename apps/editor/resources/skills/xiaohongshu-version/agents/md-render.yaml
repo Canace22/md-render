@@ -1,0 +1,7 @@
+label: 小红书版
+group: 平台版本
+aliases: [小红书, xiaohongshu]
+entry: [slash, doc-toolbar]
+input: active_doc
+tools: [read_active_doc, create_agent_artifact]
+output: artifact
