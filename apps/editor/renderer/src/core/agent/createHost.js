@@ -56,6 +56,7 @@ import { searchExternalKnowledge } from '../../services/externalKnowledgeService
 import { getSurfaceLabel } from './surfaceLabels.js';
 import { hashContent } from '../../../../shared/capabilities/contentHash.js';
 import { toProposalStatus } from '../../../../shared/capabilities/proposals.js';
+import { renderPlatformHtml } from '../../utils/platformRender.js';
 
 export const CONTENT_ENTRY_PRESETS = Object.freeze({
   topic: { draftStatus: 'idea', fallbackName: '新选题' },
@@ -150,6 +151,14 @@ export function createHost({
     },
 
     getProposalStatus: (proposalId) => toProposalStatus(getState().getAgentProposal(proposalId)),
+
+    /** 公众号排版 HTML（只读） */
+    renderPlatformHtml: ({ id = '', template = 'default' } = {}) => {
+      const state = getState();
+      const file = findNodeById(state.workspace, cleanText(id) || state.selectedId);
+      if (!file || file.type !== 'file') return { ok: false, error: '找不到要渲染的文档。' };
+      return { id: file.id, name: file.name, ...renderPlatformHtml(readFileContent(state, file), template) };
+    },
 
     /** 改元数据：可逆，直接生效 */
     updateDocMeta: ({ id, patch = {} } = {}) => {
