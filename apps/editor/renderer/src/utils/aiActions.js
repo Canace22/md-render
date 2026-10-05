@@ -1,6 +1,7 @@
 import { getPublishingPlatformLabel } from './publishingPlatforms.js';
 import { BUILTIN_SKILL_ENTRIES } from '../core/agent/builtinSkills.js';
 import { buildSkillRegistry, findSkillById } from '../core/agent/skillRegistry.js';
+import { buildSkillTurn } from '../core/agent/skillRunner.js';
 
 const DEFAULT_MAX_CONTEXT_CHARS = 2200;
 const DEFAULT_SUMMARY_LENGTH = 240;
@@ -235,25 +236,18 @@ export const getAiActionPromptLabel = (actionKey) => {
 };
 
 /**
- * 给 AI 助手用的「快捷指令」：开场一句 + 对应 skill 正文（任务、输出要求、写回方式）。
- * 不内嵌整篇正文——交给 agent 通过「读取当前文档」工具自行获取，避免重复拼正文。
+ * 给 AI 助手用的「快捷指令」：按动作找到内置 skill，用和 AI 面板相同的规则拼 prompt。
  * @param {string} actionKey 动作 key/别名
  * @param {object} [options]
  * @param {string} [options.selectionText] 选区原文，仅对 input=selection 的 skill 生效（只改这段）
  */
 export const buildQuickActionInstruction = (actionKey, options = {}) => {
   const skill = getActionSkill(actionKey);
-  const selectionText = skill?.input === 'selection'
-    ? normalizeMultilineText(options.selectionText)
-    : '';
-  const intro = selectionText
-    ? '请先理解上下文，然后只处理下面这段选中文本。'
-    : '请先读取当前文档，然后处理整篇正文。';
-  return [
-    intro,
-    skill?.prompt || '',
-    selectionText ? `选中原文：\n${selectionText}` : '',
-  ].filter(Boolean).join('\n\n');
+  if (!skill) return '';
+  return buildSkillTurn(skill, {
+    skills: BUILTIN_SKILLS,
+    selectionText: normalizeMultilineText(options.selectionText),
+  }).promptText;
 };
 
 export const buildAiContextSummary = ({

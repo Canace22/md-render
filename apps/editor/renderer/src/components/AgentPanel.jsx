@@ -28,11 +28,6 @@ import AgentConversation from './AgentConversation.jsx';
 import AgentKnowledgeSources from './AgentKnowledgeSources.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import {
-  EDITORIAL_REVIEW_PROMPT,
-  HEADLINE_ANALYSIS_PROMPT,
-  PUBLISH_RETRO_PROMPT,
-} from '../core/agent/editorialBoard.js';
-import {
   EDITORIAL_MEMORY_DOC_NAME,
   MEMORY_CATEGORIES,
   appendMemoryEntry,
@@ -51,8 +46,10 @@ import {
   buildWorkspaceBrief,
   buildWorkspaceRelatedRefs,
 } from '../core/agent/taskContext.js';
-import { AI_ACTION_KEYS, buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
-import { PLATFORM_VARIANT_KEYS, buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
+import { buildSkillTurn } from '../core/agent/skillRunner.js';
+import { findSkillById } from '../core/agent/skillRegistry.js';
+import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
+import { pickSkillItems, toSkillItem } from './agentSkillItems.js';
 import { extractRecallKeywords, rankRelatedDocs } from '../core/agent/contextRecall.js';
 import {
   buildCanvasItemsFromAgentCards,
@@ -256,198 +253,8 @@ const CONTENT_ENTRY_PRESETS = Object.freeze({
   },
 });
 
-// 平台版本：同一正文改写成对应平台版（走 AI 助手，让 agent 读当前文档并写回）
-const PLATFORM_VARIANTS = listPlatformVariants();
-const PLATFORM_VARIANT_LABELS = Object.freeze(
-  PLATFORM_VARIANTS.reduce((acc, item) => {
-    acc[item.value] = item.label;
-    return acc;
-  }, {}),
-);
 const MAX_SLASH_SKILL_RESULTS = 8;
 const SLASH_SKILL_PATTERN = /^\s*\/([^\s/]*)$/;
-const TOPIC_SELECTION_SKILL_PROMPT = [
-  '帮我整理选题。如果我没有明确想法，请先基于当前工作区、最近稿件、已发布文章或相关旧文，归纳我的内容资产和可延展方向；',
-  '如果我提到互联网新闻、热点或最近趋势，请结合我提供的新闻/链接/剪藏材料整理，不要编造没有来源的新闻。',
-  '请输出候选选题并简要比较：目标读者、读者问题、核心角度、适合平台、可展开性、风险。',
-  '如果信息不足，最多问 2 个关键问题。',
-  '当我确认某个选题，或请求直接创建时，请调用 create_content_entry 创建 kind=topic 的选题条目，正文使用结构化选题卡。',
-].join('\n');
-const TOPIC_SELECTION_SKILL = Object.freeze({
-  id: 'topic-entry',
-  type: 'agent',
-  label: '选题',
-  icon: ApartmentOutlined,
-  tone: 'teal',
-  category: '项目 skill',
-  description: '从旧文、素材和趋势整理选题',
-  aliases: ['topic', 'idea', '选题库', '旧文', '新闻', '热点', '趋势'],
-  promptText: TOPIC_SELECTION_SKILL_PROMPT,
-});
-
-const APP_DIAGNOSTICS_SKILL_PROMPT = [
-  '请帮我排查 MD Render 当前的问题。',
-  '先调用 inspect_app_health 读取脱敏运行快照，再区分配置、数据、服务或代码故障。',
-  '只有诊断结果返回 availableRepairs 时，才能调用 apply_safe_repair；修复后必须复检。',
-  '如果不能在本机安全修复，请用 create_agent_artifact 创建 incident_report，写清复现、环境、证据、归属层、临时方案和验收标准。',
-].join('\n');
-const APP_DIAGNOSTICS_SKILL = Object.freeze({
-  id: 'app-diagnostics',
-  type: 'agent',
-  label: '应用体检',
-  icon: Activity,
-  tone: 'rose',
-  category: 'App 专家',
-  description: '诊断发布版环境并尝试安全修复',
-  aliases: ['diagnostics', 'health', 'bug', '故障', '修复', '体检'],
-  promptText: APP_DIAGNOSTICS_SKILL_PROMPT,
-});
-
-// AI 编辑部：prompt 正文来自 core/agent/editorialBoard.js（事实源是内置 skill resources/skills/ai-editorial-board）
-const EDITORIAL_REVIEW_SKILL = Object.freeze({
-  id: 'editorial-review',
-  type: 'agent',
-  label: '编辑部审稿',
-  icon: ShieldCheck,
-  tone: 'violet',
-  category: 'AI 编辑部',
-  description: '9 个编辑角色评审当前稿件',
-  aliases: ['审稿', '编辑部', '评审', '总编辑', 'review', 'editorial'],
-  promptText: EDITORIAL_REVIEW_PROMPT,
-});
-
-const EDITORIAL_SKILLS = Object.freeze([
-  EDITORIAL_REVIEW_SKILL,
-  {
-    id: 'editorial-headline',
-    type: 'agent',
-    label: '标题分析',
-    icon: HighlightOutlined,
-    tone: 'cyan',
-    category: 'AI 编辑部',
-    description: '分析原标题并给多渠道版本',
-    aliases: ['标题分析', '标题编辑', 'headline', '起标题'],
-    promptText: HEADLINE_ANALYSIS_PROMPT,
-  },
-  {
-    id: 'editorial-retro',
-    type: 'agent',
-    label: '发布复盘',
-    icon: Activity,
-    tone: 'amber',
-    category: 'AI 编辑部',
-    description: '按后台数据复盘并沉淀经验',
-    aliases: ['复盘', '数据复盘', 'retro', '阅读量', '发布后'],
-    promptText: PUBLISH_RETRO_PROMPT,
-  },
-]);
-
-const DELIVERABLE_SKILL = Object.freeze({
-  id: 'create-deliverable',
-  type: 'agent',
-  label: '生成交付物',
-  icon: PackageCheck,
-  tone: 'teal',
-  category: '产出物',
-  description: '将结果另存为有来源关系的文档',
-  aliases: ['artifact', 'deliverable', '交付', '报告', '方案'],
-  promptText: '请先理解当前稿件、相关旧文和我指定的资料，完成后调用 create_agent_artifact 把结果另存为一份可复用的交付物。',
-});
-
-const WELCOME_SUGGESTIONS = Object.freeze([
-  EDITORIAL_REVIEW_SKILL,
-  APP_DIAGNOSTICS_SKILL,
-  DELIVERABLE_SKILL,
-  { type: 'quick', actionKey: AI_ACTION_KEYS.OUTLINE, label: '帮我写一个提纲' },
-  { type: 'quick', actionKey: AI_ACTION_KEYS.KEY_POINTS, label: '提炼关键要点' },
-]);
-
-const COMPOSER_SHORTCUTS = Object.freeze([
-  {
-    id: 'title',
-    type: 'quick',
-    actionKey: AI_ACTION_KEYS.TITLE_SUGGESTIONS,
-    label: '标题建议',
-    icon: FileTextOutlined,
-    tone: 'cyan',
-    description: '给当前文稿想几个标题',
-    aliases: ['标题', 'title'],
-  },
-  {
-    id: 'wechat',
-    type: 'platform',
-    platformValue: PLATFORM_VARIANT_KEYS.WECHAT,
-    label: '公众号版',
-    icon: WechatOutlined,
-    tone: 'green',
-    description: '生成公众号版本',
-    aliases: ['微信', '公众号', 'wechat'],
-  },
-  {
-    id: 'xiaohongshu',
-    type: 'platform',
-    platformValue: PLATFORM_VARIANT_KEYS.XIAOHONGSHU,
-    label: '小红书版',
-    icon: CameraOutlined,
-    tone: 'magenta',
-    description: '生成小红书版本',
-    aliases: ['小红书', 'xiaohongshu'],
-  },
-]);
-
-const COMPOSER_PLUS_SHORTCUTS = Object.freeze([
-  TOPIC_SELECTION_SKILL,
-  {
-    id: 'outline',
-    type: 'quick',
-    actionKey: AI_ACTION_KEYS.OUTLINE,
-    label: '提纲',
-    icon: ApartmentOutlined,
-    tone: 'teal',
-    description: '按当前文稿整理结构提纲',
-    aliases: ['大纲', 'outline'],
-  },
-  {
-    id: 'expand',
-    type: 'quick',
-    actionKey: AI_ACTION_KEYS.EXPAND,
-    label: '扩写',
-    icon: ArrowsAltOutlined,
-    tone: 'blue',
-    description: '把当前文稿扩充展开',
-    aliases: ['展开', 'expand'],
-  },
-  {
-    id: 'continue',
-    type: 'quick',
-    actionKey: AI_ACTION_KEYS.CONTINUE,
-    label: '续写',
-    icon: ArrowsAltOutlined,
-    tone: 'blue',
-    description: '基于全文继续往下写',
-    aliases: ['继续往下写', 'continue'],
-  },
-  {
-    id: 'polish',
-    type: 'quick',
-    actionKey: AI_ACTION_KEYS.POLISH,
-    label: '润色',
-    icon: HighlightOutlined,
-    tone: 'rose',
-    description: '优化表达和语气',
-    aliases: ['改写', '优化', 'polish'],
-  },
-  {
-    id: 'summarize',
-    type: 'quick',
-    actionKey: AI_ACTION_KEYS.SUMMARIZE,
-    label: '压缩',
-    icon: CompressOutlined,
-    tone: 'amber',
-    description: '压缩成更短版本',
-    aliases: ['总结', '摘要', 'summarize'],
-  },
-]);
 
 // 本地脚本工具（不走 AI，直接执行 server 上的脚本），收进 + 下拉菜单。
 const COMPOSER_SCRIPT_TOOLS = Object.freeze([
@@ -483,174 +290,6 @@ const COMPOSER_SCRIPT_TOOLS = Object.freeze([
   },
 ]);
 
-const EXTRA_PLATFORM_SLASH_SKILLS = Object.freeze([
-  {
-    id: 'zhihu',
-    type: 'platform',
-    platformValue: PLATFORM_VARIANT_KEYS.ZHIHU,
-    label: '知乎版',
-    icon: FileTextOutlined,
-    tone: 'slate',
-    description: '生成知乎版本',
-    aliases: ['知乎', 'zhihu'],
-  },
-]);
-
-const PROJECT_SLASH_SKILLS = Object.freeze([
-  ...EDITORIAL_SKILLS,
-  APP_DIAGNOSTICS_SKILL,
-  DELIVERABLE_SKILL,
-  TOPIC_SELECTION_SKILL,
-  {
-    id: 'draft-entry',
-    type: 'agent',
-    label: '新稿件',
-    icon: FileTextOutlined,
-    tone: 'blue',
-    category: '项目 skill',
-    description: '新建一篇稿件',
-    aliases: ['draft', '稿件', '文章'],
-    promptText: '请直接调用 create_content_entry 创建 kind=draft 的稿件，使用默认名称，不要先询问。',
-  },
-  {
-    id: 'material-entry',
-    type: 'agent',
-    label: '资料单',
-    icon: FileTextOutlined,
-    tone: 'amber',
-    category: '项目 skill',
-    description: '新建一个资料单',
-    aliases: ['material', '资料', '素材'],
-    promptText: '请直接调用 create_content_entry 创建 kind=material 的资料单，使用默认名称，不要先询问。',
-  },
-  {
-    id: 'ready-entry',
-    type: 'agent',
-    label: '待发布稿',
-    icon: FileTextOutlined,
-    tone: 'green',
-    category: '项目 skill',
-    description: '新建一篇待发布稿',
-    aliases: ['ready', '发布', '平台稿'],
-    promptText: '请直接调用 create_content_entry 创建 kind=ready 的待发布稿，使用默认名称，不要先询问。',
-  },
-  {
-    id: 'daily-task',
-    type: 'agent',
-    label: '今日任务',
-    icon: Check,
-    tone: 'cyan',
-    category: '项目 skill',
-    description: '往今日速记添加一条任务',
-    aliases: ['daily', 'task', '待办'],
-    promptText: '帮我在今日速记里加一条任务。如果缺少任务内容，请直接问我。',
-  },
-  {
-    id: 'daily-note',
-    type: 'agent',
-    label: '今日笔记',
-    icon: MessageSquareQuote,
-    tone: 'slate',
-    category: '项目 skill',
-    description: '往今日速记添加一条笔记',
-    aliases: ['daily', 'note', '速记'],
-    promptText: '帮我在今日速记里记一条笔记。如果缺少笔记内容，请直接问我。',
-  },
-  {
-    id: 'todo-pool',
-    type: 'agent',
-    label: '待办池',
-    icon: Check,
-    tone: 'violet',
-    category: '项目 skill',
-    description: '往待办池添加一条待办',
-    aliases: ['todo', 'pool', '稍后处理'],
-    promptText: '帮我往待办池加一条待办。如果缺少待办内容，请直接问我。',
-  },
-  {
-    id: 'canvas-flow',
-    type: 'agent',
-    label: '白板流程图',
-    icon: ArrowsAltOutlined,
-    tone: 'rose',
-    category: '项目 skill',
-    description: '切到白板并生成流程图',
-    aliases: ['白板', '流程图', 'canvas', 'flow'],
-    promptText: '请切到灵感白板，并根据当前稿件或上下文画一个流程图。',
-  },
-  {
-    id: 'canvas-cards',
-    type: 'agent',
-    label: '白板卡片',
-    icon: PlusOutlined,
-    tone: 'teal',
-    category: '项目 skill',
-    description: '往白板追加几张卡片',
-    aliases: ['卡片', '点子', 'brainstorm'],
-    promptText: '请切到灵感白板，并根据当前稿件或上下文追加几张卡片。',
-  },
-  {
-    id: 'related-docs',
-    type: 'agent',
-    label: '相关旧文',
-    icon: FileText,
-    tone: 'slate',
-    category: '项目 skill',
-    description: '召回和当前文档相关的旧文',
-    aliases: ['参考', '召回', '旧文', 'related'],
-    promptText: '帮我找和当前文档相关的旧文参考。',
-  },
-  {
-    id: 'workspace-brief',
-    type: 'agent',
-    label: '工作区概览',
-    icon: Bot,
-    tone: 'gray',
-    category: '项目 skill',
-    description: '先概览当前工作区再继续',
-    aliases: ['workspace', 'overview', '概览'],
-    promptText: '请概览当前工作区，总结近期内容、重要主题和建议的下一步。',
-  },
-  {
-    id: 'new-folder',
-    type: 'agent',
-    label: '新建文件夹',
-    icon: Plus,
-    tone: 'purple',
-    category: '项目 skill',
-    description: '在当前位置新建文件夹',
-    aliases: ['folder', '目录', '整理'],
-    promptText: '请直接调用 create_folder 在当前位置创建文件夹，使用默认名称，不要先询问。',
-  },
-]);
-
-const SLASH_SKILLS = Object.freeze([
-  ...COMPOSER_SHORTCUTS.map((item) => ({
-    ...item,
-    category: item.type === 'platform' ? '平台版本' : '快捷动作',
-    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
-  })),
-  ...PROJECT_SLASH_SKILLS.map((item) => ({
-    ...item,
-    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
-  })),
-  ...COMPOSER_PLUS_SHORTCUTS.filter((item) => item.id !== TOPIC_SELECTION_SKILL.id).map((item) => ({
-    ...item,
-    category: item.category ?? '快捷动作',
-    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
-  })),
-  ...EXTRA_PLATFORM_SLASH_SKILLS.map((item) => ({
-    ...item,
-    category: '平台版本',
-    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
-  })),
-  ...COMPOSER_SCRIPT_TOOLS.map((item) => ({
-    ...item,
-    type: 'script',
-    category: '本地工具',
-    searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
-  })),
-]);
 
 const SURFACE_LABELS = Object.freeze({
   overview: '总览',
@@ -754,15 +393,30 @@ export default function AgentPanel({ onClose }) {
     const list = q ? mdFiles.filter((f) => (f.name ?? '').toLowerCase().includes(q)) : mdFiles;
     return list.slice(0, 20);
   }, [mdFiles, fileFilter]);
+  // 产品 skill：内置 + 内容库（MdRender/.agents/skills），改文件后自动刷新
+  const { skills: registrySkills, warnings: skillWarnings } = useSkillRegistry();
+  const skillItems = useMemo(() => registrySkills.map(toSkillItem), [registrySkills]);
+  const welcomeItems = useMemo(() => pickSkillItems(skillItems, 'welcome'), [skillItems]);
+  const composerItems = useMemo(() => pickSkillItems(skillItems, 'composer'), [skillItems]);
+  const slashItems = useMemo(() => [
+    ...pickSkillItems(skillItems, 'slash'),
+    ...COMPOSER_SCRIPT_TOOLS.map((item) => ({
+      ...item,
+      type: 'script',
+      category: '本地工具',
+      searchText: [item.label, item.description, ...(item.aliases ?? [])].join(' ').toLowerCase(),
+    })),
+  ], [skillItems]);
   const filteredSkills = useMemo(() => {
     const q = skillFilter.trim().toLowerCase();
-    const list = q ? SLASH_SKILLS.filter((item) => item.searchText.includes(q)) : SLASH_SKILLS;
+    const list = q ? slashItems.filter((item) => item.searchText.includes(q)) : slashItems;
     return list.slice(0, MAX_SLASH_SKILL_RESULTS);
-  }, [skillFilter]);
+  }, [skillFilter, slashItems]);
   const skillTabItems = useMemo(() => {
     const q = skillTabFilter.trim().toLowerCase();
-    return q ? SLASH_SKILLS.filter((item) => item.searchText.includes(q)) : SLASH_SKILLS;
-  }, [skillTabFilter]);
+    const visible = skillItems.filter((item) => item.entry.length > 0 || item.source === 'vault');
+    return q ? visible.filter((item) => item.searchText.includes(q)) : visible;
+  }, [skillTabFilter, skillItems]);
   const skillTabGroups = useMemo(() => {
     const groups = [];
     const groupMap = new Map();
@@ -814,11 +468,11 @@ export default function AgentPanel({ onClose }) {
   const isOtherSessionRunning = running && runningSessionId !== activeSessionId;
 
   const isShortcutDisabled = useCallback((item) => {
-    return running && ['agent', 'quick', 'platform'].includes(item.type);
+    return running && item.type === 'skill';
   }, [running]);
 
   const composerPlusMenuItems = useMemo(() => {
-    const shortcuts = COMPOSER_PLUS_SHORTCUTS.map((item) => {
+    const shortcuts = composerItems.map((item) => {
       const Icon = item.icon;
       return {
         key: item.id,
@@ -837,7 +491,7 @@ export default function AgentPanel({ onClose }) {
       };
     });
     return [...shortcuts, { type: 'divider' }, ...scripts];
-  }, [running, isShortcutDisabled]);
+  }, [running, isShortcutDisabled, composerItems]);
 
   // 注入给 agent 的宿主能力：读写当前文档 + 搜索工作区
   // 全局模式：无文档时 readActiveDoc 返回空，writeActiveDoc 为 no-op
@@ -1398,6 +1052,7 @@ export default function AgentPanel({ onClose }) {
     fileNames = [],
     selectionText = '',
     pinnedFiles = [],
+    allowedTools = null,
   }) => {
     if (running || runLockRef.current) return;
     if (!isAiConfigured()) {
@@ -1432,6 +1087,7 @@ export default function AgentPanel({ onClose }) {
         signal: controller.signal,
         serverTools,
         taskContext,
+        allowedTools,
         onEvent: (ev) => {
           if (!ownsRun() || controller.signal.aborted) return;
           if (ev.type === 'tool_start') {
@@ -1511,27 +1167,6 @@ export default function AgentPanel({ onClose }) {
     });
   }, [running, runTurn]);
 
-  // 快捷动作：直接走 AI 助手，让 agent 读当前文档并处理。
-  // 有引用选区时，改写类动作只处理这段（其余动作内部会忽略选区），触发后清空引用。
-  const handleQuickAction = useCallback((actionKey) => {
-    if (running) return;
-    runTurn({
-      promptText: buildQuickActionInstruction(actionKey, { selectionText: quotedSelection }),
-      displayText: getAiActionLabel(actionKey),
-      selectionText: quotedSelection,
-    });
-    if (quotedSelection) clearAiQuotedSelection();
-  }, [running, runTurn, quotedSelection, clearAiQuotedSelection]);
-
-  // 平台版本：把当前正文改写成指定平台版（微信/小红书/知乎），另存为新文件。
-  const handlePlatformVariant = useCallback((platformValue, platformLabel) => {
-    if (running) return;
-    runTurn({
-      promptText: buildPlatformVariantInstruction(platformValue),
-      displayText: `生成${platformLabel}版本`,
-    });
-  }, [running, runTurn]);
-
   const handleInsertMention = useCallback(() => {
     setInput((prev) => {
       const next = prev.trimEnd();
@@ -1542,45 +1177,37 @@ export default function AgentPanel({ onClose }) {
     focusInput();
   }, [focusInput]);
 
-  // Agent skill：内部 prompt 不进入输入框；点击后直接携带当前附件/选区运行。
-  const handleAgentSkill = useCallback((item) => {
+  // 统一的 skill 入口：按 skill 声明拼 prompt、带上附件/选区、只开放白名单里的工具。
+  const runSkill = useCallback((skillId) => {
     if (running) return;
-    const instruction = String(item?.promptText ?? '').trim();
-    if (!instruction) return;
+    const skill = findSkillById(registrySkills, skillId);
+    if (!skill) return;
 
-    const selectionAttachment = quotedSelection
+    const turn = buildSkillTurn(skill, { skills: registrySkills, selectionText: quotedSelection });
+    // 选区没被 skill 当作处理对象时，作为参考附件带上
+    const selectionAttachment = quotedSelection && !turn.consumesSelection
       ? { id: 'selection', name: '选中内容', content: quotedSelection }
       : null;
     const files = selectionAttachment ? [selectionAttachment, ...attachedFiles] : attachedFiles;
 
     setInput('');
     setAttachedFiles([]);
-    clearAiQuotedSelection();
+    if (quotedSelection) clearAiQuotedSelection();
     setActivePanelTab('chat');
     runTurn({
-      promptText: buildInputWithAttachments(instruction, files),
-      displayText: item.label || '执行技能',
+      promptText: buildInputWithAttachments(turn.promptText, files),
+      displayText: turn.displayText,
       fileNames: files.map((file) => file.name),
       selectionText: quotedSelection,
       pinnedFiles: attachedFiles,
+      allowedTools: turn.allowedTools,
     });
-  }, [running, quotedSelection, attachedFiles, clearAiQuotedSelection, runTurn]);
+  }, [running, registrySkills, quotedSelection, attachedFiles, clearAiQuotedSelection, runTurn]);
 
   const handleShortcutClick = useCallback((item) => {
     setActivePanelTab('chat');
-    if (item.type === 'agent') {
-      handleAgentSkill(item);
-      return;
-    }
-    if (item.type === 'quick') {
-      handleQuickAction(item.actionKey);
-      return;
-    }
-    if (item.type === 'platform') {
-      handlePlatformVariant(
-        item.platformValue,
-        PLATFORM_VARIANT_LABELS[item.platformValue] || item.label,
-      );
+    if (item.type === 'skill') {
+      runSkill(item.skillId);
       return;
     }
     if (item.type === 'mention') {
@@ -1594,7 +1221,7 @@ export default function AgentPanel({ onClose }) {
     if (item.type === 'settings') {
       setShowSettings((v) => !v);
     }
-  }, [handleAgentSkill, handleInsertMention, handlePlatformVariant, handleQuickAction]);
+  }, [runSkill, handleInsertMention]);
 
   const handleWelcomeSuggestion = useCallback((item) => {
     handleShortcutClick(item);
@@ -1647,29 +1274,17 @@ export default function AgentPanel({ onClose }) {
   const handlePickSkill = useCallback((item) => {
     closeSkillPicker();
     setActivePanelTab('chat');
-    if (item.type === 'agent') {
-      handleAgentSkill(item);
+    if (item.type === 'skill') {
+      runSkill(item.skillId);
       return;
     }
 
     setInput('');
     focusInput();
-
-    if (item.type === 'quick') {
-      handleQuickAction(item.actionKey);
-      return;
-    }
-    if (item.type === 'platform') {
-      handlePlatformVariant(
-        item.platformValue,
-        PLATFORM_VARIANT_LABELS[item.platformValue] || item.label,
-      );
-      return;
-    }
     if (item.type === 'script') {
       handleScriptTool(item);
     }
-  }, [closeSkillPicker, focusInput, handleAgentSkill, handlePlatformVariant, handleQuickAction, handleScriptTool]);
+  }, [closeSkillPicker, focusInput, runSkill, handleScriptTool]);
 
   const handlePanelTabChange = useCallback((tabId) => {
     setActivePanelTab(tabId);
@@ -1678,14 +1293,14 @@ export default function AgentPanel({ onClose }) {
   }, []);
 
   const handleComposerPlusClick = useCallback(({ key }) => {
-    const shortcut = COMPOSER_PLUS_SHORTCUTS.find((item) => item.id === key);
+    const shortcut = composerItems.find((item) => item.id === key);
     if (shortcut) {
       handleShortcutClick(shortcut);
       return;
     }
     const tool = COMPOSER_SCRIPT_TOOLS.find((t) => t.id === key);
     if (tool) handleScriptTool(tool);
-  }, [handleShortcutClick, handleScriptTool]);
+  }, [composerItems, handleShortcutClick, handleScriptTool]);
 
   // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
@@ -1911,9 +1526,9 @@ export default function AgentPanel({ onClose }) {
                 <span><PackageCheck size={13} /> 产出物留来源</span>
               </div>
               <div className="agent-panel__welcome-grid">
-                {WELCOME_SUGGESTIONS.map((item) => (
+                {welcomeItems.map((item) => (
                   <button
-                    key={item.label}
+                    key={item.id}
                     type="button"
                     className="agent-panel__welcome-chip"
                     disabled={running}
