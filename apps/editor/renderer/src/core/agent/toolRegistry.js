@@ -950,6 +950,24 @@ export const fetchServerTools = async (fetchFn, { force = false } = {}) => {
   }
 };
 
+/**
+ * 按 skill 的工具白名单裁剪工具定义。allowedTools 为 null/undefined 表示不限制（普通对话）。
+ * @param {object[]} definitions
+ * @param {string[]|null} [allowedTools]
+ */
+export const filterToolDefinitions = (definitions, allowedTools) => {
+  if (!Array.isArray(allowedTools)) return definitions;
+  const allowed = new Set(allowedTools);
+  return definitions.filter((definition) => allowed.has(definition?.function?.name));
+};
+
+export const isToolAllowed = (name, allowedTools) =>
+  !Array.isArray(allowedTools) || allowedTools.includes(name);
+
+/** 执行器层的拦截文案：回填给模型，让它改用已声明的工具 */
+export const buildToolDeniedResult = (name) =>
+  `拒绝：当前技能没有声明工具「${name}」，不能调用。请只用已提供的工具完成任务。`;
+
 /** 合并本地 + server 工具定义，供 agentEngine 调用 */
 export const buildAllToolDefinitions = (serverTools = []) => {
   return [...TOOL_DEFINITIONS, ...serverTools];

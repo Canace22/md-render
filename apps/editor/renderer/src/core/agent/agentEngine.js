@@ -13,7 +13,10 @@
 import { callChatCompletion } from './aiClient.js';
 import {
   buildAllToolDefinitions,
+  buildToolDeniedResult,
   executeTool,
+  filterToolDefinitions,
+  isToolAllowed,
   getToolLabel,
   registerServerToolLabels,
 } from './toolRegistry.js';
@@ -93,6 +96,7 @@ const toAssistantMessage = (message, content) => ({
  * @param {number} [params.maxSteps]
  * @param {AbortSignal} [params.signal]
  * @param {object} [params.taskContext]
+ * @param {string[]|null} [params.allowedTools] skill 的工具白名单；null 表示不限制
  * @returns {Promise<{ finalText: string, history: Array }>}
  *
  * onEvent 事件类型：
@@ -112,6 +116,7 @@ export const runAgent = async ({
   signal,
   serverTools = [],
   taskContext = null,
+  allowedTools = null,
 }) => {
   const messages = [
     { role: 'system', content: buildSystemPrompt(taskContext) },
@@ -126,7 +131,7 @@ export const runAgent = async ({
     );
     registerServerToolLabels(labels);
   }
-  const allTools = buildAllToolDefinitions(serverTools);
+  const allTools = filterToolDefinitions(buildAllToolDefinitions(serverTools), allowedTools);
 
   let finalText = '';
 
@@ -135,7 +140,7 @@ export const runAgent = async ({
 
     const message = await callChatCompletion({
       messages,
-      tools: allTools,
+      tools: allTools.length ? allTools : undefined,
       config,
       signal,
     });
@@ -170,7 +175,10 @@ export const runAgent = async ({
         step: step + 1,
       };
       onEvent({ type: 'tool_start', ...eventBase });
-      const result = await executeTool(call, host);
+      // 白名单在请求时已裁剪，执行前再拦一次，防止模型臆造未提供的工具
+      const result = isToolAllowed(name, allowedTools)
+        ? await executeTool(call, host)
+        : buildToolDeniedResult(name);
       if (signal?.aborted) throw new Error('已取消');
       onEvent({ type: 'tool_done', ...eventBase, result });
 
