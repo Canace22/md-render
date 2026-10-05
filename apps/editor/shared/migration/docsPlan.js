@@ -141,15 +141,24 @@ const withoutEmpty = (patch) => Object.fromEntries(Object.entries(patch).filter(
  * @param {object} workspace 工作区树（BlockNote 旧格式正文须已由调用方转成 Markdown）
  * @param {{ existingNames?: string[] }} [options] 内容库里已有的 Markdown 文件名（不含扩展名），用于避让
  */
-export const planBuiltinDocsMigration = (workspace, { existingNames = [] } = {}) => {
+export const planBuiltinDocsMigration = (workspace, { existingNames = [], existingIdPaths = {} } = {}) => {
   const { files, folders } = collectBuiltinNodes(workspace);
-  const allocate = createNameAllocator(existingNames);
+  // 已经迁过的文档（磁盘上有 frontmatter id 对得上的文件）沿用原路径，不重复生成
+  const migratedBases = Object.values(existingIdPaths).map((rel) => stripMarkdownExt(rel.split('/').pop()));
+  const allocate = createNameAllocator([...existingNames, ...migratedBases]);
   const resolveName = buildNameResolver(files);
 
   // 第一遍：定文件名和路径
   const targets = new Map();
   files.forEach(({ node, dirSegments }) => {
     const originalBase = stripMarkdownExt(node.name) || UNTITLED;
+    const existingPath = existingIdPaths[node.id];
+    if (existingPath) {
+      const parts = existingPath.split('/');
+      const base = stripMarkdownExt(parts.pop());
+      targets.set(node.id, { node, dir: parts.join('/'), base, originalBase, relativePath: existingPath, alreadyMigrated: true });
+      return;
+    }
     const base = allocate(sanitizeFileName(originalBase));
     const dir = [BUILTIN_DOCS_DIR, ...dirSegments].join('/');
     targets.set(node.id, { node, dir, base, originalBase, relativePath: `${dir}/${base}.md` });
@@ -182,6 +191,7 @@ export const planBuiltinDocsMigration = (workspace, { existingNames = [] } = {})
       originalName: node.name,
       relativePath: target.relativePath,
       renamed,
+      alreadyMigrated: Boolean(target.alreadyMigrated),
       content,
       contentHash: hashContent(content),
       assets: images.assets.map((asset) => ({ ...asset, relativePath: `${target.dir}/${ASSETS_DIR}/${asset.fileName}` })),

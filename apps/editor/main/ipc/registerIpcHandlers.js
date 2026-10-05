@@ -4,6 +4,7 @@ import { registerDbHandlers } from './dbHandlers.js';
 import { registerDiagnosticHandlers } from './diagnosticHandlers.js';
 import { registerExportHandlers } from './exportHandlers.js';
 import { registerLocalProjectHandlers } from './localProjectHandlers.js';
+import { registerMigrationHandlers } from './migrationHandlers.js';
 import { registerSkillHandlers } from './skillHandlers.js';
 import { registerUpdaterHandlers } from './updaterHandlers.js';
 import { registerWindowHandlers } from './windowHandlers.js';
@@ -18,4 +19,5 @@ export function registerIpcHandlers(deps) {
   registerUpdaterHandlers(deps);
   registerSkillHandlers(deps);
   registerAgentDataHandlers(deps);
+  registerMigrationHandlers(deps);
 }

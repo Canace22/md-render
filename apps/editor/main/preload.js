@@ -66,6 +66,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readActivity: (payload) => ipcRenderer.invoke('agent-data:read-activity', payload),
   },
 
+  // 数据层文件化：迁移向导 + 迁移后 Daily / 白板 / 编辑部记忆的文件读写
+  migration: {
+    getState: () => ipcRenderer.invoke('migration:state'),
+    plan: (payload, steps) => ipcRenderer.invoke('migration:plan', { payload, steps }),
+    execute: (payload, steps) => ipcRenderer.invoke('migration:execute', { payload, steps }),
+    rollback: () => ipcRenderer.invoke('migration:rollback'),
+    onProgress: (callback) => {
+      const sub = (_event, progress) => callback(progress);
+      ipcRenderer.on('migration:progress', sub);
+      return () => ipcRenderer.removeListener('migration:progress', sub);
+    },
+  },
+  vault: {
+    readText: (relativePath) => ipcRenderer.invoke('vault:read-text', { relativePath }),
+    writeText: (relativePath, content) => ipcRenderer.invoke('vault:write-text', { relativePath, content }),
+    readDaily: () => ipcRenderer.invoke('vault:read-daily'),
+    readCanvas: () => ipcRenderer.invoke('vault:read-canvas'),
+    ensureIds: () => ipcRenderer.invoke('vault:ensure-ids'),
+    rebuildIndex: (workspaceJson) => ipcRenderer.invoke('db:rebuild-index', { workspaceJson }),
+  },
+
   // 只读本机运行诊断
   diagnostics: {
     getSnapshot: (payload) => ipcRenderer.invoke('diagnostics:get-snapshot', payload),

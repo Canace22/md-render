@@ -15,9 +15,11 @@ import {
   updateDocumentDiskPaths,
 } from '../database.js';
 import { writeBuiltInDocsToDisk } from '../mdSync.js';
+import { isStepOnFilesCached } from '../migration/stateCache.js';
 
 const syncBuiltInDocs = (workspace, logPrefix) => {
-  if (!workspace) return;
+  // 内置文档已迁成真文件后，不再往 Artifacts/ 单向导出（M6）
+  if (!workspace || isStepOnFilesCached('docs')) return;
   writeBuiltInDocsToDisk(workspace).then((diskPaths) => {
     if (Object.keys(diskPaths).length > 0) updateDocumentDiskPaths(diskPaths);
   }).catch((err) => console.error(`[db] ${logPrefix} disk-write failed:`, err));

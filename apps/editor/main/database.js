@@ -441,6 +441,17 @@ export function getGraphData() {
   return { nodes, edges };
 }
 
+/** 在线备份（WAL 模式下也一致），迁移前用 */
+export function backupDatabase(destPath) {
+  return getDb().backup(destPath);
+}
+
+/** 从当前工作区（文件为真相后就是磁盘内容）重建全文索引和链接 */
+export function rebuildIndexFromWorkspace(workspace) {
+  syncDocuments(workspace);
+  syncAllLinks(workspace);
+}
+
 export function closeDatabase() {
   if (db) {
     db.close();
