@@ -8,6 +8,25 @@ import { EDITOR_STATE_KEYS } from '../shared/stateKeys.js';
 
 let db = null;
 
+const DOCUMENT_UPDATE_COLUMNS = Object.freeze([
+  'parent_id', 'type', 'name', 'content', 'node_type', 'summary', 'aliases',
+  'tags', 'related_ids', 'created_at', 'updated_at', 'disk_path', 'url',
+]);
+
+const DOCUMENT_FTS_UPDATE_TRIGGER = `
+  CREATE TRIGGER documents_au
+  AFTER UPDATE OF name, content, summary, aliases, tags ON documents
+  WHEN old.name IS NOT new.name OR old.content IS NOT new.content
+    OR old.summary IS NOT new.summary OR old.aliases IS NOT new.aliases
+    OR old.tags IS NOT new.tags
+  BEGIN
+    INSERT INTO documents_fts(documents_fts, rowid, name, content, summary, aliases, tags)
+    VALUES ('delete', old.rowid, old.name, old.content, old.summary, old.aliases, old.tags);
+    INSERT INTO documents_fts(rowid, name, content, summary, aliases, tags)
+    VALUES (new.rowid, new.name, new.content, new.summary, new.aliases, new.tags);
+  END;
+`;
+
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS app_state (
     key   TEXT PRIMARY KEY,
@@ -48,13 +67,6 @@ const SCHEMA = `
     VALUES ('delete', old.rowid, old.name, old.content, old.summary, old.aliases, old.tags);
   END;
 
-  CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
-    INSERT INTO documents_fts(documents_fts, rowid, name, content, summary, aliases, tags)
-    VALUES ('delete', old.rowid, old.name, old.content, old.summary, old.aliases, old.tags);
-    INSERT INTO documents_fts(rowid, name, content, summary, aliases, tags)
-    VALUES (new.rowid, new.name, new.content, new.summary, new.aliases, new.tags);
-  END;
-
   CREATE TABLE IF NOT EXISTS links (
     source_id TEXT NOT NULL,
     target_id TEXT NOT NULL,
@@ -82,6 +94,11 @@ export function initDatabase() {
   try { db.exec('ALTER TABLE documents ADD COLUMN disk_path TEXT'); } catch { /* already exists */ }
   // Migration: add url column for bookmark nodes
   try { db.exec('ALTER TABLE documents ADD COLUMN url TEXT'); } catch { /* already exists */ }
+  // 升级老库的更新触发器：元数据或相同内容的保存不应反复重建全文索引。
+  db.transaction(() => {
+    db.exec('DROP TRIGGER IF EXISTS documents_au');
+    db.exec(DOCUMENT_FTS_UPDATE_TRIGGER);
+  })();
   console.log('[db] initialized at', dbPath);
   return db;
 }
@@ -227,10 +244,13 @@ function buildNotInClause(ids, columnName) {
 export function syncDocuments(workspace) {
   const docs = flattenWorkspace(workspace);
   const upsert = getDb().prepare(`
-    INSERT OR REPLACE INTO documents
+    INSERT INTO documents
       (id, parent_id, type, name, content, node_type, summary, aliases, tags, related_ids, created_at, updated_at, disk_path, url)
     VALUES
       (@id, @parent_id, @type, @name, @content, @node_type, @summary, @aliases, @tags, @related_ids, @created_at, @updated_at, @disk_path, @url)
+    ON CONFLICT(id) DO UPDATE SET
+      ${DOCUMENT_UPDATE_COLUMNS.map((column) => `${column} = excluded.${column}`).join(', ')}
+    WHERE ${DOCUMENT_UPDATE_COLUMNS.map((column) => `documents.${column} IS NOT excluded.${column}`).join(' OR ')}
   `);
   const deleteAllLinks = getDb().prepare('DELETE FROM links');
   const deleteAllVersions = getDb().prepare('DELETE FROM versions');
@@ -264,9 +284,9 @@ export function syncDocuments(workspace) {
 }
 
 export function updateDocumentDiskPaths(diskPaths) {
-  const update = getDb().prepare('UPDATE documents SET disk_path = ? WHERE id = ?');
+  const update = getDb().prepare('UPDATE documents SET disk_path = ? WHERE id = ? AND disk_path IS NOT ?');
   const updateAll = getDb().transaction((entries) => {
-    for (const [id, diskPath] of entries) update.run(diskPath, id);
+    for (const [id, diskPath] of entries) update.run(diskPath, id, diskPath);
   });
   updateAll(Object.entries(diskPaths));
 }

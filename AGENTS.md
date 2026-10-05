@@ -77,7 +77,7 @@
 | `md-render-agent` | Agent 工具、引擎、面板 |
 | `md-render-excalidraw-canvas` | Excalidraw 无限画布的同步、保存与交互边界 |
 | `ai-editorial-board` | AI 编辑部：9 角色审稿 / 标题分析 / 发布复盘（app 内 slash skill 与外部 agent 共用） |
-| `md-render-kb-source` | 知识库新增节点类型 / 外部来源 |
+| `md-render-kb-source` | 知识库节点 / 外部来源、FTS 同步与索引膨胀修复 |
 | `md-render-asset-derivation` | 派生资产：保留原稿、生成新稿、记录来源素材 |
 | `md-render-architecture-boundary` | 跨 renderer/main/server 的架构边界重整 |
 | `md-render-electron-startup` | Electron 开发启动、白屏、preload 与 ESM/CJS 崩溃诊断 |

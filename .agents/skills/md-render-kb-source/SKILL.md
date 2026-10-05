@@ -1,6 +1,6 @@
 ---
 name: md-render-kb-source
-description: 给知识库新增一种「节点类型 / 外部来源」（如书签、稍后读、RSS、剪藏）时的固定步骤与易漏点。知识库里所有条目都复用 file 节点（type='file' + nodeType 区分），落 SQLite documents 表并走 FTS5 全文索引。涉及"导入书签/Notion/本地文件""加一种条目类型""接入新来源""nodeType""documents 表加字段""知识库搜不到"时触发。
+description: 知识库新增节点类型 / 外部来源，以及 SQLite documents 与 FTS5 同步、索引膨胀和数据保全清理的规范。涉及"导入书签/Notion/本地文件""加一种条目类型""接入新来源""nodeType""documents 表加字段""知识库搜不到""索引膨胀""数据库异常变大"时触发。
 ---
 
 # 知识库新增节点类型 / 外部来源规范
@@ -41,6 +41,14 @@ flowchart TD
 ## 打开外链
 
 渲染进程里 `window.open(url, '_blank')` 即可——main 进程已设 `setWindowOpenHandler` → `shell.openExternal` 转交系统浏览器；web 端开新标签页。**不需要新增 IPC**。
+
+## documents / FTS 同步与膨胀修复
+
+- `documents` 同步必须用 `INSERT ... ON CONFLICT(id) DO UPDATE` 保留 rowid，并用 NULL 安全的 `IS NOT` 比较跳过未变化行。禁止 `INSERT OR REPLACE`：它隐式删除旧行，默认不触发删除触发器，旧 FTS 记录会残留；频繁全工作区同步会累积到数十 GB。FTS 更新触发器只监听索引字段且判断值真的变化，老库在初始化时事务化升级触发器；重复写相同 `disk_path` 也应跳过。
+- 实际体积先看文件大小、`page_count` / `freelist_count`；正文体积用 `octet_length`，不要把数据库文件大小等同于内容量。禁止在主线程扫描大 FTS 表；外部只读诊断也必须有耗时上限。
+- 清理巨大坏索引时，运行 `scripts/rebuild-knowledge-db.py 源库 新库`：在一致性快照中只复制有效业务表和 schema，保留 rowid、历史 id、自增序列与所有设置，再在新库重建 FTS。脚本不原地修改源库，拒绝覆盖目标和未知 schema，并逐表核对哈希、完整性与外键。
+- 正式切换必须先正常退出 app，确认没有数据库持有者；保留有效数据的独立备份，再替换数据库及对应 WAL/SHM。启动修复版并复检后，才清理旧的大库。不要直接删整个 userData，也不要复制或 VACUUM 整个几十 GB 的坏库。
+- 建议 case：重复保存不换 rowid、原样保存不触发索引写入、改文后旧词消失/新词可搜、删除后无孤立索引、重建后正文/历史/设置哈希一致。默认不主动跑测试，用户明确要求时再运行。
 
 ## 参考实现
 
