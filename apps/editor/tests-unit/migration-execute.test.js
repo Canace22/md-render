@@ -105,6 +105,9 @@ describe('正式迁移', () => {
     const state = await rollbackMigration({ vaultRoot: vault });
     expect(isStepOnFiles(state, 'daily')).toBe(false);
     expect(await readVaultText(vault, 'Todo.md')).toContain('待办');
+    // 内置文档目录挪走（不删），侧栏不会和回灌的内置文档重复
+    await expect(fs.access(path.join(vault, 'Projects/内置文档'))).rejects.toThrow();
+    expect(await fs.readFile(path.join(vault, state.rollbackDocsPath, '周报.md'), 'utf8')).toContain('旧内容 A');
   });
 });
 
@@ -130,5 +133,40 @@ describe('补写 frontmatter id（M-base-4）', () => {
     expect(await fs.readFile(path.join(vault, 'Projects/a/新稿.md'), 'utf8')).toBe('---\nid: doc-new\n---\n\n正文');
     expect(ignored).toHaveLength(1);
     expect(isBrokenFrontmatter('---\n  : :\n---\n正文')).toBe(true);
+  });
+});
+
+describe('frontmatter 损坏判断', () => {
+  it('只有成对 --- 块里解析不出 key 才算坏；分割线开头不算', async () => {
+    const { isBrokenFrontmatter } = await import('../main/migration/frontmatterIds.js');
+    expect(isBrokenFrontmatter('---\n\n正文')).toBe(false);
+    expect(isBrokenFrontmatter('---\ntitle: a\n---\n正文')).toBe(false);
+    expect(isBrokenFrontmatter('---\n乱写一通\n---\n正文')).toBe(true);
+    expect(isBrokenFrontmatter('正文')).toBe(false);
+  });
+});
+
+describe('工作区：内置节点 ↔ 磁盘节点', () => {
+  it('findNodeById 找不到 id 时按 docId 找；stripBuiltinNodes 只留磁盘和隐藏节点；diskNodeToBuiltin 恢复原 id', async () => {
+    const { findNodeById, stripBuiltinNodes, diskNodeToBuiltin } = await import('../renderer/src/store/workspaceUtils.js');
+    const ws = {
+      id: 'root',
+      type: 'folder',
+      children: [
+        { id: 'old', type: 'file', name: '旧文' },
+        { id: '.agent', type: 'folder', name: '.agent', agentMetaFolder: true, children: [] },
+        { id: 'project:/v:folder:Projects/内置文档', type: 'folder', name: '内置文档', projectRootPath: '/v', relativePath: 'Projects/内置文档', children: [
+          { id: 'project:/v:file:Projects/内置文档/周报.md', type: 'file', name: '周报.md', docId: 'doc-1', projectRootPath: '/v', relativePath: 'Projects/内置文档/周报.md', content: 'x', frontmatter: { id: 'doc-1', tags: ['a'] } },
+        ] },
+      ],
+    };
+    expect(findNodeById(ws, 'doc-1').name).toBe('周报.md');
+    const { workspace, removedCount } = stripBuiltinNodes(ws);
+    expect(removedCount).toBe(1);
+    expect(workspace.children.map((c) => c.name)).toEqual(['.agent', '内置文档']);
+    let n = 0;
+    const restored = diskNodeToBuiltin(ws.children[2], (kind) => `${kind}-${(n += 1)}`);
+    expect(restored).toMatchObject({ id: 'folder-1', type: 'folder', name: '内置文档' });
+    expect(restored.children[0]).toEqual({ id: 'doc-1', type: 'file', name: '周报.md', content: 'x', frontmatter: { tags: ['a'] } });
   });
 });

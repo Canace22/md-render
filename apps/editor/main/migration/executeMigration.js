@@ -193,9 +193,22 @@ export async function executeMigration({
   };
 }
 
-/** 切回旧存储：只改状态，文件都保留；数据回灌由 renderer 完成 */
-export async function rollbackMigration({ vaultRoot, now = new Date() }) {
+const BUILTIN_DOCS_DIR = 'Projects/内置文档';
+
+/**
+ * 切回旧存储：改状态；内置文档目录挪到 .agent/migration/rollback-<时间>/（不删），
+ * 避免和回灌进数据库的内置文档在侧栏里重复。数据回灌由 renderer 完成。
+ */
+export async function rollbackMigration({ vaultRoot, now = new Date(), markIgnored = () => {} }) {
   const state = await readMigrationState(vaultRoot);
+  const docsDir = resolveVaultPath(vaultRoot, BUILTIN_DOCS_DIR);
+  if (state.steps?.docs?.done && await pathExists(docsDir)) {
+    const target = resolveVaultPath(vaultRoot, `${MIGRATION_DIR}/rollback-${buildStamp(now)}/内置文档`);
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    markIgnored(docsDir);
+    await fsp.rename(docsDir, target);
+    state.rollbackDocsPath = path.relative(vaultRoot, target).split(path.sep).join('/');
+  }
   state.storageSource = 'legacy';
   state.rolledBackAt = now.toISOString();
   await writeMigrationState(vaultRoot, state);

@@ -276,17 +276,26 @@ export function ensureKnowledgeFields(node) {
   return node;
 }
 
-export function findNodeById(node, targetId) {
+function findNodeByKey(node, key, targetId) {
   if (!node) return null;
-  if (node.id === targetId) return node;
+  if (node[key] === targetId) return node;
 
   if (node.type === 'folder' && Array.isArray(node.children)) {
     for (const child of node.children) {
-      const result = findNodeById(child, targetId);
+      const result = findNodeByKey(child, key, targetId);
       if (result) return result;
     }
   }
   return null;
+}
+
+/**
+ * 按 id 找节点。找不到时再按 docId（文件 frontmatter 里的稳定 id）找：
+ * 内置文档迁成真文件后节点 id 变成路径形式，旧的 relatedIds / 会话引用仍然能定位到。
+ */
+export function findNodeById(node, targetId) {
+  return findNodeByKey(node, 'id', targetId)
+    ?? (targetId ? findNodeByKey(node, 'docId', targetId) : null);
 }
 
 export const getDerivationSourceFileId = (workspace, sourceNodeId) => {
@@ -1300,4 +1309,32 @@ export function getFolderChannelLabel(node) {
   if (!node || node.type !== 'folder') return null;
   if (node.localProjectRoot) return '本地';
   return null;
+}
+
+// ── 数据层文件化：内置文档 ↔ 内容库真文件 ─────────────────────
+
+const isDiskBackedNode = (node) => Boolean(node?.projectRootPath);
+
+/** 去掉根下的内置文档（迁移到 Projects/内置文档 之后），保留磁盘挂载和隐藏目录 */
+export function stripBuiltinNodes(workspace) {
+  const children = workspace?.children ?? [];
+  const kept = children.filter((child) => isDiskBackedNode(child) || isHiddenWorkspaceNode(child));
+  return { workspace: { ...workspace, children: kept }, removedCount: children.length - kept.length };
+}
+
+const DISK_ONLY_FIELDS = ['projectRootPath', 'relativePath', 'diskContentSnapshot', 'localProjectRoot', 'docId', 'frontmatterError'];
+
+/** 切回旧存储：把磁盘上的文件夹转回内置节点，文件优先用 frontmatter 里的原 id */
+export function diskNodeToBuiltin(node, createNodeId) {
+  if (!node) return null;
+  const base = Object.fromEntries(Object.entries(node).filter(([key]) => !DISK_ONLY_FIELDS.includes(key)));
+  if (node.type === 'folder') {
+    return {
+      ...base,
+      id: createNodeId('folder'),
+      children: (node.children ?? []).map((child) => diskNodeToBuiltin(child, createNodeId)).filter(Boolean),
+    };
+  }
+  const { id: _legacyId, ...frontmatter } = node.frontmatter ?? {};
+  return { ...base, id: node.docId || createNodeId('file'), frontmatter };
 }

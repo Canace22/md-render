@@ -15,12 +15,13 @@ const ID_RANDOM_LENGTH = 6;
 export const createDocId = (now = Date.now(), random = Math.random) =>
   `doc-${now.toString(ID_RADIX)}-${random().toString(ID_RADIX).slice(2, 2 + ID_RANDOM_LENGTH)}`;
 
-/** 文件开头像 frontmatter 却解析不出 key：认为格式坏了 */
+const FRONTMATTER_BLOCK_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/** 开头有成对的 --- 块、里面有内容，却一个 key 都解析不出来：认为 frontmatter 格式坏了 */
 export const isBrokenFrontmatter = (raw) => {
-  const text = String(raw ?? '');
-  if (!text.startsWith('---')) return false;
-  const doc = parseFrontmatterDocument(text);
-  return !doc.hasFrontmatter;
+  const match = String(raw ?? '').match(FRONTMATTER_BLOCK_RE);
+  if (!match || !match[1].trim()) return false;
+  return !parseFrontmatterDocument(String(raw)).hasFrontmatter;
 };
 
 /** 给缺 id 的 Markdown 补 id；返回新内容，不需要改时返回 null */

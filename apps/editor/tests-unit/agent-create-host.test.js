@@ -121,3 +121,28 @@ describe('按 id 的文档工具（P2-3）', () => {
     expect(none.docs).toEqual([]);
   });
 });
+
+describe('编辑部记忆迁到文件后（M1）', () => {
+  it('读写内容库里的 .agent/memory/editorial.md，不再碰工作区隐藏节点', async () => {
+    const files = { '.agent/memory/editorial.md': '# 编辑部记忆\n\n## 平台经验库\n\n- 2026-09-01：旧经验' };
+    useEditorStore.setState({ vaultStorage: { memory: true, daily: false, canvas: false, docs: false } });
+    const createdWindow = typeof globalThis.window === 'undefined';
+    if (createdWindow) globalThis.window = {};
+    window.electronAPI = {
+      vault: {
+        readText: async (rel) => ({ ok: true, content: files[rel] ?? null }),
+        writeText: async (rel, content) => { files[rel] = content; return { ok: true }; },
+      },
+    };
+    try {
+      const host = makeHost();
+      expect((await host.readEditorialMemory()).content).toContain('旧经验');
+      expect(await host.updateEditorialMemory({ category: 'experience', text: '新经验' })).toContain('.agent/memory/editorial.md');
+      expect(files['.agent/memory/editorial.md']).toContain('新经验');
+    } finally {
+      if (createdWindow) delete globalThis.window;
+      else delete window.electronAPI;
+      useEditorStore.setState({ vaultStorage: { memory: false, daily: false, canvas: false, docs: false } });
+    }
+  });
+});

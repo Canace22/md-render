@@ -75,6 +75,7 @@ import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
 import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
 import { useAgentRuntime } from '../hooks/useAgentRuntime.js';
+import { useVaultStorage } from '../hooks/useVaultStorage.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
 import { filterSkillsByEntry } from '../core/agent/skillRegistry.js';
 import useCommandPalette from '../hooks/useCommandPalette.js';
@@ -1061,6 +1062,8 @@ function MarkdownEditor() {
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   // agent 运行时（MCP 控制桥、提案收件箱）不依赖 AI 面板是否打开
   useAgentRuntime({ dialogs: AGENT_HOST_DIALOGS });
+  // 数据层文件化：迁移后 Daily / 白板 / 编辑部记忆以内容库文件为准
+  useVaultStorage();
   const requestAgentSkill = useEditorStore((state) => state.requestAgentSkill);
   // 文档工具栏上的 AI 动作：entry 含 doc-toolbar 的 skill（平台版等）
   const { skills: registrySkills } = useSkillRegistry();

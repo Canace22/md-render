@@ -12,6 +12,7 @@ import {
   metadataToFrontmatterPatch,
 } from '../shared/properties.js';
 import { syncObsidianPropertyTypes } from './obsidianTypes.js';
+import { isBrokenFrontmatter } from './migration/frontmatterIds.js';
 
 export const MD_RENDER_DIR_NAME = 'MdRender';
 export const MD_RENDER_SUBDIRS = ['Projects', 'Artifacts', 'Scheduled'];
@@ -385,8 +386,13 @@ async function readProjectNode(rootPath, currentPath, isRoot = false) {
       createLocalProjectRelation(rootPath),
     );
     const content = doc.hasFrontmatter ? doc.content : rawContent;
+    const docId = typeof doc.frontmatter.id === 'string' ? doc.frontmatter.id.trim() : '';
     return {
       id: `file:${relativePath}`,
+      // frontmatter 里的稳定 id：迁移过来的内置文档沿用原 id，外部新建的由 vault:ensure-ids 补写
+      ...(docId ? { docId } : {}),
+      // frontmatter 看起来有但解析不出来：只当正文读，界面上提示（U7）
+      ...(isBrokenFrontmatter(rawContent) ? { frontmatterError: true } : {}),
       type: 'file',
       name,
       relativePath,

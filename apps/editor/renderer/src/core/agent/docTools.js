@@ -83,6 +83,7 @@ export const DOC_TOOL_LABELS = Object.freeze({
   get_proposal_status: '查询提案状态',
   render_platform_html: '渲染公众号排版',
   disk_change: '文件被外部修改',
+  ensure_doc_id: '补写文档 id',
 });
 
 const META_KEYS = ['title', 'summary', 'status', 'tags', 'targetPlatforms', 'scheduledPublishAt', 'aliases', 'sourceMaterialIds'];

@@ -57,6 +57,8 @@ import { getSurfaceLabel } from './surfaceLabels.js';
 import { hashContent } from '../../../../shared/capabilities/contentHash.js';
 import { toProposalStatus } from '../../../../shared/capabilities/proposals.js';
 import { renderPlatformHtml } from '../../utils/platformRender.js';
+import { readVaultText, writeVaultText } from '../../utils/vaultBridge.js';
+import { EDITORIAL_MEMORY_PATH } from '../../../../shared/migration/memoryMerge.js';
 
 export const CONTENT_ENTRY_PRESETS = Object.freeze({
   topic: { draftStatus: 'idea', fallbackName: '新选题' },
@@ -409,6 +411,11 @@ export function createHost({
     },
 
     readEditorialMemory: async () => {
+      // 迁移后编辑部记忆是内容库里的真文件，app 内 AI 和 Claude Code 读同一份
+      if (getState().vaultStorage?.memory) {
+        const content = await readVaultText(EDITORIAL_MEMORY_PATH);
+        return content == null ? null : { id: EDITORIAL_MEMORY_PATH, name: EDITORIAL_MEMORY_DOC_NAME, content };
+      }
       const ws = getState().workspace;
       const file = findAgentMetaFile(ws, EDITORIAL_MEMORY_DOC_NAME)
         ?? findEditorialMemoryFile(collectFiles(ws)); // 兼容旧版散落在笔记区的记忆
@@ -418,6 +425,13 @@ export function createHost({
 
     updateEditorialMemory: async ({ category, text } = {}) => {
       const state = getState();
+      if (state.vaultStorage?.memory) {
+        const current = (await readVaultText(EDITORIAL_MEMORY_PATH)) ?? '';
+        const appended = appendMemoryEntry(current, { category, text, dateKey: getTodayDateKey() });
+        if (!appended.ok) return `更新失败：${appended.error}`;
+        await writeVaultText(EDITORIAL_MEMORY_PATH, appended.content);
+        return `已把新经验追加到「${MEMORY_CATEGORIES[category]}」（${EDITORIAL_MEMORY_PATH}）。`;
+      }
       const metaFile = findAgentMetaFile(state.workspace, EDITORIAL_MEMORY_DOC_NAME);
       const legacyFile = metaFile ? null : findEditorialMemoryFile(collectFiles(state.workspace));
       const base = metaFile ?? legacyFile;

@@ -11,8 +11,6 @@ import {
   writeVaultText,
 } from '../migration/vaultFiles.js';
 import { getMigrationStateCache, isStepOnFilesCached, refreshMigrationStateCache, setMigrationStateCache } from '../migration/stateCache.js';
-import { appendActivityEntry, getAgentDataDir } from '../capabilities/agentDataFiles.js';
-import { buildActivityEntry } from '../../shared/capabilities/activity.js';
 
 const GIT_TIMEOUT_MS = 120000;
 
@@ -78,7 +76,7 @@ export function registerMigrationHandlers({
   }));
 
   ipcMain.handle('migration:rollback', wrap(async () => {
-    const state = await rollbackMigration({ vaultRoot: getVaultRoot() });
+    const state = await rollbackMigration({ vaultRoot: getVaultRoot(), markIgnored: markLocalProjectWriteIgnored });
     setMigrationStateCache(state);
     return { state };
   }));
@@ -94,14 +92,12 @@ export function registerMigrationHandlers({
   ipcMain.handle('vault:read-daily', wrap(async () => readDailyFiles(getVaultRoot())));
   ipcMain.handle('vault:read-canvas', wrap(async () => readCanvasFiles(getVaultRoot())));
 
-  // 外部新建的 Markdown 补 frontmatter id（内置文档迁到文件后才做），并记活动日志
+  // 外部新建的 Markdown 补 frontmatter id（内置文档迁到文件后才做）
   ipcMain.handle('vault:ensure-ids', wrap(async () => {
     if (!isStepOnFilesCached('docs')) return { fixed: [] };
     const vaultRoot = getVaultRoot();
+    // 活动日志由 renderer 记（同时刷新活动页）
     const fixed = await ensureFrontmatterIds(vaultRoot, { markIgnored: markLocalProjectWriteIgnored });
-    await Promise.all(fixed.map((relativePath) => appendActivityEntry(getAgentDataDir(vaultRoot), buildActivityEntry({
-      who: 'external', tool: 'ensure_doc_id', args: { id: relativePath }, result: `补写 frontmatter id：${relativePath}`,
-    }))));
     return { fixed };
   }));
 

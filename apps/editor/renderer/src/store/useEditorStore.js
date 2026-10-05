@@ -30,6 +30,8 @@ import {
   createLocalProjectFolderNode,
   stripLocalProjectMounts,
   mergeProjectsChildren,
+  stripBuiltinNodes,
+  diskNodeToBuiltin,
   syncProjectsChildrenFromDisk,
   replaceLocalProjectMount,
   findLocalProjectRoot,
@@ -82,6 +84,7 @@ import {
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import { createAgentSlice } from './slices/agentSlice.js';
 import { createProposalSlice } from './slices/proposalSlice.js';
+import { createVaultSlice } from './slices/vaultSlice.js';
 import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
@@ -748,6 +751,20 @@ const persistDailyWorkspaceBackup = async (dailyWorkspace, projectRootPath = '')
   }
 };
 
+const BUILTIN_DOCS_RELATIVE_PATH = 'Projects/内置文档';
+
+/** 迁移后在内置区新建：目标换成磁盘上的「内置文档」文件夹（找不到就保持原样） */
+const resolveVaultCreateTarget = (workspace, nodeId, docsOnFiles) => {
+  if (!docsOnFiles) return nodeId;
+  const folderId = resolveTargetFolderId(workspace, nodeId);
+  const folder = findNodeById(workspace, folderId);
+  if (folder?.projectRootPath) return nodeId;
+  const builtinFolder = (workspace?.children ?? []).find(
+    (child) => child.type === 'folder' && child.relativePath === BUILTIN_DOCS_RELATIVE_PATH,
+  );
+  return builtinFolder?.id ?? nodeId;
+};
+
 const createLocalProjectNodeId = (projectRootPath, suffix = '') => {
   return `project:${projectRootPath}${suffix}`;
 };
@@ -852,6 +869,7 @@ export const useEditorStore = create(
 
       ...createAgentSlice(set, get),
       ...createProposalSlice(set, get),
+      ...createVaultSlice(set, get),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -1020,6 +1038,41 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
+      /** 迁移后：Daily 以内容库文件为准（保留当前查看的日期） */
+      applyDailyWorkspaceFromFiles: (fileWorkspace) => {
+        const currentDate = get().dailyWorkspace?.currentDate;
+        set({ dailyWorkspace: normalizeDailyWorkspace({ ...fileWorkspace, currentDate }, currentDate) });
+      },
+
+      /**
+       * 内置文档迁到 Projects/内置文档 后，从工作区里去掉旧的内置节点（它们会作为磁盘节点重新出现）。
+       * 旧数据库已在迁移时完整备份到 .agent/migration/backup-<时间>/。
+       */
+      removeMigratedBuiltinDocs: () => {
+        const { workspace, removedCount } = stripBuiltinNodes(get().workspace);
+        if (!removedCount) return 0;
+        persistWorkspace(workspace);
+        set({ workspace });
+        return removedCount;
+      },
+
+      /** 切回旧存储：把磁盘上的「内置文档」目录转回内置节点（文件沿用 frontmatter 里的原 id） */
+      restoreBuiltinDocsFromDisk: (diskFolderNode) => {
+        if (!diskFolderNode) return 0;
+        const restored = diskNodeToBuiltin(diskFolderNode, (kind) => createId(kind));
+        const { workspace } = get();
+        const nextWorkspace = {
+          ...workspace,
+          children: [
+            ...(restored.children ?? []),
+            ...(workspace.children ?? []).filter((child) => child.id !== diskFolderNode.id),
+          ],
+        };
+        persistWorkspace(nextWorkspace);
+        set({ workspace: nextWorkspace });
+        return restored.children?.length ?? 0;
+      },
+
       setWorkspaceCanvas: (canvasState) => {
         const { workspace } = get();
         if (areCanvasStatesEqual(workspace?.canvasState, canvasState)) {
@@ -1674,8 +1727,9 @@ export const useEditorStore = create(
         contextNodeId,
         meta = {},
       } = {}) => {
-        const { workspace, selectedId, openTabs } = get();
-        const targetNodeId = contextNodeId ?? selectedId;
+        const { workspace, selectedId, openTabs, vaultStorage } = get();
+        // 内置文档已迁到文件：落在根目录（内置区）的新文档改写到 Projects/内置文档
+        const targetNodeId = resolveVaultCreateTarget(workspace, contextNodeId ?? selectedId, vaultStorage?.docs);
         const currentFile = findNodeById(workspace, selectedId);
         const fallbackBaseName = sanitizeGeneratedFileBaseName(currentFile?.name, 'AI 生成');
         const normalizedContent = normalizeMarkdown(String(content ?? ''));
