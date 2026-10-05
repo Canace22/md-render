@@ -4,7 +4,7 @@
  * 主进程把「别的 AI」的工具请求（经 MCP + HTTP）转发过来，这里用 app 里现成的
  * host + executeTool 执行，再把结果回帖给主进程。复用现有工具逻辑，不重写业务。
  *
- * 纵深防御：主进程 agentBridge.js 已是安全网关，这里再按同一份白名单校验一次。
+ * 纵深防御：主进程 agentBridge.js 已是安全网关，这里再按同一份风险分级校验一次。
  */
 import {
   isFailureResult,
@@ -40,7 +40,7 @@ export const handleBridgeRequest = async ({ name, args } = {}, { host, executeTo
     return { ok: true, result: filterSafeToolDefs(toolDefs) };
   }
   if (!isSafeTool(name)) {
-    return { ok: false, result: `工具「${name}」不在安全白名单内。` };
+    return { ok: false, result: `工具「${name}」不对外部 agent 开放。` };
   }
   const toolCall = {
     id: `bridge-${name}`,
