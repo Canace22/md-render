@@ -134,7 +134,8 @@ const getArtifactResultForMessage = (result) => {
   });
 };
 
-const TOOL_ERROR_RESULT_PATTERN = /^\s*(?:工具「[^」]+」(?:执行出错|不可用)|[^\n：:]{0,24}(?:失败|出错|错误|不可用)[：:]|server 工具通道不可用|未知工具|当前工作区不可用|当前环境不支持|当前没有.*无法)/i;
+const AGENT_WRITE_BUSY_MESSAGE = '写入被拒绝：已有一处改动在等待用户确认，请等用户应用或放弃后再写。';
+const TOOL_ERROR_RESULT_PATTERN = /^\s*(?:工具「[^」]+」(?:执行出错|不可用)|[^\n：:]{0,24}(?:失败|出错|错误|不可用|拒绝)[：:]|server 工具通道不可用|未知工具|当前工作区不可用|当前环境不支持|当前没有.*无法)/i;
 
 const getToolCompletionStatus = (result) => {
   const text = String(result ?? '').trim();
@@ -855,9 +856,12 @@ export default function AgentPanel({ onClose }) {
     // wait=false（外部 AI 经 MCP 调用）时暂存后立即返回，不等用户点按钮。
     writeActiveDoc: async (content, { wait = true } = {}) => {
       if (!selectedId) return '写入失败：当前没有打开的文档。请先打开一个文档。';
+      // 非阻塞模式拿不到 Promise 结果，先同步查一次是否已有待确认改动
+      if (useEditorStore.getState().agentPendingWrite) return AGENT_WRITE_BUSY_MESSAGE;
       const decision = stageAgentWrite({ oldText: markdown ?? '', newText: content });
       if (!wait) return '已暂存改动，等待用户在编辑器里确认（应用或放弃）。';
       const applied = await decision;
+      if (applied === null) return AGENT_WRITE_BUSY_MESSAGE;
       return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
     },
     createNewDoc: async ({ name, content, targetPlatforms, sourceMaterialIds } = {}) => {

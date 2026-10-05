@@ -24,7 +24,13 @@ export const createAgentSlice = (set, get) => ({
   // 在“调用写入”这一刻就把改动绑定到目标文档 id（取实时选中态）。
   // 否则应用时若选中态已漂移（AI 期间打开了别的文档 / 用户切了文档），
   // 会把改动写进错误的文档，导致上下文里的其它文档被误改。
+  // Promise 结果：true=已应用，false=已放弃，null=已有待确认改动，本次被拒绝。
+  // 拒绝而不是覆盖：静默覆盖会让上一次写入的 Promise 永远挂起。
   stageAgentWrite: ({ oldText, newText } = {}) => new Promise((resolve) => {
+    if (get().agentPendingWrite) {
+      resolve(null);
+      return;
+    }
     const { selectedId, workspace } = get();
     const targetNode = findNodeById(workspace, selectedId);
     const isFile = targetNode?.type === 'file';
