@@ -1,0 +1,7 @@
+label: 应用体检
+group: App 专家
+aliases: [diagnostics, health, bug, 故障, 修复, 体检]
+entry: [slash, welcome]
+input: none
+tools: [inspect_app_health, apply_safe_repair, create_agent_artifact]
+output: answer

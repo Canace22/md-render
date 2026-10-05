@@ -1,0 +1,7 @@
+label: 待办池
+group: 今日速记
+aliases: [todo, pool, 稍后处理]
+entry: [slash]
+input: none
+tools: [add_todo_entry]
+output: answer

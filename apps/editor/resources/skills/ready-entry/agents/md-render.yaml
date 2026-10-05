@@ -1,0 +1,7 @@
+label: 待发布稿
+group: 内容管理
+aliases: [ready, 发布, 平台稿]
+entry: [slash]
+input: none
+tools: [create_content_entry]
+output: artifact

@@ -10,7 +10,7 @@
 import { parseFrontmatterDocument } from '../../../../shared/frontmatterDocument.js';
 
 export const SKILL_SOURCES = Object.freeze({ BUILTIN: 'builtin', VAULT: 'vault' });
-export const SKILL_ENTRIES = Object.freeze(['slash', 'welcome', 'doc-toolbar']);
+export const SKILL_ENTRIES = Object.freeze(['slash', 'welcome', 'composer', 'doc-toolbar']);
 export const SKILL_INPUTS = Object.freeze(['active_doc', 'selection', 'none']);
 export const SKILL_OUTPUTS = Object.freeze(['artifact', 'proposal', 'answer']);
 

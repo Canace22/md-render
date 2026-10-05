@@ -196,3 +196,21 @@ describe('内置 skill', () => {
     });
   });
 });
+
+describe('内置 skill 约束', () => {
+  it('需要读当前文档的 skill 都把 read_active_doc 放进白名单', async () => {
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { skills } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    skills.filter((s) => s.input !== 'none').forEach((skill) => {
+      expect(skill.tools, skill.id).toContain('read_active_doc');
+    });
+  });
+
+  it('白名单里的工具都是真实存在的本地工具', async () => {
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { TOOL_DEFINITIONS } = await import('../renderer/src/core/agent/toolRegistry.js');
+    const names = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
+    const { skills } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    skills.forEach((skill) => skill.tools.forEach((tool) => expect(names.has(tool), `${skill.id}:${tool}`).toBe(true)));
+  });
+});

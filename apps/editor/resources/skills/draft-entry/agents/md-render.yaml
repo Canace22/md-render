@@ -1,0 +1,7 @@
+label: 新稿件
+group: 内容管理
+aliases: [draft, 稿件, 文章]
+entry: [slash]
+input: none
+tools: [create_content_entry]
+output: artifact

@@ -1,7 +1,7 @@
 label: 提纲
 group: 改写
 aliases: [大纲, outline]
-entry: [slash, welcome]
+entry: [slash, welcome, composer]
 input: active_doc
 tools: [read_active_doc]
 output: answer

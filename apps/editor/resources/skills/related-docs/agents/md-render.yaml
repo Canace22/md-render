@@ -1,0 +1,7 @@
+label: 相关旧文
+group: 内容管理
+aliases: [参考, 召回, 旧文, related]
+entry: [slash]
+input: none
+tools: [read_active_doc, recall_related_docs, search_docs, read_doc_by_id]
+output: answer

@@ -1,0 +1,7 @@
+label: 今日任务
+group: 今日速记
+aliases: [daily, task, 待办]
+entry: [slash]
+input: none
+tools: [add_daily_entry]
+output: answer

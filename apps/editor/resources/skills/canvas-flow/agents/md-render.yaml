@@ -1,0 +1,7 @@
+label: 白板流程图
+group: 灵感白板
+aliases: [白板, 流程图, canvas, flow]
+entry: [slash]
+input: none
+tools: [read_active_doc, open_canvas, replace_canvas, append_canvas_cards]
+output: answer

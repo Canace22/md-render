@@ -1,0 +1,7 @@
+label: 选题
+group: 内容管理
+aliases: [topic, idea, 选题库, 旧文, 新闻, 热点, 趋势]
+entry: [slash, composer]
+input: none
+tools: [get_workspace_brief, list_recent_docs, search_docs, recall_related_docs, read_doc_by_id, search_external_knowledge, create_content_entry]
+output: artifact

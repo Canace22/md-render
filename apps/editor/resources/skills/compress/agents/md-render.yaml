@@ -1,7 +1,7 @@
 label: 压缩
 group: 改写
 aliases: [总结, 摘要, summarize, compress]
-entry: [slash]
+entry: [slash, composer]
 input: selection
 tools: [read_active_doc, write_active_doc]
 output: proposal

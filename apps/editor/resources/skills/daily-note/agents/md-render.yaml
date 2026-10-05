@@ -1,0 +1,7 @@
+label: 今日笔记
+group: 今日速记
+aliases: [daily, note, 速记]
+entry: [slash]
+input: none
+tools: [add_daily_entry]
+output: answer

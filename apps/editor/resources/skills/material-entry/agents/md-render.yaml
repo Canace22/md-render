@@ -1,0 +1,7 @@
+label: 资料单
+group: 内容管理
+aliases: [material, 资料, 素材]
+entry: [slash]
+input: none
+tools: [create_content_entry]
+output: artifact

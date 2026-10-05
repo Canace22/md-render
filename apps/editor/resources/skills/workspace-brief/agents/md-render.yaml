@@ -1,0 +1,7 @@
+label: 工作区概览
+group: 内容管理
+aliases: [workspace, overview, 概览]
+entry: [slash]
+input: none
+tools: [get_workspace_brief, list_recent_docs, search_docs]
+output: answer
