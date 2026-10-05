@@ -81,6 +81,7 @@ import {
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import { createAgentSlice } from './slices/agentSlice.js';
+import { createProposalSlice } from './slices/proposalSlice.js';
 import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
@@ -850,6 +851,7 @@ export const useEditorStore = create(
       activeBlockDraft: '',
 
       ...createAgentSlice(set, get),
+      ...createProposalSlice(set, get),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

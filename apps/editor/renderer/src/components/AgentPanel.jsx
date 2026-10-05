@@ -132,7 +132,12 @@ const getArtifactResultForMessage = (result) => {
   });
 };
 
-const AGENT_WRITE_BUSY_MESSAGE = '写入被拒绝：已有一处改动在等待用户确认，请等用户应用或放弃后再写。';
+const PROPOSAL_OUTCOME_TEXT = Object.freeze({
+  applied: '改动已应用到当前文档。',
+  discarded: '用户放弃了这次改动，文档未变更。',
+  conflict: '写入被拒绝：文档在提案之后被用户改过，请重新读取后再提交。',
+});
+const describeProposalOutcome = (proposal) => PROPOSAL_OUTCOME_TEXT[proposal?.status] || '提案状态未知，文档未变更。';
 const TOOL_ERROR_RESULT_PATTERN = /^\s*(?:工具「[^」]+」(?:执行出错|不可用)|[^\n：:]{0,24}(?:失败|出错|错误|不可用|拒绝)[：:]|server 工具通道不可用|未知工具|当前工作区不可用|当前环境不支持|当前没有.*无法)/i;
 
 const getToolCompletionStatus = (result) => {
@@ -292,7 +297,6 @@ export default function AgentPanel({ onClose }) {
   const dailyWorkspace = useEditorStore((s) => s.dailyWorkspace);
 
   // AI 待确认写入：stage 暂存改动；diff 对比与应用/放弃由预览区的 DiffOverlay 负责
-  const stageAgentWrite = useEditorStore((s) => s.stageAgentWrite);
   // 直接写当前文档（插入引用用，无需 diff 确认）
   const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
   const createGeneratedFile = useEditorStore((s) => s.createGeneratedFile);
@@ -442,17 +446,16 @@ export default function AgentPanel({ onClose }) {
       const active = files.find((f) => f.id === selectedId);
       return buildActiveDocMeta(active, markdown ?? '');
     },
-    // 不直接覆盖：暂存成待确认改动，弹 diff 卡片让用户应用/放弃。
-    // wait=false（外部 AI 经 MCP 调用）时暂存后立即返回，不等用户点按钮。
-    writeActiveDoc: async (content, { wait = true } = {}) => {
-      if (!selectedId) return '写入失败：当前没有打开的文档。请先打开一个文档。';
-      // 非阻塞模式拿不到 Promise 结果，先同步查一次是否已有待确认改动
-      if (useEditorStore.getState().agentPendingWrite) return AGENT_WRITE_BUSY_MESSAGE;
-      const decision = stageAgentWrite({ oldText: markdown ?? '', newText: content });
-      if (!wait) return '已暂存改动，等待用户在编辑器里确认（应用或放弃）。';
-      const applied = await decision;
-      if (applied === null) return AGENT_WRITE_BUSY_MESSAGE;
-      return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
+    // 不直接覆盖：生成提案，弹 diff 让用户应用/放弃。
+    // wait=false（外部 AI 经 MCP 调用）时提交后立即返回，不等用户点按钮。
+    writeActiveDoc: async (content, { wait = true, who = 'app' } = {}) => {
+      const state = useEditorStore.getState();
+      if (!state.selectedId) return '写入失败：当前没有打开的文档。请先打开一个文档。';
+      const submitted = state.submitEditProposal({ targetId: state.selectedId, newText: content, who, tool: 'write_active_doc' });
+      if (!submitted.ok) return submitted.error;
+      if (!wait) return `已提交改动提案（${submitted.proposal.id}），等待用户确认（应用或放弃）。`;
+      const resolved = await useEditorStore.getState().waitForAgentProposal(submitted.proposal.id);
+      return describeProposalOutcome(resolved);
     },
     createNewDoc: async ({ name, content, targetPlatforms, sourceMaterialIds } = {}) => {
       const result = await createGeneratedFile({
@@ -806,7 +809,6 @@ export default function AgentPanel({ onClose }) {
     workspace,
     selectedId,
     markdown,
-    stageAgentWrite,
     createGeneratedFile,
     dailyWorkspace,
     addDailyItem,

@@ -154,7 +154,7 @@ describe('handleBridgeRequest 失败标记与非阻塞写入（P0-3 / P0-4）', 
       { name: 'write_active_doc', args: { content: '新内容' } },
       { host: { writeActiveDoc }, executeTool, toolDefs },
     );
-    expect(writeActiveDoc).toHaveBeenCalledWith('新内容', { wait: false });
+    expect(writeActiveDoc).toHaveBeenCalledWith('新内容', { wait: false, who: 'mcp' });
     expect(reply.ok).toBe(true);
   });
 

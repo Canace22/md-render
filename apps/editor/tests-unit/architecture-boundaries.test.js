@@ -22,14 +22,15 @@ describe('architecture boundaries', () => {
     expect(typeof state.createAgentSession).toBe('function');
   });
 
-  it('keeps agent write-back action routed through selected file content updates', async () => {
+  it('keeps agent write-back routed through proposals into file content updates', async () => {
     const before = useEditorStore.getState();
     before.selectNode(DEFAULT_FILE_ID);
-    const applyPromise = before.stageAgentWrite({ oldText: '', newText: '# Agent Update' });
+    const { proposal } = before.submitEditProposal({ targetId: DEFAULT_FILE_ID, newText: '# Agent Update' });
+    const waiting = useEditorStore.getState().waitForAgentProposal(proposal.id);
 
-    useEditorStore.getState().applyAgentWrite();
+    useEditorStore.getState().resolveAgentProposal(proposal.id, 'apply');
 
-    await expect(applyPromise).resolves.toBe(true);
+    await expect(waiting).resolves.toMatchObject({ status: 'applied' });
     expect(useEditorStore.getState().markdown).toBe('# Agent Update');
   });
 });

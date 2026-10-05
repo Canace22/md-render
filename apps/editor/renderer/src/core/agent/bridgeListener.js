@@ -18,7 +18,7 @@ import {
  * 把 writeActiveDoc 换成「暂存即返回」，其余能力原样透传。
  */
 export const toBridgeHost = (host) => (host
-  ? { ...host, writeActiveDoc: (content) => host.writeActiveDoc?.(content, { wait: false }) }
+  ? { ...host, writeActiveDoc: (content) => host.writeActiveDoc?.(content, { wait: false, who: 'mcp' }) }
   : host);
 
 /**
