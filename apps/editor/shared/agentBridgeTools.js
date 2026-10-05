@@ -69,6 +69,33 @@ export const LIST_TOOLS_NAME = '__list_tools__';
 /** renderer 执行一次工具的超时（毫秒） */
 export const INVOKE_TIMEOUT_MS = 30000;
 
+/** 结果开头（第一个冒号/句号前）出现这些词，视为失败 */
+const FAILURE_HEAD_PATTERN = /失败|出错|拒绝/;
+/** 只看开头这么多字，避免正文里偶然出现「失败」被误判 */
+const FAILURE_HEAD_MAX_CHARS = 24;
+
+const parseJsonObject = (text) => {
+  try {
+    const value = JSON.parse(text);
+    return value && typeof value === 'object' ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 工具结果是否表示失败（用于给 MCP 客户端标记 isError）。
+ * 规则：对象或 JSON 字符串看 ok:false；普通文案看开头一句（去掉「」引用）里有没有「失败 / 出错 / 拒绝」。
+ */
+export const isFailureResult = (result) => {
+  if (result && typeof result === 'object') return result.ok === false;
+  const text = String(result ?? '').trim();
+  if (text.startsWith('{')) return parseJsonObject(text)?.ok === false;
+  // 去掉「」里的引用内容（多是用户输入的关键词 / 文档名），只看工具自己的措辞
+  const head = text.split(/[：:。\n]/)[0].replace(/「[^」]*」/g, '').slice(0, FAILURE_HEAD_MAX_CHARS);
+  return FAILURE_HEAD_PATTERN.test(head);
+};
+
 /** 该工具是否允许对外调用 */
 export const isSafeTool = (name) => SAFE_TOOL_NAMES.has(String(name ?? '').trim());
 

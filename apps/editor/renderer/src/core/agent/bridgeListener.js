@@ -7,6 +7,7 @@
  * 纵深防御：主进程 agentBridge.js 已是安全网关，这里再按同一份白名单校验一次。
  */
 import {
+  isFailureResult,
   isSafeTool,
   filterSafeToolDefs,
   LIST_TOOLS_NAME,
@@ -31,7 +32,8 @@ export const handleBridgeRequest = async ({ name, args } = {}, { host, executeTo
     function: { name, arguments: JSON.stringify(args ?? {}) },
   };
   const result = await executeTool(toolCall, host);
-  return { ok: true, result };
+  // 工具失败也是「正常返回一段文案」，这里识别出来，让 MCP 端标记 isError
+  return { ok: !isFailureResult(result), result };
 };
 
 /**
