@@ -27,14 +27,14 @@ import {
 
 const makeTempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'md-render-bridge-'));
 
-describe('agent bridge 白名单', () => {
-  it('放行只读与安全写工具', () => {
-    expect(isSafeTool('read_active_doc')).toBe(true);
-    expect(isSafeTool('create_new_doc')).toBe(true);
-    expect(isSafeTool('open_surface')).toBe(true);
+describe('agent bridge 按风险分级放行', () => {
+  it('放行读、导航、可逆写和走提案的工具', () => {
+    ['read_active_doc', 'read_doc', 'create_new_doc', 'open_surface', 'move_workspace_item', 'rename_workspace_item', 'propose_edit', 'delete_workspace_items', 'update_editorial_memory']
+      .forEach((name) => expect(isSafeTool(name), name).toBe(true));
   });
 
-  it('拒绝全部破坏性工具', () => {
+  it('不放行重建/清空白板和安全修复', () => {
+    expect(BLOCKED_TOOLS).toEqual(expect.arrayContaining(['replace_canvas', 'clear_canvas', 'apply_safe_repair']));
     for (const name of BLOCKED_TOOLS) {
       expect(isSafeTool(name)).toBe(false);
       expect(SAFE_TOOL_NAMES.has(name)).toBe(false);
@@ -43,14 +43,15 @@ describe('agent bridge 白名单', () => {
 
   it('未知工具名一律拒绝', () => {
     expect(isSafeTool('rm_rf')).toBe(false);
+    expect(isSafeTool('pdf_to_docx')).toBe(false);
     expect(isSafeTool('')).toBe(false);
     expect(isSafeTool(null)).toBe(false);
   });
 
-  it('filterSafeToolDefs 只留白名单', () => {
+  it('filterSafeToolDefs 只留可对外的', () => {
     const defs = [
       { function: { name: 'read_active_doc' } },
-      { function: { name: 'delete_workspace_items' } },
+      { function: { name: 'clear_canvas' } },
       { function: { name: 'write_active_doc' } },
     ];
     const kept = filterSafeToolDefs(defs).map((d) => d.function.name);
@@ -70,14 +71,14 @@ describe('validateInvoke', () => {
   it('非法 body / 空名 / 破坏性工具都被拒', () => {
     expect(validateInvoke(null).ok).toBe(false);
     expect(validateInvoke({}).ok).toBe(false);
-    expect(validateInvoke({ name: 'delete_workspace_items' }).ok).toBe(false);
+    expect(validateInvoke({ name: 'apply_safe_repair' }).ok).toBe(false);
   });
 });
 
 describe('handleBridgeRequest', () => {
   const toolDefs = [
     { function: { name: 'read_active_doc' } },
-    { function: { name: 'delete_workspace_items' } },
+    { function: { name: 'clear_canvas' } },
   ];
 
   it('__list_tools__ 只返回安全 schema', async () => {
@@ -102,10 +103,10 @@ describe('handleBridgeRequest', () => {
     expect(toolCall.function.arguments).toBe('{}');
   });
 
-  it('破坏性工具不会走到 executeTool', async () => {
+  it('不对外的工具不会走到 executeTool', async () => {
     const executeTool = vi.fn();
     const reply = await handleBridgeRequest(
-      { name: 'delete_workspace_items', args: { ids: ['x'] } },
+      { name: 'clear_canvas', args: {} },
       { host: {}, executeTool, toolDefs },
     );
     expect(reply.ok).toBe(false);
@@ -236,5 +237,23 @@ describe('MCP bridgeClient（P0-1）', () => {
     expect(readToolCache(file)).toEqual([{ name: 'read_active_doc' }]);
     fs.writeFileSync(file, 'oops');
     expect(readToolCache(file)).toEqual([]);
+  });
+});
+
+describe('MCP instructions（P2-9）', () => {
+  it('instructions 和 app 内 system prompt 同源，包含操作规则', async () => {
+    const { AGENT_INSTRUCTIONS, APP_OPERATION_RULES } = await import('../shared/appKnowledge.js');
+    expect(AGENT_INSTRUCTIONS).toContain('md-render 产品知识');
+    expect(AGENT_INSTRUCTIONS).toContain(APP_OPERATION_RULES[0]);
+    expect(AGENT_INSTRUCTIONS).toContain('propose_edit');
+  });
+
+  it('instructions 缓存：读不到用兜底，空内容不覆盖', async () => {
+    const { readInstructionsCache, writeInstructionsCache, DEFAULT_INSTRUCTIONS } = await import('../../../server/mcp-bridge/bridgeClient.js');
+    const file = path.join(makeTempDir(), 'instructions.txt');
+    expect(readInstructionsCache(file)).toBe(DEFAULT_INSTRUCTIONS);
+    writeInstructionsCache(file, '规则 A');
+    writeInstructionsCache(file, '  ');
+    expect(readInstructionsCache(file)).toBe('规则 A');
   });
 });

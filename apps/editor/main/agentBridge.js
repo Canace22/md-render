@@ -21,6 +21,7 @@ import {
   LIST_TOOLS_NAME,
   INVOKE_TIMEOUT_MS,
 } from '../shared/agentBridgeTools.js';
+import { AGENT_INSTRUCTIONS } from '../shared/appKnowledge.js';
 
 const HOST = '127.0.0.1';
 const INVOKE_CHANNEL = 'agent-bridge:invoke';
@@ -144,7 +145,8 @@ export function startAgentBridge({ getMainWindow, ipcMain, app, port = 0 } = {})
       try {
         const reply = await callRenderer(getMainWindow, LIST_TOOLS_NAME, {});
         const defs = Array.isArray(reply?.result) ? reply.result : [];
-        return sendJson(res, 200, { ok: true, tools: filterSafeToolDefs(defs) });
+        // instructions 和 app 内 AI 的产品规则同源（shared/appKnowledge.js）
+        return sendJson(res, 200, { ok: true, tools: filterSafeToolDefs(defs), instructions: AGENT_INSTRUCTIONS });
       } catch (error) {
         return sendJson(res, 502, { ok: false, error: error.message });
       }

@@ -14,6 +14,7 @@ import path from 'node:path';
 const APP_DIR_NAME = 'md-render';
 const HANDSHAKE_FILE_NAME = 'agent-bridge.json';
 const TOOL_CACHE_FILE_NAME = 'agent-bridge-tools.cache.json';
+const INSTRUCTIONS_CACHE_FILE_NAME = 'agent-bridge-instructions.cache.txt';
 
 export const NOT_RUNNING_MESSAGE =
   '调用失败：md-render 没在运行。请先打开 md-render 桌面版，再重试（不需要重启 MCP 客户端）。';
@@ -33,6 +34,35 @@ export const handshakeFilePath = (env = process.env) =>
 /** 工具列表缓存文件：和握手文件放同一目录 */
 export const toolCacheFilePath = (env = process.env) =>
   path.join(path.dirname(handshakeFilePath(env)), TOOL_CACHE_FILE_NAME);
+
+/** instructions 缓存文件：MCP 握手时就要给 instructions，app 没开时用上次的 */
+export const instructionsCacheFilePath = (env = process.env) =>
+  path.join(path.dirname(handshakeFilePath(env)), INSTRUCTIONS_CACHE_FILE_NAME);
+
+/** app 从没连上过时的兜底说明 */
+export const DEFAULT_INSTRUCTIONS = [
+  'md-render 是本地优先的内容创作工作台。这些工具直接操作用户打开的 md-render 桌面版。',
+  '改正文、删除都会生成提案，需要用户在 app 里确认；用 get_proposal_status 查结果。',
+  'md-render 没开时工具不可用，可先调用 md_render_status 查看。',
+].join('\n');
+
+export const readInstructionsCache = (file) => {
+  try {
+    const text = fs.readFileSync(file, 'utf8').trim();
+    return text || DEFAULT_INSTRUCTIONS;
+  } catch {
+    return DEFAULT_INSTRUCTIONS;
+  }
+};
+
+export const writeInstructionsCache = (file, text) => {
+  if (!String(text ?? '').trim()) return;
+  try {
+    fs.writeFileSync(file, String(text), { mode: 0o600 });
+  } catch {
+    /* noop */
+  }
+};
 
 /**
  * 读取控制桥连接信息。每次调用都重新读，app 重启后 url/token 会变。

@@ -30,15 +30,20 @@ import {
 
 import {
   NOT_RUNNING_MESSAGE,
+  instructionsCacheFilePath,
   isConnectionError,
+  readInstructionsCache,
   readToolCache,
   resolveBridge,
   toolCacheFilePath,
+  writeInstructionsCache,
   writeToolCache,
 } from './bridgeClient.js';
 
 /** 探测 app 是否启动 / 重启的间隔 */
 const WATCH_INTERVAL_MS = 5000;
+/** 启动时预取 instructions 最多等这么久，不能拖慢 MCP 握手 */
+const STARTUP_PREFETCH_TIMEOUT_MS = 3000;
 
 /** app 没开且没有缓存时，至少给客户端一个能解释现状的工具 */
 const STATUS_TOOL = Object.freeze({
@@ -87,6 +92,8 @@ const listTools = async (cacheFile) => {
       const data = await bridgeFetch(bridge, '/tools');
       const tools = (Array.isArray(data?.tools) ? data.tools : []).map(toMcpTool);
       if (tools.length) writeToolCache(cacheFile, tools);
+      // 产品规则和 app 内 AI 同源；下次启动 MCP 时作为 instructions
+      writeInstructionsCache(instructionsCacheFilePath(), data?.instructions);
       return tools;
     } catch {
       /* 握手文件残留或 app 正在启动：退回缓存 */
@@ -129,9 +136,17 @@ const watchBridge = (server) => {
 
 async function main() {
   const cacheFile = toolCacheFilePath();
+  // 先拉一次：app 开着就能拿到最新的 instructions，再创建 server
+  await Promise.race([
+    listTools(cacheFile).catch(() => {}),
+    new Promise((resolve) => { setTimeout(resolve, STARTUP_PREFETCH_TIMEOUT_MS).unref?.(); }),
+  ]);
   const server = new Server(
     { name: 'md-render-bridge', version: '0.2.0' },
-    { capabilities: { tools: { listChanged: true } } },
+    {
+      capabilities: { tools: { listChanged: true } },
+      instructions: readInstructionsCache(instructionsCacheFilePath()),
+    },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await listTools(cacheFile) }));
