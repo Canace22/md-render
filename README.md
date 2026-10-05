@@ -1,334 +1,89 @@
 # MD Render
 
-[中文版说明](./README.zh.md)
+[English](./README.en.md)
 
-**A local-first, AI-driven Chinese content creation workbench.**
+**一个本地优先的中文写作工作台：在一个 app 里安排今天要写什么、写长文、让 AI 帮你改稿，最后一键排版复制到微信公众号。**
 
-Built with **React + Vite + Electron**. The product has evolved from a Markdown renderer into an integrated workbench for **daily planning → writing → knowledge → multi-channel publishing**, while keeping its self-built CommonMark / GFM pipeline (`packages/markdown-core`), a desktop app for macOS (`apps/editor`), and a web build for browser or GitHub Pages.
+适合公众号 / 博客作者和独立内容创作者。macOS 用户可以直接[下载桌面版](https://github.com/Canace22/md-render/releases/latest)，其他平台可以先试[网页版](https://canace22.github.io/md-render/)。
 
-| | |
-|---|---|
-| **For** | WeChat / blog authors · solo content creators · knowledge workers who write, organize, and publish |
-| **Keywords** | Local-first · AI-driven · daily-driven · writing-first · publish-friendly |
-| **Version** | `1.0.12` — [release process](./docs/release-process.md) |
-| **Roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
+## 开始使用
 
-The product goal is to connect **plan → collect → write → revise → finalize → publish** into one workflow: Daily handles today's work, the editor handles long-form writing, the AI assistant rewrites and operates the app, the knowledge base holds your library, and WeChat formatting plus multi-format export handle outbound publishing.
+### 桌面版（推荐）
 
----
+1. 到 [Releases](https://github.com/Canace22/md-render/releases/latest) 下载 `.dmg` 安装，Intel 和 Apple 芯片都能用。
+2. 第一次打开如果提示 **「应用程序已损坏，无法打开」**，这是因为安装包没有做苹果签名，文件本身没有问题。到 **系统设置 → 隐私与安全性** 点「仍要打开」；或者在终端执行：
 
-## Available today
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/MD Render.app"
+   ```
 
-### Daily notebook
+安装包会比 main 分支稍旧，本页提到的个别功能可能还没打进去，差别见 [CHANGELOG](./CHANGELOG.md) 的「未发布」部分。
 
-- Per-day **tasks**, **notes**, **events**, and a cross-day **todo pool**
-- Task priority (high / medium / low) and category tags (work, creation, learning, life, personal)
-- Date navigation, cross-day carryOver, inline quick-add
-- Desktop disk sync (Electron)
+### 网页版
 
-### AI assistant
+打开 <https://canace22.github.io/md-render/> 就能用，不用安装。
 
-- Cowork-style agent panel: read/write documents, switch surfaces, and manage Daily items from chat
-- Paragraph-level writing actions: compress, expand, polish, outline, continue, title suggestions, tone, key points, and more
-- Platform variants: WeChat Official Account, Xiaohongshu, Zhihu, etc.
-- Document workspace leans creation assistant; overview, Daily, board, and other non-document surfaces lean workbench assistant
+**注意：网页版的内容只存在当前浏览器里。** 清理浏览器数据或换一台电脑，内容就没了。要长期写作请用桌面版；只用网页版的话，记得定期在 **设置 → 备份（JSON）** 里导出一份。
 
-### Write & preview
+### 想用 AI 助手？要先接一个模型
 
-- CommonMark / GFM: headings, lists, blockquotes, tables, strikethrough, images, links
-- Real-time preview, edit / preview toggle, table of contents
-- Code blocks with **Shiki** highlighting and one-click copy
-- Mermaid diagrams with fullscreen view
-- Light / dark / system theme
-- Paper-like editing: UI stays back, content stays forward (see [docs/editor-philosophy.md](./docs/editor-philosophy.md))
+直接打开 app，**AI 助手是不会回复的**。它需要先连上一个小的中转服务（`server/ai-proxy`），你的模型 API Key 就填在这个服务里。内置支持 MiniMax、DeepSeek，其他 OpenAI 兼容接口可以在 AI 助手设置里选「自定义」。
 
-### Workspace & knowledge base
+在本机跑起来只要三步（需要 Node.js）：
 
-- Sidebar file tree, Obsidian-style tabs; surfaces include creation home, current content, canvas, graph, search, and more
-- **Web:** `localStorage` persistence
-- **Desktop:** SQLite + FTS5 search, version history, `.md` disk sync
-- Wikilinks (`[[Document Name]]`), backlinks, graph view
-- Bookmark import; preview non-Markdown files (Office, PDF, etc.)
-- Metadata filters (status, platform, doc type, tags); import / export workspace
+```bash
+git clone https://github.com/Canace22/md-render.git && cd md-render
+cp server/ai-proxy/.env.example server/ai-proxy/.env   # 然后在 .env 里填上你的 Key
+node server/ai-proxy/server.js                         # 默认监听 http://localhost:8788
+```
 
-### Publish & export
+桌面版默认就连 `http://localhost:8788`，服务启动后直接能用。如果你把服务部署在别的机器上（部署方法见 [server/README.md](./server/README.md)），在 AI 助手面板右上角的 **设置 → AI 代理地址** 里填上地址。
 
-- WeChat Official Account formatting with preview modal and multiple layout templates — primary differentiator
-- Export current document as MD / HTML / PDF / DOCX
-- GitHub Pages deployment via GitHub Actions
+## 能做什么
 
-### Creation workflow
+- **今日速记**：按天记任务、笔记、日程；没做完的事自动带到第二天。
+- **写作**：Markdown 编辑与实时预览，代码高亮、Mermaid 图、表格、目录、浅色 / 深色主题。
+- **AI 助手**：常驻右侧，可以改写、扩写、润色、起标题，生成公众号 / 小红书 / 知乎版本；输入 `/编辑部审稿` 会让 9 个编辑角色一起审你的稿子。AI 改正文时会先标出改了哪几行，你确认后才会写进文档。
+- **选题到发布**：选题看板、素材收件箱、灵感画布、发布排期和发布前检查清单。
+- **知识库**：`[[文档名]]` 双向链接、反向链接、关系图谱、全文搜索。
+- **发布**：一键复制成公众号排版（多种模板可选），也能导出 MD / HTML / PDF / DOCX。
 
-- **Creation dashboard** — recent drafts, active topics, material inbox, publish queue; quick actions to create drafts/topics, triage materials, or jump to publishing
-- **Topic / draft board** — status lanes from idea → collecting → draft → drafting → ready / published
-- **Publishing queue** — schedule ready drafts, platform tags, pre-publish checklist
-- **Inspiration canvas** — card-based whiteboard for topics and materials
-- **Draft metadata** — six-state lifecycle (`idea` → `published`), target platforms, summary, scheduled publish date, related docs, source materials
-- **Bookmark import** — bookmarks as first-class entries in the material inbox
-- **File import & preview** — MD / HTML / DOCX / CSV / etc.; preview Office, PDF, Excel and convert to Markdown
+每个界面的详细说明见 [产品功能说明](./docs/产品功能说明.md)。
 
----
+## 常用操作
 
-## What's next
+### 复制到微信公众号
 
-Per the [content creation roadmap](./docs/content-creation-roadmap.md), the foundation and core creation loop are in place. Remaining gaps:
+1. 在编辑器里写或粘贴 Markdown。
+2. 在 **设置 → 排版风格** 里选一个模板。
+3. 点预览区顶部的 **复制到微信公众号**。
+4. 到公众号后台编辑器里直接粘贴。
 
-| Gap | Planned direction |
-|-----|-------------------|
-| Inbox is still early | Unified triage: paste / clipping → inbox → attach to topic or convert to draft |
-| AI action quality & consistency | More reliable surface routing and tool execution (see [ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md)) |
-| Review layer is thin | Revision checklist, version diff preview, publish archive |
-| Ecosystem | Web Clipper, plugin system |
+### 把稿子存在自己的文件夹里（桌面版）
 
-**Near-term priority:** material inbox triage + review layer + AI assistant regression quality — before plugins or a generic AI chat panel.
+在 **设置 → 本地项目目录** 选一个文件夹，之后每篇稿子都直接存成那个文件夹里的 `.md` 文件，用别的编辑器打开也没问题。在外面改过的文件，点「从磁盘同步」就能拉回来。
 
-Full phased plan (P0–P2) and module mapping: [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md).
+app 本身不做多设备同步，也不保留历史版本。需要的话，在这个文件夹里用 Git 管理即可。
 
-## Quick start
+### 桌面版和网页版的区别
 
-### Install
+| | 桌面版 | 网页版 |
+|---|---|---|
+| 内容存在哪 | 本机数据库，可选存成本地 `.md` 文件 | 当前浏览器 |
+| 全文搜索 | 搜正文 | 只做关键词匹配 |
+| 让 Claude Desktop / Cursor 等直接操作 app（[MCP](./server/mcp-bridge/README.md)） | 支持 | 不支持 |
+| 其他功能 | 一样 | 一样 |
+
+## 参与开发
 
 ```bash
 pnpm install
+pnpm dev            # 网页版，打开 http://localhost:3000
+pnpm electron:dev   # 桌面版
 ```
 
-### Web development
+构建、测试、项目结构、发版和部署见 [开发指南](./docs/development.md)。版本变化见 [CHANGELOG](./CHANGELOG.md)，后续计划见 [路线图](./docs/content-creation-roadmap.md)。
 
-```bash
-pnpm dev
-```
+## 许可证
 
-Open `http://localhost:3000`. Edit content on the left; preview updates in real time on the right.
-
-### Desktop development (Electron)
-
-```bash
-pnpm electron:dev
-```
-
-Native modules (`better-sqlite3`) may need a rebuild after dependency changes:
-
-```bash
-pnpm --filter @md-render/editor electron:rebuild
-```
-
-### Build
-
-```bash
-# Web bundle → apps/editor/dist/
-pnpm build
-
-# macOS desktop app → apps/editor/release/
-pnpm electron:build
-
-# Preview web build locally (default http://localhost:4173)
-pnpm preview
-```
-
-## Common workflows
-
-### Copy to WeChat Official Account
-
-1. Write or paste Markdown in the editor.
-2. Choose a layout template in **Settings → 排版风格**.
-3. Click **复制到微信公众号** in the preview header (or open the WeChat preview modal).
-4. Paste the converted HTML into the WeChat editor.
-
-Notes:
-
-- Code blocks are converted to WeChat-compatible `<pre><code>` markup.
-- HTTP image URLs are upgraded to HTTPS when possible.
-- Custom `class` and `data-*` attributes are stripped for compatibility.
-- Conversion logic lives in `apps/editor/renderer/src/utils/wechatCopy.js`; templates in `wechatTemplates.js`.
-
-### Workspace storage modes
-
-| Mode | Where data lives | Best for |
-|------|------------------|----------|
-| Temporary workspace (web) | Browser `localStorage` | Quick notes, online demo |
-| Desktop app | SQLite + disk `.md` backups | Large libraries, knowledge base, Daily notebook |
-
-Open **Settings → 工作区** to import / export workspace data.
-
-### Local project folder
-
-1. Open **Settings → 本地项目目录** and pick a local folder as your workspace.
-2. Edits are written straight to disk as `.md`; use "从磁盘同步" to pull in external changes.
-3. Multi-device sync and version history are handled by that folder's own Git repository.
-
-## Testing
-
-```bash
-# Unit tests (Vitest)
-pnpm test:unit
-
-# E2E tests (Playwright) — start dev server first in another terminal
-pnpm dev
-pnpm test:e2e
-
-# Interactive Playwright UI
-pnpm test:e2e:ui
-```
-
-E2E tests assume the app is available at `http://localhost:3000`.
-
-## Mermaid diagrams
-
-Use a fenced code block with language `mermaid`:
-
-````markdown
-```mermaid
-graph TD
-  A[Start] --> B{Choice}
-  B -->|Yes| C[Do something]
-  B -->|No| D[Do nothing]
-```
-````
-
-- Mermaid loads via CDN and re-renders after each preview update.
-- Theme follows the app light / dark setting.
-- Hover a diagram to reveal the fullscreen button; close with Esc or by clicking the backdrop.
-
-## Project structure
-
-```
-md-render/
-├── package.json              # Workspace scripts & version
-├── pnpm-workspace.yaml
-├── scripts/
-│   └── release-tag.sh        # Version tagging helper
-├── docs/                     # Product & architecture notes
-├── apps/
-│   └── editor/
-│       ├── main/             # Electron main process (IPC, SQLite, fs)
-│       ├── renderer/         # React UI (Vite)
-│       ├── tests/            # Vitest + Playwright
-│       ├── dist/             # Web build output
-│       └── release/          # Desktop build output
-├── packages/
-│   └── markdown-core/
-│       └── src/
-│           ├── parser.js     # Markdown → tokens
-│           ├── renderer.js   # tokens → HTML
-│           └── index.js
-├── README.md
-├── README.zh.md
-└── ARCHITECTURE.md           # Parser / renderer deep dive
-```
-
-## Supported Markdown syntax
-
-### Block elements
-
-- `# Heading` — H1–H6
-- `` ```code block```` — fenced code blocks (language tag enables highlighting)
-- `> Quote` — blockquotes (multi-line supported)
-- `- item` / `1. item` — unordered and ordered lists (nested via indentation)
-- `---` / `***` / `___` — horizontal rules
-- GFM tables
-
-### Inline elements
-
-- `**bold**`, `*italic*`, `***bold italic***`, `~~strikethrough~~`
-- `` `code` ``, `[link](url)`, `[link](url "title")`
-- `![image](url)`, `![image](url "title")`
-- `[[Document Name]]` — wikilinks (knowledge base)
-
-## Tech stack
-
-| Layer | Choices |
-|-------|---------|
-| UI | React 18, Ant Design 5, lucide-react |
-| Build | Vite 5, pnpm workspace |
-| Desktop | Electron 33, electron-builder |
-| State | Zustand (persist) |
-| Markdown core | Self-built parser / renderer (`packages/markdown-core`) |
-| Highlighting | Shiki |
-| Diagrams | Mermaid (CDN) |
-| Rich text | BlockNote |
-| AI | Agent engine + tool registry (`core/agent/`) |
-| Storage | localStorage (web) · SQLite + FTS5 (desktop) |
-
-For parser / renderer internals, see [ARCHITECTURE.md](./ARCHITECTURE.md).
-
-## Documentation
-
-| Topic | Doc |
-|-------|-----|
-| **Feature guide** (what each surface does, in Chinese) | [docs/产品功能说明.md](./docs/产品功能说明.md) |
-| **Content creation roadmap** | [docs/content-creation-roadmap.md](./docs/content-creation-roadmap.md) |
-| Daily notebook categories | [docs/daily-notebook-task-category.md](./docs/daily-notebook-task-category.md) |
-| AI assistant quality checklist | [docs/ai-assistant-quality-checklist.md](./docs/ai-assistant-quality-checklist.md) |
-| Knowledge base progress | [docs/knowledge-base-progress.md](./docs/knowledge-base-progress.md) |
-| Knowledge base roadmap | [docs/knowledge-base-roadmap.md](./docs/knowledge-base-roadmap.md) |
-| Editor design philosophy | [docs/editor-philosophy.md](./docs/editor-philosophy.md) |
-| Release & tagging | [docs/release-process.md](./docs/release-process.md) |
-| Parser / renderer internals | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| Agent / dev rules | [AGENTS.md](./AGENTS.md) |
-
-## Release
-
-Version lives in root `package.json`. To cut a release:
-
-```bash
-# 1. Bump version in package.json and commit
-# 2. Preview tag
-pnpm release:tag -- --dry-run
-# 3. Create annotated tag and push
-pnpm release:tag
-```
-
-See [docs/release-process.md](./docs/release-process.md) for the full checklist.
-
-## Deploy to GitHub Pages
-
-The web build from `apps/editor` can deploy to GitHub Pages via GitHub Actions.
-
-### One-time setup
-
-1. Open **Settings → Pages** in your GitHub repository.
-2. Set **Source** to **GitHub Actions**.
-3. Confirm the default branch is `main` (or adjust the workflow).
-
-### Automatic deployment
-
-- Workflow: `.github/workflows/deploy-pages.yml`
-- Pushes to `main` build and deploy automatically; you can also trigger manually from the Actions tab.
-- Vite `base` is inferred as `/<repo>/` in CI; locally it stays `/`.
-
-### Access URL
-
-- Personal site: `https://<username>.github.io/`
-- Project page: `https://<username>.github.io/<repo>/`
-
-If assets 404 on Pages, ensure CI sets the correct Vite `base` (this repo infers it from `GITHUB_REPOSITORY`).
-
-## Changelog (highlights)
-
-### v1.0.x — AI-driven creation workbench
-
-Built on the creation foundation with Daily, AI assistant, and board UI:
-
-- **Daily notebook**: tasks / notes / todo pool, priority & categories, cross-day carryOver
-- **AI assistant**: paragraph rewrites, platform variants, surface switching and workspace actions
-- **Creation board & publishing queue**: status lanes, scheduling, pre-publish checklist
-- **Knowledge base P1 complete**: SQLite, FTS5, wikilinks, backlinks, graph, version history
-- WeChat formatting, bookmark import, multi-format export, inspiration canvas
-
-Next focus per [roadmap §7–§8](./docs/content-creation-roadmap.md): material inbox triage, review layer, AI assistant regression quality.
-
-### v2.1 — Workspace & local storage
-
-- Directory sidebar with nested folders; auto-save to `localStorage`
-
-### v2.0 — CommonMark / GFM
-
-- Strikethrough, images, link titles, multi-line blockquotes, tables
-
-### v1.3 — Code blocks
-
-- Copy button, syntax highlighting, VS Code–style code block header
-
-### v1.2 — Nested lists
-
-- Multi-level and mixed ordered / unordered lists
+[MIT](./LICENSE)
