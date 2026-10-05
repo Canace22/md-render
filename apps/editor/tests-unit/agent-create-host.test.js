@@ -80,3 +80,44 @@ describe('createHost', () => {
     useEditorStore.getState().resolveAgentProposal(external.proposalId, 'discard');
   });
 });
+
+describe('按 id 的文档工具（P2-3）', () => {
+  const call = async (host, name, args = {}) => {
+    const { executeTool } = await import('../renderer/src/core/agent/toolRegistry.js');
+    return executeTool({ id: name, function: { name, arguments: JSON.stringify(args) } }, host);
+  };
+
+  beforeEach(() => {
+    useEditorStore.getState().selectNode(DEFAULT_FILE_ID);
+    useEditorStore.getState().updateSelectedFileContent('# 母稿\n正文');
+  });
+
+  it('read_doc 不传 id 读当前文档，带 baseHash', async () => {
+    const doc = JSON.parse(await call(makeHost(), 'read_doc'));
+    expect(doc).toMatchObject({ id: DEFAULT_FILE_ID, content: '# 母稿\n正文' });
+    expect(doc.baseHash).toBeTruthy();
+    expect(await call(makeHost(), 'read_doc', { id: 'nope' })).toMatch(/^读取失败/);
+  });
+
+  it('propose_edit 立即返回 pending；get_proposal_status 能查到；baseHash 过期被拒', async () => {
+    const host = makeHost();
+    const { baseHash } = JSON.parse(await call(host, 'read_doc'));
+    const submitted = JSON.parse(await call(host, 'propose_edit', { content: '# 新稿', baseHash }));
+    expect(submitted).toMatchObject({ ok: true, status: 'pending' });
+    expect(JSON.parse(await call(host, 'get_proposal_status', { proposalId: submitted.proposalId }))).toMatchObject({ status: 'pending' });
+
+    useEditorStore.getState().resolveAgentProposal(submitted.proposalId, 'apply');
+    expect(JSON.parse(await call(host, 'get_proposal_status', { proposalId: submitted.proposalId }))).toMatchObject({ status: 'applied' });
+    expect(await call(host, 'propose_edit', { content: 'x', baseHash })).toMatch(/内容已变化，请重新读取/);
+  });
+
+  it('update_doc_meta 改状态和标签，list_docs 按条件筛出来', async () => {
+    const host = makeHost();
+    expect(await call(host, 'update_doc_meta', { id: DEFAULT_FILE_ID, status: 'ready', tags: ['本地优先'] })).toMatch(/^已更新/);
+    expect(await call(host, 'update_doc_meta', { id: DEFAULT_FILE_ID, status: 'done' })).toMatch(/^修改失败：状态只能是/);
+    const { docs } = JSON.parse(await call(host, 'list_docs', { status: 'ready', tag: '本地优先' }));
+    expect(docs.map((d) => d.id)).toContain(DEFAULT_FILE_ID);
+    const none = JSON.parse(await call(host, 'list_docs', { status: 'idea', tag: '本地优先' }));
+    expect(none.docs).toEqual([]);
+  });
+});

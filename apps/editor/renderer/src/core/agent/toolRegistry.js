@@ -32,6 +32,7 @@
 
 import { extractRecallKeywords, rankRelatedDocs } from './contextRecall.js';
 import { MEMORY_CATEGORIES } from './editorialMemory.js';
+import { DOC_TOOL_DEFINITIONS, DOC_TOOL_EXECUTORS, DOC_TOOL_LABELS } from './docTools.js';
 
 const MAX_SEARCH_RESULTS = 8;
 const MAX_SNIPPET_CHARS = 200;
@@ -227,6 +228,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
         type: 'object',
         properties: {
           content: { type: 'string', description: '要写入文档的完整 Markdown 正文' },
+          baseHash: { type: 'string', description: '可选，read_active_doc 返回的 baseHash；内容已变化时会被拒绝' },
         },
         required: ['content'],
       },
@@ -525,6 +527,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
+  ...DOC_TOOL_DEFINITIONS,
 ]);
 
 const truncate = (text, max) => {
@@ -565,6 +568,7 @@ const searchExternalRecall = async (host, keywords) => {
 
 /** 工具执行器：name -> async (args, host) => 结果字符串 */
 const EXECUTORS = {
+  ...DOC_TOOL_EXECUTORS,
   open_surface: async (args, host) => {
     const surface = String(args?.surface ?? '').trim();
     if (!surface) return '切换失败：目标界面为空。';
@@ -605,7 +609,11 @@ const EXECUTORS = {
     if (!doc || !String(doc.content ?? '').trim()) {
       return '当前文档为空。';
     }
-    return JSON.stringify({ title: doc.title ?? '', content: doc.content ?? '' });
+    return JSON.stringify({
+      title: doc.title ?? '',
+      content: doc.content ?? '',
+      ...(doc.baseHash ? { baseHash: doc.baseHash } : {}),
+    });
   },
 
   get_active_doc_meta: async (_args, host) => {
@@ -637,7 +645,8 @@ const EXECUTORS = {
     const content = String(args?.content ?? '');
     if (!content.trim()) return '写入失败：内容为空。';
     // host 提交写入（可能弹 diff 让用户确认），返回结果文案回填给模型
-    const result = await host.writeActiveDoc(content);
+    const baseHash = String(args?.baseHash ?? '').trim();
+    const result = await (baseHash ? host.writeActiveDoc(content, { baseHash }) : host.writeActiveDoc(content));
     return typeof result === 'string' ? result : `已提交写入（${content.length} 字）。`;
   },
 
@@ -887,6 +896,7 @@ export const executeTool = async (toolCall, host) => {
  * 本地标签写死在这里；server 工具通过 registerServerToolLabels 动态注册。
  */
 const _localToolLabels = Object.freeze({
+  ...DOC_TOOL_LABELS,
   open_surface: '切换界面',
   open_canvas: '打开灵感白板',
   append_canvas_cards: '追加白板卡片',

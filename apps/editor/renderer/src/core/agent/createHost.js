@@ -54,6 +54,8 @@ import { buildAgentHealthSnapshot, runSafeRepair } from './appSupport.js';
 import { loadKnowledgeSources } from './knowledgeSources.js';
 import { searchExternalKnowledge } from '../../services/externalKnowledgeService.js';
 import { getSurfaceLabel } from './surfaceLabels.js';
+import { hashContent } from '../../../../shared/capabilities/contentHash.js';
+import { toProposalStatus } from '../../../../shared/capabilities/proposals.js';
 
 export const CONTENT_ENTRY_PRESETS = Object.freeze({
   topic: { draftStatus: 'idea', fallbackName: '新选题' },
@@ -76,6 +78,28 @@ const DEFAULT_RECENT_DOCS = 4;
 
 const toJson = (value) => JSON.stringify(value);
 const cleanText = (value) => String(value ?? '').trim();
+const lower = (value) => cleanText(value).toLowerCase();
+
+/** 选中的文件优先用编辑器里的 markdown（可能比树里的 content 新） */
+const readFileContent = (state, file) => (file?.id === state.selectedId ? state.markdown ?? '' : file?.content ?? '');
+
+const collectFolderFileIds = (folder) => new Set(collectFiles(folder).map((file) => file.id));
+
+/** list_docs 的过滤条件，全部可选 */
+const matchesDocFilter = (file, { status, tag, platform, query }) => {
+  const pointer = buildContentAssetPointer(file);
+  if (status && pointer.status !== status) return false;
+  if (tag && !pointer.tags.map(lower).includes(lower(tag))) return false;
+  if (platform && !pointer.targetPlatforms.map(lower).includes(lower(platform))) return false;
+  if (query && !lower(pointer.title).includes(lower(query))) return false;
+  return true;
+};
+
+/** update_doc_meta 的 patch → store 字段（status 对应 draftStatus，tags 单独走 setFileTags） */
+const splitMetaPatch = ({ status, tags, ...rest }) => ({
+  knowledgePatch: { ...rest, ...(status ? { draftStatus: status } : {}) },
+  tags,
+});
 
 /**
  * @param {object} deps
@@ -103,7 +127,51 @@ export function createHost({
     readActiveDoc: () => {
       const state = getState();
       const active = activeFileOf(state);
-      return { title: active?.name ?? '', content: state.markdown ?? '' };
+      const content = state.markdown ?? '';
+      return { title: active?.name ?? '', content, ...(active ? { baseHash: hashContent(content) } : {}) };
+    },
+
+    /** 按 id 读文档；不传 id 读当前文档。带 baseHash 供 propose_edit 做乐观锁 */
+    readDoc: (id = '') => {
+      const state = getState();
+      const file = findNodeById(state.workspace, cleanText(id) || state.selectedId);
+      if (!file || file.type !== 'file') return null;
+      const content = readFileContent(state, file);
+      return { ...buildActiveDocMeta(file, content), id: file.id, content, baseHash: hashContent(content) };
+    },
+
+    /** 提交改正文提案，立即返回 pending（不等用户确认） */
+    proposeEdit: ({ id = '', content = '', baseHash = '' } = {}, { who = 'app' } = {}) => {
+      const state = getState();
+      const targetId = cleanText(id) || state.selectedId;
+      const submitted = state.submitEditProposal({ targetId, newText: content, baseHash, who, tool: 'propose_edit' });
+      if (!submitted.ok) return submitted.error;
+      return toJson({ ok: true, status: 'pending', proposalId: submitted.proposal.id, message: '已提交改动提案，等待用户确认。' });
+    },
+
+    getProposalStatus: (proposalId) => toProposalStatus(getState().getAgentProposal(proposalId)),
+
+    /** 改元数据：可逆，直接生效 */
+    updateDocMeta: ({ id, patch = {} } = {}) => {
+      const state = getState();
+      const file = findNodeById(state.workspace, id);
+      if (!file || file.type !== 'file') return `修改失败：未找到 id 为「${id}」的文档。`;
+      const { knowledgePatch, tags } = splitMetaPatch(patch);
+      if (Object.keys(knowledgePatch).length) state.setFileKnowledgeMeta(file.id, knowledgePatch);
+      if (Array.isArray(tags)) state.setFileTags(file.id, tags);
+      return `已更新「${file.name}」的元数据：${Object.keys(patch).join('、')}。`;
+    },
+
+    listDocs: ({ folderId = '', limit, ...filter } = {}) => {
+      const state = getState();
+      const hiddenIds = collectHiddenFileIds(state.workspace);
+      const folder = folderId ? findNodeById(state.workspace, folderId) : null;
+      const inFolder = folder ? collectFolderFileIds(folder) : null;
+      return collectFiles(state.workspace)
+        .filter((file) => !hiddenIds.has(file.id) && (!inFolder || inFolder.has(file.id)))
+        .filter((file) => matchesDocFilter(file, filter))
+        .slice(0, limit)
+        .map((file) => buildContentAssetPointer(file));
     },
 
     getActiveDocMeta: () => {

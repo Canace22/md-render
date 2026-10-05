@@ -24,6 +24,7 @@ export const toBridgeHost = (host) => (host
     ...host,
     writeActiveDoc: (content, options = {}) => host.writeActiveDoc?.(content, { ...options, ...BRIDGE_CALL_OPTIONS }),
     deleteWorkspaceItems: (args) => host.deleteWorkspaceItems?.(args, BRIDGE_CALL_OPTIONS),
+    proposeEdit: (args) => host.proposeEdit?.(args, BRIDGE_CALL_OPTIONS),
   }
   : host);
 
