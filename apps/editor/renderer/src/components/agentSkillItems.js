@@ -42,6 +42,7 @@ const SKILL_STYLES = Object.freeze({
   'new-folder': [Plus, 'purple'],
   'create-deliverable': [PackageCheck, 'teal'],
   'app-diagnostics': [Activity, 'rose'],
+  'daily-review': [Check, 'green'],
 });
 
 const DEFAULT_STYLE = [Sparkles, 'violet'];

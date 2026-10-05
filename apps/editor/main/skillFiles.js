@@ -8,6 +8,7 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
+import { readManagedState } from './vaultAgentFiles.js';
 
 export const SKILL_FILE_NAME = 'SKILL.md';
 export const SKILL_MANIFEST_PATH = path.join('agents', 'md-render.yaml');
@@ -34,7 +35,9 @@ const readSkillEntry = async (skillsDir, dirName) => {
     const skillMarkdown = await readTextIfExists(skillPath);
     if (skillMarkdown == null) return null;
     const manifestYaml = await readTextIfExists(path.join(skillDir, SKILL_MANIFEST_PATH));
-    return { dirName, skillPath, skillMarkdown, manifestYaml };
+    // 内置技能的托管副本：没改过的不当成用户覆盖（见 vaultAgentFiles.js）
+    const { managed, modified } = await readManagedState(skillDir);
+    return { dirName, skillPath, skillMarkdown, manifestYaml, managed, modified };
   } catch (error) {
     return { dirName, skillPath, error: error.message };
   }

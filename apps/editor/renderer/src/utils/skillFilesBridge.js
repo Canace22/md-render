@@ -34,3 +34,6 @@ export const writeVaultSkill = (payload) => callSkillsApi('write', payload);
 
 /** 用系统默认程序打开内容库里的 skill 文件 */
 export const openVaultSkillFile = (skillPath) => callSkillsApi('open', { skillPath });
+
+/** 把内置技能、AGENTS.md、.claude/skills 软链接同步到内容库（外部 agent 用） */
+export const syncVaultAgentFiles = (builtinSkills) => callSkillsApi('syncVault', builtinSkills);

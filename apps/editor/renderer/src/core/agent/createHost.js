@@ -34,7 +34,7 @@ import {
   buildExcalidrawElementsFromItems,
   countRenderableCanvasCards,
 } from '../../utils/excalidrawCanvas.js';
-import { getTodayDateKey, normalizeDateKey } from '../../utils/dailyWorkspace.js';
+import { getDailyEntry, getTodayDateKey, normalizeDateKey } from '../../utils/dailyWorkspace.js';
 import {
   clearAiServerOverride,
   getAiServerConfiguration,
@@ -276,6 +276,19 @@ export function createHost({
       state.setDailyCurrentDate(targetDateKey);
       state.setSurface('daily');
       return `已添加到 ${targetDateKey}：${type}「${value}」。`;
+    },
+
+    /** 某天的速记（只读，去掉富文本，只给纯文字和属性） */
+    readDaily: (dateKey = '') => {
+      const { dailyWorkspace } = getState();
+      const key = normalizeDateKey(dateKey || getTodayDateKey());
+      const entry = getDailyEntry(dailyWorkspace, key);
+      return {
+        ok: true,
+        date: key,
+        items: entry.items.map(({ id, type, done, priority, category, text }) => ({ id, type, done, priority, category: category || '', text })),
+        todoPoolCount: dailyWorkspace?.todoPool?.length ?? 0,
+      };
     },
 
     addTodoEntry: async ({ text = '' } = {}) => {

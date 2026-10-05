@@ -161,6 +161,8 @@ export const buildSkill = (entry = {}) => {
 
 const collect = (entries, source, byId, warnings) => {
   (entries || []).forEach((entry) => {
+    // 内容库里没改过的内置技能副本（给外部 agent 用的）：以 app 自带的为准
+    if (source === SKILL_SOURCES.VAULT && entry.managed && !entry.modified) return;
     const result = buildSkill({ ...entry, source });
     if (!result.ok) {
       warnings.push(result.warning);

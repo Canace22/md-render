@@ -33,6 +33,7 @@ export const TOOL_RISKS = Object.freeze({
   list_recent_docs: READ,
   get_workspace_brief: READ,
   get_daily_overview: READ,
+  read_daily: READ,
   recall_related_docs: READ,
   read_editorial_memory: READ,
   inspect_app_health: READ,

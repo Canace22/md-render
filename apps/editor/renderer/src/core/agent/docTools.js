@@ -68,6 +68,11 @@ export const DOC_TOOL_DEFINITIONS = Object.freeze([
     },
   ),
   fn(
+    'read_daily',
+    '读取某天的今日速记（任务、事件、笔记）和待办池数量；不传日期读今天。',
+    { dateKey: { type: 'string', description: 'YYYY-MM-DD，不传表示今天' } },
+  ),
+  fn(
     'get_proposal_status',
     '查询一个提案的状态：pending（等待确认）/ applied（已应用）/ discarded（已放弃）/ conflict（提案后文档被改过，未应用）。',
     { proposalId: { type: 'string' } },
@@ -82,6 +87,7 @@ export const DOC_TOOL_LABELS = Object.freeze({
   list_docs: '列出文档',
   get_proposal_status: '查询提案状态',
   render_platform_html: '渲染公众号排版',
+  read_daily: '读取今日速记',
   disk_change: '文件被外部修改',
   ensure_doc_id: '补写文档 id',
 });
@@ -143,6 +149,8 @@ export const DOC_TOOL_EXECUTORS = Object.freeze({
     const result = await host.renderPlatformHtml?.({ id: clean(args?.id), template: clean(args?.template) || 'default' });
     return toJson(result ?? { ok: false, error: '当前环境不支持排版渲染' });
   },
+
+  read_daily: async (args, host) => toJson(await host.readDaily?.(clean(args?.dateKey)) ?? { ok: false, error: '当前环境不支持' }),
 
   get_proposal_status: async (args, host) => {
     const id = clean(args?.proposalId);

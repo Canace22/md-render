@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: () => ipcRenderer.invoke('skills:list'),
     write: (payload) => ipcRenderer.invoke('skills:write', payload),
     open: (payload) => ipcRenderer.invoke('skills:open', payload),
+    syncVault: (builtinSkills) => ipcRenderer.invoke('skills:sync-vault', { builtinSkills }),
     onChanged: (callback) => {
       const sub = (_event, payload) => callback(payload);
       ipcRenderer.on('skills:changed', sub);

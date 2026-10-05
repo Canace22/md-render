@@ -1,4 +1,5 @@
 import { getMdRenderRootPath } from '../localProject.js';
+import { syncVaultAgentFiles } from '../vaultAgentFiles.js';
 import {
   getVaultSkillsDir,
   isInsideSkillsDir,
@@ -17,7 +18,8 @@ export function registerSkillHandlers({
   ipcMain,
   getMainWindow,
   openPath = async () => '',
-  getSkillsDir = () => getVaultSkillsDir(getMdRenderRootPath()),
+  getVaultRoot = getMdRenderRootPath,
+  getSkillsDir = () => getVaultSkillsDir(getVaultRoot()),
 }) {
   let stopWatching = null;
 
@@ -58,6 +60,19 @@ export function registerSkillHandlers({
     }
     const error = await openPath(payload.skillPath);
     return error ? { ok: false, error } : { ok: true };
+  });
+
+  // 生成 / 更新内容库 AGENTS.md、内置技能副本、.claude/skills 软链接（P4-1）
+  ipcMain.handle('skills:sync-vault', async (_event, payload = {}) => {
+    try {
+      const result = await syncVaultAgentFiles(getVaultRoot(), {
+        builtinSkills: Array.isArray(payload.builtinSkills) ? payload.builtinSkills : [],
+        skillsDir: getSkillsDir(),
+      });
+      return { ok: true, ...result };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
 
   return () => stopWatching?.();
