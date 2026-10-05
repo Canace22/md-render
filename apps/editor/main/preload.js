@@ -46,6 +46,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     searchKnowledge: (payload) => ipcRenderer.invoke('ai:searchKnowledge', payload),
   },
 
+  // 内容库产品 skill（MdRender/.agents/skills）：读原始文件 + 变化通知
+  skills: {
+    list: () => ipcRenderer.invoke('skills:list'),
+    onChanged: (callback) => {
+      const sub = (_event, payload) => callback(payload);
+      ipcRenderer.on('skills:changed', sub);
+      return () => ipcRenderer.removeListener('skills:changed', sub);
+    },
+  },
+
   // 只读本机运行诊断
   diagnostics: {
     getSnapshot: (payload) => ipcRenderer.invoke('diagnostics:get-snapshot', payload),
