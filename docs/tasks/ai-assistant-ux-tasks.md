@@ -22,20 +22,22 @@
 
 ## P0 基础：流式输出 + 排队 + 重试
 
-- [ ] **P0-1** ai-proxy `/api/chat` 支持 `stream: true`，透传上游 SSE
+- [x] **P0-1** ai-proxy `/api/chat` 支持 `stream: true`，透传上游 SSE
   - 范围：`server/ai-proxy/server.js`
-- [ ] **P0-2** 主进程 `ai:chatStream` IPC：读 SSE，按片段 `webContents.send('ai:chatStream:event')`，支持 `ai:chatStream:abort`
+- [x] **P0-2** 主进程 `ai:chatStream` IPC：读 SSE，按片段 `webContents.send('ai:chatStream:event')`，支持 `ai:chatStream:abort`
   - 范围：`main/aiRequest.js`、`main/ipc/aiHandlers.js`、`main/preload.js`
-- [ ] **P0-3** 渲染进程流式客户端：SSE 解析（纯函数，可单测）+ Electron 订阅 / Web `fetch` + `ReadableStream`；把 delta 合并成完整 message（含 tool_calls）
+- [x] **P0-3** 渲染进程流式客户端：SSE 解析（纯函数，可单测）+ Electron 订阅 / Web `fetch` + `ReadableStream`；把 delta 合并成完整 message（含 tool_calls）
   - 范围：`core/agent/sseStream.js`（新）、`core/agent/aiClient.js`
-- [ ] **P0-4** `agentEngine` 新增 `onDelta` → `assistant_delta` 事件；有 tool_calls 照常执行
+- [x] **P0-4** `agentEngine` 新增 `onDelta` → `assistant_delta` 事件；有 tool_calls 照常执行
   - 范围：`core/agent/agentEngine.js`
-- [ ] **P0-5** 面板：第一个 delta 追加 `typing` assistant 消息，后续只更新这一条；停止时保留已输出内容并标「已停止」
+- [x] **P0-5** 面板：第一个 delta 追加 `typing` assistant 消息，后续只更新这一条；停止时保留已输出内容并标「已停止」
   - 验收：case 1–3
-- [ ] **P0-6** 运行中回车 → 排队（显示「已排队 N 条」，可取消），本轮结束后自动发送
+- [x] **P0-6** 运行中回车 → 排队（显示「已排队 N 条」，可取消），本轮结束后自动发送
   - 验收：case 14
-- [ ] **P0-7** 出错消息加 [重试]；连接类错误再加 [打开设置]
+- [x] **P0-7** 出错消息加 [重试]；连接类错误再加 [打开设置]
   - 验收：case 15
+
+> P0 备注：本机 agent（Codex / Claude Code / Cursor）这条路不走流式，保持原样；SSE 解析放在 `shared/sseChat.js`（main 和 renderer 共用）；停止时连排队的消息一起清掉。
 
 ## P1 选区就地润色
 

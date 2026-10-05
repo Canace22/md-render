@@ -10958,3 +10958,61 @@ body.theme-dark .file-preview-iframe {
   color: var(--color-text-secondary);
   line-height: 1.5;
 }
+
+/* ── AI 助手：排队提示 / 出错重试 / 已停止（P0） ── */
+.agent-panel__queue-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 10px 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-m);
+  background: var(--color-bg-active);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.agent-panel__queue-notice button {
+  border: none;
+  background: transparent;
+  color: var(--color-brand-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agent-panel__error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.agent-panel__error-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agent-panel__error-actions button:hover:not(:disabled) {
+  background: var(--color-bg-active);
+}
+
+.agent-panel__error-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-panel__msg-stopped {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}

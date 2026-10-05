@@ -92,7 +92,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
-        const { providerId, messages, tools, model, temperature, max_tokens } = payload;
+        const { providerId, messages, tools, model, temperature, max_tokens, stream } = payload;
 
         if (!providerId) return jsonRes(res, 400, { error: '缺少 providerId' });
         if (!messages || !Array.isArray(messages)) return jsonRes(res, 400, { error: '缺少 messages' });
@@ -105,6 +105,8 @@ const server = http.createServer((req, res) => {
           messages,
           temperature: temperature ?? 0.3,
           ...(max_tokens ? { max_tokens } : {}),
+          // stream=true 时上游回 SSE，forwardToLLM 原样 pipe 回去
+          ...(stream ? { stream: true } : {}),
         };
         if (Array.isArray(tools) && tools.length) {
           llmBody.tools = tools;

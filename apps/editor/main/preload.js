@@ -40,6 +40,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI 请求 IPC（主进程直连，无 CORS，无需代理服务器）
   ai: {
     chat: (payload) => ipcRenderer.invoke('ai:chat', payload),
+    chatStream: (payload) => ipcRenderer.invoke('ai:chatStream', payload),
+    abortChatStream: (requestId) => ipcRenderer.invoke('ai:chatStream:abort', { requestId }),
+    onChatStreamEvent: (callback) => {
+      const sub = (_event, payload) => callback(payload);
+      ipcRenderer.on('ai:chatStream:event', sub);
+      return () => ipcRenderer.removeListener('ai:chatStream:event', sub);
+    },
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),
     execTool: (payload) => ipcRenderer.invoke('ai:execTool', payload),
     listTools: (payload) => ipcRenderer.invoke('ai:listTools', payload),

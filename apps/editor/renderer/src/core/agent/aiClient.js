@@ -10,6 +10,7 @@
  */
 
 import { AI_PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from './aiProviders.js';
+import { readChatStream } from '../../../../shared/sseChat.js';
 import { getLocalAgent, isRunnableAgent } from '../../../../shared/localAgents.js';
 import {
   SOURCE_KINDS,
@@ -220,40 +221,86 @@ const callViaBridge = async ({ messages, tools, config }) => {
   return res.message;
 };
 
-/** Web 兜底路径：直接 fetch ai-proxy server */
-const callViaServer = async ({ messages, tools, config, signal }) => {
+/** Electron 是否支持流式通道（旧 preload 没有时退回一次性请求） */
+export const hasAiStreamBridge = () =>
+  typeof window !== 'undefined' && typeof window.electronAPI?.ai?.chatStream === 'function';
+
+let streamSeq = 0;
+const nextStreamRequestId = () => `chat-${Date.now()}-${(streamSeq += 1)}`;
+
+/** Electron 流式路径：invoke 等整轮结束，片段通过事件推过来；abort 时通知主进程掐断请求 */
+const callViaBridgeStream = async ({ messages, tools, config, signal, onDelta }) => {
+  const api = window.electronAPI.ai;
+  const requestId = nextStreamRequestId();
+  const aiProxyBase = resolveAiServerBase();
+  const payload = { requestId, providerId: config.providerId, messages, tools };
+  if (config.model) payload.model = config.model;
+  if (aiProxyBase) payload.aiProxyBase = aiProxyBase;
+
+  const unsubscribe = api.onChatStreamEvent?.((event) => {
+    if (event?.requestId === requestId && event.text) onDelta(event.text);
+  });
+  const onAbort = () => { api.abortChatStream?.(requestId); };
+  signal?.addEventListener?.('abort', onAbort);
+  try {
+    const res = await api.chatStream(payload);
+    if (signal?.aborted || res?.cancelled) throw new Error('已取消');
+    if (!res?.ok) throw new Error(res?.error || 'AI 请求失败');
+    return res.message;
+  } finally {
+    unsubscribe?.();
+    signal?.removeEventListener?.('abort', onAbort);
+  }
+};
+
+const buildServerPayload = ({ messages, tools, config }) => ({
+  providerId: config.providerId,
+  messages,
+  tools,
+  model: config.model,
+});
+
+const postToServer = async ({ body, signal }) => {
   const serverBase = resolveAiServerBase();
   if (!serverBase) throw new Error('未配置 AI 服务器地址');
-
-  const payload = {
-    providerId: config.providerId,
-    messages,
-    tools,
-    model: config.model,
-  };
-
   const res = await fetch(`${serverBase}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
     signal,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`AI 请求失败 (${res.status}): ${text.slice(0, 300)}`);
   }
+  return res;
+};
+
+/** Web 兜底路径：直接 fetch ai-proxy server */
+const callViaServer = async ({ messages, tools, config, signal }) => {
+  const res = await postToServer({ body: buildServerPayload({ messages, tools, config }), signal });
   const data = await res.json();
   const message = data?.choices?.[0]?.message;
   if (!message) throw new Error('AI 返回内容为空');
   return message;
 };
 
+/** Web 流式路径：fetch + ReadableStream 读 SSE */
+const callViaServerStream = async ({ messages, tools, config, signal, onDelta }) => {
+  const body = { ...buildServerPayload({ messages, tools, config }), stream: true };
+  const res = await postToServer({ body, signal });
+  return readChatStream(res, { onDelta });
+};
+
 /**
  * 调用一次 chat/completions。
+ * 传了 onDelta 就走流式：每收到一段正文调用 onDelta(text)，返回值仍是完整 message（含 tool_calls）。
  */
-export const callChatCompletion = async ({ messages, tools, config, signal }) => {
+export const callChatCompletion = async ({ messages, tools, config, signal, onDelta }) => {
   const resolved = config ?? readProviderConfig();
-  return hasAiBridge()
-    ? callViaBridge({ messages, tools, config: resolved })
-    : callViaServer({ messages, tools, config: resolved, signal });
+  const params = { messages, tools, config: resolved, signal, onDelta };
+  if (hasAiBridge()) {
+    return onDelta && hasAiStreamBridge() ? callViaBridgeStream(params) : callViaBridge(params);
+  }
+  return onDelta ? callViaServerStream(params) : callViaServer(params);
 };

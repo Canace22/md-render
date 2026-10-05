@@ -7,6 +7,8 @@
  * Main 只传 providerId + messages 给 server，server 解析 key 并转发。
  */
 
+import { readChatStream } from '../shared/sseChat.js';
+
 const AI_PROXY_TIMEOUT_MS = 60000;
 const KNOWLEDGE_SEARCH_TIMEOUT_MS = 30000;
 const TOOL_EXEC_TIMEOUT_MS = 5 * 60 * 1000; // 工具执行最长 5 分钟
@@ -80,6 +82,65 @@ export async function requestChatCompletion({ aiProxyBase, providerId, messages,
     throw new Error(formatProxyError(err, base));
   } finally {
     clearTimeout(timer);
+  }
+}
+
+const buildChatPayload = ({ providerId, messages, tools, model }) => {
+  if (!providerId) throw new Error('未指定 providerId');
+  if (!messages || !messages.length) throw new Error('消息不能为空');
+  const payload = { providerId, messages };
+  if (model) payload.model = model;
+  if (Array.isArray(tools) && tools.length) payload.tools = tools;
+  return payload;
+};
+
+/**
+ * 流式调用 /api/chat：边收边通过 onDelta 推正文片段，结束后返回完整 message。
+ * 超时按「多久没收到新数据」算（空闲超时），长回答不会被总时长掐断。
+ * signal 由调用方控制（用户点停止时 abort）。
+ */
+export async function requestChatCompletionStream({
+  aiProxyBase,
+  providerId,
+  messages,
+  tools,
+  model,
+  signal,
+  onDelta = () => {},
+}) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  const payload = { ...buildChatPayload({ providerId, messages, tools, model }), stream: true };
+  const base = normalizeAiProxyBase(aiProxyBase);
+
+  const controller = new AbortController();
+  let timedOut = false;
+  let timer = null;
+  const resetIdleTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { timedOut = true; controller.abort(); }, AI_PROXY_TIMEOUT_MS);
+  };
+  const onExternalAbort = () => controller.abort();
+  signal?.addEventListener?.('abort', onExternalAbort);
+  resetIdleTimer();
+
+  try {
+    const response = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`AI 请求失败 (${response.status}): ${text.slice(0, 300)}`);
+    }
+    return await readChatStream(response, { onDelta, onChunk: resetIdleTimer });
+  } catch (err) {
+    if (signal?.aborted && !timedOut) throw new Error('已取消');
+    throw new Error(formatProxyError(err, base));
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener?.('abort', onExternalAbort);
   }
 }
 

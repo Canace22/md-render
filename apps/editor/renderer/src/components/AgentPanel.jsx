@@ -46,6 +46,14 @@ import { getSurfaceLabel } from '../core/agent/surfaceLabels.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
 import { buildInputWithAttachments, resolveLocalAgentSession } from '../core/agent/sessionUtils.js';
 import {
+  appendStreamDelta,
+  buildErrorMessage,
+  endStreamMessage,
+  finalizeAssistantReply,
+  removeMessageAt,
+  stopTypingMessages,
+} from '../core/agent/streamMessages.js';
+import {
   buildActiveDocMeta,
   buildContentAssetPointer,
   buildPinnedContext,
@@ -212,6 +220,8 @@ const recallDocsForContext = async ({
 };
 
 const MAX_SLASH_SKILL_RESULTS = 8;
+// 流式片段合并刷新的间隔：太频繁会让长回复的 Markdown 反复重渲染
+const STREAM_FLUSH_INTERVAL_MS = 60;
 const SLASH_SKILL_PATTERN = /^\s*\/([^\s/]*)$/;
 
 const AGENT_PANEL_TABS = Object.freeze([
@@ -284,6 +294,8 @@ export default function AgentPanel({ onClose }) {
   const [activePanelTab, setActivePanelTab] = useState('chat');
   const [assistantActivity, setAssistantActivity] = useState(null);
   const [runningSessionId, setRunningSessionId] = useState(null);
+  // 运行中回车发送的消息先排队，本轮结束后按顺序自动发送
+  const [queuedTurns, setQueuedTurns] = useState([]);
 
   // 工作区里所有 Markdown 文件（供 @ 选择）
   const mdFiles = useMemo(
@@ -343,6 +355,7 @@ export default function AgentPanel({ onClose }) {
   }, []);
   useEffect(() => {
     setLastContextPacket(null);
+    setQueuedTurns([]);
     shouldFollowMessagesRef.current = true;
     forceScrollToBottomRef.current = true;
   }, [activeSessionId]);
@@ -403,8 +416,10 @@ export default function AgentPanel({ onClose }) {
     runLockRef.current = false;
     abortRef.current = null;
     if (runningSessionId) {
-      updateAgentMessages(runningSessionId, (items) => finishRunningTools(items, 'interrupted'));
+      updateAgentMessages(runningSessionId, (items) => stopTypingMessages(finishRunningTools(items, 'interrupted')));
     }
+    // 停止 = 这一串都不要了，排队的也一起清掉
+    setQueuedTurns([]);
     setAssistantActivity(null);
     setRunningSessionId(null);
     setRunning(false);
@@ -532,8 +547,10 @@ export default function AgentPanel({ onClose }) {
     selectionText = '',
     pinnedFiles = [],
     allowedTools = null,
+    skipUserMessage = false,
   }) => {
     if (running || runLockRef.current) return;
+    const retryParams = { promptText, displayText, fileNames, selectionText, pinnedFiles, allowedTools };
     if (!isAiConfigured()) {
       setShowSettings(true);
       return;
@@ -553,12 +570,32 @@ export default function AgentPanel({ onClose }) {
     const ownsRun = () => activeRunIdRef.current === runId;
     forceScrollToBottomRef.current = true;
     shouldFollowMessagesRef.current = true;
-    appendAgentMessage(sessionId, { role: 'user', text: displayText, files: fileNames });
+    if (!skipUserMessage) appendAgentMessage(sessionId, { role: 'user', text: displayText, files: fileNames });
     setRunning(true);
     setAssistantActivity('thinking');
     setRunningSessionId(sessionId);
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // 流式片段先攒着，定时合并写进同一条消息
+    let pendingDelta = { streamId: '', text: '' };
+    let flushTimer = null;
+    let finalStreamId = '';
+    const toStreamId = (step) => (step ? `${runId}:${step}` : '');
+    const flushDelta = () => {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+      const { streamId, text } = pendingDelta;
+      pendingDelta = { streamId, text: '' };
+      if (!text || !ownsRun() || controller.signal.aborted) return;
+      setAssistantActivity(null);
+      updateAgentMessages(sessionId, (items) => appendStreamDelta(items, streamId, text));
+    };
+    const queueDelta = (streamId, text) => {
+      if (pendingDelta.streamId !== streamId) flushDelta();
+      pendingDelta = { streamId, text: pendingDelta.text + text };
+      if (!flushTimer) flushTimer = setTimeout(flushDelta, STREAM_FLUSH_INTERVAL_MS);
+    };
 
     try {
       const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
@@ -568,7 +605,18 @@ export default function AgentPanel({ onClose }) {
         // 工具已经执行了就要留痕，不管这一轮后来是否被取消或切走（本机 agent 的改动由 localAgentClient 自己记）
         if (ev.type === 'tool_done' && !isLocalRun) recordToolActivity({ who: 'app', name: ev.name, args: ev.args, result: ev.result });
         if (!ownsRun() || controller.signal.aborted) return;
+        if (ev.type === 'assistant_delta') {
+          queueDelta(toStreamId(ev.step), ev.text);
+          return;
+        }
+        if (ev.type === 'assistant_text') {
+          finalStreamId = toStreamId(ev.step);
+          return;
+        }
         if (ev.type === 'tool_start') {
+          // 调工具前模型说的话到此为止，收掉打字光标
+          flushDelta();
+          updateAgentMessages(sessionId, (items) => endStreamMessage(items, toStreamId(ev.step)));
           setAssistantActivity('working');
           appendAgentMessage(sessionId, {
             role: 'tool',
@@ -604,7 +652,7 @@ export default function AgentPanel({ onClose }) {
             projectRoot: pickAgentProjectRoot(workspace, selectedId),
           },
         })
-        : await runAgent({ ...turnParams, config: readProviderConfig(source.providerId), serverTools });
+        : await runAgent({ ...turnParams, config: readProviderConfig(source.providerId), serverTools, stream: true });
       const { finalText, history } = result;
       // 会话续接：同一个 agent 下一轮 resume；走 API 服务商时清空
       setAgentExternalSession(sessionId, isLocalRun
@@ -612,17 +660,20 @@ export default function AgentPanel({ onClose }) {
         : {});
       if (!ownsRun() || controller.signal.aborted) return;
       setAgentHistory(sessionId, history);
+      flushDelta();
       if (finalText) {
         setAssistantActivity(null);
-        appendAgentMessage(sessionId, { role: 'assistant', text: finalText });
+        updateAgentMessages(sessionId, (items) => finalizeAssistantReply(items, finalStreamId, finalText));
       }
     } catch (error) {
       if (!ownsRun()) return;
       if (String(error?.message ?? '') !== '已取消') {
-        updateAgentMessages(sessionId, (items) => finishRunningTools(items, 'error'));
-        appendAgentMessage(sessionId, { role: 'assistant', text: `出错了：${formatAgentError(error)}` });
+        flushDelta();
+        updateAgentMessages(sessionId, (items) => stopTypingMessages(finishRunningTools(items, 'error')));
+        appendAgentMessage(sessionId, buildErrorMessage(formatAgentError(error), retryParams));
       }
     } finally {
+      clearTimeout(flushTimer);
       if (ownsRun()) {
         runLockRef.current = false;
         setAssistantActivity(null);
@@ -635,7 +686,7 @@ export default function AgentPanel({ onClose }) {
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || running) return;
+    if (!text) return;
 
     // 引用的选中文字当成一个特殊「附件」，复用文件附件的拼接逻辑
     const selectionAttachment = quotedSelection
@@ -650,14 +701,40 @@ export default function AgentPanel({ onClose }) {
     setAttachedFiles([]);
     clearAiQuotedSelection();
     setActivePanelTab('chat');
-    await runTurn({
+    const turn = {
       promptText,
       displayText: text,
       fileNames,
       selectionText: quotedSelection,
       pinnedFiles: attachedFiles,
-    });
+    };
+    if (running) {
+      setQueuedTurns((prev) => [...prev, turn]);
+      return;
+    }
+    await runTurn(turn);
   }, [input, running, attachedFiles, quotedSelection, clearAiQuotedSelection, runTurn]);
+
+  // 本轮结束后自动发送排队的下一条
+  useEffect(() => {
+    if (running || runLockRef.current || queuedTurns.length === 0) return;
+    const [next, ...rest] = queuedTurns;
+    setQueuedTurns(rest);
+    runTurn(next);
+  }, [running, queuedTurns, runTurn]);
+
+  const handleCancelQueue = useCallback(() => setQueuedTurns([]), []);
+
+  // 出错重试：移走出错消息，用原参数再跑一轮（不重复显示用户消息）
+  const handleRetry = useCallback((index) => {
+    if (running || !activeSessionId) return;
+    const retry = messages[index]?.retry;
+    if (!retry) return;
+    updateAgentMessages(activeSessionId, (items) => removeMessageAt(items, index));
+    runTurn({ ...retry, skipUserMessage: true });
+  }, [running, activeSessionId, messages, updateAgentMessages, runTurn]);
+
+  const handleOpenSettings = useCallback(() => setShowSettings(true), []);
 
   const handleChoiceCardClick = useCallback((choice) => {
     if (running) return;
@@ -1035,6 +1112,8 @@ export default function AgentPanel({ onClose }) {
               copiedIndex={copiedIndex}
               onChoice={handleChoiceCardClick}
               onCopy={handleCopy}
+              onRetry={handleRetry}
+              onOpenSettings={handleOpenSettings}
               onOpenArtifact={(fileId) => host.openWorkspaceItem({ id: fileId })}
             />
           )}
@@ -1138,6 +1217,13 @@ export default function AgentPanel({ onClose }) {
           </div>
         )}
 
+        {queuedTurns.length > 0 && (
+          <div className="agent-panel__queue-notice" aria-live="polite">
+            <span>已排队 {queuedTurns.length} 条，这一轮结束后自动发送</span>
+            <button type="button" onClick={handleCancelQueue}>取消</button>
+          </div>
+        )}
+
         {aiSource.defaultNotice && (
           <div className="agent-panel__source-notice">
             <span>{aiSource.defaultNotice}</span>
@@ -1151,7 +1237,7 @@ export default function AgentPanel({ onClose }) {
             className="agent-panel__input"
             value={input}
             placeholder={isActiveSessionRunning
-              ? '正在处理，可继续编辑下一条消息'
+              ? '正在处理，回车把下一条排进队列'
               : isOtherSessionRunning
                 ? '另一会话正在处理，请先停止或切回查看'
                 : '发消息，输入 / 选 skill，或输入 @ 引用工作区文件'}

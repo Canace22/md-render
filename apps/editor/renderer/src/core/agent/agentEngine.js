@@ -68,9 +68,11 @@ const toAssistantMessage = (message, content) => ({
  * @param {AbortSignal} [params.signal]
  * @param {object} [params.taskContext]
  * @param {string[]|null} [params.allowedTools] skill 的工具白名单；null 表示不限制
+ * @param {boolean} [params.stream] 是否流式输出（边生成边发 assistant_delta）
  * @returns {Promise<{ finalText: string, history: Array }>}
  *
  * onEvent 事件类型：
+ *   { type: 'assistant_delta', step, text }     流式片段（只在 stream=true 时发），text 是这次新增的文字
  *   { type: 'assistant_text', text }           模型的中间/最终文字
  *   { type: 'tool_start', callId, name, label, step }  开始执行某工具
  *   { type: 'tool_done', callId, name, label, step, args, result } 工具执行完成（args 为原始参数字符串）
@@ -88,6 +90,7 @@ export const runAgent = async ({
   serverTools = [],
   taskContext = null,
   allowedTools = null,
+  stream = false,
 }) => {
   const messages = [
     { role: 'system', content: buildSystemPrompt(taskContext) },
@@ -109,11 +112,13 @@ export const runAgent = async ({
   for (let step = 0; step < maxSteps; step += 1) {
     if (signal?.aborted) throw new Error('已取消');
 
+    const stepNo = step + 1;
     const message = await callChatCompletion({
       messages,
       tools: allTools.length ? allTools : undefined,
       config,
       signal,
+      ...(stream ? { onDelta: (text) => onEvent({ type: 'assistant_delta', step: stepNo, text }) } : {}),
     });
     if (signal?.aborted) throw new Error('已取消');
 
@@ -126,7 +131,7 @@ export const runAgent = async ({
     // 没有工具调用 → 这是最终答复，结束循环
     if (!toolCalls.length) {
       finalText = assistantContent;
-      if (finalText) onEvent({ type: 'assistant_text', text: finalText });
+      if (finalText) onEvent({ type: 'assistant_text', step: stepNo, text: finalText });
       onEvent({ type: 'done', finalText });
       break;
     }
@@ -143,7 +148,7 @@ export const runAgent = async ({
         callId: call.id,
         name,
         label,
-        step: step + 1,
+        step: stepNo,
       };
       onEvent({ type: 'tool_start', ...eventBase });
       // 白名单在请求时已裁剪，执行前再拦一次，防止模型臆造未提供的工具

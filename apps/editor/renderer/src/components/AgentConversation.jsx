@@ -8,6 +8,8 @@ import {
   Copy,
   FileText,
   Loader2,
+  RotateCcw,
+  Settings,
   User,
 } from 'lucide-react';
 import { buildAssistantRenderPayload } from '../core/agent/assistantResponse.js';
@@ -105,6 +107,8 @@ const AgentMessage = ({
   running,
   onChoice,
   onCopy,
+  onRetry,
+  onOpenSettings,
 }) => {
   const { message, index } = entry;
   const parsed = message.role === 'assistant'
@@ -153,7 +157,22 @@ const AgentMessage = ({
             ))}
           </div>
         )}
-        {message.role === 'assistant' && !message.typing && parsed.displayText && (
+        {message.stopped && <span className="agent-panel__msg-stopped">已停止</span>}
+        {message.error && (message.retry || message.connectionError) && (
+          <div className="agent-panel__error-actions">
+            {message.retry && (
+              <button type="button" disabled={running} onClick={() => onRetry?.(index)}>
+                <RotateCcw size={13} /> 重试
+              </button>
+            )}
+            {message.connectionError && (
+              <button type="button" onClick={() => onOpenSettings?.()}>
+                <Settings size={13} /> 打开设置
+              </button>
+            )}
+          </div>
+        )}
+        {message.role === 'assistant' && !message.typing && !message.error && parsed.displayText && (
           <div className="agent-panel__message-actions">
             <button
               type="button"
@@ -179,6 +198,8 @@ export default function AgentConversation({
   copiedIndex,
   onChoice,
   onCopy,
+  onRetry,
+  onOpenSettings,
   onOpenArtifact,
 }) {
   const items = groupConversationItems(messages);
@@ -203,6 +224,8 @@ export default function AgentConversation({
             running={running}
             onChoice={onChoice}
             onCopy={onCopy}
+            onRetry={onRetry}
+            onOpenSettings={onOpenSettings}
           />
         )
       ))}

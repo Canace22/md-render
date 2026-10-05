@@ -53,12 +53,13 @@ export const stripPartialChoiceProtocol = (value) =>
   String(value ?? '').replace(PARTIAL_CHOICE_PATTERN, '').trimEnd();
 
 export const buildAssistantRenderPayload = (message) => {
-  const safeText = normalizeAssistantContent(message?.text);
   if (message?.typing) {
+    // 流式生成中：推理块还没闭合时先什么都不显示，不要闪「未返回答复」的兜底文案
     return {
-      displayText: stripPartialChoiceProtocol(safeText),
+      displayText: stripPartialChoiceProtocol(stripPrivateReasoning(message?.text)),
       choices: [],
     };
   }
+  const safeText = normalizeAssistantContent(message?.text);
   return parseAssistantChoiceCards(safeText);
 };
