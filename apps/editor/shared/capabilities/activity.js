@@ -5,7 +5,7 @@
 
 import { isFailureResult } from '../agentBridgeTools.js';
 
-export const ACTIVITY_SOURCES = Object.freeze({ APP: 'app', MCP: 'mcp' });
+export const ACTIVITY_SOURCES = Object.freeze({ APP: 'app', MCP: 'mcp', EXTERNAL: 'external' });
 
 const SUMMARY_MAX_CHARS = 80;
 const TARGET_KEYS = ['id', 'ids', 'docId', 'targetId', 'proposalId', 'targetFolderId', 'dateKey'];

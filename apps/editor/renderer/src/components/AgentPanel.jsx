@@ -13,7 +13,7 @@ import {
   FilePdfOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import { Activity, Bot, PackageCheck, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
+import { Activity, Bot, History, PackageCheck, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
@@ -27,6 +27,7 @@ import AgentDocMeta from './AgentDocMeta.jsx';
 import AgentConversation from './AgentConversation.jsx';
 import AgentKnowledgeSources from './AgentKnowledgeSources.jsx';
 import AgentSkillsTab from './AgentSkillsTab.jsx';
+import AgentActivityTab from './AgentActivityTab.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import {
   EDITORIAL_MEMORY_DOC_NAME,
@@ -212,6 +213,7 @@ const AGENT_PANEL_TABS = Object.freeze([
   { id: 'chat', label: '对话', icon: MessagesSquare },
   { id: 'context', label: '上下文', icon: MessageSquareQuote },
   { id: 'skills', label: '技能', icon: Wrench },
+  { id: 'activity', label: '活动', icon: History },
 ]);
 
 export default function AgentPanel({ onClose }) {
@@ -998,6 +1000,8 @@ export default function AgentPanel({ onClose }) {
           />
         </div>
       )}
+
+      {activePanelTab === 'activity' && <AgentActivityTab />}
 
       {activePanelTab === 'skills' && (
         <AgentSkillsTab

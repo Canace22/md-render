@@ -8,6 +8,7 @@ import {
   onLocalProjectDiskChanged,
 } from '../utils/localProjectBridge.js';
 import { detectLocalProjectConflicts } from '../utils/localProjectConflict.js';
+import { recordToolActivity } from '../core/agent/activityLog.js';
 
 export function useLocalProjectWatcher() {
   const workspace = useEditorStore((state) => state.workspace);
@@ -40,6 +41,8 @@ export function useLocalProjectWatcher() {
 
     const unsubscribe = onLocalProjectDiskChanged(async ({ projectRootPath: changedRoot }) => {
       if (!changedRoot) return;
+      // app 自己的写入已被 watcher 忽略，能走到这里的都是 app 外的改动（编辑器、git、外部 agent）
+      recordToolActivity({ who: 'external', name: 'disk_change', args: {}, result: '本地项目文件在 app 外被修改' });
       if (useEditorStore.getState().localProjectConflict) return;
 
       const state = useEditorStore.getState();
