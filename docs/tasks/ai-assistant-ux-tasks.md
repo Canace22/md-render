@@ -41,12 +41,14 @@
 
 ## P1 选区就地润色
 
-- [ ] **P1-1** `runInlineRewrite({ text, context, instruction, signal, onDelta })`：不带工具，直接调 `callChatCompletion`；指令表（润色 / 口语 / 正式 / 简洁 / 精简）
+- [x] **P1-1** `runInlineRewrite({ text, context, instruction, signal, onDelta })`：不带工具，直接调 `callChatCompletion`；指令表（润色 / 口语 / 正式 / 简洁 / 精简）
   - 范围：`core/agent/inlineRewrite.js`（新）
-- [ ] **P1-2** 稿件编辑器格式工具栏加 AI 按钮组（Daily 编辑器不显示，用 prop 控制）
+- [x] **P1-2** 稿件编辑器格式工具栏加 AI 按钮组（Daily 编辑器不显示，用 prop 控制）
   - 范围：`components/EditorFormattingToolbar.jsx`、`MarkdownEditor.jsx`
-- [ ] **P1-3** 行内对比卡片：流式显示新文本，[接受] [放弃] [再来一版]；接受时只替换选中的 block 范围，进入撤销栈
+- [x] **P1-3** 行内对比卡片：流式显示新文本，[接受] [放弃] [再来一版]；接受时只替换选中的 block 范围，进入撤销栈
   - 验收：case 4–6
+
+> P1 备注：对比卡只在用户点「接受」后写回；写回前会校验原选区未变，并用一次 BlockNote transaction 加入撤销栈。
 
 ## P2 找灵感：聊天模式
 

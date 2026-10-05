@@ -2684,7 +2684,7 @@ function MarkdownEditor() {
                           emojiPicker={false}
                           onChange={handleEditorChange}
                         >
-                          <EditorFormattingToolbarController />
+                          <EditorFormattingToolbarController enableAiRewrite />
                         </BlockNoteView>
                       </div>
                     </div>

@@ -9305,6 +9305,97 @@ body.theme-dark .file-preview-iframe {
   color: var(--color-brand-primary);
 }
 
+.editor-ai-toolbar__button {
+  width: auto;
+}
+
+.editor-ai-toolbar__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.editor-inline-rewrite-card {
+  position: fixed;
+  z-index: 1200;
+  width: min(420px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-medium);
+}
+
+.editor-inline-rewrite-card__header,
+.editor-inline-rewrite-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.editor-inline-rewrite-card__header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.editor-inline-rewrite-card__header button {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.editor-inline-rewrite-card__section {
+  padding: 10px 12px;
+}
+
+.editor-inline-rewrite-card__section + .editor-inline-rewrite-card__section {
+  border-top: 1px solid var(--color-border);
+}
+
+.editor-inline-rewrite-card__section--result {
+  background: color-mix(in srgb, var(--color-brand-primary) 7%, var(--color-bg-surface));
+}
+
+.editor-inline-rewrite-card__caption {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.editor-inline-rewrite-card__section p {
+  max-height: 150px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.editor-inline-rewrite-card__cursor {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--color-brand-primary);
+  animation: agent-cursor-blink 0.8s step-end infinite;
+}
+
+.editor-inline-rewrite-card__actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border);
+}
+
 .agent-panel__composer {
   margin: 0 var(--space-s) var(--space-s);
   border: 1px solid var(--color-border);

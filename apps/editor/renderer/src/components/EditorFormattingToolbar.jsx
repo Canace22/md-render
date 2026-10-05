@@ -8,6 +8,10 @@ import {
   useDictionary,
   useEditorState,
 } from '@blocknote/react';
+import {
+  EditorInlineRewriteButtons,
+  EditorInlineRewriteProvider,
+} from './EditorInlineRewrite.jsx';
 
 /** 与 BlockNote ColorStyleButton 工具栏色标尺寸对齐 */
 const COLOR_ICON_SIZE = 20;
@@ -153,9 +157,13 @@ function EditorFormattingToolbar() {
     items.push(item);
   }
 
+  items.push(<EditorInlineRewriteButtons key="inlineRewriteButtons" />);
+
   return <FormattingToolbar>{items}</FormattingToolbar>;
 }
 
-export default function EditorFormattingToolbarController() {
-  return <FormattingToolbarController formattingToolbar={EditorFormattingToolbar} />;
+export default function EditorFormattingToolbarController({ enableAiRewrite = false }) {
+  const toolbar = <FormattingToolbarController formattingToolbar={EditorFormattingToolbar} />;
+  if (!enableAiRewrite) return toolbar;
+  return <EditorInlineRewriteProvider>{toolbar}</EditorInlineRewriteProvider>;
 }
