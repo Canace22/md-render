@@ -1,6 +1,6 @@
 # md-render Skills 索引
 
-18 个 skill，AI agent（Claude Code / Cursor / Codex）在对应场景自动加载。
+19 个 skill，AI agent（Claude Code / Cursor / Codex）在对应场景自动加载。
 
 ## 通用工作流（不限于本项目）
 
@@ -10,6 +10,7 @@
 | `pre-commit-secrets` | 提交/push 前扫 API key、token、.env、私钥、数据库连接串 |
 | `skill-harvest` | 做完有套路或踩过坑的任务后，判断是否值得沉淀成新 skill |
 | `mermaid-verify` | 画完 Mermaid 图自检语法与暗黑主题可见性 |
+| `human-readable-docs` | 写/改/审 README、使用说明、发布说明等给人看的文档，切到「第一次来的人」视角 |
 
 ## 内容创作
 

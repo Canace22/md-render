@@ -83,6 +83,7 @@
 | `md-render-electron-startup` | Electron 开发启动、白屏、preload 与 ESM/CJS 崩溃诊断 |
 | `skill-harvest` | 判断并生成新 skill（沉淀机制执行器） |
 | `pre-commit-secrets` | 提交/push 前扫描敏感信息 |
+| `human-readable-docs` | 写/改/审 README 等给人看的文档：先答“是什么、给谁、怎么开始” |
 
 > 维护说明：新增或变更 Skill 时，同步更新上表；正文细节以 `.agents/skills/` 为准。
 
