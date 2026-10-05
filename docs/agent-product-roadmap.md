@@ -1,5 +1,7 @@
 # md-render Agent 产品化路线
 
+> 2026-10-05 起，整体架构以 [AI Native 重构方案](./ai-native-architecture-plan.md) 为准（数据是文件、能力是工具、功能是 skill）。本文只保留「App 专家 + 安全自愈」这条线，和新方案冲突的部分已删改。
+
 ## 定位
 
 Agent 不是一个独立聊天框，而是懂 md-render 工作台语义的操作层：理解当前稿件和工作区，调用受控工具，产出可复用资产，并在遇到应用问题时先收集证据再采取可逆动作。
@@ -8,7 +10,7 @@ Agent 不是一个独立聊天框，而是懂 md-render 工作台语义的操作
 
 已落地的首版闭环：
 
-1. 产品知识统一放在 `core/agent/appKnowledge.js`，明确界面、资产、工具边界和故障处置原则。
+1. 产品知识和操作规则统一放在 `shared/appKnowledge.js`，同一份内容生成 app 内 system prompt、MCP instructions 和内容库 `AGENTS.md`。
 2. 上下文用可定位的内容资产指针表示：`id + 标题 + 摘要 + 状态 + 来源`，正文仍然按需读取。
 3. `create_agent_artifact` 统一创建方案、调研、简报、清单、平台稿和事故报告，保留原稿并复用现有 `createGeneratedFile` + `sourceMaterialIds` 派生链路。
 4. `inspect_app_health` 通过 Main IPC 读取脱敏运行快照：版本、打包环境、AI 代理健康、SQLite 快速检查和更新能力。
@@ -28,11 +30,11 @@ Agent 不是一个独立聊天框，而是懂 md-render 工作台语义的操作
 
 - **P1 可观测性**：Renderer/Main 统一结构化错误日志，全局异常捕获，支持脱敏 incident bundle。
 - **P2 安全恢复**：SQLite integrity/FTS 重建、本地缓存清理、文档版本恢复、更新检查，每个动作都实现 `inspect / backup / apply / verify / rollback`。
-- **P3 发版闭环**：AI proxy 鉴权、限流、工具风险分级，修复工具不走远端无鉴权 spawn。
+- **P3 发版闭环**：AI proxy 鉴权、限流，修复工具不走远端无鉴权 spawn。（工具风险分级已在 AI Native P2 落地：`shared/capabilities/riskLevels.js`。）
 - **P4 仓库修复 Agent**：根据故障包在真实仓库切分支、跑验证、提交 PR，最后由签名发布反馈版本。
 
 ## 不变的交互约束
 
-- 就地改当前正文：走 `write_active_doc` 并经过 diff 确认。
+- 改正文、删除：生成待确认提案（`propose_edit` / `write_active_doc` / `delete_workspace_items`），用户在收件箱或编辑器 diff 里确认；带 `baseHash` 防止覆盖用户刚改的内容。
 - 平台版、方案、调研、事故报告：走 `create_agent_artifact`，保留原文和来源。
 - 远端 server 工具：只按其声明用于文件转换，不用于修复用户设备。
