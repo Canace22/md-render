@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { message } from 'antd';
 import {
   ChevronDown,
   ChevronRight,
@@ -48,6 +49,8 @@ export default function AgentDocMeta({ document, contextPacket = null, onRecall,
     try {
       const result = await onRecall();
       setRefs(Array.isArray(result) ? result : []);
+    } catch (error) {
+      message.error(error?.message || '相关旧文检索失败，请稍后重试。');
     } finally {
       setRecalled(true);
       setRecalling(false);

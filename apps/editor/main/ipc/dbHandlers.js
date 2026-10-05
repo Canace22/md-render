@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { createDatabaseSearch } from '../databaseSearch.js';
 import {
   getBacklinks,
   getGraphData,
@@ -8,7 +10,6 @@ import {
   markMigratedFromLocalStorage,
   saveEditorState,
   saveVersions,
-  searchDocuments,
   syncAllLinks,
   syncDocuments,
   updateDocumentDiskPaths,
@@ -22,7 +23,9 @@ const syncBuiltInDocs = (workspace, logPrefix) => {
   }).catch((err) => console.error(`[db] ${logPrefix} disk-write failed:`, err));
 };
 
-export function registerDbHandlers({ ipcMain }) {
+export function registerDbHandlers({ ipcMain, app }) {
+  const databaseSearch = createDatabaseSearch(path.join(app.getPath('userData'), 'knowledge.db'));
+  app.once('before-quit', () => databaseSearch.close());
   ipcMain.handle('db:is-migrated', () => isMigratedFromLocalStorage());
 
   ipcMain.handle('db:migrate', (_event, payload = {}) => {
@@ -120,13 +123,13 @@ export function registerDbHandlers({ ipcMain }) {
     }
   });
 
-  ipcMain.handle('db:search', (_event, payload = {}) => {
+  ipcMain.handle('db:search', async (_event, payload = {}) => {
     try {
       const { query } = payload;
-      return { ok: true, results: searchDocuments(query) };
+      return { ok: true, results: await databaseSearch.search(query) };
     } catch (err) {
       console.error('[db] search error:', err);
-      return { ok: false, results: [] };
+      return { ok: false, results: [], error: err.message };
     }
   });
 }

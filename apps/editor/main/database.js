@@ -388,27 +388,6 @@ export function getVersionById(versionId) {
   ).get(versionId);
 }
 
-// ── full-text search ──────────────────────────────────────────────────────────
-
-export function searchDocuments(query) {
-  if (!query?.trim()) return [];
-  try {
-    const escaped = query.trim().replace(/["*]/g, '') + '*';
-    return getDb().prepare(`
-      SELECT d.id, d.name, d.type,
-             snippet(documents_fts, 1, '<mark>', '</mark>', '...', 32) AS excerpt
-      FROM documents_fts fts
-      JOIN documents d ON d.rowid = fts.rowid
-      WHERE documents_fts MATCH ?
-      ORDER BY rank
-      LIMIT 50
-    `).all(escaped);
-  } catch (err) {
-    console.error('[db] search error:', err);
-    return [];
-  }
-}
-
 // ── graph data ────────────────────────────────────────────────────────────────
 
 export function getGraphData() {

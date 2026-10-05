@@ -55,7 +55,10 @@ export default defineConfig(({ mode }) => {
       // 仅在 Electron 模式下启用插件
       isElectron && electron({
         main: {
-          entry: path.join(__dirname, 'main/main.js'),
+          entry: {
+            main: path.join(__dirname, 'main/main.js'),
+            databaseSearchWorker: path.join(__dirname, 'main/databaseSearchWorker.js'),
+          },
           vite: {
             root: __dirname,
             build: {

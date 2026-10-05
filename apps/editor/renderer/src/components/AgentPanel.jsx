@@ -49,6 +49,7 @@ import {
   buildTaskContextPacket,
   buildWorkspaceToolBrief,
   buildWorkspaceBrief,
+  buildWorkspaceRelatedRefs,
 } from '../core/agent/taskContext.js';
 import { AI_ACTION_KEYS, buildQuickActionInstruction, getAiActionLabel } from '../utils/aiActions.js';
 import { PLATFORM_VARIANT_KEYS, buildPlatformVariantInstruction, listPlatformVariants } from '../utils/platformVariant.js';
@@ -1150,21 +1151,19 @@ export default function AgentPanel({ onClose }) {
       // .agent 等隐藏目录里的元数据不进搜索/召回结果
       const hiddenIds = collectHiddenFileIds(workspace);
       if (hasDbBridge()) {
-        try {
-          const res = await dbSearch(query);
-          return (res?.results ?? []).filter((r) => !hiddenIds.has(r?.id)).map((r) => {
-            const node = collectFiles(workspace).find((file) => file?.id === r.id);
-            return buildContentAssetPointer({
-              ...(node ?? {}),
-              ...r,
-              title: r.title ?? r.name ?? node?.name ?? '未命名',
-              snippet: r.snippet ?? r.excerpt ?? node?.summary ?? '',
-              id: r.id ?? node?.id,
-            });
+        const res = await dbSearch(query);
+        if (!res?.ok) throw new Error(res?.error || '知识库检索失败，请稍后重试。');
+        const filesById = new Map(collectFiles(workspace).map((file) => [file.id, file]));
+        return (res.results ?? []).filter((r) => !hiddenIds.has(r?.id)).map((r) => {
+          const node = filesById.get(r.id);
+          return buildContentAssetPointer({
+            ...(node ?? {}),
+            ...r,
+            title: r.title ?? r.name ?? node?.name ?? '未命名',
+            snippet: r.snippet ?? r.excerpt ?? node?.summary ?? '',
+            id: r.id ?? node?.id,
           });
-        } catch {
-          /* 落到内存兜底 */
-        }
+        });
       }
       const q = String(query).toLowerCase();
       return collectFiles(workspace)
@@ -1372,14 +1371,8 @@ export default function AgentPanel({ onClose }) {
     const inDocumentSurface = surface === 'paper';
     const activeDoc = inDocumentSurface ? host.getActiveDocMeta?.() : null;
     const workspaceBrief = buildWorkspaceBrief(workspace, selectedId);
-    const relatedRefs = activeDoc?.title
-      ? await recallDocsForContext({
-        doc: { title: activeDoc.title, content: markdown ?? '' },
-        selectedId,
-        searchDocs: host.searchDocs,
-        limit: 3,
-      })
-      : [];
+    // 发送前只匹配已有的文档指针；全文检索留给显式召回，不能阻塞普通写作请求。
+    const relatedRefs = buildWorkspaceRelatedRefs(activeDoc, workspaceBrief);
 
     return buildTaskContextPacket({
       activeDoc,

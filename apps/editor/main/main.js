@@ -45,7 +45,6 @@ import {
   saveVersions,
   getVersions,
   getVersionById,
-  searchDocuments,
   updateDocumentDiskPaths,
   getGraphData,
   getDatabaseDiagnostics,

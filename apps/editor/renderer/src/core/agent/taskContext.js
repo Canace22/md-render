@@ -1,4 +1,5 @@
 import { getDocumentStatus } from '../../store/creationUtils.js';
+import { extractRecallKeywords, rankRelatedDocs } from './contextRecall.js';
 import {
   collectFiles,
   collectRecentFiles,
@@ -158,6 +159,18 @@ export const buildPinnedContext = (attachedFiles = []) => {
     title: file?.name ?? '未命名附件',
     snippet: truncate(file?.content, MAX_SNIPPET_CHARS),
   }));
+};
+
+/** 普通发送仅复用简报里的有界指针，不触发数据库全文检索。 */
+export const buildWorkspaceRelatedRefs = (activeDoc, workspaceBrief) => {
+  if (!activeDoc) return [];
+  const current = { id: activeDoc.id, title: activeDoc.title, content: activeDoc.summary };
+  const keywords = extractRecallKeywords(current);
+  const candidates = (workspaceBrief?.recentDocs ?? [])
+    .slice(0, DEFAULT_RECENT_DOCS_LIMIT)
+    .map((doc) => ({ ...doc, snippet: doc.summary || doc.snippet || '' }));
+  return rankRelatedDocs(current, candidates, { limit: DEFAULT_REF_DOCS_LIMIT, keywords })
+    .map((ref) => ({ ...ref, reason: '最近稿件的标题或摘要相关' }));
 };
 
 export const buildTaskContextPacket = ({

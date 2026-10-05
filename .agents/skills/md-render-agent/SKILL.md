@@ -49,6 +49,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - 发生应用异常时先调用 `inspect_app_health`；只能把 `availableRepairs` 返回的 id 交给 `apply_safe_repair`，由 host 强制确认并复检/回滚。
 - 运行诊断放在 Main IPC，必须脱敏路径、凭证和正文。远端 `ai-proxy` 不是用户本机的修复通道。
 - 健康快照会在 Electron 主线程执行，数据库检查只能用常量时间的轻量查询（如 `schema_version`）；禁止同步执行 `PRAGMA quick_check`、全表 `COUNT(*)` 等随数据量增长的扫描，15GB 级数据库会直接卡死整个 app。深度完整性检查应另做后台任务。
+- 发送消息前只用 `buildWorkspaceRelatedRefs` 匹配简报里的最近文档指针，不要逐关键词等待全文检索。显式召回/搜索通过 `db:search` 走 `databaseSearch.js` → 独立只读 `databaseSearchWorker.js`，查询失败应如实报错，不在 renderer 重扫全部正文。Worker 入口必须登记到 `vite.config.js` 的 Electron main entries，创建线程时用 Node 文件路径，避免 Vite 按浏览器 Worker 重写 `new Worker(new URL(...))`；慢查询超时后，旧线程退出前禁止重建线程，防止重复查询积累。
 - 已打包客户端不能自改 asar；代码缺陷应生成 `incident_report`，再进入仓库 Agent、CI 与签名发版。
 
 安全修复流程固定为：`inspect → confirm → apply → verify → rollback on failure`。不要新增通用 shell、任意路径或自由 patch 工具。
