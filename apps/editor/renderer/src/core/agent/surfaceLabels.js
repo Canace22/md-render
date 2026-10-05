@@ -7,7 +7,6 @@ export const SURFACE_LABELS = Object.freeze({
   publishing: '发布队列',
   search: '知识库搜索',
   graph: '关系图谱',
-  sync: '同步中心',
   settings: '设置',
   paper: '文档工作区',
   folder: '文件夹',

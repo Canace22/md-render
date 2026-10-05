@@ -15,7 +15,6 @@ export const APP_SURFACES = Object.freeze([
   { id: 'publishing', label: '发布队列', description: '查看待发布内容和目标平台' },
   { id: 'search', label: '知识库搜索', description: '全文检索工作区内容' },
   { id: 'graph', label: '关系图谱', description: '查看内容引用与关联关系' },
-  { id: 'sync', label: '同步中心', description: '管理外部同步与工作区快照' },
   { id: 'settings', label: '设置', description: '管理应用、排版和服务配置' },
 ]);
 

@@ -49,7 +49,6 @@ const OPENABLE_SURFACES = new Set([
   'publishing',
   'search',
   'graph',
-  'sync',
   'settings',
 ]);
 
@@ -66,7 +65,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
     type: 'function',
     function: {
       name: 'open_surface',
-      description: '切换 app 主界面。可用于打开总览、文档工作区、今日速记、灵感白板、创作看板、发布队列、知识库搜索、关系图谱、同步中心或设置。',
+      description: '切换 app 主界面。可用于打开总览、文档工作区、今日速记、灵感白板、创作看板、发布队列、知识库搜索、关系图谱或设置。',
       parameters: {
         type: 'object',
         properties: {
