@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Popover, Select } from 'antd';
 import { useEditorStore } from '../store/useEditorStore.js';
 import logoUrl from '../assets/logo.png';
+import FileConvertMenuItems from './FileConvertMenuItems.jsx';
 import {
   File,
   Folder,
@@ -415,6 +416,7 @@ const TreeNode = ({
               <Trash2 size={14} strokeWidth={1.5} /> 移除项目
             </button>
           )}
+          <FileConvertMenuItems onBeforeRun={onCloseContextMenu} />
         </div>
       )}
 
@@ -1077,6 +1079,7 @@ const WorkspaceSidebar = ({
                 <button type="button" onClick={() => handleCreateFromSidebar('folder', contextMenu.nodeId)}>
                   <Folder size={14} strokeWidth={1.5} /> 新建文件夹
                 </button>
+                <FileConvertMenuItems onBeforeRun={closeContextMenu} />
               </div>
             )}
           </div>
