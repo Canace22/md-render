@@ -47,3 +47,69 @@
 ---
 
 **新增 skill**：走 `skill-harvest` 的规范。**改 `ai-editorial-board`**：`core/agent/editorialBoard.js` 在构建期用 `?raw` 内联 `SKILL.md`，改完跑 `pnpm test:unit`（`editorial-board.test.js` 按章节标题提取，别改标题）。
+
+---
+
+## 产品 skill 格式（app 内 AI 功能）
+
+本目录放的是**开发 skill**（教 agent 改 md-render 的代码）。**产品 skill**（教 agent 做内容：出公众号版、审稿、扩写……）放在另外两处，格式相同：
+
+| 来源 | 路径 | 说明 |
+|---|---|---|
+| 内置 | `apps/editor/resources/skills/<name>/` | 随 app 打包（renderer 构建期 `?raw` 内联） |
+| 内容库 | `~/Documents/MdRender/.agents/skills/<name>/` | 用户自建或覆盖内置；改完不用重启 |
+
+两处有同名 skill（按 `SKILL.md` 的 `name`，没写就用目录名）时，**内容库覆盖内置**。
+
+### 目录结构
+
+```
+<name>/
+├── SKILL.md               # 必需：prompt 正文，任何 agent 都能直接用
+└── agents/md-render.yaml  # 可选：只给 md-render 用的入口声明，外部 agent 忽略
+```
+
+### `SKILL.md`
+
+```markdown
+---
+name: wechat-version
+description: 把母稿改写成公众号版本，另存为派生稿，不改原文。用户说「出公众号版」时使用。
+---
+1. 调用 read_active_doc 读取母稿全文。
+2. 按以下要求改写：……
+3. 用 create_agent_artifact 另存为派生稿，来源关联母稿。不要修改母稿。
+```
+
+- `name`：skill id，小写字母、数字、`-`。缺省用目录名。
+- `description`：一句话说明做什么、什么时候用。
+- 正文：直接给模型的指令。不能为空。
+
+### `agents/md-render.yaml`
+
+```yaml
+label: 公众号版                      # 界面显示名，缺省用 name
+group: 平台版                        # 可选，界面分组
+entry: [slash, welcome, doc-toolbar] # 出现在哪些入口
+input: active_doc                    # 运行时自动带上什么
+tools: [read_active_doc, create_agent_artifact]  # 允许调用的工具（白名单）
+output: artifact                     # 产出形态
+```
+
+| 字段 | 取值 | 缺省 |
+|---|---|---|
+| `label` | 任意文本 | `name` |
+| `group` | 任意文本 | 空 |
+| `entry` | `slash`（slash 列表）· `welcome`（欢迎页建议）· `doc-toolbar`（文档工具栏） | `[slash]` |
+| `input` | `active_doc`（当前文档）· `selection`（选中文本）· `none` | `none` |
+| `tools` | 工具名列表，见 `core/agent/toolRegistry.js` | `[]`（只对话，不调工具） |
+| `output` | `artifact`（生成派生稿）· `proposal`（改当前稿，需确认）· `answer`（只回复） | `answer` |
+
+规则：
+
+- 只支持「`key: 值`」、行内列表 `[a, b]` 和 `- 项` 列表，不支持嵌套对象。
+- 字段取值不合法（如 `entry: [sidebar]`）→ 这个 skill 被跳过，并在 AI 面板提示原因，不影响其他 skill。
+- 不认识的字段忽略，方便以后加字段。
+- **skill 不能带代码**。需要代码的事情做成工具（`toolRegistry`），skill 只声明用哪些工具。
+
+解析逻辑在 `apps/editor/renderer/src/core/agent/skillRegistry.js`（纯函数，有单测）。
