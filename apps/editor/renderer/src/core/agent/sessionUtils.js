@@ -5,6 +5,7 @@
  *   { id, title, messages: [], history: [], createdAt }
  *   - messages: 给 UI 显示的消息（{ role, text } 或 { role:'tool', label, status }）
  *   - history:  给模型复用的 OpenAI 格式对话历史
+ *   - agentId / externalSessionId: 本地 agent 的会话续接（Codex threadId / Claude sessionId / Cursor chatId）
  */
 
 let seq = 0;
@@ -15,8 +16,22 @@ export const createSession = (title = '新会话') => ({
   title,
   messages: [],
   history: [],
+  agentId: '',
+  externalSessionId: '',
   createdAt: Date.now(),
 });
+
+/**
+ * 本地 agent 这一轮怎么续：同一个 agent 用 resume；换了 agent（或之前用的是 API 服务商）就开新会话。
+ * switched=true 时面板提示「已切换到 X，新会话开始」。
+ */
+export const resolveLocalAgentSession = (session, agentId) => {
+  if (session?.agentId === agentId && session.externalSessionId) {
+    return { externalSessionId: session.externalSessionId, switched: false };
+  }
+  const hadConversation = (session?.messages ?? []).some((item) => item.role === 'user');
+  return { externalSessionId: '', switched: hadConversation && session?.agentId !== agentId };
+};
 
 /** 从首条用户消息派生会话标题（截断） */
 export const deriveTitle = (text, maxLen = 18) => {

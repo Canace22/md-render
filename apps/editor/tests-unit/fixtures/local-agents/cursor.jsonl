@@ -1,0 +1,11 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work","session_id":"c3f1-cursor-chat","model":"Auto","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"把草稿标题改一下"}]},"session_id":"c3f1-cursor-chat"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"我先看看目录。"}]},"session_id":"c3f1-cursor-chat"}
+{"type":"tool_call","subtype":"started","call_id":"call_1","tool_call":{"shellToolCall":{"args":{"command":"ls docs"}}},"session_id":"c3f1-cursor-chat"}
+{"type":"tool_call","subtype":"completed","call_id":"call_1","tool_call":{"shellToolCall":{"args":{"command":"ls docs"},"result":{"success":{"exitCode":0,"stdout":"草稿.md"}}}},"session_id":"c3f1-cursor-chat"}
+{"type":"tool_call","subtype":"started","call_id":"call_2","tool_call":{"editToolCall":{"args":{"path":"/work/docs/草稿.md"}}},"session_id":"c3f1-cursor-chat"}
+{"type":"tool_call","subtype":"completed","call_id":"call_2","tool_call":{"editToolCall":{"args":{"path":"/work/docs/草稿.md"},"result":{"success":{"linesAdded":1,"linesRemoved":1}}}},"session_id":"c3f1-cursor-chat"}
+{"type":"tool_call","subtype":"started","call_id":"call_3","tool_call":{"mcpToolCall":{"args":{"providerIdentifier":"md-render","toolName":"read_active_doc","args":{}}}},"session_id":"c3f1-cursor-chat"}
+{"type":"tool_call","subtype":"completed","call_id":"call_3","tool_call":{"mcpToolCall":{"args":{"providerIdentifier":"md-render","toolName":"read_active_doc","args":{}},"result":{"error":{"message":"md-render 没在运行"}}}},"session_id":"c3f1-cursor-chat"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"已经把草稿的标题改好了。"}]},"session_id":"c3f1-cursor-chat"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":4100,"result":"我先看看目录。已经把草稿的标题改好了。","session_id":"c3f1-cursor-chat"}

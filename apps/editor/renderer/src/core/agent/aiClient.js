@@ -10,6 +10,18 @@
  */
 
 import { AI_PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from './aiProviders.js';
+import { getLocalAgent, isRunnableAgent } from '../../../../shared/localAgents.js';
+import {
+  SOURCE_KINDS,
+  buildAiSourceList,
+  getDetectedLocalAgents,
+  isLocalAgentSafeMode,
+  parseSourceId,
+  pickDefaultSource,
+  readSavedSourceId,
+  readSourceModel,
+  saveActiveSourceId,
+} from './aiSources.js';
 
 const ACTIVE_PROVIDER_KEY = 'md-renderer-ai-provider';
 const AI_SERVER_STORAGE_KEY = 'md-renderer-ai-server';
@@ -129,12 +141,61 @@ export const saveProviderConfig = (providerId, { model } = {}) => {
   if (model !== undefined) writeLocalStorage(providerModelStorageKey(providerId), model);
 };
 
+// ── AI 来源（本机 agent + API 服务商，L2）──────────────────
+
+const builtinProviderIds = () => (_serverProvidersCache ?? [])
+  .filter((provider) => provider.hasBuiltinKey)
+  .map((provider) => provider.id);
+
+/** 面板 / 设置页的来源列表（本机 agent 用最近一次检测结果） */
+export const listAiSources = () => buildAiSourceList({
+  detected: getDetectedLocalAgents(),
+  builtinProviders: builtinProviderIds(),
+});
+
+/** 当前来源 id：默认选中规则见 pickDefaultSource；都没有时退回当前服务商 */
+export const getActiveSourceId = () => (
+  pickDefaultSource(getDetectedLocalAgents(), readSavedSourceId(), builtinProviderIds()) || getActiveProviderId()
+);
+
+/** 切换来源；API 服务商同时更新旧的 provider 选择，保持兼容 */
+export const setActiveSource = (sourceId) => {
+  saveActiveSourceId(sourceId);
+  const parsed = parseSourceId(sourceId);
+  if (parsed.kind === SOURCE_KINDS.API) setActiveProvider(parsed.id);
+};
+
+const findDetected = (agentId) => getDetectedLocalAgents().find((item) => item.id === agentId) || null;
+
 /**
- * 当前选中服务商是否已配置好。
+ * 当前来源的运行配置。
+ * - 本机 agent：{ kind: 'local', sourceId, agentId, label, model, safeMode }
+ * - API 服务商：{ kind: 'api', sourceId, ...readProviderConfig() }
+ */
+export const getActiveSource = (sourceId = getActiveSourceId()) => {
+  const parsed = parseSourceId(sourceId);
+  if (parsed.kind === SOURCE_KINDS.LOCAL) {
+    return {
+      kind: SOURCE_KINDS.LOCAL,
+      sourceId,
+      agentId: parsed.id,
+      label: getLocalAgent(parsed.id)?.label ?? parsed.id,
+      model: readSourceModel(sourceId),
+      safeMode: isLocalAgentSafeMode(),
+      available: isRunnableAgent(findDetected(parsed.id)),
+    };
+  }
+  return { kind: SOURCE_KINDS.API, sourceId, available: true, ...readProviderConfig(parsed.id) };
+};
+
+/**
+ * 当前来源是否能直接用：本机 agent 要已检测到且可运行；
  * 走 server 的 provider 自动可用。
  */
 export const isAiConfigured = () => {
-  const { providerId } = readProviderConfig();
+  const source = getActiveSource();
+  if (source.kind === SOURCE_KINDS.LOCAL) return source.available;
+  const { providerId } = source;
   if (hasBuiltinKey(providerId)) return true;
   // 自定义 provider 或 Web 模式需要 server 地址
   return hasAiBridge() ? true : Boolean(resolveAiServerBase());

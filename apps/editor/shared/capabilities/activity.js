@@ -5,10 +5,11 @@
 
 import { isFailureResult } from '../agentBridgeTools.js';
 
-export const ACTIVITY_SOURCES = Object.freeze({ APP: 'app', MCP: 'mcp', EXTERNAL: 'external' });
+export const ACTIVITY_SOURCES = Object.freeze({ APP: 'app', MCP: 'mcp', EXTERNAL: 'external', LOCAL_AGENT: 'local-agent' });
 
 const SUMMARY_MAX_CHARS = 80;
-const TARGET_KEYS = ['id', 'ids', 'docId', 'targetId', 'proposalId', 'targetFolderId', 'dateKey'];
+// path：本地 agent 改的文件路径（不是正文）
+const TARGET_KEYS = ['id', 'ids', 'docId', 'targetId', 'proposalId', 'targetFolderId', 'dateKey', 'path'];
 const pad2 = (value) => String(value).padStart(2, '0');
 
 const truncate = (text, max = SUMMARY_MAX_CHARS) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);

@@ -30,7 +30,7 @@ import { formatTaskContextPacket } from './taskContext.js';
 const DEFAULT_MAX_STEPS = 8;
 
 // 引擎通用行为：和具体产品无关。产品知识和工具使用规则在 shared/appKnowledge.js（MCP 也用同一份）。
-const ENGINE_RULES = [
+export const ENGINE_RULES = [
   '你是 md-render 内容创作工作台里的 AI 助手，不只是聊天，还要直接操作这个 app。',
   '工作方式：先用工具了解情况，再动手。',
   '当你需要用户在 2-6 个选项里做选择时，先用一句话说明要选什么，然后在回复末尾追加一个 HTML 注释协议，格式必须是：',

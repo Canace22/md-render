@@ -7,7 +7,8 @@ import { getToolLabel } from '../core/agent/toolRegistry.js';
 import { fetchActivityEntries, isAgentDataSupported } from '../utils/agentDataBridge.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SOURCE_LABELS = Object.freeze({ app: 'app 内 AI', mcp: '外部 AI', external: '外部改动' });
+const SOURCE_LABELS = Object.freeze({ app: 'app 内 AI', mcp: '外部 AI', external: '外部改动', 'local-agent': '本机 agent' });
+const CLIENT_NAMED_SOURCES = new Set(['mcp', 'local-agent']);
 
 const shiftDateKey = (dateKey, days) => activityDateKey(new Date(`${dateKey}T12:00:00`).getTime() + days * DAY_MS);
 
@@ -20,7 +21,7 @@ const formatTarget = (target = {}) => Object.values(target)
   .map((value) => (Array.isArray(value) ? value.join('、') : String(value)))
   .join(' · ');
 
-const sourceLabel = (entry) => (entry.who === 'mcp' && entry.client ? entry.client : SOURCE_LABELS[entry.who] || entry.who);
+const sourceLabel = (entry) => (CLIENT_NAMED_SOURCES.has(entry.who) && entry.client ? entry.client : SOURCE_LABELS[entry.who] || entry.who);
 
 /** 某天的记录：桌面版读 .agent/activity 文件，Web 版用内存里的 */
 const loadEntries = async (dateKey) => {

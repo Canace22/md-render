@@ -896,6 +896,9 @@ export const executeTool = async (toolCall, host) => {
  */
 const _localToolLabels = Object.freeze({
   ...DOC_TOOL_LABELS,
+  // 本机 agent（Codex / Claude Code / Cursor）自己的改动，只出现在活动记录里
+  local_agent_edit_file: '改文件',
+  local_agent_run_command: '运行命令',
   open_surface: '切换界面',
   open_canvas: '打开灵感白板',
   append_canvas_cards: '追加白板卡片',

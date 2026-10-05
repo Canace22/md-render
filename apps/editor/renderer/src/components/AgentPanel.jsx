@@ -29,6 +29,10 @@ import AgentKnowledgeSources from './AgentKnowledgeSources.jsx';
 import AgentSkillsTab from './AgentSkillsTab.jsx';
 import AgentActivityTab from './AgentActivityTab.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
+import { pickAgentProjectRoot, runLocalAgent } from '../core/agent/localAgentClient.js';
+import { useAiSource } from '../hooks/useAiSource.js';
+import AgentSourcePicker from './AgentSourcePicker.jsx';
+import AgentLocalSources from './AgentLocalSources.jsx';
 import {
   EDITORIAL_MEMORY_DOC_NAME,
   MEMORY_CATEGORIES,
@@ -40,7 +44,7 @@ import { createHost } from '../core/agent/createHost.js';
 import { recordToolActivity } from '../core/agent/activityLog.js';
 import { getSurfaceLabel } from '../core/agent/surfaceLabels.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
-import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
+import { buildInputWithAttachments, resolveLocalAgentSession } from '../core/agent/sessionUtils.js';
 import {
   buildActiveDocMeta,
   buildContentAssetPointer,
@@ -70,6 +74,7 @@ import {
   normalizeDateKey,
 } from '../utils/dailyWorkspace.js';
 import {
+  getActiveSource,
   isAiConfigured,
   listProviders,
   getActiveProviderId,
@@ -245,6 +250,7 @@ export default function AgentPanel({ onClose }) {
   const appendAgentMessage = useEditorStore((s) => s.appendAgentMessage);
   const updateAgentMessages = useEditorStore((s) => s.updateAgentMessages);
   const setAgentHistory = useEditorStore((s) => s.setAgentHistory);
+  const setAgentExternalSession = useEditorStore((s) => s.setAgentExternalSession);
 
   // 编辑器「引用到 AI」暂存的选中文字（发送时拼进 prompt，发送后清空）
   const quotedSelection = useEditorStore((s) => s.aiQuotedSelection);
@@ -315,6 +321,8 @@ export default function AgentPanel({ onClose }) {
   const [aiServerBase, setAiServerBase] = useState(() => readAiServerBase());
   const [knowledgeSources, setKnowledgeSources] = useState(() => loadKnowledgeSources());
   const [serverProvidersReady, setServerProvidersReady] = useState(false);
+  // AI 来源：本机 agent（Codex / Claude Code / Cursor）或 API 服务商
+  const aiSource = useAiSource({ providersReady: serverProvidersReady });
   const abortRef = useRef(null);
   const activeRunIdRef = useRef(0);
   const runLockRef = useRef(false);
@@ -532,6 +540,12 @@ export default function AgentPanel({ onClose }) {
     }
     const sessionId = activeSessionId;
     if (!sessionId) return;
+    const source = getActiveSource();
+    const isLocalRun = source.kind === 'local';
+    const localSession = isLocalRun ? resolveLocalAgentSession(activeSession, source.agentId) : null;
+    if (localSession?.switched) {
+      appendAgentMessage(sessionId, { role: 'assistant', text: `已切换到 ${source.label}，新会话开始。` });
+    }
 
     runLockRef.current = true;
     const runId = activeRunIdRef.current + 1;
@@ -550,38 +564,52 @@ export default function AgentPanel({ onClose }) {
       const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
       if (!ownsRun() || controller.signal.aborted) return;
       setLastContextPacket(taskContext);
-      const { finalText, history } = await runAgent({
+      const onEvent = (ev) => {
+        // 工具已经执行了就要留痕，不管这一轮后来是否被取消或切走（本机 agent 的改动由 localAgentClient 自己记）
+        if (ev.type === 'tool_done' && !isLocalRun) recordToolActivity({ who: 'app', name: ev.name, args: ev.args, result: ev.result });
+        if (!ownsRun() || controller.signal.aborted) return;
+        if (ev.type === 'tool_start') {
+          setAssistantActivity('working');
+          appendAgentMessage(sessionId, {
+            role: 'tool',
+            callId: ev.callId,
+            label: ev.label,
+            status: 'running',
+          });
+        } else if (ev.type === 'tool_done') {
+          setAssistantActivity('finalizing');
+          updateAgentMessages(sessionId, (items) => finishToolMessage(items, {
+            callId: ev.callId,
+            label: ev.label,
+            status: getToolCompletionStatus(ev.result),
+            result: getArtifactResultForMessage(ev.result),
+          }));
+        }
+      };
+      const turnParams = {
         userInput: promptText,
         history: activeSession?.history ?? [],
-        config: readProviderConfig(),
         host,
         signal: controller.signal,
-        serverTools,
         taskContext,
         allowedTools,
-        onEvent: (ev) => {
-          // 工具已经执行了就要留痕，不管这一轮后来是否被取消或切走
-          if (ev.type === 'tool_done') recordToolActivity({ who: 'app', name: ev.name, args: ev.args, result: ev.result });
-          if (!ownsRun() || controller.signal.aborted) return;
-          if (ev.type === 'tool_start') {
-            setAssistantActivity('working');
-            appendAgentMessage(sessionId, {
-              role: 'tool',
-              callId: ev.callId,
-              label: ev.label,
-              status: 'running',
-            });
-          } else if (ev.type === 'tool_done') {
-            setAssistantActivity('finalizing');
-            updateAgentMessages(sessionId, (items) => finishToolMessage(items, {
-              callId: ev.callId,
-              label: ev.label,
-              status: getToolCompletionStatus(ev.result),
-              result: getArtifactResultForMessage(ev.result),
-            }));
-          }
-        },
-      });
+        onEvent,
+      };
+      const result = isLocalRun
+        ? await runLocalAgent({
+          ...turnParams,
+          config: {
+            ...source,
+            externalSessionId: localSession.externalSessionId,
+            projectRoot: pickAgentProjectRoot(workspace, selectedId),
+          },
+        })
+        : await runAgent({ ...turnParams, config: readProviderConfig(source.providerId), serverTools });
+      const { finalText, history } = result;
+      // 会话续接：同一个 agent 下一轮 resume；走 API 服务商时清空
+      setAgentExternalSession(sessionId, isLocalRun
+        ? { agentId: source.agentId, externalSessionId: result.externalSessionId || localSession.externalSessionId }
+        : {});
       if (!ownsRun() || controller.signal.aborted) return;
       setAgentHistory(sessionId, history);
       if (finalText) {
@@ -603,7 +631,7 @@ export default function AgentPanel({ onClose }) {
         if (abortRef.current === controller) abortRef.current = null;
       }
     }
-  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, serverTools, buildTurnContext]);
+  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, setAgentExternalSession, serverTools, buildTurnContext, workspace, selectedId]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -761,7 +789,19 @@ export default function AgentPanel({ onClose }) {
     setActiveProvider(nextId);
     setProviderId(nextId);
     setCfg(readProviderConfig(nextId));
-  }, []);
+    // 当前用的是 API 服务商时，改服务商就是改来源
+    if (!aiSource.isLocal) aiSource.selectSource(nextId);
+  }, [aiSource]);
+
+  // 设置页里选来源：选 API 服务商时同步下方的服务商配置
+  const handleSourceChange = useCallback((nextSourceId) => {
+    aiSource.selectSource(nextSourceId);
+    const next = getActiveSource(nextSourceId);
+    if (next.kind === 'api') {
+      setProviderId(next.providerId);
+      setCfg(readProviderConfig(next.providerId));
+    }
+  }, [aiSource]);
 
   const handleSaveSettings = useCallback(() => {
     setActiveProvider(providerId);
@@ -905,7 +945,18 @@ export default function AgentPanel({ onClose }) {
 
       {showSettings && (
         <div className="agent-panel__settings">
-          <label>服务商
+          <AgentLocalSources
+            sources={aiSource.sources}
+            activeSource={aiSource.activeSource}
+            detected={aiSource.detected}
+            detecting={aiSource.detecting}
+            safeMode={aiSource.safeMode}
+            onSelectSource={handleSourceChange}
+            onSelectModel={aiSource.selectModel}
+            onRedetect={aiSource.redetect}
+            onSafeModeChange={aiSource.setSafeMode}
+          />
+          <label>API 服务商
             <select value={providerId} onChange={(e) => handleProviderChange(e.target.value)}>
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
@@ -1087,6 +1138,13 @@ export default function AgentPanel({ onClose }) {
           </div>
         )}
 
+        {aiSource.defaultNotice && (
+          <div className="agent-panel__source-notice">
+            <span>{aiSource.defaultNotice}</span>
+            <button type="button" onClick={aiSource.dismissDefaultNotice}>知道了</button>
+          </div>
+        )}
+
         <div className="agent-panel__input-row">
           <textarea
             ref={inputRef}
@@ -1144,6 +1202,14 @@ export default function AgentPanel({ onClose }) {
           >
             @
           </button>
+          <AgentSourcePicker
+            sources={aiSource.sources}
+            activeSource={aiSource.activeSource}
+            modelOptions={aiSource.modelOptions}
+            onSelectSource={handleSourceChange}
+            onSelectModel={aiSource.selectModel}
+            disabled={running}
+          />
         </div>
       </div>
     </div>

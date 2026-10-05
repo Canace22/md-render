@@ -67,4 +67,8 @@ export const createAgentSlice = (set, get) => ({
   setAgentHistory: (sessionId, history) => set((state) => ({
     agentSessions: mapSession(state.agentSessions, sessionId, (session) => ({ ...session, history })),
   })),
+  // 本地 agent 会话续接：记住这一轮用的 agent 和它的外部会话 id；走 API 服务商时清空
+  setAgentExternalSession: (sessionId, { agentId = '', externalSessionId = '' } = {}) => set((state) => ({
+    agentSessions: mapSession(state.agentSessions, sessionId, (session) => ({ ...session, agentId, externalSessionId })),
+  })),
 });

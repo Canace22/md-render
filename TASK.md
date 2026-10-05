@@ -88,39 +88,39 @@ AgentPanel.runTurn
   - 范围：`main/localAgents/adapters/cursor.js`
 - [x] **L1-6** 注入 md-render MCP：生成 mcp-bridge 的启动配置；打包后 mcp-bridge 放进 resources，用 `process.execPath` + `ELECTRON_RUN_AS_NODE=1` 跑（用户机器不一定有 node）
   - 范围：`main/localAgents/mcpConfig.js`、`vite.config.js` / electron-builder 配置
-- [ ] **L1-7** 系统提示：`ENGINE_RULES` + `AGENT_INSTRUCTIONS`（含 agent-choice 选择卡片协议）和 app 内 AI 同源；不支持追加系统提示的 agent 拼在 prompt 开头
+- [x] **L1-7** 系统提示：`ENGINE_RULES` + `AGENT_INSTRUCTIONS`（含 agent-choice 选择卡片协议）和 app 内 AI 同源；不支持追加系统提示的 agent 拼在 prompt 开头
 - [x] **L1-8** skill 工具白名单：在 mcp-bridge 层过滤（启动时传 `MD_RENDER_ALLOWED_TOOLS` 环境变量），三家 agent 通用；`null` 表示放行全部 md-render 工具
-- [ ] **L1-9** renderer 侧 `runLocalAgent()`：和 `runAgent` 同签名、同返回值，订阅 IPC 事件转 `onEvent`；agent 自己的工具（改文件、跑命令）也映射成 `tool_start / tool_done`，标签如「改文件 xxx.md」「运行命令」
+- [x] **L1-9** renderer 侧 `runLocalAgent()`：和 `runAgent` 同签名、同返回值，订阅 IPC 事件转 `onEvent`；agent 自己的工具（改文件、跑命令）也映射成 `tool_start / tool_done`，标签如「改文件 xxx.md」「运行命令」
   - 范围：`renderer/src/core/agent/localAgentClient.js`
-- [ ] **L1-10** 活动记录：本地 agent 的每次改文件、跑命令写进活动记录（复用 U4），来源标注 agent 名
-- [ ] **L1-11** 会话续接：会话上存 `agentId` + `externalSessionId`（Codex threadId / Claude sessionId / Cursor chatId）；下一轮用 resume；切换 agent 后从新会话开始，并提示「已切换到 X，新会话开始」
+- [x] **L1-10** 活动记录：本地 agent 的每次改文件、跑命令写进活动记录（复用 U4），来源标注 agent 名
+- [x] **L1-11** 会话续接：会话上存 `agentId` + `externalSessionId`（Codex threadId / Claude sessionId / Cursor chatId）；下一轮用 resume；切换 agent 后从新会话开始，并提示「已切换到 X，新会话开始」
   - 范围：`sessionUtils.js`、`agentSlice`
-- [ ] **L1-12** 直接改文件后 app 同步：本地项目里的文件复用 `localProjectWatcher` 刷新；正在编辑的文件被改时依赖 U6（外部修改提示）
+- [x] **L1-12** 直接改文件后 app 同步：本地项目里的文件复用 `localProjectWatcher` 刷新；正在编辑的文件被改时依赖 U6（外部修改提示）
   - 已知限制：内置文档还在 SQLite（P3 未做），agent 改不到真文件，只能走 md-render MCP 工具；system prompt 里写清这一点
 
 ## L2 选择与切换
 
-- [ ] **L2-1** 统一「AI 来源」列表：本地 agent + API 服务商，带分组和状态
-  - 范围：`aiClient.js`（`listAiSources` / `getActiveSource` / `setActiveSource`），存 `md-renderer-ai-source`
-- [ ] **L2-2** 默认选中：纯函数 `pickDefaultSource(detected, saved, builtinProviders)`，规则见「原理」；`isAiConfigured()` 有可用本地 agent 即为 true
-- [ ] **L2-3** 模型列表（按来源）：
+- [x] **L2-1** 统一「AI 来源」列表：本地 agent + API 服务商，带分组和状态
+  - 范围：`aiClient.js`（`listAiSources` / `getActiveSource` / `setActiveSource`），存 `md-renderer-ai-source`；纯函数和存储在 `aiSources.js`（避免和 aiClient 循环引用），状态 hook 在 `hooks/useAiSource.js`
+- [x] **L2-2** 默认选中：纯函数 `pickDefaultSource(detected, saved, builtinProviders)`，规则见「原理」；`isAiConfigured()` 有可用本地 agent 即为 true
+- [x] **L2-3** 模型列表（按来源）：
   - Codex：跟随默认（显示 `~/.codex/config.toml` 里的 `model`）/ 预设 / 自定义
   - Claude Code：跟随默认 / `sonnet` / `opus` / `haiku` / 自定义
   - Cursor：`agent models` 返回的真实列表；失败时退回预设 + 自定义
   - API 服务商：沿用现有 `md-renderer-ai-model:<id>`
   - 「跟随默认」= 不传模型参数，让用户本地 Harness 的配置生效
-- [ ] **L2-4** 每个来源单独记住选过的模型：`md-renderer-ai-model:<sourceId>`
-- [ ] **L2-5** 安全模式（默认关）：开启后 Codex 用 `--sandbox workspace-write`、Claude 用 `--permission-mode acceptEdits`、Cursor 不加 `--force`；存 `md-renderer-local-agent-safe-mode`
+- [x] **L2-4** 每个来源单独记住选过的模型：`md-renderer-ai-model:<sourceId>`
+- [x] **L2-5** 安全模式（默认关）：开启后 Codex 用 `--sandbox workspace-write`、Claude 用 `--permission-mode acceptEdits`、Cursor 不加 `--force`；存 `md-renderer-local-agent-safe-mode`
 
 **UI（L2）**
 
-- [ ] **U1** 面板输入框旁的「来源 · 模型」切换器：一级选 agent，二级选模型；不可用的置灰并写明原因（未登录 / 即将支持）
-- [ ] **U2** 设置页「AI 来源」：检测结果、版本、路径、「重新检测」、「安全模式」开关；没检测到任何本地 agent 时显示安装指引 + 回落到 API 服务商
-- [ ] **U3** 首次打开：自动选中后用一行提示「已使用本机 Codex，可在这里切换」
+- [x] **U1** 面板输入框旁的「来源 · 模型」切换器：一级选 agent，二级选模型；不可用的置灰并写明原因（未登录 / 即将支持）
+- [x] **U2** 设置页「AI 来源」：检测结果、版本、路径、「重新检测」、「安全模式」开关；没检测到任何本地 agent 时显示安装指引 + 回落到 API 服务商
+- [x] **U3** 首次打开：自动选中后用一行提示「已使用本机 Codex，可在这里切换」
 
 ## L3 收尾
 
-- [ ] **L3-1** 单测：detect（含 `agent` 重名识别）、三个适配器的 `buildArgs / parseLine`（用录好的 JSONL 样本）、`pickDefaultSource`、Cursor `mcp.json` 合并、白名单过滤
+- [x] **L3-1** 单测：detect（含 `agent` 重名识别）、三个适配器的 `buildArgs / parseLine`（用录好的 JSONL 样本）、`pickDefaultSource`、Cursor `mcp.json` 合并、白名单过滤
   - 范围：`tests-unit/local-agents.test.js`、`tests-unit/fixtures/local-agents/*.jsonl`
 - [ ] **L3-2** 更新 `.agents/skills/md-render-agent/SKILL.md`：新增「本地 agent」一节（链路、坑、加新 agent 的步骤）
 - [ ] **L3-3** 更新 `README.md` / `docs/产品功能说明.md`：开箱即用说明、bypass 默认行为与安全模式
