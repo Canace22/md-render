@@ -16,11 +16,9 @@
  *   - 或各平台默认 userData：<userData>/md-render/agent-bridge.json
  * 也可以直接用 MD_RENDER_BRIDGE_URL + MD_RENDER_BRIDGE_TOKEN 两个环境变量跳过握手文件。
  *
- * 前提：MD Render 桌面版必须正在运行。
+ * app 没开时本 server 照常存活：每次调用都重新读握手文件，读不到就返回「md-render 没在运行」；
+ * 并定期探测，app 启动后发 tools/list_changed 通知客户端刷新工具列表。
  */
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import process from 'node:process';
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -30,31 +28,24 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-// main.js 会把 Electron userData 固定到 appData/md-render。
-// 这里必须跟实际目录一致，不能按 electron-builder productName 推断。
-const APP_DIR_NAME = 'md-render';
+import {
+  NOT_RUNNING_MESSAGE,
+  isConnectionError,
+  readToolCache,
+  resolveBridge,
+  toolCacheFilePath,
+  writeToolCache,
+} from './bridgeClient.js';
 
-/** 各平台默认 userData 目录 */
-const defaultUserDataDir = () => {
-  const home = os.homedir();
-  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support');
-  if (process.platform === 'win32') return process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-  return process.env.XDG_CONFIG_HOME || path.join(home, '.config');
-};
+/** 探测 app 是否启动 / 重启的间隔 */
+const WATCH_INTERVAL_MS = 5000;
 
-/** 读取控制桥连接信息 { url, token } */
-const resolveBridge = () => {
-  if (process.env.MD_RENDER_BRIDGE_URL && process.env.MD_RENDER_BRIDGE_TOKEN) {
-    return { url: process.env.MD_RENDER_BRIDGE_URL, token: process.env.MD_RENDER_BRIDGE_TOKEN };
-  }
-  const file =
-    process.env.MD_RENDER_BRIDGE_FILE ||
-    path.join(defaultUserDataDir(), APP_DIR_NAME, 'agent-bridge.json');
-  const raw = fs.readFileSync(file, 'utf8');
-  const info = JSON.parse(raw);
-  if (!info?.url || !info?.token) throw new Error(`握手文件缺少 url/token：${file}`);
-  return { url: info.url, token: info.token };
-};
+/** app 没开且没有缓存时，至少给客户端一个能解释现状的工具 */
+const STATUS_TOOL = Object.freeze({
+  name: 'md_render_status',
+  description: '查看 md-render 桌面版是否在运行。md-render 没开时其它工具不可用。',
+  inputSchema: { type: 'object', properties: {} },
+});
 
 const bridgeFetch = async (bridge, pathname, options = {}) => {
   const res = await fetch(`${bridge.url}${pathname}`, {
@@ -83,46 +74,81 @@ const toMcpTool = (def) => ({
   inputSchema: def.function.parameters || { type: 'object', properties: {} },
 });
 
-async function main() {
-  const bridge = resolveBridge();
+const textResult = (text, isError = false) => ({
+  content: [{ type: 'text', text: text ?? '' }],
+  isError,
+});
 
+/** 拉工具列表：app 在线就拉最新并缓存；不在线用缓存；都没有就只给状态工具 */
+const listTools = async (cacheFile) => {
+  const bridge = resolveBridge();
+  if (bridge) {
+    try {
+      const data = await bridgeFetch(bridge, '/tools');
+      const tools = (Array.isArray(data?.tools) ? data.tools : []).map(toMcpTool);
+      if (tools.length) writeToolCache(cacheFile, tools);
+      return tools;
+    } catch {
+      /* 握手文件残留或 app 正在启动：退回缓存 */
+    }
+  }
+  const cached = readToolCache(cacheFile);
+  return cached.length ? cached : [STATUS_TOOL];
+};
+
+/** 调用一次工具：每次都重新读握手文件，app 重启后不用重启 MCP 客户端 */
+const callTool = async (name, args) => {
+  const bridge = resolveBridge();
+  if (name === STATUS_TOOL.name) {
+    return textResult(bridge ? 'md-render 正在运行。' : NOT_RUNNING_MESSAGE, !bridge);
+  }
+  if (!bridge) return textResult(NOT_RUNNING_MESSAGE, true);
+  try {
+    const data = await bridgeFetch(bridge, '/invoke', {
+      method: 'POST',
+      body: JSON.stringify({ name, args: args || {} }),
+    });
+    const result = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
+    return textResult(result, data.ok === false);
+  } catch (error) {
+    return textResult(isConnectionError(error) ? NOT_RUNNING_MESSAGE : `调用失败：${error.message}`, true);
+  }
+};
+
+/** 定期看握手文件：app 启动 / 重启（url 变化）后通知客户端刷新工具列表 */
+const watchBridge = (server) => {
+  let lastUrl = resolveBridge()?.url ?? null;
+  const timer = setInterval(() => {
+    const url = resolveBridge()?.url ?? null;
+    if (url === lastUrl) return;
+    lastUrl = url;
+    if (url) server.sendToolListChanged().catch(() => {});
+  }, WATCH_INTERVAL_MS);
+  timer.unref?.();
+};
+
+async function main() {
+  const cacheFile = toolCacheFilePath();
   const server = new Server(
-    { name: 'md-render-bridge', version: '0.1.0' },
-    { capabilities: { tools: {} } },
+    { name: 'md-render-bridge', version: '0.2.0' },
+    { capabilities: { tools: { listChanged: true } } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const data = await bridgeFetch(bridge, '/tools');
-    const tools = Array.isArray(data?.tools) ? data.tools : [];
-    return { tools: tools.map(toMcpTool) };
-  });
-
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await listTools(cacheFile) }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    try {
-      const data = await bridgeFetch(bridge, '/invoke', {
-        method: 'POST',
-        body: JSON.stringify({ name, args: args || {} }),
-      });
-      const result = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
-      return {
-        content: [{ type: 'text', text: result ?? '' }],
-        isError: data.ok === false,
-      };
-    } catch (error) {
-      return {
-        content: [{ type: 'text', text: `调用失败：${error.message}` }],
-        isError: true,
-      };
-    }
+    return callTool(name, args);
   });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[md-render-mcp] connected to bridge at', bridge.url);
+  watchBridge(server);
+  const bridge = resolveBridge();
+  console.error('[md-render-mcp] started;', bridge ? `bridge at ${bridge.url}` : 'md-render 未运行，等待启动');
 }
 
 main().catch((error) => {
+  // 只有 stdio 本身起不来才退出；app 没开不算致命错误
   console.error('[md-render-mcp] fatal:', error.message);
   process.exit(1);
 });

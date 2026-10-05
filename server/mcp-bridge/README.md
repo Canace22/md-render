@@ -36,7 +36,11 @@ npm install
 }
 ```
 
-保存后重启 Claude Desktop。**确保 MD Render 桌面版正在运行**，否则握手文件不存在、工具列表为空。
+保存后重启 Claude Desktop。MD Render 桌面版可以先开也可以后开：
+
+- 没开时，工具调用会返回「md-render 没在运行」（`isError: true`），不会让 MCP server 退出；
+- app 启动或重启后，server 每 5 秒探测一次握手文件，发现变化就通知客户端刷新工具列表，**不用重启 Claude Desktop**；
+- 上次成功拉到的工具列表会缓存在握手文件同目录的 `agent-bridge-tools.cache.json`，app 没开时先用它注册工具。
 
 ## 环境变量（可选）
 
@@ -57,5 +61,6 @@ npm install
 
 ## 排查
 
-- 工具列表为空 / 连接失败 → 确认 MD Render 桌面版在运行，且握手文件存在。
+- 只看到 `md_render_status` 一个工具 → app 没开且还没有缓存；打开 app 后客户端会收到刷新通知。
+- 返回「md-render 没在运行」→ 确认 MD Render 桌面版在运行，且握手文件存在（app 退出时会删除它）。
 - `curl http://127.0.0.1:<port>/health` 应返回 `{"ok":true}`（端口见握手文件）。
