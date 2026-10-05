@@ -26,7 +26,8 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加功能、加工
 
 - **桌面 app（Electron，默认）**：Renderer 走 IPC `window.electronAPI.ai.chat` → `apps/editor/main/aiRequest.js` → `server/ai-proxy` 的 `/api/chat`。这条路没有浏览器 CORS，但如果 `server/ai-proxy` 没启动或 `AI_PROXY_BASE` 指错，面板会报 AI 代理连接失败。
 - **Web 端兜底**：没有 IPC 时 `aiClient` 才直接 fetch `server/ai-proxy`（需配 `VITE_AI_PROXY` / 运行时代理地址）。
-- `aiClient.hasAiBridge()` 判断当前走哪条路；`isAiConfigured()` 在 Electron 下只校验 key，Web 下还要校验代理地址。
+- `aiClient.hasAiBridge()` 判断当前走哪条路；`isAiConfigured()`：当前来源是本机 agent 时看它是否可运行，是 API 服务商时 Electron 下只校验 key，Web 下还要校验代理地址。
+- **本机 agent（桌面版）**：不走 ai-proxy，见下方「本地 agent」一节。
 - 改 AI 调用时优先保留 IPC 路径；代理地址优先级是：AI 面板本机设置（localStorage `md-renderer-ai-server`，由 renderer 透传给 IPC）→ 打包时从 `AI_PROXY_BASE` / `VITE_AI_PROXY` 注入的默认值 → main 进程运行时 `AI_PROXY_BASE` → `http://localhost:8788`。
 - 打包后如果看到还在连 `localhost:8788`，先查 `apps/editor/.env` 是否有 `AI_PROXY_BASE`、`apps/editor/vite.config.js` 是否把它注入到 `__MD_RENDER_AI_PROXY_BASE__`、以及 `AgentPanel.jsx` / `aiClient.js` 是否把保存的 `aiProxyBase` 传给 `window.electronAPI.ai.chat/execTool/listTools`。
 - 开发启动用 `pnpm electron:dev` / `pnpm --filter @md-render/editor electron:dev`，脚本会先探活本地 ai-proxy，没启动就自动拉起；如果设置了远程 `AI_PROXY_BASE` 则跳过本地服务。
@@ -129,6 +130,23 @@ AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工
 - 返回结果必须包含来源名、标题和 URL；Agent prompt 要求保留引用，来源失败或未命中时如实说明。
 - 新增来源优先复用同一查询契约 `{ query, sources }`，不要每接一个站点就新增一套 IPC 或工具。
 - 「我写过类似文章吗 / 有没有相关旧文」属于跨来源召回：`recall_related_docs` 应在一个执行器里同时查工作区和外挂知识库，返回分组结果。不要只靠 system prompt 要求模型先后调用两个工具，否则模型很容易只完成本地搜索。
+
+## 本地 agent（Codex / Claude Code / Cursor）
+
+打开 AI 助手不用填 key：自动检测本机装的 agent CLI，一整轮交给它跑，用的是用户自己的登录、AGENTS.md / CLAUDE.md、skills、MCP。
+
+- **链路**：`AgentPanel.runTurn` 按当前来源分流——API 服务商走 `runAgent`，本机 agent 走 `core/agent/localAgentClient.js` 的 `runLocalAgent`（同签名同返回值）→ IPC `local-agent:run` → `main/ipc/localAgentHandlers.js` 拼参数 → `main/localAgents/runner.js` spawn → 适配器 `parseLine` 把 JSONL 转成统一事件 → `local-agent:event` 推回 renderer → 翻译成 `tool_start / tool_done / done`。
+- **模块**：注册表 `shared/localAgents.js`（main 和 renderer 共用）；检测 `detect.js` + `shellEnv.js`；适配器 `main/localAgents/adapters/`；MCP 注入 `mcpConfig.js`；工作目录 `workDir.js`；来源/默认选中/模型/安全模式 `core/agent/aiSources.js` + `aiClient.js`（`getActiveSource` / `setActiveSource`）；状态 hook `hooks/useAiSource.js`；UI `AgentSourcePicker.jsx`、`AgentLocalSources.jsx`。
+- **md-render 工具**：通过 `server/mcp-bridge` 借给 agent（Codex 用 `-c mcp_servers...`，Claude 用 `--mcp-config`，Cursor 写工作目录 `.cursor/mcp.json` 只合并 `md-render` 一项）。bridge 用 Electron 自身跑（`ELECTRON_RUN_AS_NODE=1`），打包时 esbuild 打成 `resources/mcp-bridge/index.mjs`。skill 白名单经 `MD_RENDER_ALLOWED_TOOLS` 在 bridge 层过滤。
+- **会话续接**：会话存 `agentId + externalSessionId`，同一 agent 下一轮 resume；换 agent 开新会话并提示。
+- **加一个新 agent**：① `shared/localAgents.js` 加一条（bins、priority、supported、loginCheckArgs、modelPresets、installHint/loginHint）；② 在 `adapters/` 写 `buildArgs` + `createParser`（复用 `adapters/common.js`）并在 `adapters/index.js` 登记；③ 录一份 JSONL 样本放 `tests-unit/fixtures/local-agents/`，在 `local-agents.test.js` 的 `it.each` 里加上。
+- **坑**：
+  - macOS 从 Finder 启动的 Electron 不继承 shell 的 PATH / 代理变量：检测和 spawn 都用 `getAgentEnv()`（login shell 环境），别直接用 `process.env`。
+  - Cursor 新命令叫 `agent`，名字太通用：先找 `cursor-agent`，`agent` 要靠真实路径或日期格式版本号确认是 Cursor。
+  - Stop 要连 agent 拉起的 shell 一起停：运行器用独立进程组 + 守护进程，别改成 `child.kill()`。
+  - Codex 断线重连会发 `error` 事件但还在继续，不能当失败；Cursor 的 `result.result` 会把所有文字串起来，最终答复取最后一次工具调用之后的文字。
+  - 默认 bypass 权限（用户拍板），`cwd` 限定在本地项目或内容库根目录（`workDir.js` 拒绝 home、根目录和系统目录）。
+  - 本机 agent 的改文件 / 跑命令由 `localAgentClient` 记活动记录（`who: 'local-agent'`），面板 `onEvent` 不要再记一遍；md-render 工具的调用由控制桥那边记。
 
 ## 不看代码想不到的坑
 

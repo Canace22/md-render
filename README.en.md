@@ -25,9 +25,15 @@ Open <https://canace22.github.io/md-render/> — nothing to install.
 
 **Heads-up: the web version stores everything in your current browser only.** Clearing browser data or switching computers means losing your content. For ongoing writing, use the desktop app; if you stick with the web version, export a backup regularly from **设置 → 备份（JSON）** (Settings → Backup).
 
-### Want the AI assistant? Connect a model first
+### AI assistant: works with your Codex / Claude Code / Cursor
 
-Out of the box, **the AI assistant won't reply**. It needs a small relay service (`server/ai-proxy`) that holds your model API key. MiniMax and DeepSeek are supported out of the box; other OpenAI-compatible APIs can be added by picking "自定义" (Custom) in the assistant's settings.
+On desktop, the assistant detects the agents installed on your machine (Codex first, then Claude Code, then Cursor) and picks one, **no API key needed**. It runs with your own login, `AGENTS.md` / `CLAUDE.md`, skills and MCP, and md-render's tools are lent to it. Switch agent and model from the button next to the input box; "跟随默认" (follow default) uses your agent's own config.
+
+By default the agent can edit files and run commands in the working folder (the open local project, or the content vault) without asking each time; every step shows up in the panel and the Activity tab, and Stop also kills the commands it started. Turn on **Settings → 安全模式 (safe mode)** to only allow file edits.
+
+### No local agent? Connect a model API
+
+Without a local agent, the assistant uses an API provider. It needs a small relay service (`server/ai-proxy`) that holds your model API key. MiniMax and DeepSeek are supported out of the box; other OpenAI-compatible APIs can be added by picking "自定义" (Custom) in the assistant's settings.
 
 Running it locally takes three steps (requires Node.js):
 

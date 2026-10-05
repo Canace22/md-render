@@ -122,8 +122,8 @@ AgentPanel.runTurn
 
 - [x] **L3-1** 单测：detect（含 `agent` 重名识别）、三个适配器的 `buildArgs / parseLine`（用录好的 JSONL 样本）、`pickDefaultSource`、Cursor `mcp.json` 合并、白名单过滤
   - 范围：`tests-unit/local-agents.test.js`、`tests-unit/fixtures/local-agents/*.jsonl`
-- [ ] **L3-2** 更新 `.agents/skills/md-render-agent/SKILL.md`：新增「本地 agent」一节（链路、坑、加新 agent 的步骤）
-- [ ] **L3-3** 更新 `README.md` / `docs/产品功能说明.md`：开箱即用说明、bypass 默认行为与安全模式
+- [x] **L3-2** 更新 `.agents/skills/md-render-agent/SKILL.md`：新增「本地 agent」一节（链路、坑、加新 agent 的步骤）
+- [x] **L3-3** 更新 `README.md` / `docs/产品功能说明.md`：开箱即用说明、bypass 默认行为与安全模式
 
 ## 后续（本期不做）
 
