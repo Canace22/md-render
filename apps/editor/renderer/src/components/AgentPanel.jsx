@@ -359,7 +359,9 @@ export default function AgentPanel({ onClose }) {
     return list.slice(0, 20);
   }, [mdFiles, fileFilter]);
   // 产品 skill：内置 + 内容库（MdRender/.agents/skills），改文件后自动刷新
-  const { skills: registrySkills, warnings: skillWarnings } = useSkillRegistry();
+  const { skills: registrySkills, warnings: skillWarnings, loaded: skillsLoaded } = useSkillRegistry();
+  const agentSkillRequest = useEditorStore((s) => s.agentSkillRequest);
+  const clearAgentSkillRequest = useEditorStore((s) => s.clearAgentSkillRequest);
   const skillItems = useMemo(() => registrySkills.map(toSkillItem), [registrySkills]);
   const welcomeItems = useMemo(() => pickSkillItems(skillItems, 'welcome'), [skillItems]);
   const composerItems = useMemo(() => pickSkillItems(skillItems, 'composer'), [skillItems]);
@@ -1137,6 +1139,23 @@ export default function AgentPanel({ onClose }) {
       allowedTools: turn.allowedTools,
     });
   }, [running, registrySkills, quotedSelection, attachedFiles, clearAiQuotedSelection, runTurn]);
+
+  // 文档工具栏等外部入口请求运行 skill：内容库 skill 读完后再找，找到就跑，跑不了就提示
+  useEffect(() => {
+    if (!agentSkillRequest) return;
+    const skill = findSkillById(registrySkills, agentSkillRequest.skillId);
+    if (!skill && !skillsLoaded) return;
+    clearAgentSkillRequest();
+    if (!skill) {
+      message.warning(`找不到 skill「${agentSkillRequest.skillId}」`);
+      return;
+    }
+    if (running) {
+      message.info('AI 正在处理上一个任务，稍后再试');
+      return;
+    }
+    runSkill(skill.id);
+  }, [agentSkillRequest, registrySkills, skillsLoaded, running, runSkill, clearAgentSkillRequest]);
 
   const handleShortcutClick = useCallback((item) => {
     setActivePanelTab('chat');

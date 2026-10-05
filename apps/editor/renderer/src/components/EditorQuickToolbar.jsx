@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { EditorToolbar } from '@narrative/blocknote-core';
-import { Eye, Copy, ClipboardCopy, Check } from 'lucide-react';
+import { Eye, Copy, ClipboardCopy, Check, Sparkles } from 'lucide-react';
 
 /** 「已复制！」提示的持续时长（ms） */
 const COPIED_HINT_DURATION = 2000;
@@ -23,6 +23,8 @@ export default function EditorQuickToolbar({
   onCopyWeChat,
   onCopyRichText,
   copyStyleName,
+  skillActions = [],
+  onRunSkill,
 }) {
   const [copied, setCopied] = useState(false);
   const [richCopied, setRichCopied] = useState(false);
@@ -87,6 +89,25 @@ export default function EditorQuickToolbar({
       },
     },
   ];
+
+  // 平台版等 AI 动作：来自 entry 含 doc-toolbar 的 skill，点击后交给 AI 面板运行
+  if (skillActions.length > 0) {
+    entries.unshift({
+      type: 'toolbar-dropdown',
+      key: 'skill-actions',
+      triggerPlaceholder: '平台版',
+      triggerHint: '用 AI 生成平台版本（另存为新文档）',
+      items: skillActions.map((skill) => ({
+        title: skill.label,
+        icon: <Sparkles size={14} strokeWidth={1.9} />,
+        skipFocusEditor: true,
+        onItemClick: () => {
+          if (disabled) return;
+          onRunSkill?.(skill.id);
+        },
+      })),
+    });
+  }
 
   return (
     <div

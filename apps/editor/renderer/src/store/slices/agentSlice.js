@@ -19,6 +19,11 @@ export const createAgentSlice = (set, get) => ({
   },
   clearAiQuotedSelection: () => set({ aiQuotedSelection: null }),
 
+  // 从别处（如文档工具栏）请求 AI 面板运行某个 skill；面板打开后消费并清空（内存态）。
+  agentSkillRequest: null,
+  requestAgentSkill: (skillId) => set({ agentSkillRequest: skillId ? { skillId, requestedAt: Date.now() } : null }),
+  clearAgentSkillRequest: () => set({ agentSkillRequest: null }),
+
   // AI 待确认的文档写入（内存态，不进 persist）。
   agentPendingWrite: null,
   // 在“调用写入”这一刻就把改动绑定到目标文档 id（取实时选中态）。

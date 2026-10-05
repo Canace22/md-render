@@ -73,6 +73,8 @@ import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
+import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
+import { filterSkillsByEntry } from '../core/agent/skillRegistry.js';
 import useCommandPalette from '../hooks/useCommandPalette.js';
 import { createCommands } from '../core/commands/commandRegistry.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
@@ -1055,6 +1057,17 @@ function MarkdownEditor() {
   }, []);
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
+  const requestAgentSkill = useEditorStore((state) => state.requestAgentSkill);
+  // 文档工具栏上的 AI 动作：entry 含 doc-toolbar 的 skill（平台版等）
+  const { skills: registrySkills } = useSkillRegistry();
+  const docToolbarSkills = useMemo(
+    () => filterSkillsByEntry(registrySkills, 'doc-toolbar').map(({ id, label }) => ({ id, label })),
+    [registrySkills],
+  );
+  const handleRunDocSkill = useCallback((skillId) => {
+    setAgentPanelOpen(true);
+    requestAgentSkill(skillId);
+  }, [requestAgentSkill]);
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
@@ -2604,6 +2617,8 @@ function MarkdownEditor() {
                 onCopyWeChat={handleCopyToWeChat}
                 onCopyRichText={handleCopyRichText}
                 copyStyleName={getTemplateById(copyStyle).name}
+                skillActions={docToolbarSkills}
+                onRunSkill={handleRunDocSkill}
               />
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
