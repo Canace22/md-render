@@ -26,6 +26,10 @@ const HOST = '127.0.0.1';
 const INVOKE_CHANNEL = 'agent-bridge:invoke';
 const REPLY_CHANNEL = 'agent-bridge:reply';
 const MAX_BODY_BYTES = 1_000_000;
+const HANDSHAKE_FILE_NAME = 'agent-bridge.json';
+
+/** 当前运行中的桥：{ server, handshakeFile, token }；退出时据此清理 */
+let activeBridge = null;
 
 /** 主进程 → renderer 的在途请求：id -> { resolve, reject, timer } */
 const pending = new Map();
@@ -70,6 +74,34 @@ const sendJson = (res, code, obj) => {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
 };
+
+/**
+ * 删除握手文件——只删自己写的（token 一致），避免误删另一个实例刚写的文件。
+ * 失败静默：文件不存在 / 已被删都算清理完成。
+ */
+export const removeHandshakeFileIfOwned = (file, token) => {
+  try {
+    const info = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (info?.token !== token) return false;
+    fs.unlinkSync(file);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** 关闭控制桥并删除握手文件。app 退出（before-quit）时调用；重复调用安全。 */
+export function stopAgentBridge() {
+  if (!activeBridge) return;
+  const { server, handshakeFile, token } = activeBridge;
+  activeBridge = null;
+  try {
+    server.close();
+  } catch {
+    /* noop */
+  }
+  removeHandshakeFileIfOwned(handshakeFile, token);
+}
 
 /**
  * 启动控制桥。
@@ -137,26 +169,22 @@ export function startAgentBridge({ getMainWindow, ipcMain, app, port = 0 } = {})
     console.error('[agent-bridge] server error:', error.message);
   });
 
+  const handshakeFile = path.join(app.getPath('userData'), HANDSHAKE_FILE_NAME);
+  activeBridge = { server, handshakeFile, token };
+
   server.listen(port, HOST, () => {
     const actualPort = server.address().port;
     const info = { url: `http://${HOST}:${actualPort}`, token, pid: process.pid };
     try {
-      const file = path.join(app.getPath('userData'), 'agent-bridge.json');
-      fs.writeFileSync(file, JSON.stringify(info, null, 2), { mode: 0o600 });
-      console.log('[agent-bridge] listening at', info.url, '→ handshake:', file);
+      fs.writeFileSync(handshakeFile, JSON.stringify(info, null, 2), { mode: 0o600 });
+      console.log('[agent-bridge] listening at', info.url, '→ handshake:', handshakeFile);
     } catch (error) {
       console.warn('[agent-bridge] failed to write handshake file:', error.message);
     }
   });
 
   return {
-    close: () => {
-      try {
-        server.close();
-      } catch {
-        /* noop */
-      }
-    },
+    close: stopAgentBridge,
     getToken: () => token,
     address: () => server.address(),
   };

@@ -52,7 +52,7 @@ import {
 } from './database.js';
 import { writeBuiltInDocsToDisk } from './mdSync.js';
 import { registerIpcHandlers } from './ipc/registerIpcHandlers.js';
-import { startAgentBridge } from './agentBridge.js';
+import { startAgentBridge, stopAgentBridge } from './agentBridge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -544,5 +544,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   unwatchAllLocalProjects();
+  // 删掉握手文件，MCP 端才能明确报「md-render 没在运行」，而不是连残留端口报 fetch failed
+  stopAgentBridge();
   closeDatabase();
 });
