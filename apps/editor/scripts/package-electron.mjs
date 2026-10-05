@@ -63,6 +63,32 @@ async function prepareStagingDirectory() {
   await fs.rm(path.join(STAGING_APP_DIR, 'release'), { recursive: true, force: true });
 }
 
+// 本地 agent 用的 md-render MCP（server/mcp-bridge）：打成单文件放进 resources/mcp-bridge，
+// 运行时用 Electron 自身（ELECTRON_RUN_AS_NODE=1）执行，用户机器不需要装 node。
+const MCP_BRIDGE_ENTRY = path.join(workspaceRoot, 'server', 'mcp-bridge', 'index.js');
+const MCP_BRIDGE_OUT_DIR = 'mcp-bridge-dist';
+
+async function bundleMcpBridge(targetAppDir) {
+  const bridgeModules = path.join(workspaceRoot, 'server', 'mcp-bridge', 'node_modules');
+  await fs.access(bridgeModules).catch(() => {
+    throw new Error('server/mcp-bridge 还没装依赖：先在该目录运行 npm install');
+  });
+  // esbuild 是 vite 的依赖，pnpm 下从 vite 所在目录解析
+  const vitePkg = require.resolve('vite/package.json', { paths: [appDir] });
+  const esbuild = require(require.resolve('esbuild', { paths: [path.dirname(vitePkg)] }));
+  await esbuild.build({
+    entryPoints: [MCP_BRIDGE_ENTRY],
+    outfile: path.join(targetAppDir, MCP_BRIDGE_OUT_DIR, 'index.mjs'),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node20',
+    // 依赖里的 CommonJS 模块会用 require
+    banner: { js: "import { createRequire as __mdRenderCreateRequire } from 'node:module'; const require = __mdRenderCreateRequire(import.meta.url);" },
+    logLevel: 'warning',
+  });
+}
+
 async function copyArtifactsBack() {
   await fs.rm(APP_RELEASE_DIR, { recursive: true, force: true });
   await fs.cp(path.join(STAGING_APP_DIR, 'release'), APP_RELEASE_DIR, {
@@ -81,6 +107,7 @@ async function main() {
   });
 
   await prepareStagingDirectory();
+  await bundleMcpBridge(STAGING_APP_DIR);
 
   const platformFlag = explicitPlatform || (isWindows ? '--win' : '--mac');
 

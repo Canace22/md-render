@@ -75,6 +75,12 @@
       "node_modules/bindings/**/*",
       "node_modules/file-uri-to-path/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "mcp-bridge-dist",
+        "to": "mcp-bridge"
+      }
+    ],
     "publish": [
       {
         "provider": "github",

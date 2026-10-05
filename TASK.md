@@ -86,7 +86,7 @@ AgentPanel.runTurn
   - 范围：`main/localAgents/adapters/claudeCode.js`
 - [x] **L1-5** Cursor 适配器：同上；MCP 通过工作目录的 `.cursor/mcp.json` 注入，**只合并 `md-render` 一项，不覆盖用户已有配置**，配合 `--approve-mcps`
   - 范围：`main/localAgents/adapters/cursor.js`
-- [~] **L1-6** 注入 md-render MCP：生成 mcp-bridge 的启动配置；打包后 mcp-bridge 放进 resources，用 `process.execPath` + `ELECTRON_RUN_AS_NODE=1` 跑（用户机器不一定有 node）
+- [x] **L1-6** 注入 md-render MCP：生成 mcp-bridge 的启动配置；打包后 mcp-bridge 放进 resources，用 `process.execPath` + `ELECTRON_RUN_AS_NODE=1` 跑（用户机器不一定有 node）
   - 范围：`main/localAgents/mcpConfig.js`、`vite.config.js` / electron-builder 配置
 - [ ] **L1-7** 系统提示：`ENGINE_RULES` + `AGENT_INSTRUCTIONS`（含 agent-choice 选择卡片协议）和 app 内 AI 同源；不支持追加系统提示的 agent 拼在 prompt 开头
 - [x] **L1-8** skill 工具白名单：在 mcp-bridge 层过滤（启动时传 `MD_RENDER_ALLOWED_TOOLS` 环境变量），三家 agent 通用；`null` 表示放行全部 md-render 工具
