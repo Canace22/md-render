@@ -1,0 +1,7 @@
+label: 扩写
+group: 改写
+aliases: [展开, expand]
+entry: [slash]
+input: selection
+tools: [read_active_doc, write_active_doc]
+output: proposal

@@ -179,4 +179,20 @@ describe('内置 skill', () => {
       });
     });
   });
+
+  it('改写类 skill：写回类声明 write_active_doc，只输出类不带写入工具', async () => {
+    const { BUILTIN_SKILL_ENTRIES } = await import('../renderer/src/core/agent/builtinSkills.js');
+    const { skills } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    ['compress', 'expand', 'polish', 'tone', 'continue-writing'].forEach((id) => {
+      const skill = findSkillById(skills, id);
+      expect(skill.output).toBe('proposal');
+      expect(skill.tools).toContain('write_active_doc');
+    });
+    ['title-suggestions', 'key-points', 'subheadings', 'outline'].forEach((id) => {
+      const skill = findSkillById(skills, id);
+      expect(skill.output).toBe('answer');
+      expect(skill.tools).not.toContain('write_active_doc');
+      expect(skill.prompt).not.toContain('write_active_doc');
+    });
+  });
 });

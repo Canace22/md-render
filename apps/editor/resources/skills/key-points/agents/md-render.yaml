@@ -1,0 +1,7 @@
+label: 提炼要点
+group: 改写
+aliases: [要点, key points]
+entry: [welcome]
+input: active_doc
+tools: [read_active_doc]
+output: answer

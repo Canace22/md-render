@@ -1,0 +1,7 @@
+label: 续写
+group: 改写
+aliases: [继续往下写, continue]
+entry: [slash]
+input: active_doc
+tools: [read_active_doc, write_active_doc]
+output: proposal

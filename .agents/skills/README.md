@@ -102,8 +102,8 @@ output: artifact                     # 产出形态
 | `label` | 任意文本 | `name` |
 | `group` | 任意文本 | 空 |
 | `aliases` | 搜索别名列表 | `[]` |
-| `entry` | `slash`（slash 列表）· `welcome`（欢迎页建议）· `doc-toolbar`（文档工具栏） | `[slash]` |
-| `input` | `active_doc`（当前文档）· `selection`（选中文本）· `none` | `none` |
+| `entry` | `slash`（slash 列表）· `welcome`（欢迎页建议）· `doc-toolbar`（文档工具栏）；写 `[]` 表示不在界面露出 | `[slash]` |
+| `input` | `active_doc`（当前文档）· `selection`（有选中文本就只处理选区，没有就整篇）· `none` | `none` |
 | `tools` | 工具名列表，见 `core/agent/toolRegistry.js` | `[]`（只对话，不调工具） |
 | `output` | `artifact`（生成派生稿）· `proposal`（改当前稿，需确认）· `answer`（只回复） | `answer` |
 

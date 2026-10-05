@@ -1,8 +1,9 @@
 import { getPublishingPlatformLabel } from './publishingPlatforms.js';
+import { BUILTIN_SKILL_ENTRIES } from '../core/agent/builtinSkills.js';
+import { buildSkillRegistry, findSkillById } from '../core/agent/skillRegistry.js';
 
 const DEFAULT_MAX_CONTEXT_CHARS = 2200;
 const DEFAULT_SUMMARY_LENGTH = 240;
-const DEFAULT_TITLE_SUGGESTION_COUNT = 5;
 
 export const AI_ACTION_KEYS = Object.freeze({
   SUMMARIZE: 'summarize',
@@ -77,85 +78,20 @@ const STATUS_LABEL_MAP = Object.freeze({
   published: '已发布',
 });
 
-const ACTION_PROMPT_CONFIG = Object.freeze({
-  [AI_ACTION_KEYS.SUMMARIZE]: {
-    task: '请压缩内容，保留核心信息、关键论点和必要事实。',
-    outputRules: [
-      '直接输出压缩后的中文正文，不要解释你的做法。',
-      '优先删掉重复表达、空泛铺垫和冗余转折。',
-      '尽量保留原文语气、结构和观点顺序。',
-      '如果原文信息不足，不要擅自补充事实。',
-    ],
-  },
-  [AI_ACTION_KEYS.EXPAND]: {
-    task: '请在不跑题的前提下扩写内容，让信息更完整、表达更饱满。',
-    outputRules: [
-      '直接输出扩写后的中文正文，不要解释你的做法。',
-      '优先补充论证、细节、例子、过渡句和读者收益。',
-      '尽量延续原文语气、叙述视角和段落节奏。',
-      '如果上下文不够，不要乱编具体事实，用稳妥方式补足。',
-    ],
-  },
-  [AI_ACTION_KEYS.POLISH]: {
-    task: '请润色内容，提升表达流畅度和可读性，不改变原意和信息量。',
-    outputRules: [
-      '直接输出润色后的中文正文，不要解释你的做法。',
-      '优先修顺病句、错别字、标点和生硬的衔接。',
-      '保留原文观点、结构、语气和段落顺序，不增删事实。',
-      '不要过度堆砌辞藻，以清晰自然为准。',
-    ],
-  },
-  [AI_ACTION_KEYS.TITLE_SUGGESTIONS]: {
-    task: '请基于内容给出一组中文标题建议。',
-    outputRules: [
-      `输出 ${DEFAULT_TITLE_SUGGESTION_COUNT} 个标题候选，每个标题单独一行。`,
-      '标题要具体、可用，避免空泛鸡汤或强行标题党。',
-      '优先体现主题、角度、读者收益或冲突点。',
-      '不要附加分析说明。',
-    ],
-  },
-  [AI_ACTION_KEYS.TONE]: {
-    task: '请调整内容的语气，在更口语和更专业之间，按上下文选更合适的一种。',
-    outputRules: [
-      '直接输出调整语气后的中文正文，不要解释你的做法。',
-      '只改语气和措辞，不增删事实、不改变核心信息和结构。',
-      '保持段落顺序和篇幅大体一致。',
-    ],
-  },
-  [AI_ACTION_KEYS.KEY_POINTS]: {
-    task: '请提炼内容的核心要点。',
-    outputRules: [
-      '用要点列表输出，每条单独一行、以「- 」开头。',
-      '每条简明扼要，覆盖主要论点和关键信息。',
-      '不要附加分析说明，只给要点。',
-    ],
-  },
-  [AI_ACTION_KEYS.SUBHEADINGS]: {
-    task: '请为内容的各段落拟小标题，帮助梳理结构。',
-    outputRules: [
-      '为正文中的主要段落各给一个小标题，每条单独一行。',
-      '小标题要概括该段主旨，简短具体。',
-      '只给小标题建议，不要改写或重排正文。',
-    ],
-  },
-  [AI_ACTION_KEYS.CONTINUE]: {
-    task: '请基于全文在末尾续写下一段，承接上文、延续语气与脉络。',
-    outputRules: [
-      '只输出新续写的一段中文正文，不要重复已有内容。',
-      '延续原文语气、视角和叙述节奏，不要跑题。',
-      '上下文不够时用稳妥方式承接，不要乱编具体事实。',
-    ],
-  },
-  [AI_ACTION_KEYS.OUTLINE]: {
-    task: '请基于标题或主题给出可直接动笔的写作提纲，并指出结构上的问题。',
-    outputRules: [
-      '给出 3 种不同切入角度的提纲，每种用一个小标题标明角度，下面用分级列表列出章节顺序。',
-      '提纲要具体到每节大致写什么，避免空泛的「引言/正文/结尾」。',
-      '若已有正文，额外提醒：缺失的关键论点、以及内容重复或啰嗦之处。',
-      '只输出提纲与提醒，不要改写正文，不要附加无关说明。',
-    ],
-  },
+// 改写类动作的指令单一事实源是内置 skill（resources/skills/<id>/SKILL.md），这里只做 key → skill 映射。
+const ACTION_SKILL_IDS = Object.freeze({
+  [AI_ACTION_KEYS.SUMMARIZE]: 'compress',
+  [AI_ACTION_KEYS.EXPAND]: 'expand',
+  [AI_ACTION_KEYS.POLISH]: 'polish',
+  [AI_ACTION_KEYS.TITLE_SUGGESTIONS]: 'title-suggestions',
+  [AI_ACTION_KEYS.TONE]: 'tone',
+  [AI_ACTION_KEYS.KEY_POINTS]: 'key-points',
+  [AI_ACTION_KEYS.SUBHEADINGS]: 'subheadings',
+  [AI_ACTION_KEYS.CONTINUE]: 'continue-writing',
+  [AI_ACTION_KEYS.OUTLINE]: 'outline',
 });
+
+const { skills: BUILTIN_SKILLS } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
 
 const normalizeWhitespace = (value) => {
   return String(value ?? '')
@@ -197,9 +133,10 @@ const getActionMeta = (actionKey) => {
   return ACTION_META_MAP.get(normalized) || ACTION_META_MAP.get(AI_ACTION_KEYS.SUMMARIZE);
 };
 
-const getActionConfig = (actionKey) => {
+const getActionSkill = (actionKey) => {
   const normalized = normalizeAiActionKey(actionKey);
-  return ACTION_PROMPT_CONFIG[normalized] || ACTION_PROMPT_CONFIG[AI_ACTION_KEYS.SUMMARIZE];
+  const skillId = ACTION_SKILL_IDS[normalized] || ACTION_SKILL_IDS[AI_ACTION_KEYS.SUMMARIZE];
+  return findSkillById(BUILTIN_SKILLS, skillId);
 };
 
 const getDocumentTitle = (document, fallbackTitle = '') => {
@@ -297,70 +234,25 @@ export const getAiActionPromptLabel = (actionKey) => {
   return getActionMeta(actionKey).promptLabel || '处理这段内容';
 };
 
-// 写回方式分类：覆盖整篇 / 末尾追加 / 不写回（只在对话里输出）。
-const WRITE_MODES = Object.freeze({
-  OVERWRITE: 'overwrite',
-  APPEND: 'append',
-  NONE: 'none',
-});
-
-// 每个动作对应的写回方式；未列出的默认覆盖（改写类）。
-const ACTION_WRITE_MODE = Object.freeze({
-  [AI_ACTION_KEYS.TITLE_SUGGESTIONS]: WRITE_MODES.NONE,
-  [AI_ACTION_KEYS.KEY_POINTS]: WRITE_MODES.NONE,
-  [AI_ACTION_KEYS.SUBHEADINGS]: WRITE_MODES.NONE,
-  [AI_ACTION_KEYS.OUTLINE]: WRITE_MODES.NONE,
-  [AI_ACTION_KEYS.CONTINUE]: WRITE_MODES.APPEND,
-});
-
-const getActionWriteMode = (normalized) =>
-  ACTION_WRITE_MODE[normalized] || WRITE_MODES.OVERWRITE;
-
-// 覆盖类动作的写回引导：有选区时只替换那段，否则整篇覆盖。
-const buildOverwriteWriteBack = (selectionText) => {
-  if (selectionText) {
-    return [
-      '只改写下面这段选中文本，不要动文档其它部分。',
-      `选中原文：\n${selectionText}`,
-      '处理完后，调用 read_active_doc 拿到整篇，把这段原文 replace 成新结果，'
-        + '再调用 write_active_doc 写回整篇（会弹 diff 让用户确认）。',
-    ].join('\n\n');
-  }
-  return '处理完成后，调用 write_active_doc 把结果写回当前文档（会弹 diff 让用户确认）。';
-};
-
-const WRITE_BACK_BUILDERS = Object.freeze({
-  [WRITE_MODES.OVERWRITE]: buildOverwriteWriteBack,
-  [WRITE_MODES.APPEND]: () =>
-    '调用 read_active_doc 拿到整篇，把续写内容追加到原文末尾，'
-      + '再调用 write_active_doc 写回整篇（会弹 diff 让用户确认）。',
-  [WRITE_MODES.NONE]: () => '',
-});
-
 /**
- * 给 AI 助手用的「快捷指令」：一句任务 + 几条输出要求 + 写回引导。
+ * 给 AI 助手用的「快捷指令」：开场一句 + 对应 skill 正文（任务、输出要求、写回方式）。
  * 不内嵌整篇正文——交给 agent 通过「读取当前文档」工具自行获取，避免重复拼正文。
  * @param {string} actionKey 动作 key/别名
  * @param {object} [options]
- * @param {string} [options.selectionText] 选区原文，仅对「覆盖类」动作生效（只改这段）
+ * @param {string} [options.selectionText] 选区原文，仅对 input=selection 的 skill 生效（只改这段）
  */
 export const buildQuickActionInstruction = (actionKey, options = {}) => {
-  const normalized = normalizeAiActionKey(actionKey);
-  const { task, outputRules } = getActionConfig(normalized);
-  const rules = (outputRules || []).map((rule) => `- ${rule}`).join('\n');
-  const mode = getActionWriteMode(normalized);
-  const selectionText = mode === WRITE_MODES.OVERWRITE
+  const skill = getActionSkill(actionKey);
+  const selectionText = skill?.input === 'selection'
     ? normalizeMultilineText(options.selectionText)
     : '';
   const intro = selectionText
     ? '请先理解上下文，然后只处理下面这段选中文本。'
     : '请先读取当前文档，然后处理整篇正文。';
-  const writeBackLine = WRITE_BACK_BUILDERS[mode](selectionText);
   return [
     intro,
-    task,
-    rules ? `输出要求：\n${rules}` : '',
-    writeBackLine,
+    skill?.prompt || '',
+    selectionText ? `选中原文：\n${selectionText}` : '',
   ].filter(Boolean).join('\n\n');
 };
 
@@ -403,65 +295,7 @@ export const buildAiContextSummary = ({
   };
 };
 
-export const buildAiPrompt = ({
-  actionKey = '',
-  selectedText = '',
-  selectionText = '',
-  document = null,
-  documentTitle = '',
-  documentSummary = '',
-  documentContent = '',
-  audience = '',
-  tone = '',
-  extraRequirements = '',
-  titleSuggestionCount = DEFAULT_TITLE_SUGGESTION_COUNT,
-  maxContextChars = DEFAULT_MAX_CONTEXT_CHARS,
-} = {}) => {
-  const normalizedAction = normalizeAiActionKey(actionKey) || AI_ACTION_KEYS.SUMMARIZE;
-  const context = buildAiContextSummary({
-    actionKey: normalizedAction,
-    selectedText,
-    selectionText,
-    document,
-    documentTitle,
-    documentSummary,
-    documentContent,
-    maxContextChars,
-  });
-  const config = getActionConfig(normalizedAction);
-  const cleanAudience = normalizeWhitespace(audience);
-  const cleanTone = normalizeWhitespace(tone);
-  const cleanRequirements = normalizeMultilineText(extraRequirements);
-  const titleCountLine = normalizedAction === AI_ACTION_KEYS.TITLE_SUGGESTIONS
-    ? `标题数量：${Math.max(1, Number(titleSuggestionCount) || DEFAULT_TITLE_SUGGESTION_COUNT)} 个`
-    : '';
-
-  return [
-    '你是一个中文内容创作助手，请直接给出可用结果，不要解释思路。',
-    '',
-    `当前动作：${getAiActionLabel(normalizedAction)}`,
-    `处理范围：${context.scopeLabel}`,
-    `任务目标：${config.task}`,
-    titleCountLine,
-    cleanAudience ? `目标读者：${cleanAudience}` : '',
-    cleanTone ? `风格倾向：${cleanTone}` : '',
-    context.title ? `稿件标题：${context.title}` : '',
-    context.summary ? `稿件摘要：${context.summary}` : '',
-    context.metadataLines.length ? `稿件信息：\n- ${context.metadataLines.join('\n- ')}` : '',
-    `输出要求：\n- ${config.outputRules.join('\n- ')}`,
-    cleanRequirements ? `额外要求：\n${cleanRequirements}` : '',
-    `参考内容：\n${context.sourceText || '（当前没有可用正文，请先写一点内容再触发这个动作）'}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-};
-
-export const createAiActionPrompt = (actionKey, options = {}) => {
-  return buildAiPrompt({ ...options, actionKey });
-};
-
 export const getAIAction = getAiAction;
 export const getAIActionLabel = getAiActionLabel;
 export const getAIActionPromptLabel = getAiActionPromptLabel;
 export const buildAIActionContext = buildAiContextSummary;
-export const buildAIActionPrompt = buildAiPrompt;

@@ -1,0 +1,7 @@
+label: 小标题
+group: 改写
+aliases: [小标题, subheadings]
+entry: []
+input: active_doc
+tools: [read_active_doc]
+output: answer
