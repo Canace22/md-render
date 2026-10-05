@@ -852,10 +852,12 @@ export default function AgentPanel({ onClose }) {
       return buildActiveDocMeta(active, markdown ?? '');
     },
     // 不直接覆盖：暂存成待确认改动，弹 diff 卡片让用户应用/放弃。
-    // 无文档时返回提示。
-    writeActiveDoc: async (content) => {
-      if (!selectedId) return '当前没有打开的文档，无法写入。请先打开一个文档。';
-      const applied = await stageAgentWrite({ oldText: markdown ?? '', newText: content });
+    // wait=false（外部 AI 经 MCP 调用）时暂存后立即返回，不等用户点按钮。
+    writeActiveDoc: async (content, { wait = true } = {}) => {
+      if (!selectedId) return '写入失败：当前没有打开的文档。请先打开一个文档。';
+      const decision = stageAgentWrite({ oldText: markdown ?? '', newText: content });
+      if (!wait) return '已暂存改动，等待用户在编辑器里确认（应用或放弃）。';
+      const applied = await decision;
       return applied ? '改动已应用到当前文档。' : '用户放弃了这次改动，文档未变更。';
     },
     createNewDoc: async ({ name, content, targetPlatforms, sourceMaterialIds } = {}) => {

@@ -14,6 +14,14 @@ import {
 } from '../../../../shared/agentBridgeTools.js';
 
 /**
+ * 桥接调用不能卡在「等用户点应用」上（MCP 客户端会一直挂着）：
+ * 把 writeActiveDoc 换成「暂存即返回」，其余能力原样透传。
+ */
+export const toBridgeHost = (host) => (host
+  ? { ...host, writeActiveDoc: (content) => host.writeActiveDoc?.(content, { wait: false }) }
+  : host);
+
+/**
  * 处理一次桥接请求（纯函数，方便单测）。
  * @param {{name:string,args?:object}} request
  * @param {{host:object,executeTool:Function,toolDefs:Array}} deps
@@ -31,7 +39,7 @@ export const handleBridgeRequest = async ({ name, args } = {}, { host, executeTo
     id: `bridge-${name}`,
     function: { name, arguments: JSON.stringify(args ?? {}) },
   };
-  const result = await executeTool(toolCall, host);
+  const result = await executeTool(toolCall, toBridgeHost(host));
   // 工具失败也是「正常返回一段文案」，这里识别出来，让 MCP 端标记 isError
   return { ok: !isFailureResult(result), result };
 };
