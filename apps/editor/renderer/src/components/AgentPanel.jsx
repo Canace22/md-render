@@ -36,6 +36,7 @@ import {
 } from '../core/agent/editorialMemory.js';
 import { fetchServerTools, executeTool, TOOL_DEFINITIONS } from '../core/agent/toolRegistry.js';
 import { createHost } from '../core/agent/createHost.js';
+import { recordToolActivity } from '../core/agent/activityLog.js';
 import { getSurfaceLabel } from '../core/agent/surfaceLabels.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
@@ -557,6 +558,8 @@ export default function AgentPanel({ onClose }) {
         taskContext,
         allowedTools,
         onEvent: (ev) => {
+          // 工具已经执行了就要留痕，不管这一轮后来是否被取消或切走
+          if (ev.type === 'tool_done') recordToolActivity({ who: 'app', name: ev.name, args: ev.args, result: ev.result });
           if (!ownsRun() || controller.signal.aborted) return;
           if (ev.type === 'tool_start') {
             setAssistantActivity('working');

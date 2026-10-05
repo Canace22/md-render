@@ -102,7 +102,7 @@ const toAssistantMessage = (message, content) => ({
  * onEvent 事件类型：
  *   { type: 'assistant_text', text }           模型的中间/最终文字
  *   { type: 'tool_start', callId, name, label, step }  开始执行某工具
- *   { type: 'tool_done', callId, name, label, step, result } 工具执行完成
+ *   { type: 'tool_done', callId, name, label, step, args, result } 工具执行完成（args 为原始参数字符串）
  *   { type: 'error', message }
  *   { type: 'done', finalText }
  */
@@ -180,7 +180,7 @@ export const runAgent = async ({
         ? await executeTool(call, host)
         : buildToolDeniedResult(name);
       if (signal?.aborted) throw new Error('已取消');
-      onEvent({ type: 'tool_done', ...eventBase, result });
+      onEvent({ type: 'tool_done', ...eventBase, args: call.function?.arguments, result });
 
       messages.push({
         role: 'tool',

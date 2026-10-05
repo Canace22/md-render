@@ -4,6 +4,7 @@ import { createHost } from '../core/agent/createHost.js';
 import { installAgentBridgeListener } from '../core/agent/bridgeListener.js';
 import { executeTool, TOOL_DEFINITIONS } from '../core/agent/toolRegistry.js';
 import { fetchProposalFiles } from '../utils/agentDataBridge.js';
+import { withActivityLog } from '../core/agent/activityLog.js';
 
 /**
  * app 级的 agent 运行时，不依赖 AI 面板是否打开：
@@ -25,7 +26,8 @@ export function useAgentRuntime({ dialogs }) {
     return installAgentBridgeListener({
       electronAPI: api,
       getHost: () => host,
-      executeTool,
+      // 外部 agent 的每次调用都记活动日志（来源 mcp）
+      executeTool: withActivityLog(executeTool, { who: 'mcp' }),
       toolDefs: TOOL_DEFINITIONS,
     });
   }, [dialogs]);
