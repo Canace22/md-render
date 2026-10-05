@@ -1,6 +1,6 @@
 ---
 name: md-render-agent
-description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引擎、调面板时的规范。涉及 core/agent/ 下的 agentEngine / toolRegistry / aiClient 或 AgentPanel.jsx 时加载。
+description: 给 md-render 的 AI 助手（Cowork 式 agent）加功能、加工具、改引擎、调面板时的规范。新增 AI 功能先写 skill 文件；涉及 core/agent/ 下的 agentEngine / toolRegistry / skillRegistry / aiClient 或 AgentPanel.jsx 时加载。
 ---
 
 # md-render AI 助手（agent）开发规范
@@ -56,13 +56,33 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 
 文件管理工具（move / rename / delete_workspace_items）同理是**按 id 的受限树操作**，不是自由路径操作：删除必须走宿主的 `confirmAgentDelete` 确认框（列全名单、用户确认前零改动、取消如实回报），单次上限 10 条；跨目录移动走 `moveNodeToFolderById`（防环、磁盘挂载节点拒绝）。新增破坏性工具时沿用这个「执行器校验 → host 确认 → 如实回报部分失败」模式。
 
-## 改内置 slash skill
+## 加 AI 功能 = 加 skill 文件（不改 JS）
 
-- 输入框里的 `/skill` 列表在 `AgentPanel.jsx` 的 `PROJECT_SLASH_SKILLS` 等常量里，不会自动读取 `.agents/skills/`。
-- 例外模式（长 prompt 且要跨工具共用时用）：`core/agent/editorialBoard.js` 通过 Vite `?raw` 在构建期内联 `.agents/skills/ai-editorial-board/SKILL.md` 作为单一事实源，JS 侧只叠加 app 工具指令；SKILL.md 本体保持工具无关，外部 agent 产品（Claude Code / Cursor 等）打开工作空间可直接用。
-- `type: 'agent'` 的项目 skill 把 `promptText` 当内部指令；点击后必须直接进入 `runTurn`，用户消息只显示 skill 名称，不得把 prompt 填入输入框。
-- 如果只是改“选题 / 新稿件 / 资料单”等入口的工作流提示，优先更新 `promptText` 和搜索别名，复用现有 `create_content_entry`，不要急着加新工具或新 store 字段。
-- 需要结构化落库时，再扩展 `create_content_entry` 参数、执行器和 `AgentPanel` host，仍保持执行器只通过 host 取能力。
+AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工具栏「平台版」都从 **skill registry** 生成。新增或修改一个 AI 功能，默认只动 skill 文件：
+
+1. 内置功能：在 `apps/editor/resources/skills/<id>/` 建 `SKILL.md`（prompt）+ `agents/md-render.yaml`（label / group / aliases / entry / input / tools / output）。格式见 `.agents/skills/README.md`「产品 skill 格式」。
+2. 用户自定义：同样的结构放在内容库 `MdRender/.agents/skills/<id>/`，同名覆盖内置；不用重启（主进程 `skillFiles.js` 监听目录）。
+3. `tools` 是白名单：`skillRunner.buildSkillTurn` 把它交给 `runAgent({ allowedTools })`，引擎只把这些工具发给模型，执行前再拦一次。漏写工具 = 模型拿不到；写了不存在的工具，`skill-registry.test.js` 会报错。
+4. `input` 决定运行时拼什么：`selection` 有选区就只处理选区、`active_doc` 先读当前文档、`none` 直接用正文。需要读文档的 skill 必须把 `read_active_doc` 写进 `tools`（有单测守着）。
+5. 只有 skill 做不到的事才改代码：需要新能力 → 加工具（见上节）；需要新入口位置 → 在 `SKILL_ENTRIES` 加值并在 UI 里 `pickSkillItems(items, '<entry>')`。
+
+相关模块：
+
+| 文件 | 职责 |
+|---|---|
+| `core/agent/skillRegistry.js` | 解析 SKILL.md / md-render.yaml，合并内置与内容库，校验；新建模板 |
+| `core/agent/builtinSkills.js` | 构建期 `import.meta.glob` 内联 `resources/skills` |
+| `core/agent/skillRunner.js` | skill → 一轮对话的 prompt / 显示文案 / 工具白名单 |
+| `core/agent/editorialBoard.js` | 编辑部三个入口拼接共享规范 `ai-editorial-board`（按章节标题提取，别改标题） |
+| `hooks/useSkillRegistry.js` | 内置 + 内容库，目录变化自动重载 |
+| `components/agentSkillItems.js` | skill → 面板条目（图标、配色、短说明） |
+| `components/AgentSkillsTab.jsx` | 技能页：编辑（内置先复制到内容库）、新建 |
+
+约束：
+
+- AgentPanel 只有一个入口 `runSkill(skillId)`；不要再加 quick / platform 之类的平行 handler 或 prompt 常量。
+- 别的界面要触发 skill（如文档工具栏），调 store 的 `requestAgentSkill(skillId)` 并打开面板，由 AgentPanel 消费，不要在别处直接调 `runAgent`。
+- skill 不能带代码；不需要 AI 的功能（PDF→Word、视频→音频）不做成 skill，放在工作区右键菜单（`FileConvertMenuItems`）。
 
 ## 会话管理（全局，不持久化）
 
@@ -75,8 +95,7 @@ description: 给 md-render 的 AI 助手（Cowork 式 agent）加工具、改引
 - AI 助手入口不在 `AgentPanel.jsx` 内：打开/关闭由 `MarkdownEditor.jsx` 持有状态，全局顶部按钮走 `TabBar` 的 `trailing` 区。只改入口位置时优先改 shell/titlebar，面板内容和 agent loop 不动。
 - 面板里的「对话 / 上下文 / 技能」这类纯 UI 切换用 `AgentPanel.jsx` 局部 state，不进 `useEditorStore`，也不要改 `agentEngine`。
 - `AgentDocMeta.jsx` 负责当前稿件、本轮上下文、相关旧文召回展示；不要把这些展示块重新堆回消息流顶部。
-- 技能页、欢迎页或 `/skill` picker 选中 `agent` 类型时，立即调用 `runTurn`；带上当前 @附件和选区，然后清空输入态。
-- 技能页触发 `quick` / `platform` / `script` 时复用现有 handler，不新增一套执行入口。
+- 技能页、欢迎页、「+」菜单或 `/skill` picker 选中 skill 时，统一走 `runSkill`：带上当前 @附件和选区（`input=selection` 的 skill 把选区当处理对象，其余当参考附件），然后清空输入态。
 - AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
 - AI 响应态属于 `AgentPanel.jsx` 展示层：模型没有流式输出时，也可以在 `runAgent` 返回 `finalText` 后本地打字式填充同一条 assistant 消息；等待模型时在消息列表底部显示 loading。打字过程中要隐藏未闭合的 `agent-choice` 注释协议，避免把内部 JSON 闪给用户。
 
