@@ -194,3 +194,44 @@ export const filterSkillsByEntry = (skills = [], entry) =>
 
 export const findSkillById = (skills = [], id) =>
   skills.find((skill) => skill.id === id) || null;
+
+/* ── 新建 skill 模板 ──────────────────────────────────────── */
+
+const TEMPLATE_TOOLS = ['read_active_doc', 'create_agent_artifact'];
+
+/**
+ * 「新建 skill」用的模板：改 SKILL.md 正文和 md-render.yaml 的 label 就能用。
+ * @returns {{ dirName: string, skillMarkdown: string, manifestYaml: string }}
+ */
+export const buildSkillTemplate = ({ id, label = '新 skill' }) => ({
+  dirName: id,
+  skillMarkdown: [
+    '---',
+    `name: ${id}`,
+    'description: 一句话说明这个 skill 做什么、用户说什么话时使用。',
+    '---',
+    '',
+    '读取当前文档后，按下面的要求处理：',
+    '- （写给 AI 的具体要求）',
+    '',
+    '完成后调用 create_agent_artifact 另存为新文档，不要覆盖原文。',
+    '',
+  ].join('\n'),
+  manifestYaml: [
+    `label: ${label}`,
+    'entry: [slash]',
+    'input: active_doc',
+    `tools: [${TEMPLATE_TOOLS.join(', ')}]`,
+    'output: artifact',
+    '',
+  ].join('\n'),
+});
+
+/** 生成不重名的新 skill id，如 my-skill、my-skill-2 */
+export const nextSkillId = (skills = [], base = 'my-skill') => {
+  const taken = new Set(skills.map((skill) => skill.id));
+  if (!taken.has(base)) return base;
+  let index = 2;
+  while (taken.has(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+};

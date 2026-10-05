@@ -41,3 +41,7 @@ export const toBuiltinSkillEntries = (skillFiles = {}, manifestFiles = {}) => {
 };
 
 export const BUILTIN_SKILL_ENTRIES = toBuiltinSkillEntries(SKILL_FILES, MANIFEST_FILES);
+
+/** 按目录名找内置 skill 的原始文本（复制到内容库覆盖时用） */
+export const findBuiltinSkillEntry = (dirName) =>
+  BUILTIN_SKILL_ENTRIES.find((entry) => entry.dirName === dirName) || null;

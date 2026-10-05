@@ -26,6 +26,7 @@ import {
 import AgentDocMeta from './AgentDocMeta.jsx';
 import AgentConversation from './AgentConversation.jsx';
 import AgentKnowledgeSources from './AgentKnowledgeSources.jsx';
+import AgentSkillsTab from './AgentSkillsTab.jsx';
 import { runAgent } from '../core/agent/agentEngine.js';
 import {
   EDITORIAL_MEMORY_DOC_NAME,
@@ -344,7 +345,6 @@ export default function AgentPanel({ onClose }) {
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [lastContextPacket, setLastContextPacket] = useState(null);
   const [activePanelTab, setActivePanelTab] = useState('chat');
-  const [skillTabFilter, setSkillTabFilter] = useState('');
   const [assistantActivity, setAssistantActivity] = useState(null);
   const [runningSessionId, setRunningSessionId] = useState(null);
 
@@ -369,25 +369,11 @@ export default function AgentPanel({ onClose }) {
     const list = q ? slashItems.filter((item) => item.searchText.includes(q)) : slashItems;
     return list.slice(0, MAX_SLASH_SKILL_RESULTS);
   }, [skillFilter, slashItems]);
-  const skillTabItems = useMemo(() => {
-    const q = skillTabFilter.trim().toLowerCase();
-    const visible = skillItems.filter((item) => item.entry.length > 0 || item.source === 'vault');
-    return q ? visible.filter((item) => item.searchText.includes(q)) : visible;
-  }, [skillTabFilter, skillItems]);
-  const skillTabGroups = useMemo(() => {
-    const groups = [];
-    const groupMap = new Map();
-    skillTabItems.forEach((item) => {
-      const category = item.category ?? '其他';
-      if (!groupMap.has(category)) {
-        const group = { category, items: [] };
-        groupMap.set(category, group);
-        groups.push(group);
-      }
-      groupMap.get(category).items.push(item);
-    });
-    return groups;
-  }, [skillTabItems]);
+  // 技能页：所有在界面露出的 skill，加上内容库里的全部 skill
+  const skillTabItems = useMemo(
+    () => skillItems.filter((item) => item.entry.length > 0 || item.source === 'vault'),
+    [skillItems],
+  );
   const [showSessions, setShowSessions] = useState(false);
   const [showSettings, setShowSettings] = useState(() => !isAiConfigured());
   const providers = useMemo(() => listProviders(), []);
@@ -1460,47 +1446,13 @@ export default function AgentPanel({ onClose }) {
       )}
 
       {activePanelTab === 'skills' && (
-        <div className="agent-panel__tab-panel agent-panel__tab-panel--skills" role="tabpanel" aria-label="技能">
-          <div className="agent-panel__skill-tab-head">
-            <input
-              className="agent-panel__skill-tab-search"
-              value={skillTabFilter}
-              placeholder="搜索 skill"
-              onChange={(e) => setSkillTabFilter(e.target.value)}
-            />
-          </div>
-          {skillTabGroups.length === 0 ? (
-            <div className="agent-panel__empty">没有匹配的 skill。</div>
-          ) : (
-            skillTabGroups.map((group) => (
-              <section key={group.category} className="agent-panel__skill-group">
-                <div className="agent-panel__skill-group-title">{group.category}</div>
-                <div className="agent-panel__skill-grid">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="agent-panel__skill-card"
-                        disabled={isShortcutDisabled(item)}
-                        onClick={() => handlePickSkill(item)}
-                      >
-                        <span className={`agent-panel__skill-option-icon agent-panel__tool-btn--${item.tone}`}>
-                          <Icon />
-                        </span>
-                        <span className="agent-panel__skill-option-main">
-                          <span className="agent-panel__skill-option-label">{item.label}</span>
-                          <span className="agent-panel__skill-option-desc">{item.description}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))
-          )}
-        </div>
+        <AgentSkillsTab
+          items={skillTabItems}
+          skills={registrySkills}
+          warnings={skillWarnings}
+          isDisabled={isShortcutDisabled}
+          onRun={handlePickSkill}
+        />
       )}
 
       <div className="agent-panel__composer">

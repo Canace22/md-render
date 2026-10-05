@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 内容库产品 skill（MdRender/.agents/skills）：读原始文件 + 变化通知
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
+    write: (payload) => ipcRenderer.invoke('skills:write', payload),
+    open: (payload) => ipcRenderer.invoke('skills:open', payload),
     onChanged: (callback) => {
       const sub = (_event, payload) => callback(payload);
       ipcRenderer.on('skills:changed', sub);

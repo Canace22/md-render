@@ -83,3 +83,39 @@ export function watchSkillsDir(skillsDir, onChanged) {
     watcher?.close();
   };
 }
+
+const SKILL_DIR_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+const pathExists = async (target) => {
+  try {
+    await fsp.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * 在 skill 目录下写一个 skill（SKILL.md + 可选 agents/md-render.yaml）。
+ * 已存在且不允许覆盖时不改动，直接返回已有路径（existed=true）。
+ * @returns {Promise<{ skillPath: string, existed: boolean }>}
+ */
+export async function writeSkillFiles(skillsDir, { dirName, skillMarkdown, manifestYaml }, { overwrite = false } = {}) {
+  if (!SKILL_DIR_NAME_RE.test(String(dirName ?? ''))) throw new Error(`skill 目录名不合法：${dirName}`);
+  if (!String(skillMarkdown ?? '').trim()) throw new Error('SKILL.md 内容为空');
+
+  const skillDir = path.join(skillsDir, dirName);
+  const skillPath = path.join(skillDir, SKILL_FILE_NAME);
+  if (!overwrite && await pathExists(skillPath)) return { skillPath, existed: true };
+
+  await fsp.mkdir(path.join(skillDir, path.dirname(SKILL_MANIFEST_PATH)), { recursive: true });
+  await fsp.writeFile(skillPath, skillMarkdown, 'utf8');
+  if (manifestYaml) await fsp.writeFile(path.join(skillDir, SKILL_MANIFEST_PATH), manifestYaml, 'utf8');
+  return { skillPath, existed: false };
+}
+
+/** 目标路径是否在 skill 目录内（防止打开任意文件） */
+export const isInsideSkillsDir = (skillsDir, targetPath) => {
+  const relative = path.relative(path.resolve(skillsDir), path.resolve(String(targetPath ?? '')));
+  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
+};

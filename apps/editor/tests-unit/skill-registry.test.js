@@ -214,3 +214,19 @@ describe('内置 skill 约束', () => {
     skills.forEach((skill) => skill.tools.forEach((tool) => expect(names.has(tool), `${skill.id}:${tool}`).toBe(true)));
   });
 });
+
+describe('新建 skill 模板', () => {
+  it('模板能直接通过校验', async () => {
+    const { buildSkillTemplate } = await import('../renderer/src/core/agent/skillRegistry.js');
+    const template = buildSkillTemplate({ id: 'my-skill' });
+    const result = buildSkill({ ...template, source: 'vault' });
+    expect(result.ok).toBe(true);
+    expect(result.skill).toMatchObject({ id: 'my-skill', label: '新 skill', entry: ['slash'] });
+  });
+
+  it('nextSkillId 避开已有 id', async () => {
+    const { nextSkillId } = await import('../renderer/src/core/agent/skillRegistry.js');
+    expect(nextSkillId([])).toBe('my-skill');
+    expect(nextSkillId([{ id: 'my-skill' }, { id: 'my-skill-2' }])).toBe('my-skill-3');
+  });
+});

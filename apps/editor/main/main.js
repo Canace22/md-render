@@ -232,6 +232,7 @@ registerIpcHandlers({
   markSavedLocalFileIgnored,
   markLocalProjectRootIgnored,
   markLocalProjectWriteIgnored,
+  openPath: (targetPath) => shell.openPath(targetPath),
 });
 
 // ---- 窗口状态记忆（延迟初始化） ----
