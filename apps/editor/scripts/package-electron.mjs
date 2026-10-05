@@ -67,6 +67,7 @@ async function copyArtifactsBack() {
   await fs.rm(APP_RELEASE_DIR, { recursive: true, force: true });
   await fs.cp(path.join(STAGING_APP_DIR, 'release'), APP_RELEASE_DIR, {
     recursive: true,
+    verbatimSymlinks: true,
   });
 }
 
