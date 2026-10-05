@@ -87,6 +87,11 @@ export default function DocHeader({
           </button>
         </div>
       )}
+      {selectedFile?.frontmatterError && (
+        <div className="doc-frontmatter-error" role="note">
+          这篇文档开头的元数据（frontmatter）格式有误，现在只按正文读取，标签、状态等属性没有生效；在文件里修好后会自动恢复。
+        </div>
+      )}
       {selectedFile && metaOpen && (
         <DocMetaPanel
           selectedFile={selectedFile}

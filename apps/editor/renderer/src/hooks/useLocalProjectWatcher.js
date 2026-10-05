@@ -1,14 +1,29 @@
 import { useEffect, useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore.js';
-import { collectLocalProjectRootPaths, findLocalProjectRoot } from '../store/workspaceUtils.js';
+import { collectLocalProjectRootPaths, findLocalProjectRoot, findNodeById } from '../store/workspaceUtils.js';
 import {
   isLocalProjectSupported,
   registerLocalProjectWatch,
   readLocalProjectDisk,
   onLocalProjectDiskChanged,
 } from '../utils/localProjectBridge.js';
-import { detectLocalProjectConflicts } from '../utils/localProjectConflict.js';
+import { detectLocalProjectConflicts, getDiskFileContent } from '../utils/localProjectConflict.js';
+import { normalizeMarkdown } from '../utils/markdownUtils.js';
 import { recordToolActivity } from '../core/agent/activityLog.js';
+
+/**
+ * 正在编辑的文档在 app 外被改了（且本地没有未保存的改动，不算冲突）：
+ * 刷新后提示用户，可以对比或恢复成改动前的内容（U6）。
+ */
+export const buildExternalChangeNotice = (state, diskPayload, projectRootPath, isTreeMount) => {
+  const node = findNodeById(state.workspace, state.selectedId);
+  if (node?.type !== 'file' || node.projectRootPath !== projectRootPath || !node.relativePath) return null;
+  const diskContent = getDiskFileContent(diskPayload, node.relativePath, isTreeMount);
+  if (diskContent === undefined) return null;
+  const previousContent = state.markdown ?? '';
+  if (normalizeMarkdown(previousContent) === normalizeMarkdown(diskContent)) return null;
+  return { fileId: node.id, fileName: node.name, previousContent, diskContent };
+};
 
 export function useLocalProjectWatcher() {
   const workspace = useEditorStore((state) => state.workspace);
@@ -76,12 +91,14 @@ export function useLocalProjectWatcher() {
           return;
         }
 
+        const notice = buildExternalChangeNotice(state, diskPayload, changedRoot, isTreeMount);
         useEditorStore.getState().refreshDiskBackedProject({
           projectRootPath: changedRoot,
           workspace: result.workspace,
           projectsChildren: result.projectsChildren,
           conflictResolution: 'auto',
         });
+        if (notice) useEditorStore.getState().setExternalChangeNotice(notice);
       } catch (error) {
         console.error('刷新本地项目失败:', error);
       }

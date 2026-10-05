@@ -26,6 +26,7 @@ import {
   RefreshCw,
   CalendarDays,
   SlidersHorizontal,
+  TriangleAlert,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -346,6 +347,11 @@ const TreeNode = ({
             />
           ) : (
             <span className="tree-node-text">{displayName}</span>
+          )}
+          {node.frontmatterError && (
+            <span className="tree-node-warning-icon" title="元数据（frontmatter）格式有误，只按正文读取">
+              <TriangleAlert size={11} strokeWidth={2} />
+            </span>
           )}
           {node.pinned && (
             <span className="tree-node-pin-icon" title="已置顶">

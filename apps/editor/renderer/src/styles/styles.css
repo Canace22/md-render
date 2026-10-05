@@ -10699,3 +10699,50 @@ body.theme-dark .file-preview-iframe {
   background: var(--color-brand-primary);
   color: #fff;
 }
+
+/* 外部修改提示 */
+.external-change-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-brand-primary) 30%, transparent);
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--color-brand-primary) 8%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.external-change-banner__actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.external-change-banner__actions button {
+  padding: 2px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+/* frontmatter 解析失败提示（U7） */
+.tree-node-warning-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: 4px;
+  color: #d97706;
+}
+
+.doc-frontmatter-error {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}

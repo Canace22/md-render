@@ -31,3 +31,16 @@ describe('迁移数据组装', () => {
     expect(payload.dailyWorkspace.currentDate).toBe('2026-10-05');
   });
 });
+
+describe('外部修改提示（U6）', () => {
+  it('当前文档在 app 外被改了才提示；内容一样、不是当前文档都不提示', async () => {
+    const { buildExternalChangeNotice } = await import('../renderer/src/hooks/useLocalProjectWatcher.js');
+    const node = { id: 'n1', type: 'file', name: 'a.md', projectRootPath: '/v', relativePath: 'Projects/a.md', content: '旧' };
+    const state = { workspace: { id: 'root', type: 'folder', children: [node] }, selectedId: 'n1', markdown: '旧' };
+    const disk = (content) => ({ projectsChildren: [{ ...node, content }] });
+    expect(buildExternalChangeNotice(state, disk('新'), '/v', false)).toMatchObject({ fileId: 'n1', previousContent: '旧', diskContent: '新' });
+    expect(buildExternalChangeNotice(state, disk('旧'), '/v', false)).toBeNull();
+    expect(buildExternalChangeNotice({ ...state, selectedId: 'x' }, disk('新'), '/v', false)).toBeNull();
+    expect(buildExternalChangeNotice(state, disk('新'), '/other', false)).toBeNull();
+  });
+});

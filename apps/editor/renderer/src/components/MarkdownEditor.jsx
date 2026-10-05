@@ -8,6 +8,7 @@ import { zh } from '@blocknote/core/locales';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import DocHeader from './DocHeader.jsx';
+import ExternalChangeBanner from './ExternalChangeBanner.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import EditorFormattingToolbarController from './EditorFormattingToolbar.jsx';
 import FolderFileList from './FolderFileList.jsx';
@@ -2637,6 +2638,7 @@ function MarkdownEditor() {
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
                   <DiffOverlay />
+                  <ExternalChangeBanner />
                   {/* 标题下沉进纸面，与正文同列 */}
                   <DocHeader
                     selectedFile={selectedFile}
