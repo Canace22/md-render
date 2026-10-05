@@ -9285,6 +9285,15 @@ body.theme-dark .file-preview-iframe {
   color: var(--color-text-primary);
 }
 
+.agent-panel__chip--loading {
+  opacity: 0.72;
+}
+
+.agent-panel__chip--error {
+  background: color-mix(in srgb, var(--color-danger, #dc2626) 12%, var(--color-bg-active));
+  color: var(--color-danger, #dc2626);
+}
+
 .agent-panel__chip-name {
   overflow: hidden;
   text-overflow: ellipsis;

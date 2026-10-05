@@ -25,9 +25,13 @@ const SEARCH_TOOLS = new Set(['WebFetch', 'WebSearch']);
 // 纯内部记账的工具，不进步骤列表
 const SILENT_TOOLS = new Set(['TodoWrite', 'ToolSearch']);
 
-export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, mcpLaunch = null, systemPrompt = '', contextText = '' }) => {
+export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, readOnly = false, mcpLaunch = null, systemPrompt = '', contextText = '' }) => {
   const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-  args.push(...(safeMode ? ['--permission-mode', 'acceptEdits'] : ['--dangerously-skip-permissions']));
+  args.push(...(readOnly
+    ? ['--permission-mode', 'plan', '--tools', 'Read,Glob,Grep,LS,WebSearch,WebFetch']
+    : safeMode
+      ? ['--permission-mode', 'acceptEdits']
+      : ['--dangerously-skip-permissions']));
   if (model) args.push('--model', model);
   if (sessionId) args.push('--resume', sessionId);
   const appended = [systemPrompt, contextText].filter((part) => String(part ?? '').trim()).join('\n\n');

@@ -51,8 +51,10 @@ import {
 } from '../../services/electronBridge.js';
 import { buildAgentArtifactPayload } from './artifactUtils.js';
 import { buildAgentHealthSnapshot, runSafeRepair } from './appSupport.js';
+import { appendInspirationEntry, INSPIRATION_NOTE_NAME } from './inspirationNote.js';
 import { loadKnowledgeSources } from './knowledgeSources.js';
 import { searchExternalKnowledge } from '../../services/externalKnowledgeService.js';
+import { readUrl as readPublicUrl } from '../../services/urlReaderService.js';
 import { getSurfaceLabel } from './surfaceLabels.js';
 import { hashContent } from '../../../../shared/capabilities/contentHash.js';
 import { toProposalStatus } from '../../../../shared/capabilities/proposals.js';
@@ -530,6 +532,36 @@ export function createHost({
       sources: getKnowledgeSources(),
       aiProxyBase: readAiServerBase(),
     }),
+
+    readUrl: async ({ url } = {}) => readPublicUrl({
+      url,
+      aiProxyBase: readAiServerBase(),
+    }),
+
+    pinInspiration: async ({ text, title, dateKey = getTodayDateKey(), sources = [] } = {}) => {
+      const state = getState();
+      const existing = (state.workspace?.children ?? []).find(
+        (file) => file?.type === 'file' && file.name === INSPIRATION_NOTE_NAME,
+      );
+      const content = appendInspirationEntry(
+        existing ? readFileContent(state, existing) : '',
+        { text, title, dateKey, sources },
+      );
+      if (existing) {
+        state.updateFileContentById(existing.id, content);
+        return { ok: true, fileId: existing.id, name: existing.name, created: false };
+      }
+
+      const previousSelectedId = state.selectedId;
+      const result = await state.createGeneratedFile({
+        name: INSPIRATION_NOTE_NAME,
+        content,
+        contextNodeId: state.workspace?.id,
+        meta: { draftStatus: CONTENT_ENTRY_PRESETS.material.draftStatus },
+      });
+      if (result?.ok && previousSelectedId) getState().selectNode(previousSelectedId);
+      return { ...result, created: Boolean(result?.ok) };
+    },
 
     /** 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等），返回结构化摘要 */
     execServerTool: async (toolName, args) => {

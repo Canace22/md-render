@@ -14,6 +14,14 @@ export const hasAiKnowledgeBridge = () => (
   typeof getElectronAPI()?.ai?.searchKnowledge === 'function'
 );
 
+export const hasAiUrlReaderBridge = () => (
+  typeof getElectronAPI()?.ai?.readUrl === 'function'
+);
+
+export const hasAiAttachmentTextBridge = () => (
+  typeof getElectronAPI()?.ai?.extractAttachmentText === 'function'
+);
+
 export const hasDiagnosticsBridge = () => (
   typeof getElectronAPI()?.diagnostics?.getSnapshot === 'function'
 );
@@ -41,6 +49,8 @@ export const pickSavePath = (payload) => getElectronAPI()?.pickSavePath?.(payloa
 export const aiExecTool = (payload) => getElectronAPI()?.ai?.execTool?.(payload);
 export const aiListTools = (payload) => getElectronAPI()?.ai?.listTools?.(payload);
 export const aiSearchKnowledge = (payload) => getElectronAPI()?.ai?.searchKnowledge?.(payload);
+export const aiReadUrl = (payload) => getElectronAPI()?.ai?.readUrl?.(payload);
+export const aiExtractAttachmentText = (payload) => getElectronAPI()?.ai?.extractAttachmentText?.(payload);
 
 export const getDiagnosticsSnapshot = (payload) => (
   getElectronAPI()?.diagnostics?.getSnapshot?.(payload)

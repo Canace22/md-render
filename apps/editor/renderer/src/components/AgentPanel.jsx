@@ -13,7 +13,7 @@ import {
   FilePdfOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import { Activity, Bot, History, PackageCheck, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
+import { Activity, Bot, History, Link2, PackageCheck, Paperclip, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
@@ -45,6 +45,23 @@ import { recordToolActivity } from '../core/agent/activityLog.js';
 import { getSurfaceLabel } from '../core/agent/surfaceLabels.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
 import { buildInputWithAttachments, resolveLocalAgentSession } from '../core/agent/sessionUtils.js';
+import {
+  AGENT_ATTACHMENT_ACCEPT,
+  createAttachmentId,
+  extractAgentAttachment,
+  isSupportedAgentAttachment,
+} from '../core/agent/agentAttachments.js';
+import {
+  createUrlAttachment,
+  extractPublicUrls,
+  resolveUrlAttachment,
+} from '../core/agent/urlAttachments.js';
+import {
+  AGENT_SESSION_MODES,
+  appendModeSystemMessage,
+  normalizeAgentSessionMode,
+  resolveAgentTurnMode,
+} from '../core/agent/chatMode.js';
 import {
   appendStreamDelta,
   buildErrorMessage,
@@ -115,6 +132,8 @@ import {
   saveKnowledgeSources,
 } from '../core/agent/knowledgeSources.js';
 import { searchExternalKnowledge } from '../services/externalKnowledgeService.js';
+import { extractPdfAttachmentText } from '../services/attachmentTextService.js';
+import { readUrl as readPublicUrl } from '../services/urlReaderService.js';
 
 /** 把工作区文件树拍平成文件数组（web 端搜索兜底用） */
 const flattenFiles = (node, acc = []) => {
@@ -261,6 +280,7 @@ export default function AgentPanel({ onClose }) {
   const updateAgentMessages = useEditorStore((s) => s.updateAgentMessages);
   const setAgentHistory = useEditorStore((s) => s.setAgentHistory);
   const setAgentExternalSession = useEditorStore((s) => s.setAgentExternalSession);
+  const setAgentSessionMode = useEditorStore((s) => s.setAgentSessionMode);
 
   // 编辑器「引用到 AI」暂存的选中文字（发送时拼进 prompt，发送后清空）
   const quotedSelection = useEditorStore((s) => s.aiQuotedSelection);
@@ -277,11 +297,13 @@ export default function AgentPanel({ onClose }) {
     [sessions, activeSessionId],
   );
   const messages = activeSession?.messages ?? [];
+  const sessionMode = normalizeAgentSessionMode(activeSession?.mode);
 
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
   // 刚复制成功的消息下标，用于切换复制按钮的反馈图标
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [pinnedIndex, setPinnedIndex] = useState(null);
   // @文件：弹出选择器 + 已选文件（{id, name, content}）
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
@@ -339,7 +361,10 @@ export default function AgentPanel({ onClose }) {
   const activeRunIdRef = useRef(0);
   const runLockRef = useRef(false);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const messagesRef = useRef(null);
+  const pendingAttachmentIdsRef = useRef(new Set());
+  const ignoredUrlIdsRef = useRef(new Set());
   const shouldFollowMessagesRef = useRef(true);
   const forceScrollToBottomRef = useRef(false);
 
@@ -354,8 +379,12 @@ export default function AgentPanel({ onClose }) {
     abortRef.current = null;
   }, []);
   useEffect(() => {
+    setInput('');
+    setAttachedFiles([]);
     setLastContextPacket(null);
     setQueuedTurns([]);
+    setPinnedIndex(null);
+    ignoredUrlIdsRef.current.clear();
     shouldFollowMessagesRef.current = true;
     forceScrollToBottomRef.current = true;
   }, [activeSessionId]);
@@ -380,6 +409,49 @@ export default function AgentPanel({ onClose }) {
     });
     return shortcuts;
   }, [isShortcutDisabled, composerItems]);
+  const modeMenuItems = useMemo(() => ([
+    { key: AGENT_SESSION_MODES.CHAT, label: '💡 聊天' },
+    { key: AGENT_SESSION_MODES.WRITE, label: '✏️ 写作' },
+  ]), []);
+
+  // 输入里的公开链接会先读取成附件；发送时模型直接拿到正文。
+  useEffect(() => {
+    const urls = extractPublicUrls(input);
+    const visibleIds = new Set(urls.map((url) => `url:${url}`));
+    setAttachedFiles((prev) => {
+      const next = prev.filter((item) => item.kind !== 'url' || visibleIds.has(item.id));
+      return next.length === prev.length ? prev : next;
+    });
+    ignoredUrlIdsRef.current.forEach((id) => {
+      if (!visibleIds.has(id)) ignoredUrlIdsRef.current.delete(id);
+    });
+
+    urls.forEach((url) => {
+      const attachment = createUrlAttachment(url);
+      if (ignoredUrlIdsRef.current.has(attachment.id)
+        || pendingAttachmentIdsRef.current.has(attachment.id)
+        || attachedFiles.some((item) => item.id === attachment.id)) return;
+
+      pendingAttachmentIdsRef.current.add(attachment.id);
+      setAttachedFiles((prev) => (
+        prev.some((item) => item.id === attachment.id) ? prev : [...prev, attachment]
+      ));
+      readPublicUrl({ url, aiProxyBase: aiServerBase })
+        .then((result) => {
+          setAttachedFiles((prev) => prev.map((item) => (
+            item.id === attachment.id ? resolveUrlAttachment(item, result) : item
+          )));
+        })
+        .catch((error) => {
+          setAttachedFiles((prev) => prev.map((item) => (
+            item.id === attachment.id
+              ? { ...item, status: 'error', error: error?.message || '链接读取失败' }
+              : item
+          )));
+        })
+        .finally(() => pendingAttachmentIdsRef.current.delete(attachment.id));
+    });
+  }, [input, attachedFiles, aiServerBase]);
 
   // 注入给 agent 的宿主能力：和 MCP 控制桥共用 createHost，每次调用读实时状态
   const knowledgeSourcesRef = useRef(knowledgeSources);
@@ -459,6 +531,25 @@ export default function AgentPanel({ onClose }) {
     }
   }, []);
 
+  const handlePinInspiration = useCallback(async (index, text) => {
+    const sourceMessage = [...messages.slice(0, index)]
+      .reverse()
+      .find((item) => item.role === 'user');
+    try {
+      const result = await host.pinInspiration({
+        text,
+        title: activeSession?.title || '新会话',
+        dateKey: getTodayDateKey(),
+        sources: sourceMessage?.files ?? [],
+      });
+      if (!result?.ok) throw new Error(result?.error || '写入灵感笔记失败');
+      setPinnedIndex(index);
+      message.success(`已记到「${result.name || '灵感.md'}」`);
+    } catch (error) {
+      message.error(error?.message || '写入灵感笔记失败');
+    }
+  }, [messages, host, activeSession?.title]);
+
   // 输入变化：检测末尾的 @关键词 → 打开文件选择器并带过滤词
   const handleInputChange = useCallback((value) => {
     setInput(value);
@@ -488,8 +579,71 @@ export default function AgentPanel({ onClose }) {
   }, []);
 
   const handleRemoveFile = useCallback((fileId) => {
+    if (String(fileId).startsWith('url:')) ignoredUrlIdsRef.current.add(fileId);
     setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
   }, []);
+
+  const handleAttachmentFiles = useCallback((fileList) => {
+    const files = Array.from(fileList ?? []);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      if (!isSupportedAgentAttachment(file)) {
+        message.warning(`不支持附件「${file.name || '未命名'}」`);
+        return;
+      }
+      const id = createAttachmentId(file);
+      if (pendingAttachmentIdsRef.current.has(id)
+        || attachedFiles.some((item) => item.id === id)) return;
+
+      pendingAttachmentIdsRef.current.add(id);
+      const pending = {
+        id,
+        name: file.name,
+        kind: 'file',
+        content: '',
+        status: 'loading',
+      };
+      setAttachedFiles((prev) => (
+        prev.some((item) => item.id === id) ? prev : [...prev, pending]
+      ));
+      extractAgentAttachment(file, {
+        extractPdfText: (pdfFile) => extractPdfAttachmentText(
+          pdfFile,
+          { aiProxyBase: aiServerBase },
+        ),
+      })
+        .then((attachment) => {
+          setAttachedFiles((prev) => prev.map((item) => (
+            item.id === id ? attachment : item
+          )));
+        })
+        .catch((error) => {
+          setAttachedFiles((prev) => prev.map((item) => (
+            item.id === id
+              ? { ...item, status: 'error', error: error?.message || '附件读取失败' }
+              : item
+          )));
+        })
+        .finally(() => pendingAttachmentIdsRef.current.delete(id));
+    });
+  }, [attachedFiles, aiServerBase]);
+
+  const handleAttachmentInput = useCallback((event) => {
+    handleAttachmentFiles(event.target.files);
+    event.target.value = '';
+  }, [handleAttachmentFiles]);
+
+  const handleComposerPaste = useCallback((event) => {
+    if (!event.clipboardData?.files?.length) return;
+    event.preventDefault();
+    handleAttachmentFiles(event.clipboardData.files);
+  }, [handleAttachmentFiles]);
+
+  const handleComposerDrop = useCallback((event) => {
+    event.preventDefault();
+    handleAttachmentFiles(event.dataTransfer?.files);
+  }, [handleAttachmentFiles]);
 
   const closeSkillPicker = useCallback(() => {
     setShowSkillPicker(false);
@@ -521,9 +675,10 @@ export default function AgentPanel({ onClose }) {
   const buildTurnContext = useCallback(async ({
     selectionText = '',
     pinnedFiles = [],
+    includeActiveDoc = true,
   } = {}) => {
     const inDocumentSurface = surface === 'paper';
-    const activeDoc = inDocumentSurface ? host.getActiveDocMeta?.() : null;
+    const activeDoc = includeActiveDoc && inDocumentSurface ? host.getActiveDocMeta?.() : null;
     const workspaceBrief = buildWorkspaceBrief(workspace, selectedId);
     // 发送前只匹配已有的文档指针；全文检索留给显式召回，不能阻塞普通写作请求。
     const relatedRefs = buildWorkspaceRelatedRefs(activeDoc, workspaceBrief);
@@ -547,10 +702,21 @@ export default function AgentPanel({ onClose }) {
     selectionText = '',
     pinnedFiles = [],
     allowedTools = null,
+    mode = sessionMode,
+    isSkillRun = false,
     skipUserMessage = false,
   }) => {
     if (running || runLockRef.current) return;
-    const retryParams = { promptText, displayText, fileNames, selectionText, pinnedFiles, allowedTools };
+    const retryParams = {
+      promptText,
+      displayText,
+      fileNames,
+      selectionText,
+      pinnedFiles,
+      allowedTools,
+      mode,
+      isSkillRun,
+    };
     if (!isAiConfigured()) {
       setShowSettings(true);
       return;
@@ -559,7 +725,10 @@ export default function AgentPanel({ onClose }) {
     if (!sessionId) return;
     const source = getActiveSource();
     const isLocalRun = source.kind === 'local';
-    const localSession = isLocalRun ? resolveLocalAgentSession(activeSession, source.agentId) : null;
+    const modeConfig = resolveAgentTurnMode({ mode, allowedTools, isSkillRun });
+    const localSession = isLocalRun
+      ? resolveLocalAgentSession(activeSession, source.agentId, modeConfig.mode)
+      : null;
     if (localSession?.switched) {
       appendAgentMessage(sessionId, { role: 'assistant', text: `已切换到 ${source.label}，新会话开始。` });
     }
@@ -598,7 +767,11 @@ export default function AgentPanel({ onClose }) {
     };
 
     try {
-      const taskContext = await buildTurnContext({ selectionText, pinnedFiles });
+      const taskContext = await buildTurnContext({
+        selectionText,
+        pinnedFiles,
+        includeActiveDoc: modeConfig.includeActiveDoc,
+      });
       if (!ownsRun() || controller.signal.aborted) return;
       setLastContextPacket(taskContext);
       const onEvent = (ev) => {
@@ -636,11 +809,14 @@ export default function AgentPanel({ onClose }) {
       };
       const turnParams = {
         userInput: promptText,
-        history: activeSession?.history ?? [],
+        history: isLocalRun
+          ? activeSession?.history ?? []
+          : appendModeSystemMessage(activeSession?.history ?? [], modeConfig.systemPrompt),
+        modeSystemPrompt: modeConfig.systemPrompt,
         host,
         signal: controller.signal,
         taskContext,
-        allowedTools,
+        allowedTools: modeConfig.allowedTools,
         onEvent,
       };
       const result = isLocalRun
@@ -649,6 +825,7 @@ export default function AgentPanel({ onClose }) {
           config: {
             ...source,
             externalSessionId: localSession.externalSessionId,
+            readOnly: modeConfig.mode === AGENT_SESSION_MODES.CHAT,
             projectRoot: pickAgentProjectRoot(workspace, selectedId),
           },
         })
@@ -656,7 +833,11 @@ export default function AgentPanel({ onClose }) {
       const { finalText, history } = result;
       // 会话续接：同一个 agent 下一轮 resume；走 API 服务商时清空
       setAgentExternalSession(sessionId, isLocalRun
-        ? { agentId: source.agentId, externalSessionId: result.externalSessionId || localSession.externalSessionId }
+        ? {
+          agentId: source.agentId,
+          externalSessionId: result.externalSessionId || localSession.externalSessionId,
+          mode: modeConfig.mode,
+        }
         : {});
       if (!ownsRun() || controller.signal.aborted) return;
       setAgentHistory(sessionId, history);
@@ -682,11 +863,16 @@ export default function AgentPanel({ onClose }) {
         if (abortRef.current === controller) abortRef.current = null;
       }
     }
-  }, [running, activeSessionId, activeSession, host, appendAgentMessage, updateAgentMessages, setAgentHistory, setAgentExternalSession, serverTools, buildTurnContext, workspace, selectedId]);
+  }, [running, activeSessionId, activeSession, sessionMode, host, appendAgentMessage, updateAgentMessages, setAgentHistory, setAgentExternalSession, serverTools, buildTurnContext, workspace, selectedId]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text && attachedFiles.length === 0) return;
+    if (attachedFiles.some((item) => item.status === 'loading')) {
+      message.info('附件还在读取，请稍候');
+      return;
+    }
+    const displayText = text || '请阅读这些附件';
 
     // 引用的选中文字当成一个特殊「附件」，复用文件附件的拼接逻辑
     const selectionAttachment = quotedSelection
@@ -695,7 +881,7 @@ export default function AgentPanel({ onClose }) {
     const files = selectionAttachment ? [selectionAttachment, ...attachedFiles] : attachedFiles;
     const fileNames = files.map((f) => f.name);
     // 拼附件内容给模型；UI 上只展示用户原话 + 附件名标记
-    const promptText = buildInputWithAttachments(text, files);
+    const promptText = buildInputWithAttachments(displayText, files);
 
     setInput('');
     setAttachedFiles([]);
@@ -703,17 +889,18 @@ export default function AgentPanel({ onClose }) {
     setActivePanelTab('chat');
     const turn = {
       promptText,
-      displayText: text,
+      displayText,
       fileNames,
       selectionText: quotedSelection,
       pinnedFiles: attachedFiles,
+      mode: sessionMode,
     };
     if (running) {
       setQueuedTurns((prev) => [...prev, turn]);
       return;
     }
     await runTurn(turn);
-  }, [input, running, attachedFiles, quotedSelection, clearAiQuotedSelection, runTurn]);
+  }, [input, running, attachedFiles, quotedSelection, sessionMode, clearAiQuotedSelection, runTurn]);
 
   // 本轮结束后自动发送排队的下一条
   useEffect(() => {
@@ -742,8 +929,9 @@ export default function AgentPanel({ onClose }) {
     runTurn({
       promptText: choice.prompt,
       displayText: label || choice.prompt,
+      mode: sessionMode,
     });
-  }, [running, runTurn]);
+  }, [running, sessionMode, runTurn]);
 
   const handleInsertMention = useCallback(() => {
     setInput((prev) => {
@@ -779,6 +967,8 @@ export default function AgentPanel({ onClose }) {
       selectionText: quotedSelection,
       pinnedFiles: attachedFiles,
       allowedTools: turn.allowedTools,
+      mode: AGENT_SESSION_MODES.WRITE,
+      isSkillRun: true,
     });
   }, [running, registrySkills, quotedSelection, attachedFiles, clearAiQuotedSelection, runTurn]);
 
@@ -838,6 +1028,11 @@ export default function AgentPanel({ onClose }) {
     const shortcut = composerItems.find((item) => item.id === key);
     if (shortcut) handleShortcutClick(shortcut);
   }, [composerItems, handleShortcutClick]);
+
+  const handleModeChange = useCallback(({ key }) => {
+    if (!activeSessionId) return;
+    setAgentSessionMode(activeSessionId, key);
+  }, [activeSessionId, setAgentSessionMode]);
 
   // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
@@ -1112,6 +1307,8 @@ export default function AgentPanel({ onClose }) {
               copiedIndex={copiedIndex}
               onChoice={handleChoiceCardClick}
               onCopy={handleCopy}
+              onPin={sessionMode === AGENT_SESSION_MODES.CHAT ? handlePinInspiration : null}
+              pinnedIndex={pinnedIndex}
               onRetry={handleRetry}
               onOpenSettings={handleOpenSettings}
               onOpenArtifact={(fileId) => host.openWorkspaceItem({ id: fileId })}
@@ -1206,9 +1403,15 @@ export default function AgentPanel({ onClose }) {
         {attachedFiles.length > 0 && (
           <div className="agent-panel__attachments">
             {attachedFiles.map((f) => (
-              <span key={f.id} className="agent-panel__chip">
-                <FileText size={12} />
-                <span className="agent-panel__chip-name">{f.name}</span>
+              <span
+                key={f.id}
+                className={`agent-panel__chip agent-panel__chip--${f.status || 'ready'}`}
+                title={f.status === 'error' ? f.error : f.name}
+              >
+                {f.kind === 'url' ? <Link2 size={12} /> : <FileText size={12} />}
+                <span className="agent-panel__chip-name">
+                  {f.status === 'loading' ? `正在读取：${f.name}` : f.name}
+                </span>
                 <button className="agent-panel__chip-del" title="移除" onClick={() => handleRemoveFile(f.id)}>
                   <X size={12} />
                 </button>
@@ -1244,6 +1447,9 @@ export default function AgentPanel({ onClose }) {
             rows={1}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handleComposerPaste}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleComposerDrop}
           />
           {running ? (
             <button
@@ -1255,13 +1461,36 @@ export default function AgentPanel({ onClose }) {
               <Square size={16} />
             </button>
           ) : (
-            <button type="button" className="agent-panel__send-btn" onClick={handleSend} title="发送" disabled={!input.trim()}>
+            <button
+              type="button"
+              className="agent-panel__send-btn"
+              onClick={handleSend}
+              title="发送"
+              disabled={(!input.trim() && attachedFiles.length === 0)
+                || attachedFiles.some((item) => item.status === 'loading')}
+            >
               <SendOutlined />
             </button>
           )}
         </div>
 
         <div className="agent-panel__composer-tools">
+          <Dropdown
+            trigger={['click']}
+            placement="topLeft"
+            overlayClassName="agent-panel__composer-dropdown"
+            menu={{ items: modeMenuItems, onClick: handleModeChange }}
+          >
+            <button
+              type="button"
+              className="agent-panel__composer-plus"
+              style={{ width: 'auto' }}
+              title="切换会话模式"
+              disabled={running}
+            >
+              {sessionMode === AGENT_SESSION_MODES.CHAT ? '💡 聊天' : '✏️ 写作'}
+            </button>
+          </Dropdown>
           <Dropdown
             trigger={['click']}
             placement="topLeft"
@@ -1287,6 +1516,22 @@ export default function AgentPanel({ onClose }) {
             onClick={handleInsertMention}
           >
             @
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={AGENT_ATTACHMENT_ACCEPT}
+            multiple
+            hidden
+            onChange={handleAttachmentInput}
+          />
+          <button
+            type="button"
+            className="agent-panel__composer-at"
+            title="添加附件"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip size={14} />
           </button>
           <AgentSourcePicker
             sources={aiSource.sources}

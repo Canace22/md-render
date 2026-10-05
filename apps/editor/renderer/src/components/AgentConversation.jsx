@@ -8,6 +8,7 @@ import {
   Copy,
   FileText,
   Loader2,
+  Pin,
   RotateCcw,
   Settings,
   User,
@@ -107,6 +108,8 @@ const AgentMessage = ({
   running,
   onChoice,
   onCopy,
+  onPin,
+  pinnedIndex,
   onRetry,
   onOpenSettings,
 }) => {
@@ -183,6 +186,18 @@ const AgentMessage = ({
               {copiedIndex === index ? <Check size={13} /> : <Copy size={13} />}
               <span>{copiedIndex === index ? '已复制' : '复制'}</span>
             </button>
+            {onPin && (
+              <button
+                type="button"
+                className={`agent-panel__copy-btn${pinnedIndex === index ? ' is-copied' : ''}`}
+                title={pinnedIndex === index ? '已记下' : '记到灵感笔记'}
+                disabled={running || pinnedIndex === index}
+                onClick={() => onPin(index, parsed.displayText)}
+              >
+                {pinnedIndex === index ? <Check size={13} /> : <Pin size={13} />}
+                <span>{pinnedIndex === index ? '已记下' : '记下来'}</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -198,6 +213,8 @@ export default function AgentConversation({
   copiedIndex,
   onChoice,
   onCopy,
+  onPin,
+  pinnedIndex,
   onRetry,
   onOpenSettings,
   onOpenArtifact,
@@ -224,6 +241,8 @@ export default function AgentConversation({
             running={running}
             onChoice={onChoice}
             onCopy={onCopy}
+            onPin={onPin}
+            pinnedIndex={pinnedIndex}
             onRetry={onRetry}
             onOpenSettings={onOpenSettings}
           />

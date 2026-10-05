@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     execTool: (payload) => ipcRenderer.invoke('ai:execTool', payload),
     listTools: (payload) => ipcRenderer.invoke('ai:listTools', payload),
     searchKnowledge: (payload) => ipcRenderer.invoke('ai:searchKnowledge', payload),
+    readUrl: (payload) => ipcRenderer.invoke('ai:readUrl', payload),
+    extractAttachmentText: (payload) => ipcRenderer.invoke('ai:extractAttachmentText', payload),
   },
 
   // 本机 agent（Codex / Claude Code / Cursor）：检测、模型、运行一轮、停止

@@ -1,10 +1,12 @@
 import {
   requestChatCompletion,
   requestChatCompletionStream,
+  requestAttachmentText,
   requestKnowledgeSearch,
   requestProviders,
   requestToolExec,
   requestToolSchema,
+  requestUrlRead,
 } from '../aiRequest.js';
 
 export const AI_CHAT_STREAM_EVENT_CHANNEL = 'ai:chatStream:event';
@@ -96,6 +98,24 @@ export function registerAiHandlers({ ipcMain, resolveAiProxyBase }) {
       return await requestKnowledgeSearch({ ...payload, aiProxyBase });
     } catch (err) {
       return { ok: false, results: [], error: err.message };
+    }
+  });
+
+  ipcMain.handle('ai:readUrl', async (_event, payload = {}) => {
+    try {
+      const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
+      return await requestUrlRead({ ...payload, aiProxyBase });
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('ai:extractAttachmentText', async (_event, payload = {}) => {
+    try {
+      const aiProxyBase = resolveAiProxyBase(payload.aiProxyBase);
+      return await requestAttachmentText({ ...payload, aiProxyBase });
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
   });
 }

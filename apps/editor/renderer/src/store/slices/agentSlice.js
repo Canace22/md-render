@@ -4,6 +4,7 @@ import {
   mapSession,
   removeSession,
 } from '../../core/agent/sessionUtils.js';
+import { normalizeAgentSessionMode } from '../../core/agent/chatMode.js';
 
 export const createAgentSlice = (set, get) => ({
   // AI 助手会话（全局内存态，故意不进 persist：切页不丢、关 app 清空）
@@ -41,6 +42,12 @@ export const createAgentSlice = (set, get) => ({
     return session.id;
   },
   switchAgentSession: (sessionId) => set({ activeAgentSessionId: sessionId }),
+  setAgentSessionMode: (sessionId, mode) => set((state) => ({
+    agentSessions: mapSession(state.agentSessions, sessionId, (session) => ({
+      ...session,
+      mode: normalizeAgentSessionMode(mode),
+    })),
+  })),
   deleteAgentSession: (sessionId) => set((state) => {
     const { sessions, nextActiveId } = removeSession(
       state.agentSessions,
@@ -68,7 +75,14 @@ export const createAgentSlice = (set, get) => ({
     agentSessions: mapSession(state.agentSessions, sessionId, (session) => ({ ...session, history })),
   })),
   // 本地 agent 会话续接：记住这一轮用的 agent 和它的外部会话 id；走 API 服务商时清空
-  setAgentExternalSession: (sessionId, { agentId = '', externalSessionId = '' } = {}) => set((state) => ({
-    agentSessions: mapSession(state.agentSessions, sessionId, (session) => ({ ...session, agentId, externalSessionId })),
+  setAgentExternalSession: (sessionId, {
+    agentId = '', externalSessionId = '', mode = '',
+  } = {}) => set((state) => ({
+    agentSessions: mapSession(state.agentSessions, sessionId, (session) => ({
+      ...session,
+      agentId,
+      externalSessionId,
+      externalSessionMode: mode,
+    })),
   })),
 });

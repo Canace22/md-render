@@ -11,6 +11,8 @@ import { readChatStream } from '../shared/sseChat.js';
 
 const AI_PROXY_TIMEOUT_MS = 60000;
 const KNOWLEDGE_SEARCH_TIMEOUT_MS = 30000;
+const URL_READ_TIMEOUT_MS = 30000;
+const ATTACHMENT_TEXT_TIMEOUT_MS = 45000;
 const TOOL_EXEC_TIMEOUT_MS = 5 * 60 * 1000; // 工具执行最长 5 分钟
 
 const normalizeAiProxyBase = (value) => String(value ?? '').trim().replace(/\/+$/, '');
@@ -241,6 +243,64 @@ export async function requestKnowledgeSearch({ aiProxyBase, query, sources }) {
     return data;
   } catch (err) {
     if (err?.name === 'AbortError') throw new Error('外挂知识库搜索超时');
+    throw new Error(formatProxyError(err, aiProxyBase));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 通过 ai-proxy 读取公开 http/https 网页正文。
+ */
+export async function requestUrlRead({ aiProxyBase, url }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  if (!String(url ?? '').trim()) throw new Error('网页地址为空');
+
+  const endpoint = `${normalizeAiProxyBase(aiProxyBase)}/api/url/read`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), URL_READ_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || `网页读取失败 (${response.status})`);
+    }
+    return data;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('网页读取超时');
+    throw new Error(formatProxyError(err, aiProxyBase));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 通过 ai-proxy 提取 PDF 附件文字。 */
+export async function requestAttachmentText({ aiProxyBase, base64 }) {
+  if (!aiProxyBase) throw new Error('未配置 AI 代理地址（aiProxyBase）');
+  if (!String(base64 ?? '').trim()) throw new Error('PDF 内容为空');
+
+  const endpoint = `${normalizeAiProxyBase(aiProxyBase)}/api/attachments/text`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ATTACHMENT_TEXT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64 }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || `PDF 读取失败 (${response.status})`);
+    return data;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('PDF 读取超时');
     throw new Error(formatProxyError(err, aiProxyBase));
   } finally {
     clearTimeout(timer);

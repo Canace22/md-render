@@ -30,10 +30,11 @@ const PERMISSION_PATTERN = /permission|denied|not allowed|unauthorized|rejected/
 /** MCP 在工作目录 .cursor/mcp.json 里注入，运行前由 handler 写好 */
 export const MCP_VIA_WORKSPACE_FILE = true;
 
-export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, cwd = '', systemPrompt = '', contextText = '' }) => {
+export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, readOnly = false, cwd = '', systemPrompt = '', contextText = '' }) => {
   const args = ['-p', '--output-format', 'stream-json', '--trust', '--approve-mcps'];
   if (cwd) args.push('--workspace', cwd);
-  if (!safeMode) args.push('--force');
+  if (readOnly) args.push('--mode', 'ask');
+  else if (!safeMode) args.push('--force');
   if (model) args.push('--model', model);
   if (sessionId) args.push('--resume', sessionId);
   return { args, stdin: composePrompt({ prompt, systemPrompt, contextText, sessionId }) };

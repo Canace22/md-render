@@ -23,9 +23,13 @@ const STDIN_PROMPT = '-';
 // Codex 断线重连时会发 error 事件但还会继续，不能当成失败
 const RETRY_PATTERN = /reconnect|retrying|stream disconnected/i;
 
-export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, mcpLaunch = null, systemPrompt = '', contextText = '' }) => {
+export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, readOnly = false, mcpLaunch = null, systemPrompt = '', contextText = '' }) => {
   const args = ['exec', '--json', '--skip-git-repo-check'];
-  args.push(...(safeMode ? ['--sandbox', 'workspace-write'] : ['--dangerously-bypass-approvals-and-sandbox']));
+  args.push(...(readOnly
+    ? ['--sandbox', 'read-only']
+    : safeMode
+      ? ['--sandbox', 'workspace-write']
+      : ['--dangerously-bypass-approvals-and-sandbox']));
   if (model) args.push('-m', model);
   if (mcpLaunch) args.push(...toCodexConfigArgs(mcpLaunch));
   if (sessionId) args.push('resume', sessionId);

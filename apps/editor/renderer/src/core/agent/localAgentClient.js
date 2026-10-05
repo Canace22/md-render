@@ -168,6 +168,7 @@ export const runLocalAgent = async ({
   signal,
   taskContext = null,
   allowedTools = null,
+  modeSystemPrompt = '',
 }) => {
   if (!hasLocalAgentBridge()) throw new Error('本地 agent 只在桌面版可用');
   if (signal?.aborted) throw new Error('已取消');
@@ -191,8 +192,11 @@ export const runLocalAgent = async ({
       model: config?.model || '',
       sessionId: config?.externalSessionId || '',
       safeMode: Boolean(config?.safeMode),
+      readOnly: Boolean(config?.readOnly),
       projectRoot: config?.projectRoot || '',
-      systemPrompt: buildLocalAgentSystemPrompt(),
+      systemPrompt: [buildLocalAgentSystemPrompt(), modeSystemPrompt]
+        .filter((part) => String(part ?? '').trim())
+        .join('\n\n'),
       contextText: formatTaskContextPacket(taskContext),
       allowedTools,
     });

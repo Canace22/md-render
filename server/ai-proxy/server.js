@@ -20,11 +20,13 @@
 const http = require('http');
 const https = require('https');
 const { ALLOW_ORIGIN, DEFAULT_UPSTREAM_HOST, PORT } = require('./config');
+const { extractPdfText } = require('./attachmentText');
 const { PROVIDERS, listProviders, resolveProvider } = require('./providers');
-const { searchKnowledgeSources } = require('./knowledgeSearch');
+const { readPublicUrl, searchKnowledgeSources } = require('./knowledgeSearch');
 const { executeTool, loadTools, toolsToOpenAISchema } = require('./toolRunner');
 
 const TOOLS = loadTools();
+const MAX_ATTACHMENT_BODY_BYTES = 17 * 1024 * 1024;
 
 // ── 工具函数 ───────────────────────────────────────────────
 const FORWARD_HEADERS = ['authorization', 'content-type', 'accept'];
@@ -142,6 +144,52 @@ const server = http.createServer((req, res) => {
         return jsonRes(res, result.ok ? 200 : 400, result);
       } catch (err) {
         return jsonRes(res, 400, { ok: false, error: `请求解析失败: ${err.message}`, results: [] });
+      }
+    });
+    return;
+  }
+
+  // ── 公开网页读取：POST /api/url/read ──
+  if (req.method === 'POST' && req.url === '/api/url/read') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const result = await readPublicUrl(payload);
+        return jsonRes(res, 200, result);
+      } catch (err) {
+        return jsonRes(res, 400, { ok: false, error: err.message || '网页读取失败' });
+      }
+    });
+    return;
+  }
+
+  // ── PDF 附件文字提取：POST /api/attachments/text ──
+  if (req.method === 'POST' && req.url === '/api/attachments/text') {
+    const contentLength = Number(req.headers['content-length']) || 0;
+    if (contentLength > MAX_ATTACHMENT_BODY_BYTES) {
+      return jsonRes(res, 413, { ok: false, error: 'PDF 附件过大' });
+    }
+    const chunks = [];
+    let bodyBytes = 0;
+    let bodyTooLarge = false;
+    req.on('data', (chunk) => {
+      bodyBytes += chunk.length;
+      if (bodyBytes > MAX_ATTACHMENT_BODY_BYTES) {
+        bodyTooLarge = true;
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', async () => {
+      if (bodyTooLarge) return jsonRes(res, 413, { ok: false, error: 'PDF 附件过大' });
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        return jsonRes(res, 200, await extractPdfText(payload));
+      } catch (err) {
+        const status = err?.code === 'PDF_EXTRACT_BUSY' ? 429 : 400;
+        return jsonRes(res, status, { ok: false, error: err.message || 'PDF 文字提取失败' });
       }
     });
     return;

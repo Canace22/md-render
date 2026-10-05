@@ -128,6 +128,9 @@ describe('适配器 buildArgs', () => {
     const safe = claude.buildArgs({ prompt: 'hi', safeMode: true, sessionId: 's1', systemPrompt: '规则' }).args;
     expect(safe).toEqual(expect.arrayContaining(['--permission-mode', 'acceptEdits', '--resume', 's1', '--append-system-prompt', '规则']));
     expect(safe).not.toContain('--dangerously-skip-permissions');
+    const readOnly = claude.buildArgs({ prompt: 'hi', readOnly: true }).args;
+    expect(readOnly).toEqual(expect.arrayContaining(['--permission-mode', 'plan', '--tools']));
+    expect(readOnly).not.toContain('--dangerously-skip-permissions');
   });
 
   it('Codex：resume 续会话，续会话时不重复系统提示，安全模式用 workspace-write', () => {
@@ -139,12 +142,16 @@ describe('适配器 buildArgs', () => {
     expect(next.stdin).toBe('问题');
     expect(next.args.slice(-3)).toEqual(['resume', 't1', '-']);
     expect(next.args).toEqual(expect.arrayContaining(['--sandbox', 'workspace-write']));
+    expect(codex.buildArgs({ prompt: '问题', readOnly: true }).args)
+      .toEqual(expect.arrayContaining(['--sandbox', 'read-only']));
   });
 
   it('Cursor：默认带 --force，安全模式不带', () => {
     const cursor = getAdapter('cursor');
     expect(cursor.buildArgs({ prompt: 'x', cwd: '/w' }).args).toEqual(expect.arrayContaining(['--force', '--workspace', '/w', '--approve-mcps']));
     expect(cursor.buildArgs({ prompt: 'x', safeMode: true }).args).not.toContain('--force');
+    expect(cursor.buildArgs({ prompt: 'x', readOnly: true }).args)
+      .toEqual(expect.arrayContaining(['--mode', 'ask']));
   });
 });
 
@@ -291,10 +298,16 @@ describe('来源选择', () => {
 
 describe('会话续接', () => {
   it('同一个 agent resume；换 agent 开新会话并提示', () => {
-    const session = { ...createSession(), messages: [{ role: 'user', text: 'hi' }], agentId: 'codex', externalSessionId: 't1' };
-    expect(resolveLocalAgentSession(session, 'codex')).toEqual({ externalSessionId: 't1', switched: false });
-    expect(resolveLocalAgentSession(session, 'claude')).toEqual({ externalSessionId: '', switched: true });
-    expect(resolveLocalAgentSession(createSession(), 'claude')).toEqual({ externalSessionId: '', switched: false });
+    const session = {
+      ...createSession(),
+      messages: [{ role: 'user', text: 'hi' }],
+      agentId: 'codex',
+      externalSessionId: 't1',
+      externalSessionMode: 'chat',
+    };
+    expect(resolveLocalAgentSession(session, 'codex', 'chat')).toEqual({ externalSessionId: 't1', switched: false });
+    expect(resolveLocalAgentSession(session, 'claude', 'chat')).toEqual({ externalSessionId: '', switched: true });
+    expect(resolveLocalAgentSession(createSession(), 'claude', 'chat')).toEqual({ externalSessionId: '', switched: false });
   });
 });
 

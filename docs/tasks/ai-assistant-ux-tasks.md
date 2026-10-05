@@ -52,16 +52,18 @@
 
 ## P2 找灵感：聊天模式
 
-- [ ] **P2-1** 会话加 `mode`（`chat` / `write`，新会话默认 chat）；`runTurn` 按模式决定是否带当前稿件、工具白名单、系统提示
+- [x] **P2-1** 会话加 `mode`（`chat` / `write`，新会话默认 chat）；`runTurn` 按模式决定是否带当前稿件、工具白名单、系统提示
   - 范围：`sessionUtils.js`、`agentSlice.js`、`AgentPanel.jsx`、`core/agent/chatMode.js`（新）
   - 验收：case 7
-- [ ] **P2-2** `read_url` 工具：ai-proxy 抓取公开网页并提取正文（复用 knowledgeSearch 的 SSRF 防护）；主进程 IPC + 工具执行器
+- [x] **P2-2** `read_url` 工具：ai-proxy 抓取公开网页并提取正文（复用 knowledgeSearch 的 SSRF 防护）；主进程 IPC + 工具执行器
   - 验收：case 8–9
-- [ ] **P2-3** 输入框检测 URL → 链接 chip，发送前预取，失败标红
-- [ ] **P2-4** 拖入 / 粘贴文件（md / txt / pdf / docx / 图片）→ 附件 chip
+- [x] **P2-3** 输入框检测 URL → 链接 chip，发送前预取，失败标红
+- [x] **P2-4** 拖入 / 粘贴文件（md / txt / pdf / docx / 图片）→ 附件 chip
   - 验收：case 10
-- [ ] **P2-5** 回复上的「📌 记下来」：追加到工作区「灵感」笔记
+- [x] **P2-5** 回复上的「📌 记下来」：追加到工作区「灵感」笔记
   - 验收：case 11
+
+> P2 备注：网页读取复用现有 SSRF 防护；PDF 由 ai-proxy 使用现有 PyMuPDF 环境提取文字。当前模型调用链未暴露视觉输入，图片附件会明确标记「不要猜测内容」。
 
 ## P4 面板精简
 

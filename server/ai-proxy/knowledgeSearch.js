@@ -1,4 +1,6 @@
 const dns = require('dns/promises');
+const http = require('http');
+const https = require('https');
 const net = require('net');
 
 const FETCH_TIMEOUT_MS = 10000;
@@ -7,9 +9,11 @@ const MAX_RESULT_COUNT = 5;
 const MAX_LINK_COUNT = 500;
 const MAX_FETCHED_LINKS = 6;
 const MAX_RESPONSE_CHARS = 1500000;
+const MAX_READ_CONTENT_CHARS = 20000;
 const MAX_EXCERPT_CHARS = 1600;
 const MAX_SNIPPET_CHARS = 360;
 const MAX_REDIRECTS = 3;
+const READ_CONTENT_TRUNCATED_SUFFIX = '\n…（正文过长已截断）';
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'localhost.localdomain']);
 
@@ -36,6 +40,24 @@ const stripHtml = (html) => collapseWhitespace(decodeHtml(
 const extractTitle = (html, fallback) => {
   const match = String(html ?? '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
   return collapseWhitespace(stripHtml(match?.[1])) || fallback;
+};
+
+const extractReadableHtml = (html) => {
+  const source = String(html ?? '');
+  const primary = source.match(/<(article|main)\b[^>]*>([\s\S]*?)<\/\1>/i)?.[2]
+    ?? source.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1]
+    ?? source;
+  return stripHtml(primary
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, ' ')
+    .replace(/<(nav|header|footer|aside|form)\b[^>]*>[\s\S]*?<\/\1>/gi, ' '));
+};
+
+const truncateReadContent = (content) => {
+  const text = String(content ?? '').trim();
+  if (text.length <= MAX_READ_CONTENT_CHARS) return text;
+  const keepLength = MAX_READ_CONTENT_CHARS - READ_CONTENT_TRUNCATED_SUFFIX.length;
+  return `${text.slice(0, keepLength)}${READ_CONTENT_TRUNCATED_SUFFIX}`;
 };
 
 const getQueryTerms = (query) => {
@@ -112,38 +134,69 @@ const assertSafeUrl = async (value) => {
   if (!addresses.length || addresses.some((item) => isPrivateAddress(item.address))) {
     throw new Error('知识库地址解析到了不可访问的网络');
   }
-  return url;
+  return { url, ...addresses[0] };
 };
 
-const fetchText = async (value, redirectCount = 0) => {
-  const url = await assertSafeUrl(value);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'manual',
-      headers: {
-        Accept: 'text/html,text/plain,text/markdown,application/json;q=0.8',
-        'User-Agent': 'md-render-knowledge/1.0',
-      },
+const requestText = ({ url, address, family }) => new Promise((resolve, reject) => {
+  const client = url.protocol === 'https:' ? https : http;
+  let settled = false;
+  const finish = (callback, value) => {
+    if (settled) return;
+    settled = true;
+    callback(value);
+  };
+  const request = client.request(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'text/html,text/plain,text/markdown,application/json;q=0.8',
+      'User-Agent': 'md-render-knowledge/1.0',
+    },
+    // 用安全校验过的 IP 建立连接，避免二次 DNS 解析导致 rebinding。
+    lookup: (_hostname, options, callback) => {
+      if (options?.all) callback(null, [{ address, family }]);
+      else callback(null, address, family);
+    },
+  }, (response) => {
+    const chunks = [];
+    let size = 0;
+    response.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_RESPONSE_CHARS * 4) {
+        response.destroy(new Error('知识库页面过大，暂不支持读取'));
+        return;
+      }
+      chunks.push(chunk);
     });
-    if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
-      if (redirectCount >= MAX_REDIRECTS) throw new Error('知识库地址重定向次数过多');
-      const nextUrl = new URL(response.headers.get('location'), url);
-      return fetchText(nextUrl, redirectCount + 1);
-    }
-    if (!response.ok) throw new Error(`知识库页面返回 ${response.status}`);
-    const contentType = String(response.headers.get('content-type') ?? '').toLowerCase();
-    if (contentType && !/(text\/|html|json|markdown)/.test(contentType)) {
-      throw new Error(`知识库页面类型不支持：${contentType.split(';')[0]}`);
-    }
-    const body = await response.text();
-    if (body.length > MAX_RESPONSE_CHARS) throw new Error('知识库页面过大，暂不支持读取');
-    return { url: url.toString(), contentType, body };
-  } finally {
-    clearTimeout(timer);
+    response.on('end', () => finish(resolve, {
+      status: response.statusCode ?? 0,
+      headers: response.headers,
+      body: Buffer.concat(chunks).toString('utf-8'),
+    }));
+    response.on('error', (error) => finish(reject, error));
+  });
+  request.setTimeout(FETCH_TIMEOUT_MS, () => request.destroy(new Error('知识库请求超时')));
+  request.on('error', (error) => finish(reject, error));
+  request.end();
+});
+
+const fetchText = async (value, redirectCount = 0) => {
+  const safeTarget = await assertSafeUrl(value);
+  const { url } = safeTarget;
+  const response = await requestText(safeTarget);
+  const location = response.headers.location;
+  if (response.status >= 300 && response.status < 400 && location) {
+    if (redirectCount >= MAX_REDIRECTS) throw new Error('知识库地址重定向次数过多');
+    return fetchText(new URL(location, url), redirectCount + 1);
   }
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`知识库页面返回 ${response.status}`);
+  }
+  const contentType = String(response.headers['content-type'] ?? '').toLowerCase();
+  if (contentType && !/(text\/|html|json|markdown)/.test(contentType)) {
+    throw new Error(`知识库页面类型不支持：${contentType.split(';')[0]}`);
+  }
+  if (response.body.length > MAX_RESPONSE_CHARS) throw new Error('知识库页面过大，暂不支持读取');
+  return { url: url.toString(), contentType, body: response.body };
 };
 
 const extractLinks = (html, baseUrl) => {
@@ -269,4 +322,25 @@ async function searchKnowledgeSources({ query, sources } = {}) {
   return { ok: true, results, errors };
 }
 
-module.exports = { searchKnowledgeSources };
+async function readPublicUrl({ url } = {}, fetchPage = fetchText) {
+  const cleanUrl = String(url ?? '').trim();
+  if (!cleanUrl) throw new Error('网页地址为空');
+
+  const page = await fetchPage(cleanUrl);
+  const looksLikeHtml = page.contentType.includes('html')
+    || /<!doctype\s+html|<html\b/i.test(page.body);
+  const content = truncateReadContent(
+    looksLikeHtml ? extractReadableHtml(page.body) : page.body,
+  );
+  if (!content) throw new Error('网页正文为空');
+
+  const fallbackTitle = new URL(page.url).hostname;
+  return {
+    ok: true,
+    title: looksLikeHtml ? extractTitle(page.body, fallbackTitle) : fallbackTitle,
+    url: page.url,
+    content,
+  };
+}
+
+module.exports = { readPublicUrl, searchKnowledgeSources };
