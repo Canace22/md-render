@@ -41,4 +41,4 @@ node server.js
 
 ## 部署
 
-参考 `../notion-proxy/DEPLOY-centos-nginx.md`，把端口和上游换成本服务的即可。
+见 [server/README.md](../README.md) 的一键部署（`deploy.sh` + PM2）。
