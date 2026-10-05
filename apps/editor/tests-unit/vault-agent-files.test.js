@@ -73,3 +73,13 @@ describe('同步内置技能到内容库', () => {
     expect(await fs.readFile(path.join(skillsDir, 'compress', 'SKILL.md'), 'utf8')).toBe('我的压缩');
   });
 });
+
+describe('P4-2 的三个技能在外部 agent 里也有路可走', () => {
+  it('出公众号版 / 审稿 / 整理今天：白名单里的每个工具都在 AGENTS.md 的对照表里', () => {
+    const agentsMd = mergeAgentsMd('');
+    const { skills } = buildSkillRegistry({ builtin: BUILTIN_SKILL_ENTRIES });
+    ['wechat-version', 'editorial-review', 'daily-review'].forEach((id) => {
+      findSkillById(skills, id).tools.forEach((tool) => expect(agentsMd, `${id}:${tool}`).toContain(`\`${tool}\``));
+    });
+  });
+});

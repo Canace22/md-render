@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getMdRenderRootPath } from '../localProject.js';
 import { backupDatabase, rebuildIndexFromWorkspace } from '../database.js';
 import { planMigration } from '../migration/planMigration.js';
@@ -13,6 +16,18 @@ import {
 import { getMigrationStateCache, isStepOnFilesCached, refreshMigrationStateCache, setMigrationStateCache } from '../migration/stateCache.js';
 
 const GIT_TIMEOUT_MS = 120000;
+const AGENTS_MD = 'AGENTS.md';
+const HANDSHAKE_FILE = 'agent-bridge.json';
+
+/** 开发环境下仓库里的 mcp-bridge 入口（打包版不带，返回空，界面里让用户自己填路径） */
+const findMcpBridgeEntry = () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, '../../../server/mcp-bridge/index.js'),
+    path.resolve(here, '../../../../server/mcp-bridge/index.js'),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || '';
+};
 
 const runGit = (args, cwd) => new Promise((resolve, reject) => {
   execFile('git', args, { cwd, timeout: GIT_TIMEOUT_MS }, (error) => (error ? reject(error) : resolve()));
@@ -49,7 +64,9 @@ const summarizePlan = (plan) => ({
  */
 export function registerMigrationHandlers({
   ipcMain,
+  app,
   getMainWindow,
+  openPath = async () => '',
   markLocalProjectWriteIgnored = () => {},
   getVaultRoot = getMdRenderRootPath,
 }) {
@@ -104,6 +121,27 @@ export function registerMigrationHandlers({
   // M-base-2：从当前工作区重建索引
   ipcMain.handle('db:rebuild-index', wrap(async ({ workspaceJson }) => {
     rebuildIndexFromWorkspace(JSON.parse(workspaceJson));
+    return {};
+  }));
+
+  // 设置 → 外部 agent 接入（U8）：内容库路径、MCP 配置要用的路径
+  ipcMain.handle('vault:agent-info', wrap(async () => {
+    const vaultRoot = getVaultRoot();
+    return {
+      vaultRoot,
+      agentsMdPath: path.join(vaultRoot, AGENTS_MD),
+      agentsMdExists: fs.existsSync(path.join(vaultRoot, AGENTS_MD)),
+      mcpBridgeEntry: findMcpBridgeEntry(),
+      handshakePath: app ? path.join(app.getPath('userData'), HANDSHAKE_FILE) : '',
+    };
+  }));
+
+  // 打开内容库根目录或 AGENTS.md（只允许这两个）
+  ipcMain.handle('vault:open', wrap(async ({ target }) => {
+    const vaultRoot = getVaultRoot();
+    const targetPath = target === 'agents-md' ? path.join(vaultRoot, AGENTS_MD) : vaultRoot;
+    const error = await openPath(targetPath);
+    if (error) throw new Error(error);
     return {};
   }));
 

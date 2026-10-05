@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { TEMPLATES } from '../utils/wechatTemplates';
 import VaultStorageSettings from './VaultStorageSettings.jsx';
+import ExternalAgentSettings from './ExternalAgentSettings.jsx';
 import { isVaultSupported } from '../utils/vaultBridge.js';
 
 export default function SettingsPanel({
@@ -200,6 +201,7 @@ export default function SettingsPanel({
       )}
 
       {isVaultSupported() && <VaultStorageSettings toMarkdown={toMarkdown} />}
+      {isVaultSupported() && <ExternalAgentSettings />}
 
       {backup && (
         <div className="settings-group">

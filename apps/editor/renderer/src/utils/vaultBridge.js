@@ -32,3 +32,6 @@ export const rebuildVaultIndex = (workspace) => unwrap(getApi('vault').rebuildIn
 
 /** 迁移状态里某一步是否已切到文件 */
 export const isStepOnFiles = (state, step) => state?.storageSource === 'files' && Boolean(state?.steps?.[step]?.done);
+
+export const fetchVaultAgentInfo = async () => unwrap(getApi('vault').agentInfo(), '读取内容库信息失败');
+export const openVaultLocation = (target) => unwrap(getApi('vault').open(target), '打开失败');

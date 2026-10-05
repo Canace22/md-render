@@ -86,6 +86,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readCanvas: () => ipcRenderer.invoke('vault:read-canvas'),
     ensureIds: () => ipcRenderer.invoke('vault:ensure-ids'),
     rebuildIndex: (workspaceJson) => ipcRenderer.invoke('db:rebuild-index', { workspaceJson }),
+    agentInfo: () => ipcRenderer.invoke('vault:agent-info'),
+    open: (target) => ipcRenderer.invoke('vault:open', { target }),
   },
 
   // 只读本机运行诊断
