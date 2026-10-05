@@ -30,8 +30,11 @@ import {
 
 import {
   NOT_RUNNING_MESSAGE,
+  filterAllowedTools,
   instructionsCacheFilePath,
   isConnectionError,
+  isToolAllowedByEnv,
+  readAllowedTools,
   readInstructionsCache,
   readToolCache,
   resolveBridge,
@@ -72,6 +75,9 @@ const bridgeFetch = async (bridge, pathname, options = {}) => {
   return json;
 };
 
+/** skill 白名单：md-render 拉起本地 agent 时传入；单独使用 MCP 时不设，放行全部 */
+const ALLOWED_TOOLS = readAllowedTools();
+
 /** 从 OpenAI 工具定义转成 MCP 工具定义 */
 const toMcpTool = (def) => ({
   name: def.function.name,
@@ -85,7 +91,7 @@ const textResult = (text, isError = false) => ({
 });
 
 /** 拉工具列表：app 在线就拉最新并缓存；不在线用缓存；都没有就只给状态工具 */
-const listTools = async (cacheFile) => {
+const listAllTools = async (cacheFile) => {
   const bridge = resolveBridge();
   if (bridge) {
     try {
@@ -103,12 +109,16 @@ const listTools = async (cacheFile) => {
   return cached.length ? cached : [STATUS_TOOL];
 };
 
+/** 缓存存全量，对外按白名单裁剪 */
+const listTools = async (cacheFile) => filterAllowedTools(await listAllTools(cacheFile), ALLOWED_TOOLS, [STATUS_TOOL.name]);
+
 /** 调用一次工具：每次都重新读握手文件，app 重启后不用重启 MCP 客户端 */
 const callTool = async (name, args) => {
   const bridge = resolveBridge();
   if (name === STATUS_TOOL.name) {
     return textResult(bridge ? 'md-render 正在运行。' : NOT_RUNNING_MESSAGE, !bridge);
   }
+  if (!isToolAllowedByEnv(name, ALLOWED_TOOLS)) return textResult(`当前技能不允许调用工具 ${name}`, true);
   if (!bridge) return textResult(NOT_RUNNING_MESSAGE, true);
   try {
     const data = await bridgeFetch(bridge, '/invoke', {

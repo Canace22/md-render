@@ -46,6 +46,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     searchKnowledge: (payload) => ipcRenderer.invoke('ai:searchKnowledge', payload),
   },
 
+  // 本机 agent（Codex / Claude Code / Cursor）：检测、模型、运行一轮、停止
+  localAgent: {
+    detect: (payload) => ipcRenderer.invoke('local-agent:detect', payload),
+    models: (payload) => ipcRenderer.invoke('local-agent:models', payload),
+    run: (payload) => ipcRenderer.invoke('local-agent:run', payload),
+    cancel: (payload) => ipcRenderer.invoke('local-agent:cancel', payload),
+    onEvent: (callback) => {
+      const sub = (_event, payload) => callback(payload);
+      ipcRenderer.on('local-agent:event', sub);
+      return () => ipcRenderer.removeListener('local-agent:event', sub);
+    },
+  },
+
   // 内容库产品 skill（MdRender/.agents/skills）：读原始文件 + 变化通知
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),

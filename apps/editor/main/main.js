@@ -52,6 +52,7 @@ import {
 } from './database.js';
 import { writeBuiltInDocsToDisk } from './mdSync.js';
 import { registerIpcHandlers } from './ipc/registerIpcHandlers.js';
+import { cancelAllLocalAgentRuns } from './ipc/localAgentHandlers.js';
 import { startAgentBridge, stopAgentBridge } from './agentBridge.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -547,5 +548,7 @@ app.on('before-quit', () => {
   unwatchAllLocalProjects();
   // 删掉握手文件，MCP 端才能明确报「md-render 没在运行」，而不是连残留端口报 fetch failed
   stopAgentBridge();
+  // 本地 agent 进程组一起停掉（守护进程是兜底）
+  cancelAllLocalAgentRuns();
   closeDatabase();
 });

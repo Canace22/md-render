@@ -27,7 +27,7 @@ const HOST = '127.0.0.1';
 const INVOKE_CHANNEL = 'agent-bridge:invoke';
 const REPLY_CHANNEL = 'agent-bridge:reply';
 const MAX_BODY_BYTES = 1_000_000;
-const HANDSHAKE_FILE_NAME = 'agent-bridge.json';
+export const HANDSHAKE_FILE_NAME = 'agent-bridge.json';
 
 /** 当前运行中的桥：{ server, handshakeFile, token }；退出时据此清理 */
 let activeBridge = null;

@@ -3,6 +3,7 @@ import { registerAiHandlers } from './aiHandlers.js';
 import { registerDbHandlers } from './dbHandlers.js';
 import { registerDiagnosticHandlers } from './diagnosticHandlers.js';
 import { registerExportHandlers } from './exportHandlers.js';
+import { registerLocalAgentHandlers } from './localAgentHandlers.js';
 import { registerLocalProjectHandlers } from './localProjectHandlers.js';
 import { registerMigrationHandlers } from './migrationHandlers.js';
 import { registerSkillHandlers } from './skillHandlers.js';
@@ -20,4 +21,5 @@ export function registerIpcHandlers(deps) {
   registerSkillHandlers(deps);
   registerAgentDataHandlers(deps);
   registerMigrationHandlers(deps);
+  registerLocalAgentHandlers(deps);
 }

@@ -105,3 +105,24 @@ export const writeToolCache = (file, tools) => {
     /* noop：目录不存在或无权限时放弃缓存 */
   }
 };
+
+/**
+ * skill 工具白名单（md-render 拉起本地 agent 时通过环境变量传入）。
+ * 没设 → null（放行全部）；设成空串 → 空集合（一个都不给）。
+ */
+export const ALLOWED_TOOLS_ENV = 'MD_RENDER_ALLOWED_TOOLS';
+
+export const readAllowedTools = (env = process.env) => {
+  const raw = env[ALLOWED_TOOLS_ENV];
+  if (raw === undefined) return null;
+  return new Set(String(raw).split(',').map((name) => name.trim()).filter(Boolean));
+};
+
+/** 按白名单过滤工具；alwaysAllowed 里的（如状态工具）不受限 */
+export const filterAllowedTools = (tools, allowed, alwaysAllowed = []) => (
+  allowed ? tools.filter((tool) => allowed.has(tool.name) || alwaysAllowed.includes(tool.name)) : tools
+);
+
+export const isToolAllowedByEnv = (name, allowed, alwaysAllowed = []) => (
+  !allowed || allowed.has(name) || alwaysAllowed.includes(name)
+);
