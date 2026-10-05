@@ -3,6 +3,8 @@ import {
   ArrowLeft, Cloud, Download, Loader2, Plus, Trash2, Upload,
 } from 'lucide-react';
 import { TEMPLATES } from '../utils/wechatTemplates';
+import VaultStorageSettings from './VaultStorageSettings.jsx';
+import { isVaultSupported } from '../utils/vaultBridge.js';
 
 export default function SettingsPanel({
   selectedFileName,
@@ -15,6 +17,7 @@ export default function SettingsPanel({
   onCopyStyleChange,
   onPublishingPlatformsChange,
   onClose,
+  toMarkdown,
 }) {
   const [platformDrafts, setPlatformDrafts] = useState(publishingPlatforms);
   const [newPlatformLabel, setNewPlatformLabel] = useState('');
@@ -195,6 +198,8 @@ export default function SettingsPanel({
           </div>
         </div>
       )}
+
+      {isVaultSupported() && <VaultStorageSettings toMarkdown={toMarkdown} />}
 
       {backup && (
         <div className="settings-group">

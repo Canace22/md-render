@@ -217,6 +217,12 @@ const contentToDiskMarkdown = (content, mediaContext) => {
   return rewriteMarkdownImagesForDisk(markdown, mediaContext);
 };
 
+/** 迁移用：BlockNote 旧格式正文转 Markdown，普通 Markdown 原样返回 */
+const blockNoteContentToMarkdown = (content) => {
+  const blocks = parseBlockNoteContent(content);
+  return blocks ? normalizeMarkdown(BlockNoteEditor.create(BLOCKNOTE_OPTIONS).blocksToMarkdownLossy(blocks)) : content;
+};
+
 const DEFAULT_PASTE_MIME_TYPES = new Set([
   'vscode-editor-data',
   'blocknote/html',
@@ -2501,6 +2507,7 @@ function MarkdownEditor() {
             onCopyStyleChange={setCopyStyle}
             onPublishingPlatformsChange={setPublishingPlatforms}
             onClose={leaveSettings}
+            toMarkdown={blockNoteContentToMarkdown}
             local={{
               localProjectSupported,
               canSyncFromDisk: canSyncWorkspaceFromDisk,

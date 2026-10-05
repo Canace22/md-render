@@ -10652,3 +10652,50 @@ body.theme-dark .file-preview-iframe {
   color: var(--color-text-muted);
   word-break: break-all;
 }
+
+/* 设置 → 数据存储 / 迁移向导 */
+.settings-vault-status {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.settings-vault-status li {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+
+.settings-vault-status .is-files {
+  color: var(--color-brand-primary);
+}
+
+.migration-wizard__report pre {
+  max-height: 420px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: var(--radius-m);
+  background: var(--color-bg-active);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.migration-wizard__btn {
+  margin-left: 8px;
+  padding: 4px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.migration-wizard__btn.is-primary {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary);
+  color: #fff;
+}
