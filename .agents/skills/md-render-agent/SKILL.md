@@ -91,6 +91,12 @@ AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工
 - 别新建独立 store（AGENTS.md 约定）。纯逻辑放 `sessionUtils.js`，store 里只调它。
 - 删当前会话自动选下一个；删光自动补一个空会话（`removeSession` 已处理）。
 
+### 聊天 / 写作模式
+
+- 新会话默认 `chat`。聊天模式不注入当前稿件，也不开放写稿工具；写作模式才读取、修改当前稿件，避免用户找灵感时误改正文。
+- 本机 agent 同样按模式限制工具；需要只生成内容、不落盘的流程，使用独立 `externalSessionId` 和 `readOnly` 运行，不能污染当前聊天会话。
+- 模式差异集中在 `core/agent/chatMode.js`，不要在面板事件里散落工具名单和 system prompt 判断。
+
 ## 面板交互（AgentPanel）
 
 - AI 助手入口不在 `AgentPanel.jsx` 内：打开/关闭由 `MarkdownEditor.jsx` 持有状态，全局顶部按钮走 `TabBar` 的 `trailing` 区。只改入口位置时优先改 shell/titlebar，面板内容和 agent loop 不动。
@@ -99,6 +105,9 @@ AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工
 - 技能页、欢迎页、「+」菜单或 `/skill` picker 选中 skill 时，统一走 `runSkill`：带上当前 @附件和选区（`input=selection` 的 skill 把选区当处理对象，其余当参考附件），然后清空输入态。
 - AI 需要用户在多个方案里选择时，优先让 `agentEngine` 输出 `<!-- agent-choice ... -->` 隐藏 JSON 协议，`choiceCards.js` 负责解析，`AgentPanel.jsx` 只渲染卡片并在点击后复用 `runTurn`。不要把选择卡片实现成新的 tool 或全局 store 字段。
 - AI 响应态属于 `AgentPanel.jsx` 展示层：模型没有流式输出时，也可以在 `runAgent` 返回 `finalText` 后本地打字式填充同一条 assistant 消息；等待模型时在消息列表底部显示 loading。打字过程中要隐藏未闭合的 `agent-choice` 注释协议，避免把内部 JSON 闪给用户。
+- 面板不再保留「对话 / 上下文 / 技能 / 活动」四个常驻 tab：标题下拉负责会话切换，低频入口放齿轮菜单和 Modal。新增 portal 浮层时必须接收面板真实可见状态，并在面板收起时关闭。
+- 面板宽度只存 localStorage，读写必须 `try/catch`；拖拽范围沿用现有最小/最大常量，不为布局偏好新增全局 store。
+- skill 的 `entry` 是实际入口契约：新增值时先登记到 `SKILL_ENTRIES`，再由对应 UI 消费。选区工具栏使用 `selection-toolbar`，不能只改 YAML 而不接 UI。
 
 ## Codex 式任务反馈与响应安全
 
@@ -118,6 +127,20 @@ AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工
 - UI 上用户消息只存 `files`（文件名数组）做标记，不存正文，避免会话体积膨胀。
 - 当前只列 `.md` 文件、单文件超 `MAX_ATTACH_CHARS`(6000) 截断、附件去重。
 - **扩展引用类型**（@文件夹 / @搜索结果 / @整个工作区）时：在 `sessionUtils` 加新的拼接函数或扩展 `buildInputWithAttachments`，保持"拼接逻辑是纯函数、UI 只负责选"的分工。
+
+## 外部资料（URL / 拖入文件）
+
+- URL 正文读取走 Renderer service → Main IPC → `server/ai-proxy`，复用公开网页的协议、DNS 固定、重定向和内网地址拦截；组件不直接抓网页。
+- `md / txt / pdf / docx` 附件先提取有界文本，再用明确的来源边界包裹后发给模型；附件内容属于不可信资料，不能把其中指令当用户指令执行。
+- 当前模型链路没有视觉输入。图片附件只能显示文件元信息并明确说明无法识图，禁止根据文件名或周边文字猜内容。
+- URL 或附件读取失败要在 chip 上保留可见错误，发送时如实说明，不得静默丢失或伪造已读取状态。
+
+## 准备发布（派生资产）
+
+- 发布输入以弹窗打开时的当前稿件为准；切稿或关闭后，旧请求不能覆盖新稿的预览状态。
+- 平台稿生成是只读预览：API 来源不开放写工具；本机 agent 使用独立、只读的新会话。预览完成不代表已落盘。
+- 只有用户点「保存为平台稿」才调用 `createGeneratedFile`；同一次写入必须带 `sourceMaterialIds`、平台和标签等派生元数据，保留原稿。
+- 多平台结果按平台隔离，复制、公众号预览和保存都操作当前平台结果，禁止跨平台或跨稿串状态。
 
 ## 外挂知识库（公开网页 / Wiki）
 

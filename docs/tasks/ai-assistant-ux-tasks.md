@@ -87,4 +87,6 @@
 
 ## 收尾
 
-- [ ] **Z-1** 更新 `md-render-agent` skill；在 `docs/summaries/` 写总结
+- [x] **Z-1** 更新 `md-render-agent` skill；在 `docs/summaries/` 写总结
+
+> 收尾备注：实现总结见 `docs/summaries/2026-10-05-ai-assistant-ux.md`；生产构建通过，未按项目规则主动运行单元测试或 E2E。
