@@ -65,4 +65,28 @@ describe('agentSlice 写入目标绑定', () => {
     await expect(pending).resolves.toBe(false);
     expect(store.writes).toEqual([]);
   });
+
+  it('已有待确认改动时拒绝新写入（resolve null），不覆盖旧的', async () => {
+    const store = makeStore({ workspace, selectedId: 'A' });
+    const first = store.get().stageAgentWrite({ newText: '第一次' });
+    const second = store.get().stageAgentWrite({ newText: '第二次' });
+
+    await expect(second).resolves.toBeNull();
+    expect(store.get().agentPendingWrite.newText).toBe('第一次');
+
+    // 第一次写入的 Promise 不会挂起：用户应用后正常结束
+    store.get().applyAgentWrite();
+    await expect(first).resolves.toBe(true);
+    expect(store.writes).toEqual([{ via: 'byId', fileId: 'A', text: '第一次' }]);
+  });
+
+  it('上一处改动处理完后，可以再次暂存', async () => {
+    const store = makeStore({ workspace, selectedId: 'A' });
+    const first = store.get().stageAgentWrite({ newText: '第一次' });
+    store.get().discardAgentWrite();
+    await expect(first).resolves.toBe(false);
+
+    store.get().stageAgentWrite({ newText: '第二次' });
+    expect(store.get().agentPendingWrite.newText).toBe('第二次');
+  });
 });
