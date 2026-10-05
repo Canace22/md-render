@@ -10431,3 +10431,130 @@ body.theme-dark .file-preview-iframe {
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* 待确认收件箱（顶栏入口 + 抽屉） */
+.titlebar-inbox-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.titlebar-inbox-toggle:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-active);
+}
+
+.titlebar-inbox-toggle.has-pending {
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+}
+
+.titlebar-inbox-count {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--color-brand-primary);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.proposal-inbox__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proposal-inbox__item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.proposal-inbox__item.is-discarded,
+.proposal-inbox__item.is-applied {
+  opacity: 0.7;
+}
+
+.proposal-inbox__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.proposal-inbox__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.proposal-inbox__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.proposal-inbox__title {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.proposal-inbox__meta,
+.proposal-inbox__reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.proposal-inbox__actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.proposal-inbox__diff {
+  max-height: 320px;
+  margin-top: 8px;
+  overflow: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-m);
+}
+
+.proposal-inbox__section {
+  margin: 16px 0 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.proposal-inbox__empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.diff-overlay__btn.is-danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}

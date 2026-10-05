@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Breadcrumb from './Breadcrumb.jsx';
 import ThemeToggleButton from './ThemeToggleButton.jsx';
+import ProposalInbox from './ProposalInbox.jsx';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { formatShortcut } from '../utils/shortcutLabel.js';
 
@@ -164,6 +165,7 @@ export default function EditorTopBar({
           <span className="titlebar-command-entry-text">全部功能</span>
           <kbd className="titlebar-command-entry-kbd">{formatShortcut(COMMAND_PALETTE_KEY)}</kbd>
         </button>
+        <ProposalInbox />
         <button
           type="button"
           className={`titlebar-agent-toggle${agentPanelOpen ? ' is-open' : ''}`}
