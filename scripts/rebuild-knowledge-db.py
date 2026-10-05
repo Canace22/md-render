@@ -39,11 +39,15 @@ def copy_table(connection, table):
     connection.execute(f'INSERT INTO main.{name} ({fields}) SELECT {fields} FROM original.{name}')
 
 
-def rebuild(source, destination):
+def rebuild(source, destination, offline_source=False):
     if not source.is_file():
         raise ValueError('源数据库不存在。')
     if source.resolve() == destination.resolve():
         raise ValueError('必须写入新文件，不能原地改动源数据库。')
+    source_status = source.stat()
+    wal = Path(str(source) + '-wal')
+    if offline_source and wal.exists() and wal.stat().st_size:
+        raise ValueError('离线源库仍有 WAL，必须先正常退出应用并完成写入。')
     # Exclusive creation also prevents overwriting an existing backup.
     descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     os.close(descriptor)
@@ -51,7 +55,10 @@ def rebuild(source, destination):
     deadline = time.monotonic() + REBUILD_TIMEOUT_SECONDS
     connection.set_progress_handler(lambda: int(time.monotonic() > deadline), PROGRESS_INTERVAL)
     try:
-        connection.execute('ATTACH DATABASE ? AS original', (source.resolve().as_uri() + '?mode=ro',))
+        # Closed WAL databases may require creating sidecars even for a readonly open.
+        # Immutable is only safe for an explicitly offline, checkpointed source.
+        suffix = '?mode=ro&immutable=1' if offline_source else '?mode=ro'
+        connection.execute('ATTACH DATABASE ? AS original', (source.resolve().as_uri() + suffix,))
         connection.execute('BEGIN')
         schema = connection.execute(
             "SELECT type, name, tbl_name, sql FROM original.sqlite_master WHERE sql IS NOT NULL",
@@ -104,6 +111,12 @@ def rebuild(source, destination):
         ''').fetchone()[0]
         if index_rows != fingerprints['documents']['rows'] or stale_rows:
             raise ValueError('新搜索索引与文档记录不一致。')
+        if offline_source and (
+            source.stat().st_mtime_ns != source_status.st_mtime_ns
+            or source.stat().st_size != source_status.st_size
+            or (wal.exists() and wal.stat().st_size)
+        ):
+            raise ValueError('源库在重建期间发生写入，已停止，请先关闭应用。')
         return {'tables': fingerprints, 'index_rows': index_rows, 'stale_index_rows': stale_rows}
     except Exception:
         connection.close()
@@ -117,8 +130,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path)
     parser.add_argument('destination', type=Path)
+    parser.add_argument('--offline-source', action='store_true', help='仅用于已退出应用、没有 WAL 的静止源库')
     args = parser.parse_args()
-    report = rebuild(args.source, args.destination)
+    report = rebuild(args.source, args.destination, args.offline_source)
     report.update(source_bytes=args.source.stat().st_size, repaired_bytes=args.destination.stat().st_size)
     print(json.dumps(report, ensure_ascii=False))
 
