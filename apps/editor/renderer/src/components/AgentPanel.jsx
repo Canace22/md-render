@@ -35,7 +35,9 @@ import {
   findEditorialMemoryFile,
 } from '../core/agent/editorialMemory.js';
 import { fetchServerTools, executeTool, TOOL_DEFINITIONS } from '../core/agent/toolRegistry.js';
-import { installAgentBridgeListener } from '../core/agent/bridgeListener.js';
+import { createHost } from '../core/agent/createHost.js';
+import { getSurfaceLabel } from '../core/agent/surfaceLabels.js';
+import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
 import { buildInputWithAttachments } from '../core/agent/sessionUtils.js';
 import {
   buildActiveDocMeta,
@@ -132,12 +134,6 @@ const getArtifactResultForMessage = (result) => {
   });
 };
 
-const PROPOSAL_OUTCOME_TEXT = Object.freeze({
-  applied: '改动已应用到当前文档。',
-  discarded: '用户放弃了这次改动，文档未变更。',
-  conflict: '写入被拒绝：文档在提案之后被用户改过，请重新读取后再提交。',
-});
-const describeProposalOutcome = (proposal) => PROPOSAL_OUTCOME_TEXT[proposal?.status] || '提案状态未知，文档未变更。';
 const TOOL_ERROR_RESULT_PATTERN = /^\s*(?:工具「[^」]+」(?:执行出错|不可用)|[^\n：:]{0,24}(?:失败|出错|错误|不可用|拒绝)[：:]|server 工具通道不可用|未知工具|当前工作区不可用|当前环境不支持|当前没有.*无法)/i;
 
 const getToolCompletionStatus = (result) => {
@@ -171,17 +167,6 @@ const finishRunningTools = (messages, status) => messages.map((item) => (
     ? { ...item, status }
     : item
 ));
-
-const requestSafeRepairApproval = ({ title, description }) => new Promise((resolve) => {
-  Modal.confirm({
-    title,
-    content: description,
-    okText: '确认修复',
-    cancelText: '取消',
-    onOk: () => resolve(true),
-    onCancel: () => resolve(false),
-  });
-});
 
 const formatAgentError = (error) => {
   const raw = String(error?.message ?? error ?? '').trim();
@@ -219,75 +204,14 @@ const recallDocsForContext = async ({
   }));
 };
 
-/** AI 请求删除条目时的强制确认框：列出全部名称，用户点确认才继续 */
-const confirmAgentDelete = (names, reason) => new Promise((resolve) => {
-  Modal.confirm({
-    title: `AI 助手请求删除 ${names.length} 个条目`,
-    content: (
-      <div>
-        {reason ? <p style={{ marginBottom: 8 }}>原因：{reason}</p> : null}
-        <ul style={{ paddingLeft: 18, maxHeight: 200, overflow: 'auto' }}>
-          {names.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}
-        </ul>
-        <p style={{ marginTop: 8 }}>删除后不可恢复，确认继续吗？</p>
-      </div>
-    ),
-    okText: '确认删除',
-    okButtonProps: { danger: true },
-    cancelText: '取消',
-    onOk: () => resolve(true),
-    onCancel: () => resolve(false),
-  });
-});
-
-const CONTENT_ENTRY_PRESETS = Object.freeze({
-  topic: {
-    draftStatus: 'idea',
-    fallbackName: '新选题',
-  },
-  draft: {
-    draftStatus: 'drafting',
-    fallbackName: '新稿件',
-  },
-  material: {
-    draftStatus: 'collecting',
-    fallbackName: '新资料单',
-  },
-  ready: {
-    draftStatus: 'ready',
-    fallbackName: '待发布稿',
-  },
-});
-
 const MAX_SLASH_SKILL_RESULTS = 8;
 const SLASH_SKILL_PATTERN = /^\s*\/([^\s/]*)$/;
-
-const SURFACE_LABELS = Object.freeze({
-  overview: '总览',
-  daily: '今日速记',
-  canvas: '灵感白板',
-  'creation-board': '创作看板',
-  publishing: '发布队列',
-  search: '知识库搜索',
-  graph: '关系图谱',
-  sync: '同步中心',
-  settings: '设置',
-  paper: '文档工作区',
-  folder: '文件夹',
-});
 
 const AGENT_PANEL_TABS = Object.freeze([
   { id: 'chat', label: '对话', icon: MessagesSquare },
   { id: 'context', label: '上下文', icon: MessageSquareQuote },
   { id: 'skills', label: '技能', icon: Wrench },
 ]);
-
-const getSurfaceLabel = (surface, selectedNode) => {
-  if (surface === 'paper') {
-    return selectedNode?.type === 'folder' ? '文件夹' : '文档工作区';
-  }
-  return SURFACE_LABELS[surface] || '当前界面';
-};
 
 export default function AgentPanel({ onClose }) {
   const markdown = useEditorStore((s) => s.markdown);
@@ -433,409 +357,15 @@ export default function AgentPanel({ onClose }) {
     return shortcuts;
   }, [isShortcutDisabled, composerItems]);
 
-  // 注入给 agent 的宿主能力：读写当前文档 + 搜索工作区
-  // 全局模式：无文档时 readActiveDoc 返回空，writeActiveDoc 为 no-op
-  const host = useMemo(() => ({
-    readActiveDoc: () => {
-      const files = collectFiles(workspace);
-      const active = files.find((f) => f.id === selectedId);
-      return { title: active?.name ?? '', content: markdown ?? '' };
-    },
-    getActiveDocMeta: () => {
-      const files = collectFiles(workspace);
-      const active = files.find((f) => f.id === selectedId);
-      return buildActiveDocMeta(active, markdown ?? '');
-    },
-    // 不直接覆盖：生成提案，弹 diff 让用户应用/放弃。
-    // wait=false（外部 AI 经 MCP 调用）时提交后立即返回，不等用户点按钮。
-    writeActiveDoc: async (content, { wait = true, who = 'app' } = {}) => {
-      const state = useEditorStore.getState();
-      if (!state.selectedId) return '写入失败：当前没有打开的文档。请先打开一个文档。';
-      const submitted = state.submitEditProposal({ targetId: state.selectedId, newText: content, who, tool: 'write_active_doc' });
-      if (!submitted.ok) return submitted.error;
-      if (!wait) return `已提交改动提案（${submitted.proposal.id}），等待用户确认（应用或放弃）。`;
-      const resolved = await useEditorStore.getState().waitForAgentProposal(submitted.proposal.id);
-      return describeProposalOutcome(resolved);
-    },
-    createNewDoc: async ({ name, content, targetPlatforms, sourceMaterialIds } = {}) => {
-      const result = await createGeneratedFile({
-        name,
-        content,
-        contextNodeId: selectedId,
-        meta: { targetPlatforms, sourceMaterialIds },
-      });
-      return JSON.stringify(result?.ok
-        ? { ok: true, fileId: result.fileId, name: result.name, message: '原文未改动。' }
-        : { ok: false, error: result?.error || '未知错误' });
-    },
-    createAgentArtifact: async (args = {}) => {
-      const prepared = buildAgentArtifactPayload(args);
-      if (!prepared.ok) return JSON.stringify({ ok: false, error: prepared.error });
-
-      const result = await createGeneratedFile({
-        name: prepared.artifact.name,
-        content: prepared.artifact.content,
-        contextNodeId: selectedId,
-        meta: prepared.artifact.meta,
-      });
-      return JSON.stringify(result?.ok
-        ? {
-          kind: 'agent_artifact',
-          ok: true,
-          artifactType: prepared.artifact.type,
-          artifactLabel: prepared.artifact.label,
-          fileId: result.fileId,
-          name: result.name,
-        }
-        : { kind: 'agent_artifact', ok: false, error: result?.error || '未知错误' });
-    },
-    inspectAppHealth: async () => {
-      const aiConfiguration = getAiServerConfiguration();
-      const runtimeSnapshot = hasDiagnosticsBridge()
-        ? await getDiagnosticsSnapshot({ aiProxyBase: aiConfiguration.resolved })
-        : {
-          ok: false,
-          error: '当前不在 Electron 环境，无法读取本机运行快照。',
-          aiProxy: { reachable: false },
-        };
-      return buildAgentHealthSnapshot({
-        runtimeSnapshot,
-        aiConfiguration,
-        workspaceBrief: buildWorkspaceToolBrief(workspace, selectedId),
-        activeDoc: buildActiveDocMeta(activeFile, markdown ?? ''),
-        currentSurface: getSurfaceLabel(surface, activeFile),
-      });
-    },
-    applySafeRepair: async ({ repairId = '' } = {}) => {
-      const result = await runSafeRepair({
-        repairId,
-        aiConfiguration: getAiServerConfiguration(),
-        confirm: requestSafeRepairApproval,
-        clearAiServerOverride,
-        restoreAiServerOverride: saveAiServerBase,
-        verify: async (nextBase) => {
-          if (!hasDiagnosticsBridge()) return { aiProxy: { reachable: false } };
-          return getDiagnosticsSnapshot({ aiProxyBase: nextBase });
-        },
-      });
-      setAiServerBase(readAiServerBase());
-      return JSON.stringify(result);
-    },
-    addDailyEntry: async ({ type = 'task', text = '', dateKey = '' } = {}) => {
-      const cleanText = String(text ?? '').trim();
-      if (!cleanText) return '添加失败：内容为空。';
-      const targetDateKey = normalizeDateKey(
-        dateKey || dailyWorkspace?.currentDate || getTodayDateKey(),
-      );
-      addDailyItem(targetDateKey, type, cleanText);
-      setDailyCurrentDate(targetDateKey);
-      setSurface('daily');
-      return `已添加到 ${targetDateKey}：${type}「${cleanText}」。`;
-    },
-    addTodoEntry: async ({ text = '' } = {}) => {
-      const cleanText = String(text ?? '').trim();
-      if (!cleanText) return '添加失败：待办内容为空。';
-      addTodoItem(cleanText);
-      setSurface('daily');
-      return `已加入待办池：${cleanText}。`;
-    },
-    getDailyOverview: async ({ dateKey = '' } = {}) => {
-      return buildDailyOverview(dailyWorkspace, dateKey);
-    },
-    openCanvas: async () => {
-      setSurface('canvas');
-      return '已切换到灵感白板。';
-    },
-    openSurface: async ({ surface: nextSurface = '' } = {}) => {
-      const cleanSurface = String(nextSurface ?? '').trim();
-      if (!cleanSurface) return '切换失败：目标界面为空。';
-      setSurface(cleanSurface);
-      return `已切换到${getSurfaceLabel(cleanSurface, activeFile)}。`;
-    },
-    appendCanvasCards: async ({ cards = [] } = {}) => {
-      const currentCanvasState = workspace?.canvasState ?? {};
-      const currentExcalidraw = currentCanvasState?.excalidraw ?? {};
-      const currentElements = Array.isArray(currentExcalidraw.elements)
-        ? currentExcalidraw.elements
-        : [];
-      const startIndex = countRenderableCanvasCards(currentElements);
-      const items = buildCanvasItemsFromAgentCards(cards, { startIndex });
-      if (!items.length) return '添加失败：没有有效卡片。';
-
-      const nextElements = [
-        ...currentElements,
-        ...buildExcalidrawElementsFromItems(items, { startIndex }),
-      ];
-      setWorkspaceCanvas(buildExcalidrawCanvasState({
-        elements: nextElements,
-        appState: currentExcalidraw.appState ?? {},
-        files: currentExcalidraw.files ?? {},
-      }));
-      setSurface('canvas');
-      return `已在灵感白板添加 ${items.length} 张卡片。`;
-    },
-    replaceCanvas: async ({ cards = [], edges = [] } = {}) => {
-      const currentCanvasState = workspace?.canvasState ?? {};
-      const currentExcalidraw = currentCanvasState?.excalidraw ?? {};
-      const nextCanvasState = buildCanvasSceneFromAgentGraph({
-        cards,
-        edges,
-        appState: currentExcalidraw.appState ?? {},
-        files: currentExcalidraw.files ?? {},
-      });
-      const nextCount = Array.isArray(cards) ? cards.length : 0;
-      if (!nextCount) return '绘制失败：没有有效卡片。';
-      setWorkspaceCanvas(nextCanvasState);
-      setSurface('canvas');
-      return `已重建灵感白板，包含 ${nextCount} 张卡片。`;
-    },
-    clearCanvas: async () => {
-      setWorkspaceCanvas({
-        nodes: [],
-        edges: [],
-        viewport: null,
-        excalidraw: null,
-      });
-      setSurface('canvas');
-      return '已清空灵感白板。';
-    },
-    createContentEntry: async ({
-      kind = 'topic',
-      name = '',
-      summary = '',
-      content = '',
-      targetPlatforms = [],
-      sourceMaterialIds = [],
-    } = {}) => {
-      const preset = CONTENT_ENTRY_PRESETS[kind] || CONTENT_ENTRY_PRESETS.topic;
-      const finalContent = String(content ?? '').trim()
-        || (String(summary ?? '').trim() ? `# ${name || preset.fallbackName}\n\n${String(summary ?? '').trim()}\n` : '');
-      const result = await createGeneratedFile({
-        name: name || preset.fallbackName,
-        content: finalContent,
-        contextNodeId: selectedId,
-        meta: {
-          draftStatus: preset.draftStatus,
-          summary,
-          targetPlatforms,
-          sourceMaterialIds,
-        },
-      });
-      return result?.ok
-        ? `已创建${kind === 'topic' ? '选题' : '内容条目'}「${result.name}」。`
-        : `创建失败：${result?.error || '未知错误'}`;
-    },
-    readDocById: async (docId) => {
-      const targetId = String(docId ?? '').trim();
-      if (!targetId) return null;
-      const file = collectFiles(workspace).find((item) => item?.id === targetId);
-      if (!file) return null;
-      return {
-        ...buildActiveDocMeta(file, file.content ?? ''),
-        content: file.content ?? '',
-      };
-    },
-    moveWorkspaceItem: async ({ id, targetFolderId } = {}) => {
-      const state = useEditorStore.getState();
-      const node = findNodeById(state.workspace, id);
-      if (!node) return `移动失败：未找到 id 为「${id}」的条目。`;
-      const resolvedTargetId = targetFolderId === AGENT_META_FOLDER_NAME
-        ? state.ensureAgentMetaFolder()
-        : targetFolderId;
-      const target = findNodeById(useEditorStore.getState().workspace, resolvedTargetId);
-      if (!target || target.type !== 'folder') return '移动失败：目标不是有效文件夹。';
-      const ok = useEditorStore.getState().moveNodeToFolderById(id, resolvedTargetId);
-      return ok
-        ? `已把「${node.name}」移动到「${target.name}」。`
-        : `移动失败：「${node.name}」可能已在目标文件夹里，或该条目不支持移动（如磁盘挂载项目、目标在其子树内）。`;
-    },
-    renameWorkspaceItem: async ({ id, name } = {}) => {
-      const state = useEditorStore.getState();
-      const node = findNodeById(state.workspace, id);
-      if (!node) return `重命名失败：未找到 id 为「${id}」的条目。`;
-      const oldName = node.name;
-      const ok = state.applyRename(id, name);
-      return ok
-        ? `已把「${oldName}」重命名为「${name}」。`
-        : '重命名失败：名称无效或该条目不支持重命名（如磁盘挂载项目）。';
-    },
-    deleteWorkspaceItems: async ({ ids = [], reason = '' } = {}) => {
-      const state = useEditorStore.getState();
-      const looked = ids.map((id) => ({ id, node: findNodeById(state.workspace, id) }));
-      const found = looked.filter((item) => item.node && item.id !== 'root');
-      const missing = looked.filter((item) => !item.node).map((item) => item.id);
-      if (!found.length) return '删除失败：没有找到任何对应条目，请先用 search_docs 确认 id。';
-
-      const confirmed = await confirmAgentDelete(found.map((item) => item.node.name), reason);
-      if (!confirmed) return '用户取消了删除，未做任何改动。';
-
-      const removedNames = [];
-      const failedNames = [];
-      for (const item of found) {
-        const ok = useEditorStore.getState().deleteNode(item.id);
-        (ok ? removedNames : failedNames).push(item.node.name);
-      }
-      return [
-        removedNames.length ? `已删除 ${removedNames.length} 个条目：${removedNames.map((n) => `「${n}」`).join('、')}。` : '',
-        failedNames.length ? `删除失败：${failedNames.map((n) => `「${n}」`).join('、')}（可能是磁盘挂载项目，需在侧栏手动处理）。` : '',
-        missing.length ? `未找到 id：${missing.join('、')}。` : '',
-      ].filter(Boolean).join(' ');
-    },
-    // 记忆读写必须用 getState() 拿实时 workspace：同一轮 agent run 会连续多次读写，
-    // useMemo 闭包里的 workspace 是本轮开始时的旧快照，用它判断「文件是否存在」会重复建档。
-    readEditorialMemory: async () => {
-      const ws = useEditorStore.getState().workspace;
-      const file = findAgentMetaFile(ws, EDITORIAL_MEMORY_DOC_NAME)
-        ?? findEditorialMemoryFile(collectFiles(ws)); // 兼容旧版散落在笔记区的记忆
-      if (!file) return null;
-      return { id: file.id, name: file.name, content: file.content ?? '' };
-    },
-    updateEditorialMemory: async ({ category, text } = {}) => {
-      const state = useEditorStore.getState();
-      const metaFile = findAgentMetaFile(state.workspace, EDITORIAL_MEMORY_DOC_NAME);
-      const legacyFile = metaFile ? null : findEditorialMemoryFile(collectFiles(state.workspace));
-      const base = metaFile ?? legacyFile;
-
-      const next = appendMemoryEntry(base?.content ?? '', {
-        category,
-        text,
-        dateKey: getTodayDateKey(),
-      });
-      if (!next.ok) return `更新失败：${next.error}`;
-
-      const result = state.upsertAgentMetaFile({
-        name: EDITORIAL_MEMORY_DOC_NAME,
-        content: next.content,
-        summary: 'AI 编辑部的长期知识库（只追加，不改写）',
-      });
-      if (!result?.ok) return `写入记忆失败：${result?.error || '未知错误'}`;
-
-      const location = `${AGENT_META_FOLDER_NAME}/${EDITORIAL_MEMORY_DOC_NAME}`;
-      return [
-        `已把新经验追加到「${MEMORY_CATEGORIES[category]}」（${location}）。`,
-        legacyFile ? '旧位置的记忆内容已并入 .agent 目录，散落的旧「编辑部记忆」文档可以删除了。' : '',
-      ].filter(Boolean).join(' ');
-    },
-    openWorkspaceItem: async ({ id = '' } = {}) => {
-      const targetId = String(id ?? '').trim();
-      if (!targetId) return '打开失败：条目 id 为空。';
-      const node = findNodeById(workspace, targetId);
-      if (!node) return `打开失败：未找到 id 为「${targetId}」的条目。`;
-      selectNode(targetId);
-      return node.type === 'folder'
-        ? `已打开文件夹「${node.name || '未命名'}」。`
-        : `已打开文档「${node.name || '未命名'}」。`;
-    },
-    createFolder: async ({ name = '' } = {}) => {
-      const ok = addFolder(selectedId);
-      if (!ok) return '新建失败：当前位置不支持创建文件夹。';
-      const nextState = useEditorStore.getState();
-      const folder = findNodeById(nextState.workspace, nextState.selectedId);
-      const desiredName = String(name ?? '').trim();
-      if (desiredName && folder?.id) {
-        const renamed = applyRename(folder.id, desiredName);
-        if (renamed) {
-          return `已创建文件夹「${desiredName}」。`;
-        }
-      }
-      return `已创建文件夹「${folder?.name || '新建文件夹'}」。`;
-    },
-    listRecentDocs: async (limit = 4) => {
-      return buildRecentDocPointers(workspace, selectedId, limit);
-    },
-    getWorkspaceBrief: async () => {
-      return buildWorkspaceToolBrief(workspace, selectedId);
-    },
-    searchDocs: async (query) => {
-      // .agent 等隐藏目录里的元数据不进搜索/召回结果
-      const hiddenIds = collectHiddenFileIds(workspace);
-      if (hasDbBridge()) {
-        const res = await dbSearch(query);
-        if (!res?.ok) throw new Error(res?.error || '知识库检索失败，请稍后重试。');
-        const filesById = new Map(collectFiles(workspace).map((file) => [file.id, file]));
-        return (res.results ?? []).filter((r) => !hiddenIds.has(r?.id)).map((r) => {
-          const node = filesById.get(r.id);
-          return buildContentAssetPointer({
-            ...(node ?? {}),
-            ...r,
-            title: r.title ?? r.name ?? node?.name ?? '未命名',
-            snippet: r.snippet ?? r.excerpt ?? node?.summary ?? '',
-            id: r.id ?? node?.id,
-          });
-        });
-      }
-      const q = String(query).toLowerCase();
-      return collectFiles(workspace)
-        .filter((f) => !hiddenIds.has(f?.id))
-        .filter((f) => getFileKnowledgeSearchText(f).includes(q))
-        .map((f) => buildContentAssetPointer(f, { content: String(f.content ?? '').slice(0, 200) }));
-    },
-    searchExternalKnowledge: async ({ query } = {}) => searchExternalKnowledge({
-      query,
-      sources: knowledgeSources,
-      aiProxyBase: aiServerBase,
-    }),
-    /**
-     * 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等）。
-     * 走 IPC → ai-proxy server → spawn 脚本。
-     * 返回结构化结果给模型，模型可以从中解析出文件路径告诉用户。
-     */
-    execServerTool: async (toolName, args) => {
-      if (!hasAiToolBridge()) {
-        return JSON.stringify({ ok: false, error: 'server 工具通道不可用（需要 Electron 环境）' });
-      }
-      try {
-        const res = await aiExecTool({
-          toolName,
-          args,
-          aiProxyBase: aiServerBase,
-        });
-        if (!res) return JSON.stringify({ ok: false, error: 'server 无响应' });
-        // 把 stdout/stderr 合并成一段摘要，避免超长
-        const summary = [];
-        if (res.stdout) summary.push(String(res.stdout).slice(0, 2000));
-        if (res.stderr) summary.push(`[stderr] ${String(res.stderr).slice(0, 500)}`);
-        return JSON.stringify({
-          ok: Boolean(res.ok),
-          exitCode: res.exitCode,
-          error: res.error || null,
-          summary: summary.join('\n'),
-        });
-      } catch (err) {
-        return JSON.stringify({ ok: false, error: err?.message ?? String(err) });
-      }
-    },
-  }), [
-    workspace,
-    selectedId,
-    markdown,
-    createGeneratedFile,
-    dailyWorkspace,
-    addDailyItem,
-    addTodoItem,
-    setWorkspaceCanvas,
-    setDailyCurrentDate,
-    setSurface,
-    aiServerBase,
-    activeFile,
-    surface,
-    knowledgeSources,
-  ]);
-
-  // Agent 控制桥：把 host 存进 ref，让「别的 AI」经 MCP 转发来的工具请求，
-  // 始终用最新的 host + 现成 executeTool 执行。只挂一次，靠 ref 拿最新闭包。
-  const hostRef = useRef(host);
-  hostRef.current = host;
-  useEffect(() => {
-    const api = typeof window !== 'undefined' ? window.electronAPI : null;
-    if (!api?.agentBridge) return undefined;
-    return installAgentBridgeListener({
-      electronAPI: api,
-      getHost: () => hostRef.current,
-      executeTool,
-      toolDefs: TOOL_DEFINITIONS,
-    });
-  }, []);
+  // 注入给 agent 的宿主能力：和 MCP 控制桥共用 createHost，每次调用读实时状态
+  const knowledgeSourcesRef = useRef(knowledgeSources);
+  knowledgeSourcesRef.current = knowledgeSources;
+  const host = useMemo(() => createHost({
+    getState: useEditorStore.getState,
+    ...AGENT_HOST_DIALOGS,
+    getKnowledgeSources: () => knowledgeSourcesRef.current,
+    onAiServerBaseChange: setAiServerBase,
+  }), []);
 
   // 加载 server 端脚本工具的 schema（pdf_to_docx 等），传给 runAgent
   const [serverTools, setServerTools] = useState([]);

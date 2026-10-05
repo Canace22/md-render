@@ -14,11 +14,17 @@ import {
 } from '../../../../shared/agentBridgeTools.js';
 
 /**
- * 桥接调用不能卡在「等用户点应用」上（MCP 客户端会一直挂着）：
- * 把 writeActiveDoc 换成「暂存即返回」，其余能力原样透传。
+ * 桥接调用不能卡在「等用户点应用 / 确认删除」上（MCP 客户端会一直挂着）：
+ * 改正文、删除都改成「提交提案即返回」，其余能力原样透传。
  */
+const BRIDGE_CALL_OPTIONS = Object.freeze({ wait: false, who: 'mcp' });
+
 export const toBridgeHost = (host) => (host
-  ? { ...host, writeActiveDoc: (content) => host.writeActiveDoc?.(content, { wait: false, who: 'mcp' }) }
+  ? {
+    ...host,
+    writeActiveDoc: (content, options = {}) => host.writeActiveDoc?.(content, { ...options, ...BRIDGE_CALL_OPTIONS }),
+    deleteWorkspaceItems: (args) => host.deleteWorkspaceItems?.(args, BRIDGE_CALL_OPTIONS),
+  }
   : host);
 
 /**
