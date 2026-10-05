@@ -1,7 +1,7 @@
 label: 标题建议
 group: 改写
 aliases: [标题, title]
-entry: [slash]
+entry: [slash, welcome]
 input: active_doc
 tools: [read_active_doc]
 output: answer

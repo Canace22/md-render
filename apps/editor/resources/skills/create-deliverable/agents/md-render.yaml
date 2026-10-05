@@ -1,7 +1,7 @@
 label: 生成交付物
 group: 产出物
 aliases: [artifact, deliverable, 交付, 报告, 方案]
-entry: [slash, welcome]
+entry: [slash]
 input: none
 tools: [read_active_doc, recall_related_docs, search_docs, read_doc_by_id, create_agent_artifact]
 output: artifact

@@ -113,7 +113,7 @@ function InlineRewriteCard({ state, onAccept, onDiscard, onRegenerate }) {
   );
 }
 
-export function EditorInlineRewriteProvider({ children }) {
+export function EditorInlineRewriteProvider({ children, enabledSkillIds = new Set() }) {
   const editor = useBlockNoteEditor();
   const abortRef = useRef(null);
   const [state, setState] = useState({ status: 'idle', draft: '', error: '', snapshot: null, instruction: 'polish', label: '润色' });
@@ -190,8 +190,8 @@ export function EditorInlineRewriteProvider({ children }) {
   }, [start, state.instruction, state.label, state.snapshot]);
 
   const value = useMemo(
-    () => ({ running: state.status === 'running', start }),
-    [start, state.status],
+    () => ({ enabledSkillIds, running: state.status === 'running', start }),
+    [enabledSkillIds, start, state.status],
   );
   return (
     <InlineRewriteContext.Provider value={value}>
@@ -211,41 +211,52 @@ export function EditorInlineRewriteButtons() {
   const Components = useComponentsContext();
   if (!rewrite || !Components) return null;
 
+  const showPolish = rewrite.enabledSkillIds.has('polish');
+  const showTone = rewrite.enabledSkillIds.has('tone');
+  const showCompress = rewrite.enabledSkillIds.has('compress');
+  if (!showPolish && !showTone && !showCompress) return null;
+
   const run = (instruction, label) => { void rewrite.start(instruction, label); };
   return (
     <>
-      <Components.FormattingToolbar.Button
-        className="editor-ai-toolbar__button"
-        label="润色"
-        mainTooltip="润色选中文字"
-        isDisabled={rewrite.running}
-        icon={<span className="editor-ai-toolbar__label"><Sparkles size={14} />润色</span>}
-        onClick={() => run('polish', '润色')}
-      />
-      <Components.Generic.Menu.Root>
-        <Components.Generic.Menu.Trigger>
-          <Components.FormattingToolbar.Button
-            className="editor-ai-toolbar__button"
-            label="调整语气"
-            mainTooltip="调整选中文字的语气"
-            isDisabled={rewrite.running}
-            icon={<span className="editor-ai-toolbar__label">语气<ChevronDown size={13} /></span>}
-          />
-        </Components.Generic.Menu.Trigger>
-        <Components.Generic.Menu.Dropdown className="bn-menu-dropdown">
-          <Components.Generic.Menu.Item onClick={() => run('colloquial', '更口语')}>更口语</Components.Generic.Menu.Item>
-          <Components.Generic.Menu.Item onClick={() => run('formal', '更正式')}>更正式</Components.Generic.Menu.Item>
-          <Components.Generic.Menu.Item onClick={() => run('concise', '更简洁')}>更简洁</Components.Generic.Menu.Item>
-        </Components.Generic.Menu.Dropdown>
-      </Components.Generic.Menu.Root>
-      <Components.FormattingToolbar.Button
-        className="editor-ai-toolbar__button"
-        label="精简"
-        mainTooltip="压缩选中文字"
-        isDisabled={rewrite.running}
-        icon={<span className="editor-ai-toolbar__label"><Minimize2 size={14} />精简</span>}
-        onClick={() => run('shorten', '精简')}
-      />
+      {showPolish && (
+        <Components.FormattingToolbar.Button
+          className="editor-ai-toolbar__button"
+          label="润色"
+          mainTooltip="润色选中文字"
+          isDisabled={rewrite.running}
+          icon={<span className="editor-ai-toolbar__label"><Sparkles size={14} />润色</span>}
+          onClick={() => run('polish', '润色')}
+        />
+      )}
+      {showTone && (
+        <Components.Generic.Menu.Root>
+          <Components.Generic.Menu.Trigger>
+            <Components.FormattingToolbar.Button
+              className="editor-ai-toolbar__button"
+              label="调整语气"
+              mainTooltip="调整选中文字的语气"
+              isDisabled={rewrite.running}
+              icon={<span className="editor-ai-toolbar__label">语气<ChevronDown size={13} /></span>}
+            />
+          </Components.Generic.Menu.Trigger>
+          <Components.Generic.Menu.Dropdown className="bn-menu-dropdown">
+            <Components.Generic.Menu.Item onClick={() => run('colloquial', '更口语')}>更口语</Components.Generic.Menu.Item>
+            <Components.Generic.Menu.Item onClick={() => run('formal', '更正式')}>更正式</Components.Generic.Menu.Item>
+            <Components.Generic.Menu.Item onClick={() => run('concise', '更简洁')}>更简洁</Components.Generic.Menu.Item>
+          </Components.Generic.Menu.Dropdown>
+        </Components.Generic.Menu.Root>
+      )}
+      {showCompress && (
+        <Components.FormattingToolbar.Button
+          className="editor-ai-toolbar__button"
+          label="精简"
+          mainTooltip="压缩选中文字"
+          isDisabled={rewrite.running}
+          icon={<span className="editor-ai-toolbar__label"><Minimize2 size={14} />精简</span>}
+          onClick={() => run('shorten', '精简')}
+        />
+      )}
     </>
   );
 }

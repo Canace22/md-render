@@ -1,7 +1,7 @@
 label: 润色
 group: 改写
 aliases: [改写, 优化, polish]
-entry: [slash, composer]
+entry: [slash, selection-toolbar]
 input: selection
 tools: [read_active_doc, write_active_doc]
 output: proposal

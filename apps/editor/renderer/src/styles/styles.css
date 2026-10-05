@@ -7954,6 +7954,7 @@ body.theme-dark .file-preview-iframe {
 
 /* ===================== AI 助手面板 (AgentPanel) ===================== */
 .agent-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -7975,7 +7976,25 @@ body.theme-dark .file-preview-iframe {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: calc(100% - 112px);
+  padding: 5px 7px;
+  border: none;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-text-primary);
   font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.agent-panel__title:hover {
+  background: var(--color-bg-active);
+}
+
+.agent-panel__title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-panel__tabs {
@@ -8345,6 +8364,44 @@ body.theme-dark .file-preview-iframe {
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-surface) 94%, transparent);
   max-height: 70%;
+  overflow-y: auto;
+}
+
+.agent-panel__settings-modal .agent-panel__settings {
+  max-height: min(70vh, 640px);
+  padding: 0 4px 0 0;
+  border-bottom: none;
+  background: transparent;
+}
+
+.agent-panel__advanced-settings {
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 8px 0;
+}
+
+.agent-panel__advanced-settings summary {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agent-panel__advanced-settings[open] summary {
+  margin-bottom: 8px;
+}
+
+.agent-panel__advanced-settings label + label {
+  margin-top: 8px;
+}
+
+.agent-panel__advanced-hint {
+  margin: 4px 0 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.agent-panel__utility-modal .ant-modal-body {
+  max-height: min(72vh, 680px);
   overflow-y: auto;
 }
 
@@ -9200,13 +9257,45 @@ body.theme-dark .file-preview-iframe {
 
 .agent-panel-dock--sidebar {
   flex: none;
-  width: clamp(380px, 32vw, 560px);
+  width: var(--agent-panel-width, clamp(380px, 32vw, 560px));
   min-width: 340px;
-  max-width: 560px;
+  max-width: 720px;
   height: 100%;
   border-left: 1px solid var(--color-border);
   background: var(--color-bg-page);
   animation: agent-panel-slide-in 0.22s ease;
+}
+
+.agent-panel__resize-handle {
+  position: absolute;
+  z-index: 8;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.agent-panel__resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--duration-fast) var(--easing);
+}
+
+.agent-panel__resize-handle:hover::after,
+.is-resizing-agent-panel .agent-panel__resize-handle::after {
+  background: var(--color-brand-primary);
+}
+
+body.is-resizing-agent-panel {
+  cursor: col-resize;
+  user-select: none;
 }
 
 @keyframes agent-panel-slide-in {
@@ -9229,10 +9318,44 @@ body.theme-dark .file-preview-iframe {
   gap: 2px;
 }
 
+.agent-panel__session-menu {
+  width: min(340px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  background: var(--color-bg-surface);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+}
+
+.agent-panel__session-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  color: var(--color-text-muted);
+}
+
+.agent-panel__session-search:focus-within {
+  border-color: var(--color-brand-primary);
+}
+
+.agent-panel__session-search input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
 .agent-panel__sessions {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border-subtle);
   background: var(--color-bg-page);
   max-height: 200px;
   overflow-y: auto;
@@ -9264,6 +9387,33 @@ body.theme-dark .file-preview-iframe {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-panel__session-mode {
+  flex: none;
+  font-size: 13px;
+}
+
+.agent-panel__session-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-panel__session-date {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.agent-panel__session-empty {
+  padding: 18px 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .agent-panel__session-del {
@@ -9733,7 +9883,7 @@ body.theme-dark .file-preview-iframe {
 }
 
 @media (max-width: 1360px) {
-  .agent-panel-dock {
+  .agent-panel-dock:not(.agent-panel-dock--sidebar) {
     width: clamp(380px, 34vw, 560px);
     min-width: 340px;
   }

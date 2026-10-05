@@ -1,7 +1,7 @@
 label: 改语气
 group: 改写
 aliases: [语气, tone]
-entry: []
+entry: [slash, selection-toolbar]
 input: selection
 tools: [read_active_doc, write_active_doc]
 output: proposal

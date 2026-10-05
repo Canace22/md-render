@@ -13,7 +13,7 @@ import {
   FilePdfOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import { Activity, Bot, History, Link2, PackageCheck, Paperclip, Settings, ShieldCheck, Square, Wrench, Plus, Trash2, MessagesSquare, FileText, X, MessageSquareQuote, Check } from 'lucide-react';
+import { Bot, ChevronDown, FileText, History, Link2, MessageSquareQuote, Paperclip, Plus, Search, Settings, Square, Trash2, Wrench, X } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore.js';
 import {
   collectFiles,
@@ -243,14 +243,37 @@ const MAX_SLASH_SKILL_RESULTS = 8;
 const STREAM_FLUSH_INTERVAL_MS = 60;
 const SLASH_SKILL_PATTERN = /^\s*\/([^\s/]*)$/;
 
-const AGENT_PANEL_TABS = Object.freeze([
-  { id: 'chat', label: '对话', icon: MessagesSquare },
-  { id: 'context', label: '上下文', icon: MessageSquareQuote },
-  { id: 'skills', label: '技能', icon: Wrench },
-  { id: 'activity', label: '活动', icon: History },
+const AGENT_PANEL_WIDTH_KEY = 'md-renderer-agent-panel-width';
+const AGENT_PANEL_MIN_WIDTH = 340;
+const AGENT_PANEL_MAX_WIDTH = 720;
+const AGENT_PANEL_DEFAULT_WIDTH = 460;
+
+const clampAgentPanelWidth = (width) => Math.min(
+  AGENT_PANEL_MAX_WIDTH,
+  Math.max(AGENT_PANEL_MIN_WIDTH, Number(width) || AGENT_PANEL_DEFAULT_WIDTH),
+);
+
+const readAgentPanelWidth = () => {
+  try {
+    return clampAgentPanelWidth(localStorage.getItem(AGENT_PANEL_WIDTH_KEY));
+  } catch {
+    return AGENT_PANEL_DEFAULT_WIDTH;
+  }
+};
+
+const formatSessionDate = (timestamp) => {
+  if (!Number.isFinite(timestamp)) return '';
+  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit' })
+    .format(new Date(timestamp));
+};
+
+const CHAT_WELCOME_SUGGESTIONS = Object.freeze([
+  '帮我围绕这个话题发散几个角度',
+  '我贴一段资料，你先帮我梳理重点',
+  '问我几个问题，把这个想法聊清楚',
 ]);
 
-export default function AgentPanel({ onClose }) {
+export default function AgentPanel({ open = true, onClose }) {
   const markdown = useEditorStore((s) => s.markdown);
   const workspace = useEditorStore((s) => s.workspace);
   const selectedId = useEditorStore((s) => s.selectedId);
@@ -308,12 +331,14 @@ export default function AgentPanel({ onClose }) {
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [panelMenuOpen, setPanelMenuOpen] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
   const [skillFilter, setSkillFilter] = useState('');
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [lastContextPacket, setLastContextPacket] = useState(null);
   const [activePanelTab, setActivePanelTab] = useState('chat');
+  const [sessionSearch, setSessionSearch] = useState('');
   const [assistantActivity, setAssistantActivity] = useState(null);
   const [runningSessionId, setRunningSessionId] = useState(null);
   // 运行中回车发送的消息先排队，本轮结束后按顺序自动发送
@@ -334,7 +359,13 @@ export default function AgentPanel({ onClose }) {
   const agentSkillRequest = useEditorStore((s) => s.agentSkillRequest);
   const clearAgentSkillRequest = useEditorStore((s) => s.clearAgentSkillRequest);
   const skillItems = useMemo(() => registrySkills.map(toSkillItem), [registrySkills]);
-  const welcomeItems = useMemo(() => pickSkillItems(skillItems, 'welcome'), [skillItems]);
+  const writeWelcomeItems = useMemo(() => {
+    const welcomeIds = new Set(pickSkillItems(skillItems, 'welcome').map((item) => item.skillId));
+    const preferredIds = ['polish', 'title-suggestions', 'outline', 'related-docs'];
+    return preferredIds
+      .map((id) => skillItems.find((item) => item.skillId === id))
+      .filter((item) => item && (item.skillId === 'polish' || welcomeIds.has(item.skillId)));
+  }, [skillItems]);
   const composerItems = useMemo(() => pickSkillItems(skillItems, 'composer'), [skillItems]);
   const slashItems = useMemo(() => pickSkillItems(skillItems, 'slash'), [skillItems]);
   const filteredSkills = useMemo(() => {
@@ -348,7 +379,8 @@ export default function AgentPanel({ onClose }) {
     [skillItems],
   );
   const [showSessions, setShowSessions] = useState(false);
-  const [showSettings, setShowSettings] = useState(() => !isAiConfigured());
+  const [showSettings, setShowSettings] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(readAgentPanelWidth);
   const providers = useMemo(() => listProviders(), []);
   const [providerId, setProviderId] = useState(() => getActiveProviderId());
   const [cfg, setCfg] = useState(() => readProviderConfig());
@@ -361,6 +393,8 @@ export default function AgentPanel({ onClose }) {
   const activeRunIdRef = useRef(0);
   const runLockRef = useRef(false);
   const inputRef = useRef(null);
+  const panelRef = useRef(null);
+  const previousOpenRef = useRef(false);
   const fileInputRef = useRef(null);
   const messagesRef = useRef(null);
   const pendingAttachmentIdsRef = useRef(new Set());
@@ -388,8 +422,21 @@ export default function AgentPanel({ onClose }) {
     shouldFollowMessagesRef.current = true;
     forceScrollToBottomRef.current = true;
   }, [activeSessionId]);
-  const isChatTab = activePanelTab === 'chat';
-  const isWelcomeMode = isChatTab && messages.length === 0 && !showSettings && !showSessions;
+  useEffect(() => {
+    const wasOpen = previousOpenRef.current;
+    previousOpenRef.current = open;
+    if (open) {
+      if (!wasOpen && !isAiConfigured()) setShowSettings(true);
+      return;
+    }
+    setShowSessions(false);
+    setShowSettings(false);
+    setPanelMenuOpen(false);
+    setActivePanelTab('chat');
+    setShowFilePicker(false);
+    setShowSkillPicker(false);
+  }, [open]);
+  const isWelcomeMode = messages.length === 0 && !showSettings;
   const isActiveSessionRunning = running && runningSessionId === activeSessionId;
   const isOtherSessionRunning = running && runningSessionId !== activeSessionId;
 
@@ -413,6 +460,21 @@ export default function AgentPanel({ onClose }) {
     { key: AGENT_SESSION_MODES.CHAT, label: '💡 聊天' },
     { key: AGENT_SESSION_MODES.WRITE, label: '✏️ 写作' },
   ]), []);
+  const panelMenuItems = useMemo(() => ([
+    { key: 'context', label: '上下文', icon: <MessageSquareQuote size={14} /> },
+    { key: 'skills', label: '技能', icon: <Wrench size={14} /> },
+    { key: 'activity', label: '活动', icon: <History size={14} /> },
+    { type: 'divider' },
+    { key: 'settings', label: '设置', icon: <Settings size={14} /> },
+  ]), []);
+  const filteredSessions = useMemo(() => {
+    const query = sessionSearch.trim().toLowerCase();
+    if (!query) return sessions;
+    return sessions.filter((session) => {
+      const firstMessage = session.messages?.find((item) => item.role === 'user')?.text ?? '';
+      return `${session.title ?? ''}\n${firstMessage}`.toLowerCase().includes(query);
+    });
+  }, [sessions, sessionSearch]);
 
   // 输入里的公开链接会先读取成附件；发送时模型直接拿到正文。
   useEffect(() => {
@@ -1012,17 +1074,16 @@ export default function AgentPanel({ onClose }) {
     handleShortcutClick(item);
   }, [handleShortcutClick]);
 
+  const handleChatWelcomeSuggestion = useCallback((text) => {
+    setInput(text);
+    focusInput();
+  }, [focusInput]);
+
   const handlePickSkill = useCallback((item) => {
     closeSkillPicker();
     setActivePanelTab('chat');
     runSkill(item.skillId);
   }, [closeSkillPicker, runSkill]);
-
-  const handlePanelTabChange = useCallback((tabId) => {
-    setActivePanelTab(tabId);
-    setShowFilePicker(false);
-    setShowSkillPicker(false);
-  }, []);
 
   const handleComposerPlusClick = useCallback(({ key }) => {
     const shortcut = composerItems.find((item) => item.id === key);
@@ -1033,6 +1094,37 @@ export default function AgentPanel({ onClose }) {
     if (!activeSessionId) return;
     setAgentSessionMode(activeSessionId, key);
   }, [activeSessionId, setAgentSessionMode]);
+
+  const handlePanelMenuClick = useCallback(({ key }) => {
+    setPanelMenuOpen(false);
+    if (key === 'settings') {
+      setActivePanelTab('chat');
+      setShowSettings(true);
+      return;
+    }
+    setActivePanelTab(key);
+  }, []);
+
+  const handleResizeStart = useCallback((event) => {
+    event.preventDefault();
+    const dock = panelRef.current?.parentElement;
+    if (!dock) return;
+    const startX = event.clientX;
+    const startWidth = dock.getBoundingClientRect().width;
+    const handleMove = (moveEvent) => {
+      setPanelWidth(clampAgentPanelWidth(startWidth + startX - moveEvent.clientX));
+    };
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+      document.body.classList.remove('is-resizing-agent-panel');
+    };
+    document.body.classList.add('is-resizing-agent-panel');
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp, { once: true });
+    window.addEventListener('pointercancel', handleUp, { once: true });
+  }, []);
 
   // 召回相关旧文：读当前文档 → 抽关键词 → 搜工作区 → 排序，结果给「参考上下文」区。
   // 复用 host.searchDocs（与 agent 工具同一条召回链路），不重复造轮子。
@@ -1140,7 +1232,6 @@ export default function AgentPanel({ onClose }) {
   }, [input]);
 
   useEffect(() => {
-    if (!isChatTab) return;
     const el = messagesRef.current;
     if (!el) return;
     const forceScroll = forceScrollToBottomRef.current;
@@ -1150,22 +1241,104 @@ export default function AgentPanel({ onClose }) {
       el.scrollTop = el.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
-  }, [messages, assistantActivity, isChatTab]);
+  }, [messages, assistantActivity]);
+
+  useEffect(() => {
+    const dock = panelRef.current?.parentElement;
+    dock?.style.setProperty('--agent-panel-width', `${panelWidth}px`);
+    try {
+      localStorage.setItem(AGENT_PANEL_WIDTH_KEY, String(panelWidth));
+    } catch {
+      /* localStorage 不可用时仍保留当前会话的拖拽结果 */
+    }
+  }, [panelWidth]);
 
   return (
-    <div className="agent-panel">
+    <div className="agent-panel" ref={panelRef}>
+      <div
+        className="agent-panel__resize-handle"
+        role="separator"
+        aria-label="调整 AI 助手宽度"
+        aria-orientation="vertical"
+        onPointerDown={handleResizeStart}
+      />
       <div className="agent-panel__header">
-        <span className="agent-panel__title"><Bot size={16} /> MD Render Agent</span>
-        <div className="agent-panel__header-actions">
-          <button className="agent-panel__icon-btn" onClick={() => setShowSessions((v) => !v)} title="会话列表">
-            <MessagesSquare size={16} />
+        <Dropdown
+          trigger={['click']}
+          placement="bottomLeft"
+          open={open && showSessions}
+          onOpenChange={(open) => {
+            setShowSessions(open);
+            if (!open) setSessionSearch('');
+          }}
+          dropdownRender={() => (
+            <div className="agent-panel__session-menu">
+              <label className="agent-panel__session-search">
+                <Search size={14} />
+                <input
+                  value={sessionSearch}
+                  placeholder="搜索会话"
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                />
+              </label>
+              <div className="agent-panel__sessions">
+                {filteredSessions.length === 0 ? (
+                  <div className="agent-panel__session-empty">没有匹配的会话</div>
+                ) : filteredSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`agent-panel__session${session.id === activeSessionId ? ' is-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSwitchSession(session.id)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.preventDefault();
+                      handleSwitchSession(session.id);
+                    }}
+                  >
+                    <span className="agent-panel__session-mode" aria-hidden="true">
+                      {normalizeAgentSessionMode(session.mode) === AGENT_SESSION_MODES.CHAT ? '💡' : '✏️'}
+                    </span>
+                    <span className="agent-panel__session-main">
+                      <span className="agent-panel__session-title">{session.title || '新会话'}</span>
+                      <span className="agent-panel__session-date">{formatSessionDate(session.createdAt)}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="agent-panel__session-del"
+                      title="删除会话"
+                      onClick={(event) => handleDeleteSession(event, session.id)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        >
+          <button type="button" className="agent-panel__title" title="切换会话">
+            <Bot size={16} />
+            <span>{activeSession?.title || '新会话'}</span>
+            <ChevronDown size={14} />
           </button>
+        </Dropdown>
+        <div className="agent-panel__header-actions">
           <button className="agent-panel__icon-btn" onClick={handleNewSession} title="新建会话">
             <Plus size={16} />
           </button>
-          <button className="agent-panel__icon-btn" onClick={() => setShowSettings((v) => !v)} title="设置">
-            <Settings size={16} />
-          </button>
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            open={open && panelMenuOpen}
+            onOpenChange={setPanelMenuOpen}
+            menu={{ items: panelMenuItems, onClick: handlePanelMenuClick }}
+          >
+            <button className="agent-panel__icon-btn" title="更多">
+              <Settings size={16} />
+            </button>
+          </Dropdown>
           {onClose && (
             <button className="agent-panel__icon-btn" onClick={onClose} title="关闭">
               <X size={16} />
@@ -1174,48 +1347,14 @@ export default function AgentPanel({ onClose }) {
         </div>
       </div>
 
-      <div className="agent-panel__tabs" role="tablist" aria-label="AI 助手面板">
-        {AGENT_PANEL_TABS.map((tab) => {
-          const Icon = tab.icon;
-          const selected = activePanelTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={`agent-panel__tab${selected ? ' is-active' : ''}`}
-              onClick={() => handlePanelTabChange(tab.id)}
-            >
-              <Icon size={14} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {showSessions && (
-        <div className="agent-panel__sessions">
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              className={`agent-panel__session${s.id === activeSessionId ? ' is-active' : ''}`}
-              onClick={() => handleSwitchSession(s.id)}
-            >
-              <span className="agent-panel__session-title">{s.title || '新会话'}</span>
-              <button
-                className="agent-panel__session-del"
-                title="删除会话"
-                onClick={(e) => handleDeleteSession(e, s.id)}
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showSettings && (
+      <Modal
+        className="agent-panel__settings-modal"
+        open={open && showSettings}
+        title="AI 助手设置"
+        footer={null}
+        width={560}
+        onCancel={() => setShowSettings(false)}
+      >
         <div className="agent-panel__settings">
           <AgentLocalSources
             sources={aiSource.sources}
@@ -1237,51 +1376,64 @@ export default function AgentPanel({ onClose }) {
           </label>
           {hasBuiltinKey(providerId) ? (
             <div className="agent-panel__builtin-hint">
-              
+              正在使用内置服务配置，无需填写 Base URL。
             </div>
-          ) : (
-            <>
-              <label>Base URL
-                <input value={cfg.baseURL} placeholder="https://xxx/v1"
-                  onChange={(e) => setCfg({ ...cfg, baseURL: e.target.value })} />
-              </label>
-            </>
-          )}
+          ) : null}
           <label>模型
             <input value={cfg.model} placeholder="默认已填，可改"
               onChange={(e) => setCfg({ ...cfg, model: e.target.value })} />
           </label>
-          <label>AI 代理地址
-            <input value={aiServerBase} placeholder="http://你的服务器:8788"
-              onChange={(e) => setAiServerBase(e.target.value)} />
-          </label>
+          <details className="agent-panel__advanced-settings">
+            <summary>高级</summary>
+            <label>Base URL
+              <input value={cfg.baseURL} placeholder="由 AI 代理服务配置" readOnly />
+            </label>
+            <div className="agent-panel__advanced-hint">服务地址与密钥由 AI 代理服务统一管理。</div>
+            <label>AI 代理地址
+              <input value={aiServerBase} placeholder="http://你的服务器:8788"
+                onChange={(e) => setAiServerBase(e.target.value)} />
+            </label>
+          </details>
           <AgentKnowledgeSources
             sources={knowledgeSources}
             onChange={setKnowledgeSources}
           />
           <button className="agent-panel__save-btn" onClick={handleSaveSettings}>保存</button>
         </div>
-      )}
+      </Modal>
 
-      {isChatTab && (
-        <div
-          className={`agent-panel__messages${isWelcomeMode ? ' is-welcome' : ''}`}
-          ref={messagesRef}
-          role="tabpanel"
-          aria-label="对话"
-          onScroll={handleMessagesScroll}
-        >
-          {isWelcomeMode && (
-            <div className="agent-panel__welcome">
-              <h2 className="agent-panel__welcome-title">我会先理解你的工作，再动手</h2>
-              <p className="agent-panel__welcome-subtitle">我懂当前稿件、工作区和应用状态；改文有 diff 确认，交付物默认保留原稿。</p>
-              <div className="agent-panel__expert-badges">
-                <span><ShieldCheck size={13} /> 可审计操作</span>
-                <span><Activity size={13} /> 可体检运行状态</span>
-                <span><PackageCheck size={13} /> 产出物留来源</span>
-              </div>
-              <div className="agent-panel__welcome-grid">
-                {welcomeItems.map((item) => (
+      <div
+        className={`agent-panel__messages${isWelcomeMode ? ' is-welcome' : ''}`}
+        ref={messagesRef}
+        aria-label="对话"
+        onScroll={handleMessagesScroll}
+      >
+        {isWelcomeMode && (
+          <div className="agent-panel__welcome">
+            <h2 className="agent-panel__welcome-title">
+              {sessionMode === AGENT_SESSION_MODES.CHAT
+                ? '随便聊聊，先不急着写成稿'
+                : '一起把内容写清楚'}
+            </h2>
+            <p className="agent-panel__welcome-subtitle">
+              {sessionMode === AGENT_SESSION_MODES.CHAT
+                ? '丢个链接、文档进来，或者随便聊聊。'
+                : '可以从润色、标题或提纲开始。'}
+            </p>
+            <div className="agent-panel__welcome-grid">
+              {sessionMode === AGENT_SESSION_MODES.CHAT
+                ? CHAT_WELCOME_SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="agent-panel__welcome-chip"
+                    disabled={running}
+                    onClick={() => handleChatWelcomeSuggestion(suggestion)}
+                  >
+                    {suggestion}
+                  </button>
+                ))
+                : writeWelcomeItems.map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -1292,53 +1444,59 @@ export default function AgentPanel({ onClose }) {
                     {item.label}
                   </button>
                 ))}
-              </div>
             </div>
-          )}
-          {!isWelcomeMode && messages.length === 0 && (
-            <div className="agent-panel__empty">问我点什么，比如「帮我把当前文档压缩到三段」。</div>
-          )}
-          {!isWelcomeMode && (
-            <AgentConversation
-              messages={messages}
-              running={running}
-              showActivity={isActiveSessionRunning}
-              activity={assistantActivity}
-              copiedIndex={copiedIndex}
-              onChoice={handleChoiceCardClick}
-              onCopy={handleCopy}
-              onPin={sessionMode === AGENT_SESSION_MODES.CHAT ? handlePinInspiration : null}
-              pinnedIndex={pinnedIndex}
-              onRetry={handleRetry}
-              onOpenSettings={handleOpenSettings}
-              onOpenArtifact={(fileId) => host.openWorkspaceItem({ id: fileId })}
-            />
-          )}
-        </div>
-      )}
-
-      {activePanelTab === 'context' && (
-        <div className="agent-panel__tab-panel agent-panel__tab-panel--context" role="tabpanel" aria-label="上下文">
-          <AgentDocMeta
-            document={activeFile}
-            contextPacket={lastContextPacket}
-            onRecall={handleRecall}
-            onInsertReference={handleInsertReference}
+          </div>
+        )}
+        {!isWelcomeMode && messages.length === 0 && (
+          <div className="agent-panel__empty">问我点什么，比如「帮我把这个想法聊清楚」。</div>
+        )}
+        {!isWelcomeMode && (
+          <AgentConversation
+            messages={messages}
+            running={running}
+            showActivity={isActiveSessionRunning}
+            activity={assistantActivity}
+            copiedIndex={copiedIndex}
+            onChoice={handleChoiceCardClick}
+            onCopy={handleCopy}
+            onPin={sessionMode === AGENT_SESSION_MODES.CHAT ? handlePinInspiration : null}
+            pinnedIndex={pinnedIndex}
+            onRetry={handleRetry}
+            onOpenSettings={handleOpenSettings}
+            onOpenArtifact={(fileId) => host.openWorkspaceItem({ id: fileId })}
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      {activePanelTab === 'activity' && <AgentActivityTab />}
-
-      {activePanelTab === 'skills' && (
-        <AgentSkillsTab
-          items={skillTabItems}
-          skills={registrySkills}
-          warnings={skillWarnings}
-          isDisabled={isShortcutDisabled}
-          onRun={handlePickSkill}
-        />
-      )}
+      <Modal
+        className="agent-panel__utility-modal"
+        open={open && activePanelTab !== 'chat'}
+        title={{ context: '上下文', skills: '技能', activity: '活动' }[activePanelTab]}
+        footer={null}
+        width={560}
+        onCancel={() => setActivePanelTab('chat')}
+      >
+        {activePanelTab === 'context' && (
+          <div className="agent-panel__tab-panel agent-panel__tab-panel--context" aria-label="上下文">
+            <AgentDocMeta
+              document={activeFile}
+              contextPacket={lastContextPacket}
+              onRecall={handleRecall}
+              onInsertReference={handleInsertReference}
+            />
+          </div>
+        )}
+        {activePanelTab === 'activity' && <AgentActivityTab />}
+        {activePanelTab === 'skills' && (
+          <AgentSkillsTab
+            items={skillTabItems}
+            skills={registrySkills}
+            warnings={skillWarnings}
+            isDisabled={isShortcutDisabled}
+            onRun={handlePickSkill}
+          />
+        )}
+      </Modal>
 
       <div className="agent-panel__composer">
         {showSkillPicker && (

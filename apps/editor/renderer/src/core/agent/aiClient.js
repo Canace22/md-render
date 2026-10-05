@@ -137,7 +137,7 @@ export const setActiveProvider = (providerId) => {
   writeLocalStorage(ACTIVE_PROVIDER_KEY, providerId);
 };
 
-/** 保存某个服务商的配置（只保存 model 覆盖） */
+/** 保存某个服务商的模型覆盖。 */
 export const saveProviderConfig = (providerId, { model } = {}) => {
   if (model !== undefined) writeLocalStorage(providerModelStorageKey(providerId), model);
 };

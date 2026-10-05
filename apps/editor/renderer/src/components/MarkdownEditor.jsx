@@ -76,6 +76,7 @@ import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
 import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
 import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
+import { filterSkillsByEntry } from '../core/agent/skillRegistry.js';
 import { useAgentRuntime } from '../hooks/useAgentRuntime.js';
 import { useVaultStorage } from '../hooks/useVaultStorage.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
@@ -1079,6 +1080,10 @@ function MarkdownEditor() {
   useVaultStorage();
   // 准备发布会复用平台 skill 的 prompt，也保留内容库的同名覆盖。
   const { skills: registrySkills } = useSkillRegistry();
+  const selectionToolbarSkillIds = useMemo(
+    () => new Set(filterSkillsByEntry(registrySkills, 'selection-toolbar').map((skill) => skill.id)),
+    [registrySkills],
+  );
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
@@ -2706,7 +2711,10 @@ function MarkdownEditor() {
                           emojiPicker={false}
                           onChange={handleEditorChange}
                         >
-                          <EditorFormattingToolbarController enableAiRewrite />
+                          <EditorFormattingToolbarController
+                            enableAiRewrite
+                            selectionSkillIds={selectionToolbarSkillIds}
+                          />
                         </BlockNoteView>
                       </div>
                     </div>
@@ -2731,7 +2739,10 @@ function MarkdownEditor() {
             style={agentPanelOpen ? undefined : { display: 'none' }}
             aria-hidden={!agentPanelOpen}
           >
-            <AgentPanel onClose={() => setAgentPanelOpen(false)} />
+            <AgentPanel
+              open={agentPanelOpen}
+              onClose={() => setAgentPanelOpen(false)}
+            />
           </div>
         </div>
       </div>

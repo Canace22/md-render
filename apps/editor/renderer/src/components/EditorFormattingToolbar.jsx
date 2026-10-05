@@ -162,8 +162,15 @@ function EditorFormattingToolbar() {
   return <FormattingToolbar>{items}</FormattingToolbar>;
 }
 
-export default function EditorFormattingToolbarController({ enableAiRewrite = false }) {
+export default function EditorFormattingToolbarController({
+  enableAiRewrite = false,
+  selectionSkillIds = new Set(),
+}) {
   const toolbar = <FormattingToolbarController formattingToolbar={EditorFormattingToolbar} />;
   if (!enableAiRewrite) return toolbar;
-  return <EditorInlineRewriteProvider>{toolbar}</EditorInlineRewriteProvider>;
+  return (
+    <EditorInlineRewriteProvider enabledSkillIds={selectionSkillIds}>
+      {toolbar}
+    </EditorInlineRewriteProvider>
+  );
 }
