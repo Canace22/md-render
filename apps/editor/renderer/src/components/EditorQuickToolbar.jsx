@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { EditorToolbar } from '@narrative/blocknote-core';
-import { Eye, Copy, ClipboardCopy, Check, Sparkles } from 'lucide-react';
+import { Eye, Copy, ClipboardCopy, Check, Rocket } from 'lucide-react';
 
 /** 「已复制！」提示的持续时长（ms） */
 const COPIED_HINT_DURATION = 2000;
@@ -9,7 +9,7 @@ const COPIED_HINT_DURATION = 2000;
  * 正文右上角的悬浮动作胶囊。
  *
  * 标题 / 引用 / 列表 / 分割线等块插入交给 BlockNote 的斜杠菜单与 Markdown 快捷输入，
- * 这里只保留编辑器内部无法触发的领域动作：预览与两种复制。
+ * 这里只保留编辑器内部无法触发的领域动作：准备发布、预览与两种复制。
  * 渲染交由 blocknote-core 的通用 EditorToolbar（数据驱动）；
  * disabled 时 onItemClick 为 no-op，外层 shell 另加 data-disabled 控制观感。
  *
@@ -23,8 +23,7 @@ export default function EditorQuickToolbar({
   onCopyWeChat,
   onCopyRichText,
   copyStyleName,
-  skillActions = [],
-  onRunSkill,
+  onPreparePublish,
 }) {
   const [copied, setCopied] = useState(false);
   const [richCopied, setRichCopied] = useState(false);
@@ -44,6 +43,20 @@ export default function EditorQuickToolbar({
   const styleSuffix = copyStyleName ? `（${copyStyleName}）` : '';
 
   const entries = [
+    {
+      type: 'button',
+      key: 'prepare-publish',
+      button: {
+        title: '选择多个平台，一次生成可复制、可保存的平台稿',
+        label: '准备发布',
+        icon: <Rocket size={15} strokeWidth={1.9} />,
+        skipFocusEditor: true,
+        onItemClick: () => {
+          if (disabled) return;
+          onPreparePublish?.();
+        },
+      },
+    },
     {
       type: 'button',
       key: 'preview-wechat',
@@ -89,25 +102,6 @@ export default function EditorQuickToolbar({
       },
     },
   ];
-
-  // 平台版等 AI 动作：来自 entry 含 doc-toolbar 的 skill，点击后交给 AI 面板运行
-  if (skillActions.length > 0) {
-    entries.unshift({
-      type: 'toolbar-dropdown',
-      key: 'skill-actions',
-      triggerPlaceholder: '平台版',
-      triggerHint: '用 AI 生成平台版本（另存为新文档）',
-      items: skillActions.map((skill) => ({
-        title: skill.label,
-        icon: <Sparkles size={14} strokeWidth={1.9} />,
-        skipFocusEditor: true,
-        onItemClick: () => {
-          if (disabled) return;
-          onRunSkill?.(skill.id);
-        },
-      })),
-    });
-  }
 
   return (
     <div

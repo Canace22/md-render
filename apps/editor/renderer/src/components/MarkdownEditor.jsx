@@ -20,6 +20,7 @@ import DailyNotebook from './DailyNotebook.jsx';
 import KnowledgeBasePanel from './KnowledgeBasePanel.jsx';
 import PublishingQueuePanel from './PublishingQueuePanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
+import PreparePublishModal from './PreparePublishModal.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import ImageLightbox from './ImageLightbox.jsx';
@@ -78,7 +79,10 @@ import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
 import { useAgentRuntime } from '../hooks/useAgentRuntime.js';
 import { useVaultStorage } from '../hooks/useVaultStorage.js';
 import { AGENT_HOST_DIALOGS } from './agentHostDialogs.jsx';
-import { filterSkillsByEntry } from '../core/agent/skillRegistry.js';
+import {
+  buildPlatformDraftContent,
+  buildPlatformDraftFileName,
+} from '../core/agent/publishPreparation.js';
 import useCommandPalette from '../hooks/useCommandPalette.js';
 import { createCommands } from '../core/commands/commandRegistry.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
@@ -376,6 +380,7 @@ function MarkdownEditor() {
     openLocalProjectWorkspace,
     addFile,
     addFolder,
+    createGeneratedFile,
     moveNode,
     pinNode,
     applyRename,
@@ -1051,6 +1056,7 @@ function MarkdownEditor() {
     setDiskSavePending,
   ]);
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
+  const [preparePublishSource, setPreparePublishSource] = useState(null);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   // Cmd/Ctrl+J 开关 AI 助手面板
@@ -1071,17 +1077,8 @@ function MarkdownEditor() {
   useAgentRuntime({ dialogs: AGENT_HOST_DIALOGS });
   // 数据层文件化：迁移后 Daily / 白板 / 编辑部记忆以内容库文件为准
   useVaultStorage();
-  const requestAgentSkill = useEditorStore((state) => state.requestAgentSkill);
-  // 文档工具栏上的 AI 动作：entry 含 doc-toolbar 的 skill（平台版等）
+  // 准备发布会复用平台 skill 的 prompt，也保留内容库的同名覆盖。
   const { skills: registrySkills } = useSkillRegistry();
-  const docToolbarSkills = useMemo(
-    () => filterSkillsByEntry(registrySkills, 'doc-toolbar').map(({ id, label }) => ({ id, label })),
-    [registrySkills],
-  );
-  const handleRunDocSkill = useCallback((skillId) => {
-    setAgentPanelOpen(true);
-    requestAgentSkill(skillId);
-  }, [requestAgentSkill]);
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
   const selectedNeedsConversion = Boolean(
     selectedFile?.needsConversion
@@ -1383,6 +1380,32 @@ function MarkdownEditor() {
     }
     return normalizeMarkdown(markdown);
   }, [markdown]);
+
+  const handleOpenPreparePublish = useCallback(() => {
+    if (!selectedFile) return;
+    // 保存平台稿会切换当前文档，这里先锁定原稿快照，避免后续平台稿串错来源。
+    setPreparePublishSource({ file: selectedFile, content: resolvedMarkdown });
+  }, [resolvedMarkdown, selectedFile]);
+
+  const handleSavePlatformDraft = useCallback(async (platform) => {
+    const sourceFile = preparePublishSource?.file;
+    if (!sourceFile?.id || !platform?.result) throw new Error('无法确定平台稿来源');
+
+    const created = await createGeneratedFile({
+      name: buildPlatformDraftFileName(sourceFile.name, platform.label),
+      content: buildPlatformDraftContent(platform.result),
+      contextNodeId: sourceFile.id,
+      meta: {
+        summary: platform.result.summary,
+        tags: platform.result.tags,
+        draftStatus: 'ready',
+        targetPlatforms: [platform.id],
+        sourceMaterialIds: [sourceFile.id],
+      },
+    });
+    if (!created?.ok) throw new Error(created?.error || '保存平台稿失败');
+    return created;
+  }, [createGeneratedFile, preparePublishSource]);
 
   const wechatSourceHtml = useMemo(() => {
     const tokens = parserRef.current.parse(resolvedMarkdown);
@@ -2632,8 +2655,7 @@ function MarkdownEditor() {
                 onCopyWeChat={handleCopyToWeChat}
                 onCopyRichText={handleCopyRichText}
                 copyStyleName={getTemplateById(copyStyle).name}
-                skillActions={docToolbarSkills}
-                onRunSkill={handleRunDocSkill}
+                onPreparePublish={handleOpenPreparePublish}
               />
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
@@ -2720,6 +2742,17 @@ function MarkdownEditor() {
         sourceHtml={wechatSourceHtml}
         initialTemplateId={copyStyle}
         onTemplateChange={setCopyStyle}
+      />
+
+      <PreparePublishModal
+        open={Boolean(preparePublishSource)}
+        onClose={() => setPreparePublishSource(null)}
+        sourceFile={preparePublishSource?.file}
+        sourceContent={preparePublishSource?.content ?? ''}
+        skills={registrySkills}
+        initialTemplateId={copyStyle}
+        onTemplateChange={setCopyStyle}
+        onSavePlatform={handleSavePlatformDraft}
       />
 
       <BookmarkImportModal

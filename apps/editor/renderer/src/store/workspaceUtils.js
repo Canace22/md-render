@@ -99,6 +99,7 @@ export const buildDerivedAssetKnowledgeFields = (meta = {}, sourceFileId = '') =
   const knowledge = createDefaultKnowledgeFields(meta);
   return {
     ...knowledge,
+    tags: sanitizeStringList(meta.tags),
     sourceMaterialIds: sanitizeStringList([
       ...(knowledge.sourceMaterialIds ?? []),
       sourceFileId,

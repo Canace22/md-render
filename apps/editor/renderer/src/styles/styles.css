@@ -1760,7 +1760,7 @@ a.sidebar-rail-btn:hover {
 }
 
 /* blocknote-core 的通用 EditorToolbar 用 editor-toolbar / toolbar-button 等类。
-   约定：不带 label 的项渲染成圆形图标钮，带 label 的（复制公众号）是主动作，走绿色实心胶囊。 */
+   约定：不带 label 的项渲染成圆形图标钮，带 label 的主动作走绿色实心胶囊。 */
 .editor-quick-toolbar-shell .editor-toolbar,
 .editor-quick-toolbar-shell .toolbar-center {
     display: flex;
@@ -6421,6 +6421,133 @@ body.theme-light #markdown-output::-webkit-scrollbar-thumb {
 body.theme-light #markdown-input::-webkit-scrollbar-thumb:hover,
 body.theme-light #markdown-output::-webkit-scrollbar-thumb:hover {
     background: #999999;
+}
+
+/* =====================================================
+   准备发布 Modal
+   ===================================================== */
+
+.prepare-publish-modal .ant-modal-content,
+.prepare-publish-modal .ant-modal-header {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+}
+
+.prepare-publish-modal .ant-modal-title,
+.prepare-publish-modal .ant-modal-close,
+.prepare-publish-modal .ant-checkbox-wrapper,
+.prepare-publish-modal .ant-tabs-tab,
+.prepare-publish-modal .ant-tabs-content-holder {
+    color: var(--color-text-primary);
+}
+
+.prepare-publish-options {
+    display: grid;
+    gap: var(--space-m);
+    padding: var(--space-s) 0 var(--space-m);
+    color: var(--color-text-primary);
+}
+
+.prepare-publish-options p {
+    margin: 0;
+    color: var(--color-text-secondary);
+}
+
+.prepare-publish-options .ant-checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-s) var(--space-l);
+}
+
+.prepare-publish-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-s);
+    min-height: 180px;
+    color: var(--color-text-secondary);
+}
+
+.prepare-publish-output {
+    display: grid;
+    gap: var(--space-m);
+}
+
+.prepare-publish-output > .ant-alert ul {
+    margin: var(--space-xs) 0 0;
+    padding-left: var(--space-l);
+}
+
+.prepare-publish-output .ant-tabs-content-holder {
+    max-height: min(58vh, 640px);
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+.prepare-publish-result {
+    display: grid;
+    gap: var(--space-m);
+}
+
+.prepare-publish-result-block {
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-m);
+    background: var(--color-bg-page);
+    color: var(--color-text-primary);
+}
+
+.prepare-publish-result-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-s);
+    margin-bottom: var(--space-s);
+}
+
+.prepare-publish-result-heading .ant-btn {
+    color: var(--color-text-secondary);
+}
+
+.prepare-publish-result-block p,
+.prepare-publish-title-list {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.prepare-publish-title-list {
+    display: grid;
+    gap: var(--space-xs);
+    padding-left: 22px;
+}
+
+.prepare-publish-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.prepare-publish-body {
+    margin: 0;
+    max-height: 360px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+    font: inherit;
+    line-height: var(--line-height-body);
+}
+
+.prepare-publish-result-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-s);
+}
+
+@media (max-width: 720px) {
+    .prepare-publish-result-actions {
+        flex-wrap: wrap;
+    }
 }
 
 /* =====================================================
