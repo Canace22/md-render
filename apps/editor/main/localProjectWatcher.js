@@ -47,6 +47,13 @@ function shouldIgnoreRoot(projectRootPath) {
   return false;
 }
 
+// 隐藏目录（.agent / .agents / .git / .obsidian …）里的变化不触发工作区重读：
+// 活动日志、提案、skill 各有自己的读写通道，git 操作也不该让编辑器刷新
+export function isInsideHiddenDirectory(filename) {
+  const segments = String(filename ?? '').split(/[\\/]+/).filter(Boolean);
+  return segments.slice(0, -1).some((segment) => segment.startsWith('.'));
+}
+
 function scheduleNotify(rootPath, notify) {
   const entry = watchers.get(rootPath);
   if (!entry) return;
@@ -67,6 +74,7 @@ export function watchLocalProjectRoot(projectRootPath, onChanged) {
     const watcher = fs.watch(rootPath, { recursive: true }, (_eventType, filename) => {
       if (shouldIgnoreRoot(rootPath)) return;
       if (filename) {
+        if (isInsideHiddenDirectory(filename)) return;
         const targetPath = path.join(rootPath, filename);
         if (shouldIgnorePath(targetPath)) return;
       }

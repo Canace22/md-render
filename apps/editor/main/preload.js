@@ -58,6 +58,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // 内容库 .agent/：提案（待确认改动）和活动日志
+  agentData: {
+    writeProposal: (proposal) => ipcRenderer.invoke('agent-data:write-proposal', { proposal }),
+    listProposals: () => ipcRenderer.invoke('agent-data:list-proposals'),
+    appendActivity: (entry) => ipcRenderer.invoke('agent-data:append-activity', { entry }),
+    readActivity: (payload) => ipcRenderer.invoke('agent-data:read-activity', payload),
+  },
+
   // 只读本机运行诊断
   diagnostics: {
     getSnapshot: (payload) => ipcRenderer.invoke('diagnostics:get-snapshot', payload),

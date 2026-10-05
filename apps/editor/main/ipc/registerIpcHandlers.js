@@ -1,3 +1,4 @@
+import { registerAgentDataHandlers } from './agentDataHandlers.js';
 import { registerAiHandlers } from './aiHandlers.js';
 import { registerDbHandlers } from './dbHandlers.js';
 import { registerDiagnosticHandlers } from './diagnosticHandlers.js';
@@ -16,4 +17,5 @@ export function registerIpcHandlers(deps) {
   registerDbHandlers(deps);
   registerUpdaterHandlers(deps);
   registerSkillHandlers(deps);
+  registerAgentDataHandlers(deps);
 }
