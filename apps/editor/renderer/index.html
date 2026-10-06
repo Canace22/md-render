@@ -13,9 +13,9 @@
 <body>
     <div id="root"></div>
     <!-- highlight.js 脚本 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <!-- mermaid 脚本 -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- mermaid 脚本（async：CDN 慢时不能阻塞 main.jsx，否则整页白屏） -->
+    <script async src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
