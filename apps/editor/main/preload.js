@@ -139,6 +139,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getBacklinks: (docId) => ipcRenderer.invoke('db:get-backlinks', { docId }),
     getVersions: (docId) => ipcRenderer.invoke('db:get-versions', { docId }),
     getVersionContent: (versionId) => ipcRenderer.invoke('db:get-version-content', { versionId }),
+    saveVersionSnapshot: (docId, content) => ipcRenderer.invoke('db:save-version-snapshot', { docId, content }),
   },
 
   // 自动更新 API

@@ -40,6 +40,9 @@ export const dbGetGraph = () => getElectronAPI()?.db?.getGraph();
 export const dbGetBacklinks = (docId) => getElectronAPI()?.db?.getBacklinks(docId);
 export const dbGetVersions = (docId) => getElectronAPI()?.db?.getVersions(docId);
 export const dbGetVersionContent = (versionId) => getElectronAPI()?.db?.getVersionContent(versionId);
+export const dbSaveVersionSnapshot = (docId, content) => (
+  getElectronAPI()?.db?.saveVersionSnapshot?.(docId, content)
+);
 
 export const selectCoverImage = () => getElectronAPI()?.selectCoverImage?.();
 export const saveBinaryAsset = (payload) => getElectronAPI()?.saveBinaryAsset?.(payload);

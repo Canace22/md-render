@@ -9,6 +9,7 @@ import {
   loadEditorState,
   markMigratedFromLocalStorage,
   saveEditorState,
+  saveVersionSnapshot,
   saveVersions,
   syncAllLinks,
   syncDocuments,
@@ -73,9 +74,14 @@ export function registerDbHandlers({ ipcMain, app }) {
       if (workspaceJson) {
         try {
           workspace = JSON.parse(workspaceJson);
+          // 快照要在 syncDocuments 覆盖旧正文之前存；快照失败不能影响正常保存
+          try {
+            saveVersions(workspace);
+          } catch (err) {
+            console.error('[db] save-versions error:', err);
+          }
           syncDocuments(workspace);
           syncAllLinks(workspace);
-          saveVersions(workspace);
         } catch {
           // ignore parse errors
         }
@@ -122,6 +128,15 @@ export function registerDbHandlers({ ipcMain, app }) {
     } catch (err) {
       console.error('[db] get-version-content error:', err);
       return { ok: false, version: null };
+    }
+  });
+
+  ipcMain.handle('db:save-version-snapshot', (_event, payload = {}) => {
+    try {
+      return { ok: true, ...saveVersionSnapshot(payload.docId, payload.content) };
+    } catch (err) {
+      console.error('[db] save-version-snapshot error:', err);
+      return { ok: false, error: err.message };
     }
   });
 

@@ -69,7 +69,7 @@ For a screen-by-screen guide, see the [feature guide](./docs/产品功能说明.
 
 Choose a folder in **设置 → 本地项目目录** (Settings → Local project folder). From then on, every draft is saved as a plain `.md` file in that folder, readable by any other editor. If you change files outside the app, click "从磁盘同步" (Sync from disk) to pull them back in.
 
-The app doesn't sync across devices or keep version history. If you need either, put the folder under Git.
+The app doesn't sync across devices. The desktop app keeps 7 days of version history per document (`Cmd/Ctrl + K` → 查看文档版本历史, compare and restore); for long-term history, put the folder under Git.
 
 ### Desktop vs. web
 

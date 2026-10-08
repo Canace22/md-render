@@ -1359,61 +1359,6 @@ a.sidebar-rail-btn:hover {
     line-height: 16px;
 }
 
-.doc-meta-history-arrow {
-    margin-left: auto;
-    font-size: 9px;
-    opacity: 0.6;
-}
-
-/* version history */
-.doc-meta-versions-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.doc-meta-version-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 3px 6px;
-    border-radius: 5px;
-    background: var(--color-surface-subtle, rgba(0,0,0,.03));
-    font-size: 11px;
-}
-
-.doc-meta-version-date {
-    color: var(--color-text-primary);
-}
-
-.doc-meta-version-size {
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-    margin-right: auto;
-}
-
-.doc-meta-version-restore {
-    background: none;
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-size: 10px;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: color 0.15s, border-color 0.15s;
-}
-
-.doc-meta-version-restore:hover:not(:disabled) {
-    color: var(--color-primary);
-    border-color: var(--color-primary);
-}
-
-.doc-meta-version-restore:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 /* ── backlink chip (legacy) ────────────────────────────────────────────────── */
 .knowledge-chip--backlink {
     background: none;
@@ -5879,8 +5824,7 @@ body.theme-dark .doc-meta-divider {
 body.theme-dark .doc-meta-select,
 body.theme-dark .doc-meta-input,
 body.theme-dark .doc-meta-textarea,
-body.theme-dark .doc-meta-related-controls select,
-body.theme-dark .doc-meta-version-row {
+body.theme-dark .doc-meta-related-controls select {
     background: rgba(15, 23, 42, 0.82);
     border-color: rgba(71, 85, 105, 0.42);
 }
@@ -5921,8 +5865,7 @@ body.theme-dark .doc-meta-cover-preview {
     background: rgba(15, 23, 42, 0.5);
 }
 
-body.theme-dark .doc-meta-chip--backlink,
-body.theme-dark .doc-meta-version-restore {
+body.theme-dark .doc-meta-chip--backlink {
     border-color: rgba(71, 85, 105, 0.42);
     color: var(--color-text-secondary);
 }
@@ -11390,6 +11333,121 @@ body.is-resizing-agent-panel {
 .agent-panel__msg-stopped {
   display: inline-block;
   margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* ── 版本历史（参照 Obsidian 文件恢复）────────────────────────────── */
+.version-history__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-history {
+  display: flex;
+  height: 60vh;
+  min-height: 360px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.version-history__list {
+  flex: none;
+  width: 200px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.version-history__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-history__item:hover { background: var(--color-bg-active); }
+
+.version-history__item.is-active {
+  background: var(--color-bg-active);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.version-history__badge {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.version-history__detail {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.version-history__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.version-history__meta {
+  display: inline-flex;
+  flex: 1;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.version-history__content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.version-history__preview {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.version-history__loading,
+.version-history__same {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--color-text-muted);
+}
+
+.version-history__empty { padding: 48px 0; }
+
+.version-history__hint {
+  margin-top: 8px;
   color: var(--color-text-muted);
   font-size: 12px;
 }

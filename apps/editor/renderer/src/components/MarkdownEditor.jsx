@@ -22,6 +22,7 @@ import PublishingQueuePanel from './PublishingQueuePanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import PreparePublishModal from './PreparePublishModal.jsx';
 import WechatPreviewModal from './WechatPreviewModal.jsx';
+import VersionHistoryModal from './VersionHistoryModal.jsx';
 import BookmarkImportModal from './BookmarkImportModal.jsx';
 import ImageLightbox from './ImageLightbox.jsx';
 import BookmarkCard from './BookmarkCard.jsx';
@@ -86,6 +87,7 @@ import {
 } from '../core/agent/publishPreparation.js';
 import useCommandPalette from '../hooks/useCommandPalette.js';
 import { createCommands } from '../core/commands/commandRegistry.js';
+import { hasDbBridge } from '../services/electronBridge.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
@@ -1069,6 +1071,7 @@ function MarkdownEditor() {
   const [wechatPreviewOpen, setWechatPreviewOpen] = useState(false);
   const [preparePublishSource, setPreparePublishSource] = useState(null);
   const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   // Cmd/Ctrl+J 开关 AI 助手面板
   useEffect(() => {
@@ -1085,6 +1088,7 @@ function MarkdownEditor() {
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const externalContentRequests = useEditorStore((state) => state.externalContentRequests);
+  const applyContentFromOutside = useEditorStore((state) => state.applyContentFromOutside);
   // agent 运行时（MCP 控制桥、提案收件箱）不依赖 AI 面板是否打开
   useAgentRuntime({ dialogs: AGENT_HOST_DIALOGS });
   // 数据层文件化：迁移后 Daily / 白板 / 编辑部记忆以内容库文件为准
@@ -2465,6 +2469,23 @@ function MarkdownEditor() {
     // 只在有新请求时跑；其余值取本次渲染的最新值即可
   }, [externalContentRequests]);
 
+  // 版本历史只对正文编辑器里的文档开放；恢复走 applyContentFromOutside。
+  const handleOpenVersionHistory = () => {
+    if (!hasDbBridge()) {
+      message.info('版本历史仅桌面版可用');
+      return;
+    }
+    if (!selectedFile || selectedUsesBookmarkCard || selectedNeedsConversion) {
+      message.info('先打开一篇文档再查看版本历史');
+      return;
+    }
+    setSurface('paper');
+    useEditorStore.getState().setEditorMode('edit');
+    setVersionHistoryOpen(true);
+  };
+
+  const handleRestoreVersion = (content) => applyContentFromOutside(selectedFile?.id, content);
+
   // 命令面板：把散落各处的入口收成一份可搜索清单，Cmd/Ctrl+K 唤起。
   // 部分 handler（如复制公众号）闭包里带着随渲染变化的正文，统一走 ref 取最新版本，
   // 否则 useMemo 缓存住的会是旧闭包，复制到的是过期内容。
@@ -2489,6 +2510,7 @@ function MarkdownEditor() {
     toggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     toggleSidebar: toggleSidebarCollapsed,
     syncFromDisk: () => handleManualSyncLocalProject(currentWorkspaceProjectRoot),
+    openVersionHistory: handleOpenVersionHistory,
   };
   const commands = useMemo(() => createCommands({
     openSurface: setSurface,
@@ -2503,6 +2525,7 @@ function MarkdownEditor() {
     toggleTheme: () => commandHandlersRef.current.toggleTheme(),
     toggleSidebar: () => commandHandlersRef.current.toggleSidebar(),
     syncFromDisk: () => commandHandlersRef.current.syncFromDisk(),
+    openVersionHistory: () => commandHandlersRef.current.openVersionHistory(),
   }), [setSurface]);
 
   return (
@@ -2733,7 +2756,7 @@ function MarkdownEditor() {
                     onKnowledgeMetaChange={setFileKnowledgeMeta}
                     onFrontmatterPropertyChange={setFileFrontmatterProperty}
                     onOpenFile={selectNode}
-                    onRestoreVersion={updateSelectedFileContent}
+                    onOpenVersionHistory={handleOpenVersionHistory}
                     titleEditable={!selectedInLocalProject || localProjectSupported}
                     {...titleEditing}
                   />
@@ -2821,6 +2844,16 @@ function MarkdownEditor() {
         initialTemplateId={copyStyle}
         onTemplateChange={setCopyStyle}
         onSavePlatform={handleSavePlatformDraft}
+      />
+
+      <VersionHistoryModal
+        open={versionHistoryOpen}
+        onClose={() => setVersionHistoryOpen(false)}
+        file={selectedFile}
+        currentContent={markdown}
+        toMarkdown={blockNoteContentToMarkdown}
+        onRestore={handleRestoreVersion}
+        readOnly={selectedReadOnly}
       />
 
       <BookmarkImportModal

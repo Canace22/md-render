@@ -9,22 +9,12 @@ import {
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 import {
   dbGetBacklinks,
-  dbGetVersionContent,
   dbGetVersions,
   hasDbBridge,
 } from '../services/electronBridge.js';
 import PropertyField from './properties/PropertyField.jsx';
 
 /* ── pure helpers ──────────────────────────────────────────── */
-
-const formatVersionDate = (ts) => {
-  if (!ts) return '';
-  try {
-    return new Date(ts).toLocaleString('zh-CN', {
-      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return ''; }
-};
 
 const toList = (value) => {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -93,15 +83,13 @@ export default function DocMetaPanel({
   onOpenFile,
   onManageSourceMaterials,
   onManageRelatedDocs,
-  onRestoreVersion,
+  onOpenVersionHistory,
   statusOptions = DRAFT_STATUS_OPTIONS,
   platformOptions = PUBLISHING_PLATFORM_OPTIONS,
   disabled = false,
 }) {
   const [backlinks, setBacklinks] = useState([]);
   const [versions, setVersions] = useState([]);
-  const [restoringVersionId, setRestoringVersionId] = useState(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [addingProperty, setAddingProperty] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
   // 刚添加、还没填值的属性：先在面板上占位，填了值才落盘
@@ -183,17 +171,6 @@ export default function DocMetaPanel({
     setPendingKeys((keys) => [...keys, key]);
   };
 
-  const handleRestoreVersion = async (versionId) => {
-    if (!hasDbBridge() || !onRestoreVersion) return;
-    setRestoringVersionId(versionId);
-    try {
-      const res = await dbGetVersionContent(versionId);
-      if (res?.ok && res.version?.content != null) onRestoreVersion(res.version.content);
-    } finally {
-      setRestoringVersionId(null);
-    }
-  };
-
   const relationContext = {
     filesById,
     selectedFile,
@@ -262,31 +239,15 @@ export default function DocMetaPanel({
         </div>
       )}
 
-      {/* ── 版本历史 ── */}
-      {hasDbBridge() && versions.length > 0 && (
+      {/* ── 版本历史：入口，详情在 VersionHistoryModal ── */}
+      {hasDbBridge() && versions.length > 0 && onOpenVersionHistory && (
         <>
           <div className="doc-meta-divider" />
-          <button type="button" className="doc-meta-history-toggle" onClick={() => setHistoryOpen((open) => !open)}>
+          <button type="button" className="doc-meta-history-toggle" onClick={onOpenVersionHistory}>
             <Clock size={12} strokeWidth={1.8} className="doc-meta-label-icon" />
             版本历史
             <span className="doc-meta-history-count">{versions.length}</span>
-            <span className="doc-meta-history-arrow">{historyOpen ? '▲' : '▼'}</span>
           </button>
-          {historyOpen && (
-            <div className="doc-meta-versions-list">
-              {versions.slice(0, 10).map((version) => (
-                <div key={version.id} className="doc-meta-version-row">
-                  <span className="doc-meta-version-date">{formatVersionDate(version.created_at)}</span>
-                  <span className="doc-meta-version-size">{version.char_count} 字</span>
-                  {onRestoreVersion && (
-                    <button type="button" className="doc-meta-version-restore" disabled={restoringVersionId === version.id} onClick={() => handleRestoreVersion(version.id)}>
-                      {restoringVersionId === version.id ? '恢复中…' : '恢复'}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
     </div>

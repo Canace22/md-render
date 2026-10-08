@@ -5,6 +5,12 @@ const Database = require('better-sqlite3');
 import path from 'path';
 import { app } from 'electron';
 import { EDITOR_STATE_KEYS } from '../shared/stateKeys.js';
+import {
+  VERSION_LIST_LIMIT,
+  VERSION_PRUNE_INTERVAL_MS,
+  VERSION_RETENTION_MS,
+  VERSION_SNAPSHOT_INTERVAL_MS,
+} from '../shared/versionHistory.js';
 
 let db = null;
 
@@ -81,6 +87,8 @@ const SCHEMA = `
     created_at  INTEGER,
     FOREIGN KEY (document_id) REFERENCES documents(id)
   );
+
+  CREATE INDEX IF NOT EXISTS idx_versions_doc_time ON versions(document_id, created_at);
 `;
 
 export function initDatabase() {
@@ -356,38 +364,58 @@ function parseIdList(value) {
 }
 
 // ── version history ───────────────────────────────────────────────────────────
+// 参照 Obsidian「文件恢复」：正文被覆盖前，若距该文档上个快照已满间隔，就把旧正文存一份；
+// 快照只保留最近 N 天。存的是「被覆盖前」的内容，所以停笔很久后的第一次编辑也能找回原稿。
 
-const FIVE_MIN_MS = 5 * 60 * 1000;
-const MIN_DIFF_CHARS = 50;
+let lastVersionPruneAt = 0;
 
-export function saveVersions(workspace) {
+/** 纯函数：旧正文是否需要存成新快照 */
+export function shouldSaveVersion(previousContent, lastVersion, now) {
+  if (!previousContent) return false;
+  if (!lastVersion) return true;
+  if (lastVersion.content === previousContent) return false;
+  return now - (lastVersion.created_at ?? 0) >= VERSION_SNAPSHOT_INTERVAL_MS;
+}
+
+function pruneOldVersions(now) {
+  if (now - lastVersionPruneAt < VERSION_PRUNE_INTERVAL_MS) return;
+  lastVersionPruneAt = now;
+  getDb().prepare('DELETE FROM versions WHERE created_at < ?').run(now - VERSION_RETENTION_MS);
+}
+
+/** 必须在 syncDocuments 之前调用：此时 documents 里还是旧正文 */
+export function saveVersions(workspace, now = Date.now()) {
   const docs = flattenWorkspace(workspace);
-  const now = Date.now();
-
+  const prevDoc = getDb().prepare('SELECT content FROM documents WHERE id = ?');
   const lastVer = getDb().prepare(
-    'SELECT content, created_at FROM versions WHERE document_id = ? ORDER BY created_at DESC LIMIT 1',
+    'SELECT content, created_at FROM versions WHERE document_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
   );
   const insert = getDb().prepare(
     'INSERT INTO versions (document_id, content, created_at) VALUES (?, ?, ?)',
   );
 
-  const saveAll = getDb().transaction(() => {
+  getDb().transaction(() => {
     for (const doc of docs) {
-      if (doc.type !== 'file' || !doc.content) continue;
-      const last = lastVer.get(doc.id);
-      if (!last) {
-        insert.run(doc.id, doc.content, now);
-        continue;
-      }
-      if (last.content === doc.content) continue;
-      const elapsed = now - (last.created_at ?? 0);
-      const diffLen = Math.abs(doc.content.length - (last.content?.length ?? 0));
-      if (elapsed >= FIVE_MIN_MS && diffLen >= MIN_DIFF_CHARS) {
-        insert.run(doc.id, doc.content, now);
-      }
+      if (doc.type !== 'file') continue;
+      const prev = prevDoc.get(doc.id);
+      if (!prev || prev.content === doc.content) continue;
+      if (!shouldSaveVersion(prev.content, lastVer.get(doc.id), now)) continue;
+      insert.run(doc.id, prev.content, now);
     }
-  });
-  saveAll();
+    pruneOldVersions(now);
+  })();
+}
+
+/** 手动存一份快照（恢复旧版本前先存当前内容，保证可反悔）。与最新快照相同则跳过 */
+export function saveVersionSnapshot(docId, content, now = Date.now()) {
+  if (!docId || !content) return { saved: false };
+  const last = getDb().prepare(
+    'SELECT content FROM versions WHERE document_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+  ).get(docId);
+  if (last?.content === content) return { saved: false };
+  getDb().prepare('INSERT INTO versions (document_id, content, created_at) VALUES (?, ?, ?)')
+    .run(docId, content, now);
+  return { saved: true };
 }
 
 export function getVersions(docId) {
@@ -396,9 +424,9 @@ export function getVersions(docId) {
     SELECT id, created_at, length(content) AS char_count
     FROM versions
     WHERE document_id = ?
-    ORDER BY created_at DESC
-    LIMIT 30
-  `).all(docId);
+    ORDER BY created_at DESC, id DESC
+    LIMIT ?
+  `).all(docId, VERSION_LIST_LIMIT);
 }
 
 export function getVersionById(versionId) {

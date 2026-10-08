@@ -18,7 +18,7 @@ export default function DocHeader({
   onKnowledgeMetaChange,
   onFrontmatterPropertyChange,
   onOpenFile,
-  onRestoreVersion,
+  onOpenVersionHistory,
   titleEditable = true,
   isTitleEditing,
   titleDraft,
@@ -101,7 +101,7 @@ export default function DocHeader({
           onFrontmatterPropertyChange={onFrontmatterPropertyChange}
           onTagsChange={onTagsChange}
           onOpenFile={onOpenFile}
-          onRestoreVersion={onRestoreVersion}
+          onOpenVersionHistory={onOpenVersionHistory}
         />
       )}
     </header>

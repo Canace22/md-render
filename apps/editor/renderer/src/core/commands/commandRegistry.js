@@ -92,6 +92,13 @@ export const createCommands = (ctx = {}) => [
     group: '文档',
     run: () => ctx.copyToWechat?.(),
   },
+  {
+    id: 'doc.version-history',
+    title: '查看文档版本历史',
+    keywords: ['history', 'version', 'banben', 'lishi', '版本', '历史', '恢复', '快照', 'recovery'],
+    group: '文档',
+    run: () => ctx.openVersionHistory?.(),
+  },
   ...EXPORT_FORMATS.map((format) => ({
     id: `doc.export.${format.key}`,
     title: `导出为 ${format.label}`,
