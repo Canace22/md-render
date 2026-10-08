@@ -6,14 +6,14 @@ import { Eye, Copy, ClipboardCopy, Check, Rocket } from 'lucide-react';
 const COPIED_HINT_DURATION = 2000;
 
 /**
- * 正文右上角的悬浮动作胶囊。
+ * 编辑区顶部的文档动作栏（参照 Obsidian 的 view-header：独占一条细栏，不遮挡正文）。
  *
  * 标题 / 引用 / 列表 / 分割线等块插入交给 BlockNote 的斜杠菜单与 Markdown 快捷输入，
  * 这里只保留编辑器内部无法触发的领域动作：准备发布、预览与两种复制。
  * 渲染交由 blocknote-core 的通用 EditorToolbar（数据驱动）；
  * disabled 时 onItemClick 为 no-op，外层 shell 另加 data-disabled 控制观感。
  *
- * 样式约定：**带 label 的项是主动作**（渲染成绿色实心胶囊），不带 label 的走圆形图标钮，
+ * 样式约定：全部是幽灵按钮，带 label 的项显示图标 + 文字，不带 label 的是图标钮，
  * 复制反馈靠图标换成对勾 + 调用方的 message 提示，不再靠改文案。
  */
 export default function EditorQuickToolbar({

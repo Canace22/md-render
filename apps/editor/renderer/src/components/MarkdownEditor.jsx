@@ -2732,17 +2732,17 @@ function MarkdownEditor() {
           />
         ) : (
           <>
+            {/* 文档级动作：参照 Obsidian 的视图头部，独占一条细栏，不遮挡正文 */}
+            <EditorQuickToolbar
+              editor={editor}
+              disabled={!selectedFile}
+              onPreviewWeChat={() => setWechatPreviewOpen(true)}
+              onCopyWeChat={handleCopyToWeChat}
+              onCopyRichText={handleCopyRichText}
+              copyStyleName={getTemplateById(copyStyle).name}
+              onPreparePublish={handleOpenPreparePublish}
+            />
             <div className="editor-layout">
-              {/* 文档级动作：悬浮在正文右上，不再单独占一条横栏 */}
-              <EditorQuickToolbar
-                editor={editor}
-                disabled={!selectedFile}
-                onPreviewWeChat={() => setWechatPreviewOpen(true)}
-                onCopyWeChat={handleCopyToWeChat}
-                onCopyRichText={handleCopyRichText}
-                copyStyleName={getTemplateById(copyStyle).name}
-                onPreparePublish={handleOpenPreparePublish}
-              />
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
                   <DiffOverlay />
