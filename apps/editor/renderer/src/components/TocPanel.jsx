@@ -10,6 +10,9 @@ const HEADING_SELECTOR =
 const TICK_WIDTH_BY_LEVEL = [22, 22, 18, 15, 13, 11, 10];
 /** 判定「已滚过」的容差：标题顶部进入视口这么多像素内就算当前节 */
 const ACTIVE_HEADING_OFFSET = 120;
+/** 悬停意图延迟：鼠标路过不展开，短暂移出不收起（ms） */
+const OPEN_DELAY = 250;
+const CLOSE_DELAY = 200;
 
 /** 从 markdown 文本提取标题列表 */
 function extractHeadings(markdown) {
@@ -50,8 +53,17 @@ export default function TocPanel({ markdown, collapsed, onToggle }) {
   const [hovered, setHovered] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rafRef = useRef(0);
+  const hoverTimerRef = useRef(0);
 
   const open = !collapsed || hovered;
+
+  // 延迟切换 hover 状态；新的进入/离开会覆盖上一次未生效的计划
+  const scheduleHover = useCallback((next, delay) => {
+    clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setHovered(next), delay);
+  }, []);
+
+  useEffect(() => () => clearTimeout(hoverTimerRef.current), []);
 
   useEffect(() => {
     if (!headings.length) return undefined;
@@ -80,8 +92,8 @@ export default function TocPanel({ markdown, collapsed, onToggle }) {
   return (
     <div
       className={`toc-curtain${open ? ' is-open' : ''}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => scheduleHover(true, OPEN_DELAY)}
+      onMouseLeave={() => scheduleHover(false, CLOSE_DELAY)}
     >
       {open ? (
         <nav className="toc-curtain-panel" aria-label="文档目录">

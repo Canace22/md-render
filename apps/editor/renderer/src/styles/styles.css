@@ -7522,7 +7522,15 @@ body.theme-dark .status-bar {
     bottom: 0;
     z-index: 8;
     display: flex;
+    align-items: flex-start;
     justify-content: flex-end;
+    /* 整条竖带不接收鼠标，只有刻度和展开后的面板能触发，避免碰到右侧空白就弹出 */
+    pointer-events: none;
+}
+
+.toc-curtain-ruler,
+.toc-curtain-panel {
+    pointer-events: auto;
 }
 
 .toc-curtain-ruler {
@@ -7531,8 +7539,8 @@ body.theme-dark .status-bar {
     align-items: flex-end;
     gap: 9px;
     width: 44px;
-    height: 100%;
-    padding: 24px 12px 0;
+    max-height: 100%;
+    padding: 24px 12px 12px;
     overflow: hidden;
 }
 
@@ -11432,4 +11440,27 @@ body.is-resizing-agent-panel {
   margin-top: 8px;
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+/* 右键菜单二级菜单（导出为…）：悬停展开在右侧 */
+.tree-context-submenu {
+    position: relative;
+}
+
+.tree-context-submenu-arrow {
+    margin-left: auto;
+    color: var(--color-text-secondary, currentColor);
+}
+
+.tree-node-context-menu .tree-context-submenu-panel {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: -4px;
+    min-width: 120px;
+}
+
+.tree-context-submenu:hover > .tree-context-submenu-panel,
+.tree-context-submenu:focus-within > .tree-context-submenu-panel {
+    display: block;
 }

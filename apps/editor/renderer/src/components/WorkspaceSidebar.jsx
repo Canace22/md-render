@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Popover, Select } from 'antd';
 import { useEditorStore } from '../store/useEditorStore.js';
 import logoUrl from '../assets/logo.png';
-import FileConvertMenuItems from './FileConvertMenuItems.jsx';
+import DocActionMenuItems, { isEditableDocNode } from './DocActionMenuItems.jsx';
 import MoveNodeModal from './MoveNodeModal.jsx';
 import {
   File,
@@ -188,6 +188,7 @@ const TreeNode = ({
   onContextMenu,
   onCloseContextMenu,
   onRevealLocalProjectEntry,
+  docActions,
   forceOpen,
   expandedFolderIdSet,
   onToggleFolder,
@@ -204,6 +205,7 @@ const TreeNode = ({
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
+  const showDocActions = Boolean(docActions && isEditableDocNode(node));
   const folderOpen = Boolean(isFolder && (forceOpen || expandedFolderIdSet?.has(node.id)));
   const [dragOver, setDragOver] = useState(false);
   const menuRef = useRef(null);
@@ -253,7 +255,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager) return;
+    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager && !showDocActions) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -434,7 +436,7 @@ const TreeNode = ({
               <Trash2 size={14} strokeWidth={1.5} /> 移除项目
             </button>
           )}
-          <FileConvertMenuItems onBeforeRun={onCloseContextMenu} />
+          <DocActionMenuItems node={node} docActions={docActions} runAndClose={runAndClose} />
         </div>
       )}
 
@@ -467,6 +469,7 @@ const TreeNode = ({
               onContextMenu={onContextMenu}
               onCloseContextMenu={onCloseContextMenu}
               onRevealLocalProjectEntry={onRevealLocalProjectEntry}
+              docActions={docActions}
               forceOpen={forceOpen}
               expandedFolderIdSet={expandedFolderIdSet}
               onToggleFolder={onToggleFolder}
@@ -526,6 +529,7 @@ const WorkspaceSidebar = ({
   onMoveNode,
   onPinNode,
   onRevealLocalProjectEntry,
+  docActions,
   collapsed,
   onToggleCollapse,
   surface,
@@ -1077,6 +1081,7 @@ const WorkspaceSidebar = ({
                   onStartMove: setMovingNodeId,
                   onPinNode,
                   onRevealLocalProjectEntry,
+                  docActions,
                   allowStructureActions,
                   onRemoveLocalProject,
                   onManualSyncLocalProject,
@@ -1114,7 +1119,6 @@ const WorkspaceSidebar = ({
                 <button type="button" onClick={() => handleCreateFromSidebar('folder', contextMenu.nodeId)}>
                   <Folder size={14} strokeWidth={1.5} /> 新建文件夹
                 </button>
-                <FileConvertMenuItems onBeforeRun={closeContextMenu} />
               </div>
             )}
           </div>

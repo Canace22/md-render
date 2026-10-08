@@ -88,6 +88,8 @@ import {
 import useCommandPalette from '../hooks/useCommandPalette.js';
 import { createCommands } from '../core/commands/commandRegistry.js';
 import { hasDbBridge } from '../services/electronBridge.js';
+import { FILE_CONVERT_TOOLS, isFileConvertSupported } from '../services/fileConvertTools.js';
+import { useFileConvertTool } from '../hooks/useFileConvertTool.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
@@ -2496,6 +2498,7 @@ function MarkdownEditor() {
     show: showCommandPalette,
   } = useCommandPalette();
   const commandHandlersRef = useRef(null);
+  const runFileConvertTool = useFileConvertTool();
   commandHandlersRef.current = {
     openCurrentContent: () => setSurface(selectedContentSurface),
     openDaily: () => {
@@ -2527,7 +2530,9 @@ function MarkdownEditor() {
     toggleSidebar: () => commandHandlersRef.current.toggleSidebar(),
     syncFromDisk: () => commandHandlersRef.current.syncFromDisk(),
     openVersionHistory: () => commandHandlersRef.current.openVersionHistory(),
-  }), [setSurface]);
+    fileConvertTools: isFileConvertSupported() ? FILE_CONVERT_TOOLS : [],
+    runFileConvertTool,
+  }), [setSurface, runFileConvertTool]);
 
   return (
     <div className={`container immersive-shell${macWindowed ? ' mac-windowed' : ''}`}>
@@ -2559,6 +2564,11 @@ function MarkdownEditor() {
         onMoveNode={handleMoveNode}
         onPinNode={pinNode}
         onRevealLocalProjectEntry={desktopProjectSupported ? handleRevealLocalProjectEntry : null}
+        docActions={{
+          openVersionHistory: handleOpenVersionHistory,
+          exportAs: handleExportAs,
+          copyToWechat: handleCopyToWeChat,
+        }}
         onRename={handleRename}
         onDelete={handleDelete}
         collapsed={sidebarCollapsed}

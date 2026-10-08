@@ -107,6 +107,15 @@ export const createCommands = (ctx = {}) => [
     run: () => ctx.exportAs?.(format.key),
   })),
 
+  // 文件转换工具（PDF 转 Word、视频提取音频）：列表由调用方按环境注入，没连 ai-proxy 时传空数组
+  ...(ctx.fileConvertTools ?? []).map((tool) => ({
+    id: `tool.${tool.id}`,
+    title: tool.label,
+    keywords: tool.keywords ?? [],
+    group: '工具',
+    run: () => ctx.runFileConvertTool?.(tool),
+  })),
+
   {
     id: 'app.toggle-theme',
     title: '切换深色 / 浅色主题',

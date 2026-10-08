@@ -57,6 +57,18 @@ describe('command registry', () => {
     // ctx 没给 toggleTheme，执行时应静默跳过而不是崩
     expect(() => commands.find((c) => c.id === 'app.toggle-theme').run()).not.toThrow();
   });
+
+  it('文件转换工具按注入列表进入命令面板，未注入时不出现', () => {
+    expect(createCommands({}).some((c) => c.group === '工具')).toBe(false);
+
+    const runFileConvertTool = vi.fn();
+    const tool = { id: 'pdf_to_docx', label: 'PDF 转 Word', keywords: ['pdf', '转换'] };
+    const commands = createCommands({ fileConvertTools: [tool], runFileConvertTool });
+    const hit = filterCommands(commands, '转换').find((c) => c.id === 'tool.pdf_to_docx');
+    expect(hit).toBeTruthy();
+    hit.run();
+    expect(runFileConvertTool).toHaveBeenCalledWith(tool);
+  });
 });
 
 // 单测环境是 node（vitest.config.js: environment: 'node'），没有 window。
