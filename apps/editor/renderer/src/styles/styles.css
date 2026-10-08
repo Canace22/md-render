@@ -4461,6 +4461,8 @@ body.theme-light #markdown-output code {
 }
 
 .blocknote-editor .bn-editor {
+    --editor-body-size: 0.99rem;
+    --editor-body-line-height: 1.92;
     background: transparent;
     box-shadow: none;
     border-radius: 0;
@@ -4513,9 +4515,17 @@ body.theme-light #markdown-output code {
 .blocknote-editor .bn-editor li,
 .blocknote-editor .bn-editor blockquote {
     color: #475467;
-    font-size: 0.99rem;
-    line-height: 1.92;
+    font-size: var(--editor-body-size);
+    line-height: var(--editor-body-line-height);
     font-weight: 400;
+}
+
+/* 列表序号/圆点是 .bn-block-content::before，默认继承 block 的 16px / 1.5 行高，
+   而正文 p 是 0.99rem / 1.92，行盒高度不一致 → 序号比文字偏上。这里统一成正文的字号和行高。 */
+.blocknote-editor .bn-block-content[data-content-type="numberedListItem"]::before,
+.blocknote-editor .bn-block-content[data-content-type="bulletListItem"]::before {
+    font-size: var(--editor-body-size);
+    line-height: var(--editor-body-line-height);
 }
 
 .blocknote-editor .bn-editor blockquote {
