@@ -60,3 +60,5 @@ apps/*/build/
 
 # Claude Code 本地设置（个人环境，不入库；.claude/skills 符号链接需要入库）
 .claude/settings.local.json
+
+TASK.md
