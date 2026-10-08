@@ -3,10 +3,12 @@ import { Popover, Select } from 'antd';
 import { useEditorStore } from '../store/useEditorStore.js';
 import logoUrl from '../assets/logo.png';
 import FileConvertMenuItems from './FileConvertMenuItems.jsx';
+import MoveNodeModal from './MoveNodeModal.jsx';
 import {
   File,
   Folder,
   FolderOpen,
+  FolderInput,
   Network,
   Pencil,
   Trash2,
@@ -174,6 +176,7 @@ const TreeNode = ({
   onRename,
   onDelete,
   onMoveNode,
+  onStartMove,
   onPinNode,
   renamingNodeId,
   renameDraft,
@@ -196,6 +199,8 @@ const TreeNode = ({
   const channelLabel = getFolderChannelLabel(node);
   const showCreateActions = allowStructureActions && isFolder;
   const showNodeActions = allowStructureActions && !isRoot && !isLocalProjectRoot;
+  // 置顶对挂载的本地项目根也开放（它们不能移动/重命名，但可以排到最前）
+  const showPinAction = allowStructureActions && !isRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
@@ -248,7 +253,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showCreateActions && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager) return;
+    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -379,7 +384,7 @@ const TreeNode = ({
               <button type="button" onClick={runAndClose(() => onRevealLocalProjectEntry(node.id))}>
                 <FolderOpen size={14} strokeWidth={1.5} /> 在{FILE_MANAGER_LABEL}中查看
               </button>
-              {(showCreateActions || showNodeActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
+              {(showCreateActions || showPinAction || showNodeActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
             </>
           )}
           {showCreateActions && (
@@ -393,14 +398,21 @@ const TreeNode = ({
               <div className="tree-context-menu-divider" />
             </>
           )}
-          {showNodeActions && (
+          {showPinAction && (
             <>
               <button type="button" onClick={runAndClose(() => onPinNode?.(node.id))}>
                 {node.pinned
                   ? <><PinOff size={14} strokeWidth={1.5} /> 取消置顶</>
                   : <><Pin size={14} strokeWidth={1.5} /> 置顶</>}
               </button>
-              <div className="tree-context-menu-divider" />
+              {(showNodeActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
+            </>
+          )}
+          {showNodeActions && (
+            <>
+              <button type="button" onClick={runAndClose(() => onStartMove?.(node.id))}>
+                <FolderInput size={14} strokeWidth={1.5} /> 移动到…
+              </button>
               <button type="button" onClick={runAndClose(() => onStartRename(node.id, node.name))}>
                 <Pencil size={14} strokeWidth={1.5} /> 重命名
               </button>
@@ -443,6 +455,7 @@ const TreeNode = ({
               onRename={onRename}
               onDelete={onDelete}
               onMoveNode={onMoveNode}
+              onStartMove={onStartMove}
               onPinNode={onPinNode}
               renamingNodeId={renamingNodeId}
               renameDraft={renameDraft}
@@ -532,6 +545,7 @@ const WorkspaceSidebar = ({
   const [renamingNodeId, setRenamingNodeId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [contextMenu, setContextMenu] = useState(null); // { kind, nodeId, x, y }
+  const [movingNodeId, setMovingNodeId] = useState(null);
   const isCommittingRenameRef = useRef(false);
   const sidebarFileKind = useEditorStore((s) => s.sidebarFileKind);
   const setSidebarFileKind = useEditorStore((s) => s.setSidebarFileKind);
@@ -671,6 +685,18 @@ const WorkspaceSidebar = ({
       y: event.clientY,
     });
   }, [selectedId, workspace]);
+
+  // 拖到目录树空白处 = 移到根目录（根节点本身不渲染，没有别的落点）
+  const handleTreeBackgroundDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleTreeBackgroundDrop = useCallback((event) => {
+    event.preventDefault();
+    const fromId = event.dataTransfer.getData('text/plain');
+    if (fromId && workspace?.id) onMoveNode?.(fromId, workspace.id);
+  }, [onMoveNode, workspace]);
 
   const handleTreeKeyDown = useCallback((event) => {
     if (renamingNodeId) return;
@@ -1038,6 +1064,8 @@ const WorkspaceSidebar = ({
             tabIndex={0}
             onKeyDown={handleTreeKeyDown}
             onContextMenu={handleTreeBackgroundContextMenu}
+            onDragOver={allowStructureActions ? handleTreeBackgroundDragOver : undefined}
+            onDrop={allowStructureActions ? handleTreeBackgroundDrop : undefined}
           >
             {filteredWorkspace
               ? renderTree(filteredWorkspace, selectedId, onSelect, {
@@ -1046,6 +1074,7 @@ const WorkspaceSidebar = ({
                   onRename,
                   onDelete,
                   onMoveNode,
+                  onStartMove: setMovingNodeId,
                   onPinNode,
                   onRevealLocalProjectEntry,
                   allowStructureActions,
@@ -1091,6 +1120,13 @@ const WorkspaceSidebar = ({
           </div>
         </div>
       )}
+
+      <MoveNodeModal
+        workspace={workspace}
+        nodeId={movingNodeId}
+        onMove={onMoveNode}
+        onClose={() => setMovingNodeId(null)}
+      />
 
       {!collapsed && showWorkspaceTree && (
         <div

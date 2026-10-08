@@ -516,13 +516,59 @@ export function remapDiskNodeAfterRename(node, oldRelativePath, newRelativePath,
  * 移动后整棵子树的 relativePath / id 会按 newRelativePath 重映射。
  * 非法情况原样返回 root：节点/目标缺失、目标不是文件夹、跨项目、目标在自己子树里、已在目标里。
  */
+const PROJECTS_RELATIVE_PATH = 'Projects';
+
+/** 内容库 Projects/ 下的节点：在目录树里直接平铺在工作区根下 */
+const isProjectsVaultNode = (node) => Boolean(
+  node?.relativePath?.startsWith(`${PROJECTS_RELATIVE_PATH}/`) && !node.localProjectRoot,
+);
+
+/**
+ * 磁盘节点移入 target 后，新的父级相对路径；不能移时返回 null。
+ * 工作区根对应磁盘上的 Projects/，所以 Projects 下的节点可以移回根。
+ */
+export function resolveDiskMoveParentPath(workspace, node, target) {
+  if (!node?.projectRootPath || !node.relativePath || target?.type !== 'folder') return null;
+  if (target.projectRootPath === node.projectRootPath) return target.relativePath ?? '';
+  if (target.id === workspace?.id && isProjectsVaultNode(node)) return PROJECTS_RELATIVE_PATH;
+  return null;
+}
+
+/** 判断节点能否移入 targetId 文件夹（移动弹窗 / 拖拽共用） */
+export function canMoveNodeToFolder(workspace, nodeId, targetId) {
+  const node = findNodeById(workspace, nodeId);
+  const target = findNodeById(workspace, targetId);
+  if (!node || target?.type !== 'folder' || nodeId === targetId) return false;
+  if (nodeId === workspace?.id || node.localProjectRoot) return false;
+  if (findNodeById(node, targetId)) return false; // 不能移进自己的子目录
+  if (findParentId(workspace, nodeId) === targetId) return false; // 已在目标目录
+  const fromDisk = Boolean(node.projectRootPath && node.relativePath);
+  if (!fromDisk) return !target.projectRootPath;
+  return resolveDiskMoveParentPath(workspace, node, target) !== null;
+}
+
+export const MOVE_TARGET_ROOT_TITLE = '根目录';
+
+/** 「移动到」弹窗的目录树：只列文件夹，不能移入的置灰 */
+export function buildMoveTargetTree(workspace, nodeId) {
+  const toTreeNode = (folder, isRoot) => ({
+    key: folder.id,
+    title: isRoot ? MOVE_TARGET_ROOT_TITLE : folder.name,
+    disabled: !canMoveNodeToFolder(workspace, nodeId, folder.id),
+    children: (folder.children ?? [])
+      .filter((child) => child.type === 'folder' && !isHiddenWorkspaceNode(child) && child.id !== nodeId)
+      .map((child) => toTreeNode(child, false)),
+  });
+  return workspace?.type === 'folder' ? [toTreeNode(workspace, true)] : [];
+}
+
 export function moveDiskNodeToFolder(root, nodeId, targetFolderId, newRelativePath) {
   if (!root || !nodeId || !targetFolderId || nodeId === targetFolderId || !newRelativePath) return root;
 
   const node = findNodeById(root, nodeId);
   const target = findNodeById(root, targetFolderId);
   if (!node?.projectRootPath || !node.relativePath) return root;
-  if (!target || target.type !== 'folder' || target.projectRootPath !== node.projectRootPath) return root;
+  if (resolveDiskMoveParentPath(root, node, target) === null) return root;
   if (findNodeById(node, targetFolderId)) return root; // 目标在自己子树里
   if ((target.children ?? []).some((child) => child.id === nodeId)) return root;
 
@@ -875,6 +921,33 @@ export function togglePinNode(root, targetId) {
   }
 
   return root;
+}
+
+const collectPinnedIds = (node, ids = new Set()) => {
+  if (!node) return ids;
+  if (node.pinned) ids.add(node.id);
+  (node.children ?? []).forEach((child) => collectPinnedIds(child, ids));
+  return ids;
+};
+
+const applyPinnedIds = (node, ids) => {
+  if (!node) return node;
+  let next = ids.has(node.id) && !node.pinned ? { ...node, pinned: true } : node;
+  if (Array.isArray(node.children)) {
+    const children = node.children.map((child) => applyPinnedIds(child, ids));
+    if (children.some((child, i) => child !== node.children[i])) next = { ...next, children };
+  }
+  return next;
+};
+
+/**
+ * 磁盘刷新会用新扫描的节点替换旧节点，pinned 只存在内存里会丢。
+ * 这里按 id 把旧树上的置顶标记带到新树上（纯函数，无变化时原样返回）。
+ */
+export function keepPinnedFlags(nextRoot, prevRoot) {
+  const pinnedIds = collectPinnedIds(prevRoot);
+  if (pinnedIds.size === 0) return nextRoot;
+  return applyPinnedIds(nextRoot, pinnedIds);
 }
 
 /**

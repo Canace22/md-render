@@ -44,6 +44,7 @@ import {
   sanitizeStringList,
   moveNodeInParent,
   togglePinNode,
+  keepPinnedFlags,
   getDerivationSourceFileId,
   AGENT_META_FOLDER_NAME,
   findAgentMetaFolder,
@@ -1498,7 +1499,10 @@ export const useEditorStore = create(
         const current = get();
         const baseWorkspace = ensureLocalWorkspaceRoot(current.workspace, current.projectRootPath);
         const withoutDuplicate = removeLocalProjectByPath(baseWorkspace, rootPath);
-        const nextWorkspace = addChildNode(withoutDuplicate, withoutDuplicate.id, projectNode, true);
+        const nextWorkspace = keepPinnedFlags(
+          addChildNode(withoutDuplicate, withoutDuplicate.id, projectNode, true),
+          current.workspace,
+        );
         const initialId = findFirstFileId(projectNode) ?? projectNode.id;
         const node = findNodeById(nextWorkspace, initialId);
 
@@ -1521,7 +1525,10 @@ export const useEditorStore = create(
 
         const { workspace } = get();
         const cleaned = stripLocalProjectMounts(workspace, projectRootPath);
-        const nextWorkspace = mergeProjectsChildren(cleaned, projectsChildren ?? []);
+        const nextWorkspace = keepPinnedFlags(
+          mergeProjectsChildren(cleaned, projectsChildren ?? []),
+          workspace,
+        );
 
         persistWorkspace(nextWorkspace);
         set({
@@ -1619,6 +1626,7 @@ export const useEditorStore = create(
         } else {
           return;
         }
+        nextWorkspace = keepPinnedFlags(nextWorkspace, state.workspace);
 
         let selectedFile = findNodeById(nextWorkspace, state.selectedId);
         const patch = { workspace: nextWorkspace };

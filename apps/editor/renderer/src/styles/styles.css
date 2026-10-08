@@ -11337,6 +11337,12 @@ body.is-resizing-agent-panel {
   font-size: 12px;
 }
 
+/* 右键「移动到…」弹窗的目录树 */
+.move-node-tree {
+    max-height: 360px;
+    overflow-y: auto;
+}
+
 /* ── 版本历史（参照 Obsidian 文件恢复）────────────────────────────── */
 .version-history__title {
   display: inline-flex;

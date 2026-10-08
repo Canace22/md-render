@@ -102,6 +102,8 @@ import {
   buildUniqueName,
   buildUniqueNameInFolder,
   buildUniqueRenameNameInFolder,
+  canMoveNodeToFolder,
+  resolveDiskMoveParentPath,
   collectFiles,
   collectLocalProjectRootPaths,
   createLocalProjectFileNode,
@@ -974,7 +976,7 @@ function MarkdownEditor() {
   ]);
 
   /**
-   * 侧边栏拖拽：拖到文件上 = 同级排序；拖到文件夹上 = 移入该文件夹。
+   * 侧边栏拖拽 / 「移动到」：拖到文件上 = 同级排序；拖到文件夹（含根目录）上 = 移入该文件夹。
    * 磁盘挂载节点移动时先在磁盘上 rename，成功后再同步内存树。
    */
   const handleMoveNode = useCallback(async (fromId, toId) => {
@@ -989,25 +991,24 @@ function MarkdownEditor() {
       return;
     }
 
-    const fromDisk = Boolean(from.projectRootPath && from.relativePath);
-    const toDisk = Boolean(to.projectRootPath);
+    if (!canMoveNodeToFolder(state.workspace, fromId, toId)) {
+      const crossSource = from.projectRootPath !== to.projectRootPath && to.id !== state.workspace?.id;
+      if (crossSource) {
+        message.warning('暂不支持在本地项目和内存工作区之间移动');
+      }
+      return;
+    }
 
-    if (!fromDisk && !toDisk) {
+    const fromDisk = Boolean(from.projectRootPath && from.relativePath);
+    if (!fromDisk) {
       state.moveNodeToFolderById(fromId, toId);
       return;
     }
 
-    if (!fromDisk || !toDisk || from.projectRootPath !== to.projectRootPath) {
-      message.warning('暂不支持在本地项目和内存工作区之间拖拽移动');
-      return;
-    }
-
-    if (from.localProjectRoot) return;
-    if (findNodeById(from, toId)) return; // 不能移进自己的子目录
-    if (findParentId(state.workspace, fromId) === toId) return; // 已在目标目录
-
+    // 工作区根对应磁盘 Projects/，由 resolveDiskMoveParentPath 统一换算
+    const parentRelativePath = resolveDiskMoveParentPath(state.workspace, from, to);
     const uniqueName = buildUniqueRenameNameInFolder(to, from.name, fromId);
-    const newRelativePath = to.relativePath ? `${to.relativePath}/${uniqueName}` : uniqueName;
+    const newRelativePath = parentRelativePath ? `${parentRelativePath}/${uniqueName}` : uniqueName;
     const pathChange = beginNodePathChange(from);
     let diskPathChanged = false;
     try {
