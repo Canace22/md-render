@@ -854,6 +854,8 @@ export const useEditorStore = create(
       diskSavePendingFileIds: {},
       /** 磁盘外部变更触发编辑器重载（递增） */
       editorReloadToken: 0,
+      // 编辑器之外改了正文、等编辑器接手的请求（见 applyContentFromOutside）
+      externalContentRequests: [],
       /** 本地项目磁盘冲突待用户选择 */
       localProjectConflict: null,
       /** 通知渲染进程取消待写入磁盘的定时器 */
@@ -1208,6 +1210,27 @@ export const useEditorStore = create(
 
       updateSelectedFileContent: (nextMarkdown) => {
         get().updateFileContentById(get().selectedId, nextMarkdown);
+      },
+
+      /**
+       * 编辑器之外改正文（应用 AI 提案、恢复历史版本 / 外部改动前的内容）。
+       * 只调 updateFileContentById 时，编辑器画面不刷新、本地文件也不落盘；
+       * 这里先写 store，再排一个请求给 MarkdownEditor：当前文档交给编辑器整篇替换
+       * （等同一次正常编辑：落盘、可撤销），其它文档直接写回磁盘。
+       */
+      applyContentFromOutside: (fileId, content) => {
+        if (!fileId) return;
+        get().updateFileContentById(fileId, content);
+        set((state) => ({
+          externalContentRequests: [...state.externalContentRequests, { fileId, content }],
+        }));
+      },
+
+      /** MarkdownEditor 取走待处理的请求（取完即清空） */
+      takeExternalContentRequests: () => {
+        const requests = get().externalContentRequests;
+        if (requests.length) set({ externalContentRequests: [] });
+        return requests;
       },
 
       /** 找/建工作区根下的 .agent 元数据目录（带 agentMetaFolder 标记），返回目录 id */

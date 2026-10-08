@@ -85,6 +85,7 @@ import { findSkillById } from '../core/agent/skillRegistry.js';
 import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
 import { pickSkillItems, toSkillItem } from './agentSkillItems.js';
 import { extractRecallKeywords, rankRelatedDocs } from '../core/agent/contextRecall.js';
+import { appendReferenceToContent } from '../core/agent/referenceBlock.js';
 import {
   buildCanvasItemsFromAgentCards,
   buildCanvasSceneFromAgentGraph,
@@ -282,7 +283,7 @@ export default function AgentPanel({ open = true, onClose }) {
 
   // AI 待确认写入：stage 暂存改动；diff 对比与应用/放弃由预览区的 DiffOverlay 负责
   // 直接写当前文档（插入引用用，无需 diff 确认）
-  const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
+  const applyContentFromOutside = useEditorStore((s) => s.applyContentFromOutside);
   const createGeneratedFile = useEditorStore((s) => s.createGeneratedFile);
   const addDailyItem = useEditorStore((s) => s.addDailyItem);
   const addTodoItem = useEditorStore((s) => s.addTodoItem);
@@ -1138,15 +1139,10 @@ export default function AgentPanel({ open = true, onClose }) {
     });
   }, [host, selectedId]);
 
-  // 一键插入引用：把选中的相关旧文以 Markdown 引用块追加到当前文档末尾。
+  // 一键插入引用：把选中的相关旧文以引用块追加到当前文档末尾（编辑器同步刷新并落盘）。
   const handleInsertReference = useCallback((ref) => {
-    const title = ref?.title ?? '未命名';
-    const snippet = String(ref?.snippet ?? '').trim();
-    const block = snippet
-      ? `\n\n> 参考：${title}\n>\n> ${snippet.replace(/\n/g, '\n> ')}\n`
-      : `\n\n> 参考：${title}\n`;
-    updateSelectedFileContent(`${markdown ?? ''}${block}`);
-  }, [markdown, updateSelectedFileContent]);
+    applyContentFromOutside(selectedId, appendReferenceToContent(markdown, ref));
+  }, [applyContentFromOutside, markdown, selectedId]);
 
   // 切换服务商：记住选择并带出该商已存配置（参考 Cursor，每商独立 key）
   const handleProviderChange = useCallback((nextId) => {

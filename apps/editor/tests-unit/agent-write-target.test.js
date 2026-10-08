@@ -19,7 +19,7 @@ function makeStore(initial) {
   state = {
     ...state,
     ...createProposalSlice(set, get),
-    updateFileContentById: (fileId, text) => {
+    applyContentFromOutside: (fileId, text) => {
       writes.push({ fileId, text });
       state = { ...state, workspace: setContent(state.workspace, fileId, text) };
     },

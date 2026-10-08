@@ -47,7 +47,7 @@ const applyEdit = (get, proposal) => {
   const target = findNodeById(get().workspace, proposal.targetId);
   const check = checkProposalApplicable(proposal, target?.content ?? '');
   if (!check.ok) return check;
-  get().updateFileContentById(proposal.targetId, proposal.newText);
+  get().applyContentFromOutside(proposal.targetId, proposal.newText);
   return { ok: true };
 };
 

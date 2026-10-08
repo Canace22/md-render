@@ -11,7 +11,7 @@ export default function ExternalChangeBanner() {
   const notice = useEditorStore((s) => s.externalChangeNotice);
   const selectedId = useEditorStore((s) => s.selectedId);
   const clearNotice = useEditorStore((s) => s.clearExternalChangeNotice);
-  const updateSelectedFileContent = useEditorStore((s) => s.updateSelectedFileContent);
+  const applyContentFromOutside = useEditorStore((s) => s.applyContentFromOutside);
   const [diffOpen, setDiffOpen] = useState(false);
 
   const rows = useMemo(
@@ -22,7 +22,7 @@ export default function ExternalChangeBanner() {
   const stat = countDiff(rows);
 
   const handleRestore = () => {
-    updateSelectedFileContent(notice.previousContent);
+    applyContentFromOutside(notice.fileId, notice.previousContent);
     clearNotice();
   };
 

@@ -229,6 +229,16 @@ const blockNoteContentToMarkdown = (content) => {
   return blocks ? normalizeMarkdown(BlockNoteEditor.create(BLOCKNOTE_OPTIONS).blocksToMarkdownLossy(blocks)) : content;
 };
 
+/** 存储正文（BlockNote JSON 或 Markdown）→ 编辑器块，版本恢复时整篇替换用 */
+const contentToEditorBlocks = (content, mediaContext) => {
+  const blocks = parseBlockNoteContent(content);
+  if (blocks?.length) return blocks;
+  const source = rewriteMarkdownImagesForEditor(normalizeMarkdown(content ?? ''), mediaContext);
+  if (!source) return createEmptyDocument();
+  const parsed = BlockNoteEditor.create(BLOCKNOTE_OPTIONS).tryParseMarkdownToBlocks(source);
+  return parsed.length > 0 ? parsed : createEmptyDocument();
+};
+
 const DEFAULT_PASTE_MIME_TYPES = new Set([
   'vscode-editor-data',
   'blocknote/html',
@@ -1074,6 +1084,7 @@ function MarkdownEditor() {
   }, []);
   const [contentResetKey, setContentResetKey] = useState(0);
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
+  const externalContentRequests = useEditorStore((state) => state.externalContentRequests);
   // agent 运行时（MCP 控制桥、提案收件箱）不依赖 AI 面板是否打开
   useAgentRuntime({ dialogs: AGENT_HOST_DIALOGS });
   // 数据层文件化：迁移后 Daily / 白板 / 编辑部记忆以内容库文件为准
@@ -2407,6 +2418,52 @@ function MarkdownEditor() {
       document.removeEventListener('keyup', commitSelection);
     };
   }, [setAiQuotedSelection, shouldSuppressSelectAllKeyUp]);
+
+  // 编辑器接不了的外部改动（非当前文档 / 编辑器没挂载），直接把正文写回本地文件
+  const saveContentToDiskNow = useCallback(async (file, content) => {
+    const canSave = localProjectSupported && file?.projectRootPath && file.relativePath
+      && !file.readOnly && !file.needsConversion && !needsConversion(file.name);
+    if (!canSave) return;
+    const pendingTimer = projectSaveTimersRef.current.get(file.id);
+    if (pendingTimer) {
+      // 丢掉编辑器里还没写出去的旧正文，避免它稍后覆盖这次的内容
+      window.clearTimeout(pendingTimer);
+      projectSaveTimersRef.current.delete(file.id);
+    }
+    const diskMarkdown = contentToDiskMarkdown(content, mediaContextFromFile(file));
+    setDiskSavePending(file.id, true);
+    try {
+      await enqueueProjectFileSave(file.id, () => saveLocalProjectFile({
+        projectRootPath: file.projectRootPath,
+        relativePath: file.relativePath,
+        content: diskMarkdown,
+      }));
+      useEditorStore.getState().markLocalFileDiskSaved(file.id, diskMarkdown);
+      setDiskSavePending(file.id, false);
+    } catch (error) {
+      console.error('保存本地项目文件失败:', error);
+      message.error(error?.message || '保存本地项目文件失败');
+    }
+  }, [enqueueProjectFileSave, localProjectSupported, setDiskSavePending]);
+
+  // 接手编辑器之外的正文改动（applyContentFromOutside）：store 已经写好了，
+  // 当前文档用 replaceBlocks 整篇替换——等同一次正常编辑，onChange 落盘、可 Cmd/Ctrl+Z；
+  // 编辑器接不了时重建编辑器（若是当前文档）并直接落盘。
+  useEffect(() => {
+    if (!externalContentRequests.length) return;
+    const requests = useEditorStore.getState().takeExternalContentRequests();
+    requests.forEach(({ fileId, content }) => {
+      const canUseEditor = fileId === selectedId && Boolean(editor.domElement)
+        && !selectedReadOnly && !selectedUsesBookmarkCard && !selectedNeedsConversion;
+      if (canUseEditor) {
+        editor.replaceBlocks(editor.document, contentToEditorBlocks(content, mediaContextFromFile(selectedFile)));
+        return;
+      }
+      if (fileId === selectedId) setContentResetKey((k) => k + 1);
+      saveContentToDiskNow(findNodeById(useEditorStore.getState().workspace, fileId), content);
+    });
+    // 只在有新请求时跑；其余值取本次渲染的最新值即可
+  }, [externalContentRequests]);
 
   // 命令面板：把散落各处的入口收成一份可搜索清单，Cmd/Ctrl+K 唤起。
   // 部分 handler（如复制公众号）闭包里带着随渲染变化的正文，统一走 ref 取最新版本，

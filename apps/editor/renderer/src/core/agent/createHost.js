@@ -548,7 +548,7 @@ export function createHost({
         { text, title, dateKey, sources },
       );
       if (existing) {
-        state.updateFileContentById(existing.id, content);
+        state.applyContentFromOutside(existing.id, content);
         return { ok: true, fileId: existing.id, name: existing.name, created: false };
       }
 

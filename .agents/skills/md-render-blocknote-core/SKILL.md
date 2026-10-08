@@ -36,6 +36,8 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 9. **工具栏 tooltip 文案会被 `#markdown-output p` 盖成正文色。** BlockNote/Mantine 的 tooltip 用 `<p>`，且 `withinPortal={false}` 还挂在编辑器里；`#markdown-output p` 是 ID 选择器，会压过 `.bn-tooltip` 的 `color`。本项目又把 tooltip 做成深底白字（暗色主题反过来），结果字和底一个色。修的时候必须用带 `#markdown-output` 的选择器把 `.bn-tooltip p` 抢回来，只改 `.bn-tooltip` 不够。
 
+10. **在编辑器外改正文，别直接调 `updateFileContentById`。** 编辑器实例只在 `selectedId / contentResetKey / editorReloadToken` 变化时重建，只改 store 的话画面不变；落盘又只在编辑器 onChange 里做，本地项目文件也不会写。统一走 store 的 `applyContentFromOutside(fileId, content)`：它先写 store，再排请求给 `MarkdownEditor`——当前文档用 `editor.replaceBlocks` 整篇替换（等同一次正常编辑：onChange 落盘、可 Cmd/Ctrl+Z），编辑器没挂载或是别的文档就直接落盘。现有调用：AI 提案应用（`proposalSlice`）、外部改动「恢复为修改前」、版本历史恢复、AI 面板插入引用、灵感摘录。要往正文**追加**内容时，先按格式拼好整篇（参考 `core/agent/referenceBlock.js` / `inspirationNote.js`：BlockNote JSON 追加块、Markdown 追加文本），绝不能把 Markdown 字符串直接拼到 `__bn:` JSON 后面。编辑器自己的 onChange 仍用 `updateSelectedFileContent`，不要改成它（会循环）。
+
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
 ```bash
