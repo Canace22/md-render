@@ -1,14 +1,18 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Popover, Select } from 'antd';
+import { Popover, Select, message } from 'antd';
 import { useEditorStore } from '../store/useEditorStore.js';
 import logoUrl from '../assets/logo.png';
 import DocActionMenuItems, { isEditableDocNode } from './DocActionMenuItems.jsx';
 import MoveNodeModal from './MoveNodeModal.jsx';
+import TreeSortMenu from './TreeSortMenu.jsx';
+import { sortTreeNodes } from '../utils/treeSort.js';
+import { buildLocalEntryPath } from '../utils/localEntryPath.js';
 import {
   File,
   Folder,
   FolderOpen,
   FolderInput,
+  Link2,
   Network,
   Pencil,
   Trash2,
@@ -41,7 +45,6 @@ import {
   KNOWLEDGE_NODE_TYPE_OPTIONS,
   META_FILTER_STATUS_NONE,
   META_FILTER_STATUS_NONE_LABEL,
-  getNodeSortTime,
   isHiddenWorkspaceNode,
   collectVisibleFolderIds,
   SIDEBAR_FILE_KIND_ALL,
@@ -61,6 +64,15 @@ const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
 const FILE_MANAGER_LABEL = getPlatform() === 'darwin'
   ? '访达'
   : '文件管理器';
+
+const copyAbsolutePath = async (absolutePath) => {
+  try {
+    await navigator.clipboard.writeText(absolutePath);
+    message.success('已复制绝对路径');
+  } catch {
+    message.error('复制失败，请重试');
+  }
+};
 
 const EMPTY_META_FILTERS = { status: null, platform: null, nodeType: null, tag: null };
 const META_FILTER_ALL = '__all__';
@@ -145,22 +157,13 @@ const getRenameDraftValue = (node, fallbackName = '') => {
 };
 
 /**
- * 置顶节点优先，同组内按 updatedAt（最近活跃，缺失时用 createdAt）降序。
+ * 置顶节点优先，同组内按用户选的排序方式排（见 utils/treeSort.js）。
  * .agent 等隐藏元数据节点（点开头命名 / agentMetaFolder 标记）不进目录树。
  */
-const sortTreeChildren = (childrenRaw) => {
+const sortTreeChildren = (childrenRaw, sortMode) => {
   const children = (Array.isArray(childrenRaw) ? childrenRaw : [])
     .filter((child) => !isHiddenWorkspaceNode(child));
-  if (children.length <= 1) return children;
-  const indexed = children.map((child, index) => ({ child, index }));
-  const byActivityDesc = (a, b) => {
-    const diff = getNodeSortTime(b.child) - getNodeSortTime(a.child);
-    if (diff !== 0) return diff;
-    return a.index - b.index;
-  };
-  const pinned = indexed.filter(({ child }) => child.pinned).sort(byActivityDesc);
-  const unpinned = indexed.filter(({ child }) => !child.pinned).sort(byActivityDesc);
-  return [...pinned, ...unpinned].map(({ child }) => child);
+  return sortTreeNodes(children, sortMode);
 };
 
 const TreeNode = ({
@@ -192,6 +195,7 @@ const TreeNode = ({
   forceOpen,
   expandedFolderIdSet,
   onToggleFolder,
+  sortMode,
 }) => {
   const isFolder = node.type === 'folder';
   const isActive = node.id === selectedId;
@@ -205,6 +209,9 @@ const TreeNode = ({
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
   const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
+  const absolutePath = buildLocalEntryPath(node);
+  const showCopyPath = Boolean(absolutePath);
+  const showLocationActions = showRevealInFileManager || showCopyPath;
   const showDocActions = Boolean(docActions && isEditableDocNode(node));
   const folderOpen = Boolean(isFolder && (forceOpen || expandedFolderIdSet?.has(node.id)));
   const [dragOver, setDragOver] = useState(false);
@@ -255,7 +262,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showRevealInFileManager && !showDocActions) return;
+    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showLocationActions && !showDocActions) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -381,11 +388,18 @@ const TreeNode = ({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           data-testid="tree-context-menu"
         >
-          {showRevealInFileManager && (
+          {showLocationActions && (
             <>
-              <button type="button" onClick={runAndClose(() => onRevealLocalProjectEntry(node.id))}>
-                <FolderOpen size={14} strokeWidth={1.5} /> 在{FILE_MANAGER_LABEL}中查看
-              </button>
+              {showRevealInFileManager && (
+                <button type="button" onClick={runAndClose(() => onRevealLocalProjectEntry(node.id))}>
+                  <FolderOpen size={14} strokeWidth={1.5} /> 在{FILE_MANAGER_LABEL}中查看
+                </button>
+              )}
+              {showCopyPath && (
+                <button type="button" onClick={runAndClose(() => copyAbsolutePath(absolutePath))}>
+                  <Link2 size={14} strokeWidth={1.5} /> 复制绝对路径
+                </button>
+              )}
               {(showCreateActions || showPinAction || showNodeActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
             </>
           )}
@@ -442,7 +456,7 @@ const TreeNode = ({
 
       {isFolder && folderOpen && Array.isArray(node.children) && node.children.length > 0 && (
         <div className="tree-node-children">
-          {sortTreeChildren(node.children).map((child) => (
+          {sortTreeChildren(node.children, sortMode).map((child) => (
             <TreeNode
               key={child.id}
               node={child}
@@ -473,6 +487,7 @@ const TreeNode = ({
               forceOpen={forceOpen}
               expandedFolderIdSet={expandedFolderIdSet}
               onToggleFolder={onToggleFolder}
+              sortMode={sortMode}
             />
           ))}
         </div>
@@ -497,7 +512,7 @@ const renderTree = (
   const children = workspace?.type === 'folder' && Array.isArray(workspace.children)
     ? workspace.children
     : [];
-  const sorted = sortTreeChildren(children);
+  const sorted = sortTreeChildren(children, handlers.sortMode);
   return sorted.map((child) => (
     <TreeNode
       key={child.id}
@@ -553,6 +568,8 @@ const WorkspaceSidebar = ({
   const isCommittingRenameRef = useRef(false);
   const sidebarFileKind = useEditorStore((s) => s.sidebarFileKind);
   const setSidebarFileKind = useEditorStore((s) => s.setSidebarFileKind);
+  const sidebarSortMode = useEditorStore((s) => s.sidebarSortMode);
+  const setSidebarSortMode = useEditorStore((s) => s.setSidebarSortMode);
   const expandedFolderIds = useEditorStore((s) => s.expandedFolderIds);
   const setExpandedFolderIds = useEditorStore((s) => s.setExpandedFolderIds);
   const toggleFolderExpanded = useEditorStore((s) => s.toggleFolderExpanded);
@@ -1037,6 +1054,7 @@ const WorkspaceSidebar = ({
                   <rect x="2" y="7.25" width="12" height="1.5" rx="0.75" fill="currentColor"/>
                 </svg>
               </button>
+              <TreeSortMenu value={sidebarSortMode} onChange={setSidebarSortMode} />
               {allowStructureActions && (
                 <button
                   type="button"
@@ -1085,6 +1103,7 @@ const WorkspaceSidebar = ({
                   allowStructureActions,
                   onRemoveLocalProject,
                   onManualSyncLocalProject,
+                  sortMode: sidebarSortMode,
                   ...renameHandlers,
                 },
                 contextMenu,

@@ -1,8 +1,6 @@
-import { message } from 'antd';
-import { ChevronRight, Copy, Download, History, Link2 } from 'lucide-react';
+import { ChevronRight, Copy, Download, History } from 'lucide-react';
 import { getWorkspaceFileKind, SIDEBAR_FILE_KIND_DOCUMENT } from '../store/workspaceUtils.js';
 import { needsConversion } from '../utils/fileConverters.js';
-import { buildLocalEntryPath } from '../utils/localEntryPath.js';
 
 export const EXPORT_FORMATS = Object.freeze([
   { key: 'md', label: 'Markdown' },
@@ -18,22 +16,12 @@ export const isEditableDocNode = (node) => (
   && !needsConversion(node.name)
 );
 
-const copyPath = async (node) => {
-  try {
-    await navigator.clipboard.writeText(buildLocalEntryPath(node));
-    message.success('已复制文件路径');
-  } catch {
-    message.error('复制失败，请重试');
-  }
-};
-
 /**
- * 文件右键菜单里的文档操作：版本历史、导出、复制公众号、复制路径。
+ * 文件右键菜单里的文档操作：版本历史、导出、复制公众号。
  * 右键时节点已被选中，所以 docActions 里的 handler 直接作用于当前文档。
  */
 export default function DocActionMenuItems({ node, docActions, runAndClose }) {
   if (!docActions || !isEditableDocNode(node)) return null;
-  const hasLocalPath = Boolean(node.projectRootPath);
 
   return (
     <>
@@ -61,11 +49,6 @@ export default function DocActionMenuItems({ node, docActions, runAndClose }) {
       <button type="button" onClick={runAndClose(() => docActions.copyToWechat?.())}>
         <Copy size={14} strokeWidth={1.5} /> 复制公众号
       </button>
-      {hasLocalPath && (
-        <button type="button" onClick={runAndClose(() => copyPath(node))}>
-          <Link2 size={14} strokeWidth={1.5} /> 复制文件路径
-        </button>
-      )}
     </>
   );
 }

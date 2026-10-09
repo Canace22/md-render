@@ -83,6 +83,7 @@ import {
   updateTodoPoolItemCategory,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
+import { DEFAULT_TREE_SORT_MODE, normalizeTreeSortMode } from '../utils/treeSort.js';
 import { createAgentSlice } from './slices/agentSlice.js';
 import { createProposalSlice } from './slices/proposalSlice.js';
 import { createVaultSlice } from './slices/vaultSlice.js';
@@ -99,6 +100,7 @@ const STORAGE_MODE_STORAGE_KEY = 'md-renderer-storage-mode';
 const PROJECT_ROOT_STORAGE_KEY = 'md-renderer-project-root';
 const DAILY_WORKSPACE_STORAGE_KEY = 'md-renderer-daily-workspace';
 const SIDEBAR_FILE_KIND_STORAGE_KEY = 'md-renderer-sidebar-file-kind';
+const SIDEBAR_SORT_MODE_STORAGE_KEY = 'md-renderer-sidebar-sort-mode';
 const SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY = 'md-renderer-sidebar-expanded-folders';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
@@ -193,6 +195,9 @@ const buildStateFromLocalStorage = () => {
   const expandedFolderIds = normalizeExpandedFolderIds(
     safeParseJSON(window.localStorage.getItem(SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY), []),
   );
+  const sidebarSortMode = normalizeTreeSortMode(
+    window.localStorage.getItem(SIDEBAR_SORT_MODE_STORAGE_KEY),
+  );
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -210,6 +215,7 @@ const buildStateFromLocalStorage = () => {
       dailyWorkspace,
       sidebarFileKind,
       expandedFolderIds,
+      sidebarSortMode,
     },
     version: 0,
   };
@@ -249,6 +255,7 @@ const buildStateFromDb = (raw) => {
       expandedFolderIds: normalizeExpandedFolderIds(
         safeParseJSON(raw.sidebar_expanded_folders, []),
       ),
+      sidebarSortMode: normalizeTreeSortMode(raw.sidebar_sort_mode),
     },
     version: 0,
   };
@@ -279,6 +286,9 @@ const buildStateMap = (state) => {
     map.sidebar_expanded_folders = JSON.stringify(
       normalizeExpandedFolderIds(state.expandedFolderIds),
     );
+  }
+  if (state.sidebarSortMode != null) {
+    map.sidebar_sort_mode = normalizeTreeSortMode(state.sidebarSortMode);
   }
   return map;
 };
@@ -372,6 +382,7 @@ const editorStorage = {
           dailyWorkspace: normalizeDailyWorkspace(null),
           sidebarFileKind: SIDEBAR_FILE_KIND_ALL,
           expandedFolderIds: [],
+          sidebarSortMode: DEFAULT_TREE_SORT_MODE,
         },
         version: 0,
       };
@@ -416,6 +427,12 @@ const editorStorage = {
           window.localStorage.setItem(
             SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY,
             JSON.stringify(normalizeExpandedFolderIds(state.expandedFolderIds)),
+          );
+        }
+        if (state.sidebarSortMode != null) {
+          window.localStorage.setItem(
+            SIDEBAR_SORT_MODE_STORAGE_KEY,
+            normalizeTreeSortMode(state.sidebarSortMode),
           );
         }
       } catch { /* ignore */ }
@@ -469,6 +486,12 @@ const editorStorage = {
           JSON.stringify(normalizeExpandedFolderIds(state.expandedFolderIds)),
         );
       }
+      if (state.sidebarSortMode != null) {
+        window.localStorage.setItem(
+          SIDEBAR_SORT_MODE_STORAGE_KEY,
+          normalizeTreeSortMode(state.sidebarSortMode),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -491,6 +514,7 @@ const persistConfig = {
     dailyWorkspace: state.dailyWorkspace,
     sidebarFileKind: state.sidebarFileKind,
     expandedFolderIds: state.expandedFolderIds,
+    sidebarSortMode: state.sidebarSortMode,
   }),
 };
 
@@ -851,6 +875,7 @@ export const useEditorStore = create(
       dailyWorkspace: normalizeDailyWorkspace(null),
       sidebarFileKind: SIDEBAR_FILE_KIND_ALL,
       expandedFolderIds: [],
+      sidebarSortMode: DEFAULT_TREE_SORT_MODE,
       /** 正在等待 debounce 写入磁盘的文件 id */
       diskSavePendingFileIds: {},
       /** 磁盘外部变更触发编辑器重载（递增） */
@@ -878,6 +903,9 @@ export const useEditorStore = create(
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarFileKind: (fileKind) => set({
         sidebarFileKind: normalizeSidebarFileKind(fileKind),
+      }),
+      setSidebarSortMode: (mode) => set({
+        sidebarSortMode: normalizeTreeSortMode(mode),
       }),
       setExpandedFolderIds: (folderIds) => set({
         expandedFolderIds: normalizeExpandedFolderIds(folderIds),

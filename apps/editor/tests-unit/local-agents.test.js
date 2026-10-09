@@ -20,6 +20,7 @@ import {
 } from '../main/localAgents/mcpConfig.js';
 import { parseCodexDefaultModel, parseCursorModels } from '../main/localAgents/models.js';
 import { startLocalAgentRun } from '../main/localAgents/runner.js';
+import { parseEnvOutput, readShellEnv } from '../main/localAgents/shellEnv.js';
 import { isSafeWorkDir, resolveWorkDir } from '../main/localAgents/workDir.js';
 import {
   filterAllowedTools,
@@ -65,6 +66,12 @@ describe('本地 agent 检测', () => {
     const lastCursorAgent = candidates.map((item) => item.bin).lastIndexOf('cursor-agent');
     expect(candidates[0].file).toBe('/a/cursor-agent');
     expect(lastCursorAgent).toBeLessThan(firstAgent);
+  });
+
+  it('PATH 里没有时，兜底找 fnm 默认 Node 下全局装的 codex', () => {
+    const files = buildCandidatePaths(getLocalAgent('codex'), { pathEnv: '/usr/bin', home: '/Users/u', platform: 'darwin' }).map((item) => item.file);
+    expect(files).toContain('/Users/u/.local/share/fnm/aliases/default/bin/codex');
+    expect(files.indexOf('/usr/bin/codex')).toBe(0);
   });
 
   it('重名的 agent 只有路径或版本号像 Cursor 才算', () => {
@@ -176,6 +183,22 @@ describe('适配器解析录好的 JSONL', () => {
     const [event] = parser.parseLine(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'Invalid API key · Please run /login' }));
     expect(event).toMatchObject({ type: 'error', auth: true });
     expect(formatLocalAgentError('claude', event)).toContain('claude');
+  });
+
+  it('Claude 返回 403 Request not allowed：判为网络/代理问题，不提示登录', () => {
+    const parser = getAdapter('claude').createParser();
+    const message = 'Failed to authenticate. API Error: 403 {"error":{"type":"forbidden","message":"Request not allowed"}}';
+    const [event] = parser.parseLine(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: message }));
+    expect(event).toMatchObject({ type: 'error', auth: false, network: true });
+    const text = formatLocalAgentError('claude', event);
+    expect(text).toContain('代理');
+    expect(text).not.toContain(getLocalAgent('claude').loginHint);
+  });
+
+  it('连不上（ECONNREFUSED）也判为网络问题', () => {
+    const parser = getAdapter('codex').createParser();
+    const [event] = parser.finish({ code: 1, signal: null, stderr: 'connect ECONNREFUSED 127.0.0.1:7890' });
+    expect(event).toMatchObject({ type: 'error', network: true, auth: false });
   });
 
   it('进程异常退出又没收到结束事件：用 stderr 兜底报错', () => {
@@ -376,4 +399,28 @@ describe('运行器', () => {
     expect(() => process.kill(childPid, 0)).toThrow();
     expect(events.map((event) => event.type)).toEqual(['line']);
   }, 10000);
+});
+
+describe('shell 环境（代理变量）', () => {
+  it('先用 -ilc 读（会加载 .zshrc），拿到就不再试', async () => {
+    const read = vi.fn(async () => ({ PATH: '/bin', https_proxy: 'http://127.0.0.1:7890' }));
+    const env = await readShellEnv('/bin/zsh', read);
+    expect(env.https_proxy).toBe('http://127.0.0.1:7890');
+    expect(read.mock.calls.map(([, flags]) => flags)).toEqual(['-ilc']);
+  });
+
+  it('-ilc 读不到时退回 -lc', async () => {
+    const read = vi.fn(async (_shell, flags) => (flags === '-lc' ? { PATH: '/usr/bin' } : {}));
+    expect(await readShellEnv('/bin/zsh', read)).toEqual({ PATH: '/usr/bin' });
+    expect(read.mock.calls.map(([, flags]) => flags)).toEqual(['-ilc', '-lc']);
+  });
+
+  it('都失败返回空对象', async () => {
+    expect(await readShellEnv('/bin/zsh', async () => ({}))).toEqual({});
+  });
+
+  it('.zshrc 打印的欢迎语不影响解析', () => {
+    const output = 'Welcome!\n__MD_RENDER_ENV__PATH=/bin\0https_proxy=http://127.0.0.1:7890\0';
+    expect(parseEnvOutput(output)).toEqual({ PATH: '/bin', https_proxy: 'http://127.0.0.1:7890' });
+  });
 });

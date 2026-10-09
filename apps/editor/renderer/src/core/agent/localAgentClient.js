@@ -147,10 +147,13 @@ export const createLocalEventTranslator = ({ agentLabel, onEvent, onActivity = r
   return { handle, state };
 };
 
-/** 报错文案：疑似没登录时附上登录指引 */
+const NETWORK_HINT = '请求被拒绝或连不上服务，多半是代理没生效：确认 ~/.zshrc 或 ~/.zprofile 里导出了 https_proxy，然后完全退出 md-render 再打开';
+
+/** 报错文案：疑似网络/代理问题附代理指引，疑似没登录附登录指引 */
 export const formatLocalAgentError = (agentId, error) => {
   const agent = getLocalAgent(agentId);
   const message = String(error?.message ?? error ?? '').trim() || `${agent?.label ?? '本地 agent'} 执行失败`;
+  if (error?.network) return `${message}\n\n${NETWORK_HINT}`;
   return error?.auth && agent?.loginHint ? `${message}\n\n${agent.loginHint}` : message;
 };
 

@@ -21,4 +21,10 @@ describe('buildLocalEntryPath', () => {
     expect(buildLocalEntryPath({ name: 'a.md' })).toBe('');
     expect(buildLocalEntryPath(null)).toBe('');
   });
+
+  it('文件夹节点返回文件夹路径；Web 版合成根路径返回空串', () => {
+    expect(buildLocalEntryPath({ projectRootPath: '/root', relativePath: '笔记/游戏设计' }))
+      .toBe('/root/笔记/游戏设计');
+    expect(buildLocalEntryPath({ projectRootPath: 'webfs:MdRender:abc', relativePath: 'a.md' })).toBe('');
+  });
 });

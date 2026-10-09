@@ -7,7 +7,7 @@
  *   { type: 'tool_start', callId, tool }                 tool = { kind, name, target }
  *   { type: 'tool_done', callId, tool, ok }
  *   { type: 'done', finalText, sessionId }
- *   { type: 'error', message, auth }                     auth=true 表示疑似未登录
+ *   { type: 'error', message, auth, network }            auth=true 疑似未登录；network=true 疑似代理/网络问题
  * kind：edit 改文件 / command 跑命令 / read 读文件 / search 搜索 / mcp md-render 工具 / other
  */
 
@@ -25,6 +25,11 @@ const TARGET_MAX_CHARS = 200;
 const AUTH_ERROR_PATTERN = /\/login|not logged in|log ?in required|authenticat|invalid api key|api key|oauth|unauthorized|\b401\b|credential/i;
 
 export const isAuthError = (text) => AUTH_ERROR_PATTERN.test(String(text ?? ''));
+
+// 403 / 连不上：多半是没走代理或地区受限，不是没登录（Claude 的 403 也带 "Failed to authenticate"，所以要先判它）
+const NETWORK_ERROR_PATTERN = /\b403\b|request not allowed|\bforbidden\b|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|unable to connect|fetch failed/i;
+
+export const isNetworkError = (text) => NETWORK_ERROR_PATTERN.test(String(text ?? ''));
 
 export const clipTarget = (value) => {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -89,7 +94,8 @@ export const doneEvent = (state, finalText) => {
 export const errorEvent = (state, message) => {
   state.finished = true;
   const text = String(message ?? '').trim() || '本地 agent 执行失败';
-  return { type: 'error', message: text, auth: isAuthError(text) };
+  const network = isNetworkError(text);
+  return { type: 'error', message: text, auth: !network && isAuthError(text), network };
 };
 
 const STDERR_TAIL_CHARS = 600;
