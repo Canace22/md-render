@@ -2,16 +2,42 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../renderer/src/core/agent/aiClient.js', () => ({
   callChatCompletion: vi.fn(),
+  getActiveSource: vi.fn(),
+}));
+vi.mock('../renderer/src/core/agent/localAgentClient.js', () => ({
+  runLocalAgent: vi.fn(),
 }));
 
-import { callChatCompletion } from '../renderer/src/core/agent/aiClient.js';
+import { callChatCompletion, getActiveSource } from '../renderer/src/core/agent/aiClient.js';
+import { runLocalAgent } from '../renderer/src/core/agent/localAgentClient.js';
 import {
   buildInlineRewriteMessages,
   runInlineRewrite,
 } from '../renderer/src/core/agent/inlineRewrite.js';
 
 describe('inline rewrite', () => {
-  beforeEach(() => callChatCompletion.mockReset());
+  beforeEach(() => {
+    callChatCompletion.mockReset();
+    runLocalAgent.mockReset();
+    getActiveSource.mockReset();
+    getActiveSource.mockReturnValue({ kind: 'api', providerId: 'minimax', model: 'm' });
+  });
+
+  it('当前来源是本机 agent 时不走 API，只读且不给工具', async () => {
+    getActiveSource.mockReturnValue({ kind: 'local', agentId: 'claude-code', label: 'Claude Code', available: true });
+    runLocalAgent.mockResolvedValue({ finalText: '本机改写' });
+    const result = await runInlineRewrite({ text: '原文', instruction: 'polish' });
+    expect(result).toBe('本机改写');
+    expect(callChatCompletion).not.toHaveBeenCalled();
+    const args = runLocalAgent.mock.calls[0][0];
+    expect(args.allowedTools).toEqual([]);
+    expect(args.config.readOnly).toBe(true);
+  });
+
+  it('本机 agent 不可用时给出明确提示', async () => {
+    getActiveSource.mockReturnValue({ kind: 'local', agentId: 'codex', label: 'Codex', available: false });
+    await expect(runInlineRewrite({ text: '原文', instruction: 'polish' })).rejects.toThrow('Codex 当前不可用');
+  });
 
   it('空选区会被拒绝', () => {
     expect(() => buildInlineRewriteMessages({ text: '  ', instruction: 'polish' }))

@@ -1,5 +1,7 @@
-import { callChatCompletion } from './aiClient.js';
+import { callChatCompletion, getActiveSource } from './aiClient.js';
+import { SOURCE_KINDS } from './aiSources.js';
 import { stripPrivateReasoning } from './assistantResponse.js';
+import { runLocalAgent } from './localAgentClient.js';
 
 export const INLINE_REWRITE_INSTRUCTIONS = Object.freeze({
   polish: '在不改变原意和事实的前提下，把表达改得自然、顺畅、准确。',
@@ -47,8 +49,31 @@ export const buildInlineRewriteMessages = ({ text, context, instruction }) => {
   ];
 };
 
+/** 本机 agent：只读、不给工具，一次性返回正文（无流式预览） */
+const completeWithLocalAgent = async ({ messages, source, signal }) => {
+  if (!source.available) throw new Error(`${source.label} 当前不可用，请在 AI 助手里切换来源`);
+  const systemPrompt = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n');
+  const userInput = messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => message.content)
+    .join('\n\n');
+  const result = await runLocalAgent({
+    userInput,
+    history: [],
+    config: { ...source, externalSessionId: '', projectRoot: '', readOnly: true },
+    modeSystemPrompt: systemPrompt,
+    allowedTools: [],
+    signal,
+  });
+  return { content: result.finalText };
+};
+
 /**
  * 只改写一段选区：不传 tools，不进 agent loop，直接返回干净正文。
+ * 跟随当前 AI 来源：API 服务商走流式，本机 agent 走一次性返回。
  * onDelta 收到的是“当前累积正文”，便于 UI 直接替换预览内容。
  */
 export const runInlineRewrite = async ({
@@ -60,18 +85,21 @@ export const runInlineRewrite = async ({
   config,
 }) => {
   const messages = buildInlineRewriteMessages({ text, context, instruction });
+  const source = config ?? getActiveSource();
   let streamedText = '';
 
-  const response = await callChatCompletion({
-    messages,
-    tools: undefined,
-    config,
-    signal,
-    onDelta: (chunk) => {
-      streamedText += String(chunk ?? '');
-      onDelta(stripPrivateReasoning(streamedText));
-    },
-  });
+  const response = source.kind === SOURCE_KINDS.LOCAL
+    ? await completeWithLocalAgent({ messages, source, signal })
+    : await callChatCompletion({
+      messages,
+      tools: undefined,
+      config: source,
+      signal,
+      onDelta: (chunk) => {
+        streamedText += String(chunk ?? '');
+        onDelta(stripPrivateReasoning(streamedText));
+      },
+    });
 
   if (signal?.aborted) throw new Error('已取消');
   const result = stripPrivateReasoning(response?.content);
