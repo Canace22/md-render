@@ -12,6 +12,8 @@ import {
   metadataToFrontmatterPatch,
   PROPERTY_DEFINITIONS,
   PROPERTY_TEMPLATES,
+  groupProperties,
+  listAddableProperties,
   resolveVisibleProperties,
 } from '../shared/properties.js';
 
@@ -119,10 +121,13 @@ describe('属性 schema', () => {
     expect(visible[0].key).toBe('status');
   });
 
-  it('平台文章模板按目标顺序展示，日期字段为 date', () => {
-    const visible = resolveVisibleProperties({}, PROPERTY_TEMPLATES.platformArticle);
+  it('平台文章：常驻字段在前，有值的字段跟着显示，日期字段为 date', () => {
+    const visible = resolveVisibleProperties(
+      { title: 'T', author: 'A', published: '2026-09-01', created: '2026-09-02' },
+      PROPERTY_TEMPLATES.platformArticle,
+    );
     expect(visible.map((item) => item.key)).toEqual([
-      'title', 'source', 'author', 'published', 'created', 'description', 'tags',
+      'source', 'tags', 'title', 'author', 'published', 'created',
     ]);
     expect(visible.find((item) => item.key === 'title')?.field).toBe('title');
     expect(visible.find((item) => item.key === 'published')?.widget).toBe('date');
@@ -149,22 +154,36 @@ describe('属性 schema', () => {
     });
   });
 
-  it('draft / bookmark / default 模板都包含统一内容日期字段', () => {
+  it('模板只保留少量常驻字段，空字段不铺满面板', () => {
     expect(PROPERTY_DEFINITIONS.slice(0, 7).map((item) => item.key)).toEqual([
       'title', 'source', 'author', 'published', 'created', 'description', 'tags',
     ]);
-    expect(PROPERTY_TEMPLATES.draft).toEqual([
-      'status', 'type', 'title', 'author', 'published', 'created', 'description',
-      'cover', 'tags', 'platforms', 'publish', 'sources', 'related',
-    ]);
-    expect(PROPERTY_TEMPLATES.bookmark).toEqual([
-      'type', 'title', 'source', 'author', 'published', 'created', 'description',
-      'tags', 'cover', 'related',
-    ]);
-    expect(PROPERTY_TEMPLATES.default).toEqual([
-      'status', 'type', 'title', 'author', 'published', 'created',
-      'description', 'tags', 'related',
-    ]);
+    expect(PROPERTY_TEMPLATES.draft).toEqual(['status', 'tags']);
+    expect(PROPERTY_TEMPLATES.bookmark).toEqual(['source', 'tags']);
+    expect(PROPERTY_TEMPLATES.default).toEqual(['status', 'tags']);
+    expect(resolveVisibleProperties({}, PROPERTY_TEMPLATES.draft).map((item) => item.key))
+      .toEqual(['status', 'tags']);
+  });
+
+  it('属性按用途分组，空组省略，自定义属性归「其他」', () => {
+    const visible = resolveVisibleProperties(
+      { platforms: ['wechat'], author: 'A', rating: 5 },
+      PROPERTY_TEMPLATES.draft,
+    );
+    const groups = groupProperties(visible);
+    expect(groups.map((group) => group.key)).toEqual(['basic', 'source', 'publish', 'other']);
+    expect(groups[0].properties.map((item) => item.key)).toEqual(['status', 'tags']);
+    expect(groups[3].properties.map((item) => item.key)).toEqual(['rating']);
+    expect(groupProperties(visible, ['relation']).map((group) => group.key)).toContain('relation');
+  });
+
+  it('添加属性菜单只列出还没显示的内置属性', () => {
+    const groups = listAddableProperties(['status', 'tags', 'author']);
+    const keys = groups.flatMap((group) => group.properties.map((item) => item.key));
+    expect(keys).not.toContain('status');
+    expect(keys).not.toContain('author');
+    expect(keys).toContain('cover');
+    expect(groups.every((group) => group.properties.length > 0)).toBe(true);
   });
 
   it('新文件的平台文章字段优先排在内部流程属性前', () => {

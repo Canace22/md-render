@@ -75,6 +75,7 @@ import {
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
+import { handleLeadingEmptyBlockBackspace } from '../utils/leadingEmptyBlock.js';
 import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
 import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
 import { filterSkillsByEntry } from '../core/agent/skillRegistry.js';
@@ -178,12 +179,27 @@ const CODE_BLOCK_LANGUAGES = {
   rust: { name: 'Rust', aliases: ['rs'] },
 };
 
+// 亮/暗双主题：token 只输出 --shiki-light / --shiki-dark 两个 CSS 变量，
+// 由 styles.css 按当前主题取色，切主题不用重新高亮。
+const CODE_BLOCK_THEMES = { light: 'github-light', dark: 'github-dark' };
+
 const createCodeBlockHighlighter = async () => {
   const { createHighlighter } = await import('shiki');
-
-  return createHighlighter({
-    themes: ['github-dark'],
+  const highlighter = await createHighlighter({
+    themes: Object.values(CODE_BLOCK_THEMES),
     langs: Object.keys(CODE_BLOCK_LANGUAGES),
+  });
+
+  // BlockNote 调 codeToTokens 时只传单主题，这里拦一下换成双主题
+  return new Proxy(highlighter, {
+    get(target, key) {
+      if (key !== 'codeToTokens') return Reflect.get(target, key);
+      return (code, options) => target.codeToTokens(code, {
+        lang: options?.lang,
+        themes: CODE_BLOCK_THEMES,
+        defaultColor: false,
+      });
+    },
   });
 };
 
@@ -1388,6 +1404,13 @@ function MarkdownEditor() {
     resetSelectAllState,
     shouldSuppressSelectAllKeyUp,
   } = useTwoStageSelectAll(editor);
+
+  const handlePaperKeyDownCapture = useCallback((event) => {
+    handleSelectAllKeyDownCapture(event);
+    if (event.defaultPrevented || !editor.domElement?.contains(event.target)) return;
+    // BlockNote 不删除文档首个空块，这里补齐「首行空段落按 Backspace 删除」。
+    handleLeadingEmptyBlockBackspace(editor, event);
+  }, [editor, handleSelectAllKeyDownCapture]);
 
   // 供导出/预览/微信使用的纯 Markdown 文本：
   // content 存的是 BlockNote JSON，需通过 editor 转换；旧数据直接用
@@ -2744,13 +2767,13 @@ function MarkdownEditor() {
           <>
             {/* 文档级动作：参照 Obsidian 的视图头部，独占一条细栏，不遮挡正文 */}
             <EditorQuickToolbar
-              editor={editor}
               disabled={!selectedFile}
+              onPreparePublish={handleOpenPreparePublish}
+              onCopyRichText={handleCopyRichText}
+              onExportAs={handleExportAs}
               onPreviewWeChat={() => setWechatPreviewOpen(true)}
               onCopyWeChat={handleCopyToWeChat}
-              onCopyRichText={handleCopyRichText}
               copyStyleName={getTemplateById(copyStyle).name}
-              onPreparePublish={handleOpenPreparePublish}
             />
             <div className="editor-layout">
               <div className="paper-stage">
@@ -2783,7 +2806,7 @@ function MarkdownEditor() {
                         className="blocknote-paper"
                         onDoubleClick={handlePaperDoubleClick}
                         onBlurCapture={handleSelectAllBlurCapture}
-                        onKeyDownCapture={handleSelectAllKeyDownCapture}
+                        onKeyDownCapture={handlePaperKeyDownCapture}
                         onKeyUpCapture={handleSelectAllKeyUpCapture}
                         onPointerDownCapture={resetSelectAllState}
                       >

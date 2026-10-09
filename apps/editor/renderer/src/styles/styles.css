@@ -1013,6 +1013,44 @@ a.sidebar-rail-btn:hover {
     margin: 6px 0;
 }
 
+/* groups：按用途分组，组之间用细线隔开 */
+.doc-meta-group + .doc-meta-group {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.doc-meta-group-title {
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+}
+
+.doc-meta-add-property {
+    margin-top: 10px;
+}
+
+.doc-meta-add-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+    border: 1px dashed rgba(148, 163, 184, 0.3);
+    border-radius: 10px;
+}
+
+.doc-meta-add-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.doc-meta-add-group .doc-meta-group-title {
+    margin-bottom: 4px;
+}
+
 /* fields */
 .doc-meta-field {
     display: flex;
@@ -1625,8 +1663,44 @@ a.sidebar-rail-btn:hover {
     opacity: 0.55;
 }
 
-.doc-title-meta .doc-meta-toggle {
-    margin-left: auto;
+/* 标题区的元数据开关：跟在目录后面的文字按钮，无边框，平时淡一点，悬停标题区时再显现 */
+.doc-meta-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 4px;
+    margin-left: -4px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.doc-title-block:hover .doc-meta-inline,
+.doc-meta-inline:focus-visible {
+    opacity: 1;
+}
+
+.doc-meta-inline:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-active);
+}
+
+.doc-meta-inline.is-open {
+    opacity: 1;
+    color: var(--color-text-active);
+}
+
+.doc-meta-inline-icon {
+    transition: transform 0.2s;
+}
+
+.doc-meta-inline.is-open .doc-meta-inline-icon {
+    transform: rotate(180deg);
 }
 
 .doc-meta-toggle {
@@ -1699,46 +1773,29 @@ a.sidebar-rail-btn:hover {
     pointer-events: none;
 }
 
-/* blocknote-core 的通用 EditorToolbar 用 editor-toolbar / toolbar-button 等类。
-   约定：全部是幽灵按钮；不带 label 的是方形图标钮，带 label 的显示图标 + 文字。 */
-.editor-quick-toolbar-shell .editor-toolbar,
-.editor-quick-toolbar-shell .toolbar-center {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-}
-
-.editor-quick-toolbar-shell .toolbar-button.ant-btn {
+.editor-share-trigger {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
     gap: 5px;
-    width: 28px;
     height: 28px;
-    padding: 0;
+    padding: 0 8px;
     border: none;
     border-radius: 6px;
     background: transparent;
     color: var(--color-text-secondary, #667085);
     font-size: 13px;
-    box-shadow: none;
-    flex-shrink: 0;
+    cursor: pointer;
 }
 
-.editor-quick-toolbar-shell .toolbar-button.ant-btn:hover,
-.editor-quick-toolbar-shell .toolbar-button.ant-btn:focus {
+.editor-share-trigger:hover,
+.editor-share-trigger:focus-visible,
+.editor-share-trigger.ant-dropdown-open {
     background: rgba(15, 23, 42, 0.06);
     color: var(--color-text-primary, #111827);
 }
 
-.editor-quick-toolbar-shell .toolbar-button.toolbar-button-with-label.ant-btn {
-    width: auto;
-    padding: 0 8px;
-}
-
-.editor-quick-toolbar-shell .toolbar-button.ant-btn .ant-btn-icon {
-    display: inline-flex;
-    align-items: center;
+.editor-share-menu {
+    min-width: 200px;
 }
 
 .ai-action-modal-title {
@@ -4190,7 +4247,7 @@ body.theme-light #markdown-output code {
 .graph-legend-hint {
     margin-left: auto;
     font-size: 10px;
-    color: var(--color-text-tertiary, var(--color-text-secondary));
+    color: var(--color-text-secondary);
     opacity: 0.7;
 }
 
@@ -4348,9 +4405,15 @@ body.theme-light #markdown-output code {
    这里同样按 id 限定，才能让正文和纸面里的标题块落在同一列上 */
 #markdown-output.paper-content {
     margin-top: -1px;
-    padding: 32px 104px 104px;
+    padding: 16px 104px 104px;
     border-top: 0;
     background: var(--paper-bg);
+}
+
+/* 正文第一个块紧贴标题区：去掉首个标题的上外边距（预览模式同理） */
+#markdown-output .blocknote-editor .ProseMirror > .bn-block-group > .bn-block-outer:first-child > .bn-block > .bn-block-content[data-content-type="heading"] > .bn-inline-content,
+#markdown-output.paper-content > :first-child {
+    margin-top: 0;
 }
 
 .blocknote-paper {
@@ -4482,6 +4545,15 @@ body.theme-light #markdown-output code {
     min-height: 1.9em;
 }
 
+/* 标题：去掉正文那条 min-height:1.9em（按标题字号算会比行高高一截，文字贴顶、下面空一块）；
+   间距改成「上大下小」，让标题贴近它下面的内容。用 em 跟着各级字号自动缩放。 */
+#markdown-output .blocknote-editor .bn-block-content[data-content-type="heading"] > .bn-inline-content {
+    min-height: 0;
+    margin: 0.75em 0 0.2em;
+    padding: 0;
+    border: none;
+}
+
 .blocknote-editor .bn-editor h1,
 .blocknote-editor .bn-editor h2,
 .blocknote-editor .bn-editor h3,
@@ -4562,21 +4634,71 @@ body.theme-light #markdown-output code {
     font-family: "JetBrains Mono", "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-.blocknote-editor .bn-editor [data-content-type="codeBlock"] > pre {
+/* ===== 编辑器代码块：浅灰圆角卡片 + 右上角语言胶囊（参考 Claude Docs）=====
+   颜色都走变量，暗色主题只改变量。选择器带 #markdown-output 是为了压过
+   上面 #markdown-output pre / code 那组预览样式（ID 优先级）。 */
+.blocknote-editor.bn-container {
+    --code-block-bg: #f6f6f4;
+    --code-block-border: rgba(15, 23, 42, 0.06);
+    --code-block-text: #2b3645;
+    --code-block-pill-bg: rgba(255, 255, 255, 0.7);
+    --code-block-pill-border: rgba(15, 23, 42, 0.12);
+    --code-block-pill-text: #667085;
+}
+
+#markdown-output .blocknote-editor .bn-block-content[data-content-type="codeBlock"] {
+    margin: 6px 0;
+    padding: 0;
+    background: var(--code-block-bg);
+    border: 1px solid var(--code-block-border);
+    border-radius: 8px;
+    color: var(--code-block-text);
+}
+
+#markdown-output .blocknote-editor .bn-block-content[data-content-type="codeBlock"] > pre {
+    margin: 0;
+    padding: 36px 18px 16px;
+    background: transparent;
+    border: none;
     border-radius: 0;
+    box-shadow: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
-.blocknote-editor .bn-editor [data-content-type="codeBlock"] > div > select {
-    opacity: 0.78;
-    transition-delay: 0s;
-    padding: 2px 8px;
+#markdown-output .blocknote-editor .bn-block-content[data-content-type="codeBlock"] > pre > code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: 0.875rem;
+    line-height: 1.7;
+}
+
+#markdown-output .blocknote-editor .bn-block-content[data-content-type="codeBlock"] > div > select {
+    left: auto;
+    top: 8px;
+    right: 8px;
+    padding: 1px 10px;
+    border: 1px solid var(--code-block-pill-border);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--code-block-pill-bg);
+    color: var(--code-block-pill-text);
+    font-family: var(--bn-font-family);
+    font-size: 12px;
+    line-height: 20px;
+    opacity: 1;
+    transition: none;
 }
 
-.blocknote-editor .bn-editor [data-content-type="codeBlock"]:hover > div > select,
-.blocknote-editor .bn-editor [data-content-type="codeBlock"] > div > select:focus {
-    opacity: 1;
+#markdown-output .blocknote-editor .bn-block-content[data-content-type="codeBlock"] > div > select:hover {
+    color: var(--code-block-text);
+}
+
+/* shiki 双主题：亮色读 --shiki-light，暗色见下方 theme-dark 覆盖 */
+.blocknote-editor .bn-block-content[data-content-type="codeBlock"] .shiki {
+    color: var(--shiki-light);
+    font-style: var(--shiki-light-font-style);
+    font-weight: var(--shiki-light-font-weight);
 }
 
 .blocknote-editor .bn-side-menu {
@@ -5813,6 +5935,10 @@ body.theme-dark .doc-meta-panel {
     box-shadow: 0 24px 60px rgba(2, 6, 23, 0.32);
 }
 
+body.theme-dark .doc-meta-group + .doc-meta-group {
+    border-top-color: rgba(71, 85, 105, 0.32);
+}
+
 body.theme-dark .doc-meta-divider {
     background: rgba(71, 85, 105, 0.32);
 }
@@ -6066,6 +6192,23 @@ body.theme-dark .blocknote-editor .bn-editor blockquote {
 body.theme-dark .blocknote-editor .bn-editor a {
     color: #67e8f9;
 }
+
+body.theme-dark .blocknote-editor.bn-container,
+.blocknote-editor.bn-container[data-color-scheme="dark"] {
+    --code-block-bg: rgba(148, 163, 184, 0.08);
+    --code-block-border: rgba(148, 163, 184, 0.14);
+    --code-block-text: #e5e7eb;
+    --code-block-pill-bg: rgba(15, 23, 42, 0.6);
+    --code-block-pill-border: rgba(148, 163, 184, 0.28);
+    --code-block-pill-text: #94a3b8;
+}
+
+body.theme-dark .blocknote-editor .bn-block-content[data-content-type="codeBlock"] .shiki,
+.blocknote-editor.bn-container[data-color-scheme="dark"] .bn-block-content[data-content-type="codeBlock"] .shiki {
+    color: var(--shiki-dark);
+    font-style: var(--shiki-dark-font-style);
+    font-weight: var(--shiki-dark-font-weight);
+}
 body.theme-dark .paper-copy-wechat-btn {
     background: transparent !important;
     color: #94a3b8;
@@ -6081,13 +6224,13 @@ body.theme-dark .paper-copy-wechat-btn.copied {
     color: #4ade80;
 }
 
-body.theme-dark .editor-quick-toolbar-shell .toolbar-button.ant-btn {
-    background: transparent;
+body.theme-dark .editor-share-trigger {
     color: #94a3b8;
 }
 
-body.theme-dark .editor-quick-toolbar-shell .toolbar-button.ant-btn:hover,
-body.theme-dark .editor-quick-toolbar-shell .toolbar-button.ant-btn:focus {
+body.theme-dark .editor-share-trigger:hover,
+body.theme-dark .editor-share-trigger:focus-visible,
+body.theme-dark .editor-share-trigger.ant-dropdown-open {
     background: rgba(148, 163, 184, 0.16);
     color: #f8fafc;
 }
@@ -11233,7 +11376,7 @@ body.is-resizing-agent-panel {
 
 .agent-source-settings__version,
 .agent-source-settings__path {
-  color: var(--color-text-tertiary, var(--color-text-secondary));
+  color: var(--color-text-secondary);
   font-size: 11px;
 }
 

@@ -4,7 +4,7 @@ import { getWorkspaceFileKind, SIDEBAR_FILE_KIND_DOCUMENT } from '../store/works
 import { needsConversion } from '../utils/fileConverters.js';
 import { buildLocalEntryPath } from '../utils/localEntryPath.js';
 
-const EXPORT_FORMATS = Object.freeze([
+export const EXPORT_FORMATS = Object.freeze([
   { key: 'md', label: 'Markdown' },
   { key: 'html', label: 'HTML' },
   { key: 'pdf', label: 'PDF' },

@@ -33,30 +33,44 @@ export const DRAFT_STATUS_OPTIONS = Object.freeze([
   { value: 'published', label: '已发布' },
 ]);
 
-export const PROPERTY_DEFINITIONS = Object.freeze([
-  { key: 'title', field: 'title', label: '标题', widget: 'text', obsidianType: 'text' },
-  { key: 'source', field: 'url', label: '来源链接', widget: 'url', obsidianType: 'text' },
-  { key: 'author', field: 'sourceAuthor', label: '作者', widget: 'text', obsidianType: 'text' },
-  { key: 'published', field: 'sourcePublishedAt', label: '发布日期', widget: 'date', obsidianType: 'date' },
-  { key: 'created', field: 'createdAt', label: '创建日期', widget: 'date', obsidianType: 'date' },
-  { key: 'description', field: 'summary', label: '摘要', widget: 'textarea', obsidianType: 'text' },
-  { key: 'tags', field: 'tags', label: '标签', widget: 'tags', obsidianType: 'tags' },
-  { key: 'cover', field: 'cover', label: '封面图片', widget: 'image', obsidianType: 'text' },
-  { key: 'status', field: 'draftStatus', label: '状态', widget: 'select', obsidianType: 'text', options: DRAFT_STATUS_OPTIONS },
-  { key: 'type', field: 'nodeType', label: '类型', widget: 'select', obsidianType: 'text', options: NODE_TYPE_OPTIONS },
-  { key: 'platforms', field: 'targetPlatforms', label: '平台', widget: 'multi-select', obsidianType: 'multitext' },
-  { key: 'publish', field: 'scheduledPublishAt', label: '排期', widget: 'datetime', obsidianType: 'datetime' },
-  { key: 'aliases', field: 'aliases', label: '别名', widget: 'list', obsidianType: 'aliases' },
-  { key: 'sources', field: 'sourceMaterialIds', label: '来源素材', widget: 'relation', obsidianType: 'multitext' },
-  { key: 'related', field: 'relatedIds', label: '关联文档', widget: 'relation', obsidianType: 'multitext' },
+/** 面板分组：按用途归类，顺序即面板展示顺序；没归类的（自定义属性）进「其他」 */
+export const PROPERTY_GROUPS = Object.freeze([
+  { key: 'basic', label: '基本' },
+  { key: 'source', label: '来源' },
+  { key: 'publish', label: '发布' },
+  { key: 'relation', label: '关联' },
+  { key: 'other', label: '其他' },
 ]);
 
-/** 不同文档类型的默认属性模板（面板里即使为空也显示） */
+const FALLBACK_GROUP = 'other';
+
+export const PROPERTY_DEFINITIONS = Object.freeze([
+  { key: 'title', field: 'title', label: '标题', widget: 'text', obsidianType: 'text', group: 'basic' },
+  { key: 'source', field: 'url', label: '来源链接', widget: 'url', obsidianType: 'text', group: 'source' },
+  { key: 'author', field: 'sourceAuthor', label: '作者', widget: 'text', obsidianType: 'text', group: 'source' },
+  { key: 'published', field: 'sourcePublishedAt', label: '发布日期', widget: 'date', obsidianType: 'date', group: 'source' },
+  { key: 'created', field: 'createdAt', label: '创建日期', widget: 'date', obsidianType: 'date', group: 'basic' },
+  { key: 'description', field: 'summary', label: '摘要', widget: 'textarea', obsidianType: 'text', group: 'basic' },
+  { key: 'tags', field: 'tags', label: '标签', widget: 'tags', obsidianType: 'tags', group: 'basic' },
+  { key: 'cover', field: 'cover', label: '封面图片', widget: 'image', obsidianType: 'text', group: 'publish' },
+  { key: 'status', field: 'draftStatus', label: '状态', widget: 'select', obsidianType: 'text', options: DRAFT_STATUS_OPTIONS, group: 'basic' },
+  { key: 'type', field: 'nodeType', label: '类型', widget: 'select', obsidianType: 'text', options: NODE_TYPE_OPTIONS, group: 'basic' },
+  { key: 'platforms', field: 'targetPlatforms', label: '平台', widget: 'multi-select', obsidianType: 'multitext', group: 'publish' },
+  { key: 'publish', field: 'scheduledPublishAt', label: '排期', widget: 'datetime', obsidianType: 'datetime', group: 'publish' },
+  { key: 'aliases', field: 'aliases', label: '别名', widget: 'list', obsidianType: 'aliases', group: 'other' },
+  { key: 'sources', field: 'sourceMaterialIds', label: '来源素材', widget: 'relation', obsidianType: 'multitext', group: 'source' },
+  { key: 'related', field: 'relatedIds', label: '关联文档', widget: 'relation', obsidianType: 'multitext', group: 'relation' },
+]);
+
+/**
+ * 不同文档类型「常驻」的属性（即使为空也显示）。
+ * 其余属性只有在 frontmatter 里有值时才显示，没值的收进「添加属性」菜单，避免面板一次铺满。
+ */
 export const PROPERTY_TEMPLATES = Object.freeze({
-  draft: ['status', 'type', 'title', 'author', 'published', 'created', 'description', 'cover', 'tags', 'platforms', 'publish', 'sources', 'related'],
-  bookmark: ['type', 'title', 'source', 'author', 'published', 'created', 'description', 'tags', 'cover', 'related'],
-  platformArticle: ['title', 'source', 'author', 'published', 'created', 'description', 'tags'],
-  default: ['status', 'type', 'title', 'author', 'published', 'created', 'description', 'tags', 'related'],
+  draft: ['status', 'tags'],
+  bookmark: ['source', 'tags'],
+  platformArticle: ['source', 'tags'],
+  default: ['status', 'tags'],
 });
 
 /** 常见属性的展示兜底；内置 key 也保留，兼容独立的属性推断调用。 */
@@ -65,9 +79,9 @@ export const EXTRA_PROPERTY_DEFINITIONS = Object.freeze({
   author: { label: '作者', widget: 'text', obsidianType: 'text' },
   published: { label: '发布日期', widget: 'date', obsidianType: 'date' },
   created: { label: '创建日期', widget: 'date', obsidianType: 'date' },
-  updated: { label: '更新日期', widget: 'date', obsidianType: 'date' },
-  category: { label: '分类', widget: 'text', obsidianType: 'text' },
-  categories: { label: '分类', widget: 'list', obsidianType: 'multitext' },
+  updated: { label: '更新日期', widget: 'date', obsidianType: 'date', group: 'basic' },
+  category: { label: '分类', widget: 'text', obsidianType: 'text', group: 'basic' },
+  categories: { label: '分类', widget: 'list', obsidianType: 'multitext', group: 'basic' },
 });
 
 export const EXTRA_PROPERTY_LABELS = Object.freeze(Object.fromEntries(
@@ -154,6 +168,20 @@ export const resolveVisibleProperties = (frontmatter = {}, templateKeys = PROPER
   (templateKeys ?? []).forEach(push);
   Object.keys(frontmatter ?? {}).forEach(push);
   return result;
+};
+
+/** 把面板属性按 PROPERTY_GROUPS 归类；空组不返回，除非在 keepGroupKeys 里 */
+export const groupProperties = (properties = [], keepGroupKeys = []) => PROPERTY_GROUPS
+  .map((group) => ({
+    ...group,
+    properties: properties.filter((property) => (property.group ?? FALLBACK_GROUP) === group.key),
+  }))
+  .filter((group) => group.properties.length > 0 || keepGroupKeys.includes(group.key));
+
+/** 还没显示出来的内置属性，按组列出，给「添加属性」菜单用 */
+export const listAddableProperties = (visibleKeys = []) => {
+  const visible = new Set(visibleKeys);
+  return groupProperties(PROPERTY_DEFINITIONS.filter((def) => !visible.has(def.key)));
 };
 
 /* ── 值编解码 ─────────────────────────────────────────────── */

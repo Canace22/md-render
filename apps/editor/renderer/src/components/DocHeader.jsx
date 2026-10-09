@@ -6,7 +6,7 @@ import DocMetaPanel from './DocMetaPanel.jsx';
 /**
  * 文档标题块 —— 下沉进纸面，与正文同列。
  *
- * 标题下保留所属目录，元数据面板收在同一行的开关里；
+ * 标题下保留所属目录，后面紧跟一个轻量的「元数据」文字开关（不再推到最右）；
  * 字数与字符数统一由底部状态栏展示。
  */
 export default function DocHeader({
@@ -76,14 +76,15 @@ export default function DocHeader({
       {selectedFile && (
         <div className="doc-title-meta">
           {parentLabel && <span>{parentLabel}</span>}
+          {parentLabel && <span className="doc-title-meta-sep">·</span>}
           <button
             type="button"
-            className={`doc-meta-toggle${metaOpen ? ' is-open' : ''}`}
+            className={`doc-meta-inline${metaOpen ? ' is-open' : ''}`}
             onClick={() => setMetaOpen((o) => !o)}
             title={metaOpen ? '收起元数据' : '展开元数据'}
           >
-            <ChevronDown size={13} strokeWidth={2} className="doc-meta-toggle-icon" />
             <span>元数据</span>
+            <ChevronDown size={12} strokeWidth={2} className="doc-meta-inline-icon" />
           </button>
         </div>
       )}
