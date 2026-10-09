@@ -23,6 +23,8 @@ import { resolveWorkDir } from '../localAgents/workDir.js';
 export const LOCAL_AGENT_EVENT_CHANNEL = 'local-agent:event';
 
 const MAIN_DIR = path.dirname(fileURLToPath(import.meta.url));
+// effort 会拼进 Codex 的 `-c key="value"`，只放行纯小写单词（low / xhigh / max …）
+const EFFORT_PATTERN = /^[a-z]+$/;
 
 /** 在途运行：runId → { cancel, done } */
 const activeRuns = new Map();
@@ -82,7 +84,8 @@ export function registerLocalAgentHandlers({
     if (!workDir.ok) throw new Error(workDir.error);
     const { cwd } = workDir;
     const { mcpLaunch, notice } = await prepareMcp({ adapter, cwd, launch: buildLaunch({ app, allowedTools }) });
-    const { args, stdin } = adapter.buildArgs({ ...payload, cwd, mcpLaunch });
+    const effort = EFFORT_PATTERN.test(String(payload.effort ?? '')) ? payload.effort : '';
+    const { args, stdin } = adapter.buildArgs({ ...payload, effort, cwd, mcpLaunch });
 
     const send = (agentEvent) => {
       if (!event.sender.isDestroyed()) event.sender.send(LOCAL_AGENT_EVENT_CHANNEL, { runId, event: agentEvent });

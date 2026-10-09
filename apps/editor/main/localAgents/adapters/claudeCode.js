@@ -25,7 +25,7 @@ const SEARCH_TOOLS = new Set(['WebFetch', 'WebSearch']);
 // 纯内部记账的工具，不进步骤列表
 const SILENT_TOOLS = new Set(['TodoWrite', 'ToolSearch']);
 
-export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false, readOnly = false, mcpLaunch = null, systemPrompt = '', contextText = '' }) => {
+export const buildArgs = ({ prompt, model = '', effort = '', sessionId = '', safeMode = false, readOnly = false, mcpLaunch = null, systemPrompt = '', contextText = '' }) => {
   const args = ['-p', '--output-format', 'stream-json', '--verbose'];
   args.push(...(readOnly
     ? ['--permission-mode', 'plan', '--tools', 'Read,Glob,Grep,LS,WebSearch,WebFetch']
@@ -33,6 +33,7 @@ export const buildArgs = ({ prompt, model = '', sessionId = '', safeMode = false
       ? ['--permission-mode', 'acceptEdits']
       : ['--dangerously-skip-permissions']));
   if (model) args.push('--model', model);
+  if (effort) args.push('--effort', effort);
   if (sessionId) args.push('--resume', sessionId);
   const appended = [systemPrompt, contextText].filter((part) => String(part ?? '').trim()).join('\n\n');
   if (appended) args.push('--append-system-prompt', appended);

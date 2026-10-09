@@ -30,7 +30,9 @@ export const LOCAL_AGENTS = Object.freeze([
     priority: 10,
     supported: true,
     loginCheckArgs: ['login', 'status'],
-    modelPresets: ['gpt-6-astra', 'gpt-5-codex'],
+    // 兜底预设：正常从 ~/.codex/models_cache.json 读真实列表
+    modelPresets: ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-5.6-sol'],
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     installHint: 'npm install -g @openai/codex',
     loginHint: '在终端运行一次 `codex login` 完成登录',
   },
@@ -44,7 +46,8 @@ export const LOCAL_AGENTS = Object.freeze([
     supported: true,
     // 没有便宜的登录检测命令：标「未验证」，首轮报鉴权错误时再引导
     loginCheckArgs: null,
-    modelPresets: ['sonnet', 'opus', 'haiku'],
+    modelPresets: ['fable', 'opus', 'sonnet', 'haiku'],
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     installHint: 'curl -fsSL https://claude.ai/install.sh | bash',
     loginHint: '在终端运行一次 `claude` 完成登录',
   },

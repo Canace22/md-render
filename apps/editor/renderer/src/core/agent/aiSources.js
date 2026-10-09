@@ -19,6 +19,7 @@ const SAFE_MODE_KEY = 'md-renderer-local-agent-safe-mode';
 const DEFAULT_NOTICE_KEY = 'md-renderer-ai-source-default-notice';
 const LOCAL_PREFIX = 'local:';
 const sourceModelKey = (sourceId) => `md-renderer-ai-model:${sourceId}`;
+const sourceEffortKey = (sourceId) => `md-renderer-ai-effort:${sourceId}`;
 
 export const SOURCE_KINDS = Object.freeze({ LOCAL: 'local', API: 'api' });
 
@@ -123,6 +124,10 @@ export const saveActiveSourceId = (sourceId) => writeStorage(ACTIVE_SOURCE_KEY, 
 export const readSourceModel = (sourceId) => String(readStorage(sourceModelKey(sourceId)) ?? '').trim();
 export const saveSourceModel = (sourceId, model) => writeStorage(sourceModelKey(sourceId), model);
 
+/** 某个本机 agent 选过的思考强度；空串 = 跟随本机配置（不传 effort 参数） */
+export const readSourceEffort = (sourceId) => String(readStorage(sourceEffortKey(sourceId)) ?? '').trim();
+export const saveSourceEffort = (sourceId, effort) => writeStorage(sourceEffortKey(sourceId), effort);
+
 export const isLocalAgentSafeMode = () => readStorage(SAFE_MODE_KEY) === '1';
 export const setLocalAgentSafeMode = (enabled) => writeStorage(SAFE_MODE_KEY, enabled ? '1' : '');
 
@@ -167,13 +172,16 @@ export const buildAiSourceList = ({ detected = [], builtinProviders = [] } = {})
 };
 
 /**
- * 本机 agent 的模型选项：首项「跟随默认」（value 为空），之后是预设 / Cursor 的真实列表。
- * @returns {Promise<{ options: Array<{ value, label }>, error?: string }>}
+ * 本机 agent 的模型 / 思考强度选项：模型首项「跟随默认」（value 为空），之后是真实列表或预设。
+ * @returns {Promise<{ options: Array<{ value, label }>, defaultModel: string, efforts: string[],
+ *   modelEfforts: Record<string, string[]>, defaultEffort: string, error?: string }>}
  */
 export const loadLocalAgentModelOptions = async (agentId) => {
   const agent = getLocalAgent(agentId);
   let models = (agent?.modelPresets ?? []).map((id) => ({ id, label: id }));
   let defaultModel = '';
+  let efforts = agent?.effortLevels ?? [];
+  let defaultEffort = '';
   let error = '';
   if (typeof window !== 'undefined' && window.electronAPI?.localAgent?.models) {
     try {
@@ -181,13 +189,26 @@ export const loadLocalAgentModelOptions = async (agentId) => {
       if (res?.ok) {
         models = res.models?.length ? res.models : models;
         defaultModel = res.defaultModel ?? '';
+        efforts = res.efforts ?? efforts;
+        defaultEffort = res.defaultEffort ?? '';
         error = res.error ?? '';
       }
     } catch { /* 用预设 */ }
   }
   const followLabel = defaultModel ? `跟随默认（${defaultModel}）` : '跟随默认';
+  const modelEfforts = Object.fromEntries(models.filter((model) => model.efforts?.length).map((model) => [model.id, model.efforts]));
   return {
     options: [{ value: '', label: followLabel }, ...models.map((model) => ({ value: model.id, label: model.label || model.id }))],
+    defaultModel,
+    efforts,
+    modelEfforts,
+    defaultEffort,
     ...(error ? { error } : {}),
   };
+};
+
+/** 当前模型可选的思考强度：优先用该模型自己声明的列表（Codex 各模型不同），否则用 agent 通用列表 */
+export const getEffortChoices = (modelInfo, model = '') => {
+  const effective = model || modelInfo?.defaultModel || '';
+  return modelInfo?.modelEfforts?.[effective] ?? modelInfo?.efforts ?? [];
 };

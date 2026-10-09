@@ -160,7 +160,7 @@ export const formatLocalAgentError = (agentId, error) => {
 /**
  * 运行一轮本地 agent。
  * @param {object} params           同 runAgent；config 换成本地 agent 的配置
- * @param {object} params.config    { agentId, model, safeMode, externalSessionId, projectRoot }
+ * @param {object} params.config    { agentId, model, effort, safeMode, externalSessionId, projectRoot }
  * @returns {Promise<{ finalText: string, history: Array, externalSessionId: string, cwd: string }>}
  */
 export const runLocalAgent = async ({
@@ -193,6 +193,7 @@ export const runLocalAgent = async ({
       agentId,
       prompt: String(userInput ?? ''),
       model: config?.model || '',
+      effort: config?.effort || '',
       sessionId: config?.externalSessionId || '',
       safeMode: Boolean(config?.safeMode),
       readOnly: Boolean(config?.readOnly),

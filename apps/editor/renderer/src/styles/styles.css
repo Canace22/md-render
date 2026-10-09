@@ -989,7 +989,7 @@ a.sidebar-rail-btn:hover {
 
 /* ── unified doc-meta panel ────────────────────────────────────────────────── */
 .doc-meta-panel {
-    margin: 0 var(--space-l, 24px) 12px;
+    margin: 0 0 12px;
     padding: 14px 16px;
     border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 14px;
@@ -11228,8 +11228,28 @@ body.is-resizing-agent-panel {
   color: var(--color-text-primary);
 }
 
-.agent-panel__source-picker > svg {
+.agent-panel__source-picker > svg,
+.agent-panel__effort-picker > svg {
   flex: none;
+}
+
+/* 思考强度：紧跟来源切换器，样式同源 */
+.agent-panel__effort-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 104px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border-radius: var(--radius-m);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.agent-panel__effort-picker:hover {
+  background: color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
+  color: var(--color-text-primary);
 }
 
 .agent-panel__source-select {
@@ -11239,7 +11259,9 @@ body.is-resizing-agent-panel {
 }
 
 .agent-panel__source-picker .agent-panel__source-select .ant-select-selector,
-.agent-panel__source-picker .ant-select-arrow {
+.agent-panel__source-picker .ant-select-arrow,
+.agent-panel__effort-picker .agent-panel__source-select .ant-select-selector,
+.agent-panel__effort-picker .ant-select-arrow {
   color: var(--color-text-secondary);
 }
 

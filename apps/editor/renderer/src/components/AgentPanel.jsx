@@ -1693,6 +1693,7 @@ export default function AgentPanel({ open = true, onClose }) {
             modelOptions={aiSource.modelOptions}
             onSelectSource={handleSourceChange}
             onSelectModel={aiSource.selectModel}
+            onSelectEffort={aiSource.selectEffort}
             disabled={running}
           />
         </div>

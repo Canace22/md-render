@@ -20,6 +20,7 @@ import {
   parseSourceId,
   pickDefaultSource,
   readSavedSourceId,
+  readSourceEffort,
   readSourceModel,
   saveActiveSourceId,
 } from './aiSources.js';
@@ -170,7 +171,7 @@ const findDetected = (agentId) => getDetectedLocalAgents().find((item) => item.i
 
 /**
  * 当前来源的运行配置。
- * - 本机 agent：{ kind: 'local', sourceId, agentId, label, model, safeMode }
+ * - 本机 agent：{ kind: 'local', sourceId, agentId, label, model, effort, safeMode }
  * - API 服务商：{ kind: 'api', sourceId, ...readProviderConfig() }
  */
 export const getActiveSource = (sourceId = getActiveSourceId()) => {
@@ -182,6 +183,7 @@ export const getActiveSource = (sourceId = getActiveSourceId()) => {
       agentId: parsed.id,
       label: getLocalAgent(parsed.id)?.label ?? parsed.id,
       model: readSourceModel(sourceId),
+      effort: readSourceEffort(sourceId),
       safeMode: isLocalAgentSafeMode(),
       available: isRunnableAgent(findDetected(parsed.id)),
     };

@@ -18,7 +18,12 @@ import {
   mergeCursorMcpJson,
   toCodexConfigArgs,
 } from '../main/localAgents/mcpConfig.js';
-import { parseCodexDefaultModel, parseCursorModels } from '../main/localAgents/models.js';
+import {
+  parseCodexDefaultEffort,
+  parseCodexDefaultModel,
+  parseCodexModelsCache,
+  parseCursorModels,
+} from '../main/localAgents/models.js';
 import { startLocalAgentRun } from '../main/localAgents/runner.js';
 import { parseEnvOutput, readShellEnv } from '../main/localAgents/shellEnv.js';
 import { isSafeWorkDir, resolveWorkDir } from '../main/localAgents/workDir.js';
@@ -127,6 +132,13 @@ describe('本地 agent 检测', () => {
 });
 
 describe('适配器 buildArgs', () => {
+  it('思考强度：Claude 带 --effort，Codex 走 -c model_reasoning_effort；跟随默认都不带', () => {
+    expect(getAdapter('claude').buildArgs({ prompt: 'hi', effort: 'xhigh' }).args).toEqual(expect.arrayContaining(['--effort', 'xhigh']));
+    expect(getAdapter('claude').buildArgs({ prompt: 'hi' }).args).not.toContain('--effort');
+    expect(getAdapter('codex').buildArgs({ prompt: 'hi', effort: 'high' }).args).toEqual(expect.arrayContaining(['-c', 'model_reasoning_effort="high"']));
+    expect(getAdapter('codex').buildArgs({ prompt: 'hi' }).args.join(' ')).not.toContain('model_reasoning_effort');
+  });
+
   it('Claude Code：选了 opus 带 --model，默认 bypass；跟随默认不带 --model', () => {
     const claude = getAdapter('claude');
     const withModel = claude.buildArgs({ prompt: 'hi', model: 'opus' }).args;
@@ -256,6 +268,26 @@ describe('模型列表', () => {
   it('只读 config.toml 顶层的 model', () => {
     expect(parseCodexDefaultModel('model = "gpt-5-codex"\n[profiles.x]\nmodel = "o3"')).toBe('gpt-5-codex');
     expect(parseCodexDefaultModel('[profiles.x]\nmodel = "o3"')).toBe('');
+  });
+
+  it('只读 config.toml 顶层的 model_reasoning_effort，不误读 plan_mode_reasoning_effort', () => {
+    expect(parseCodexDefaultEffort('plan_mode_reasoning_effort = "low"\nmodel_reasoning_effort = "high"')).toBe('high');
+    expect(parseCodexDefaultEffort('[profiles.x]\nmodel_reasoning_effort = "low"')).toBe('');
+  });
+
+  it('models_cache.json：只留可见模型，按 priority 排序并带各自的 effort', () => {
+    const cache = JSON.stringify({
+      models: [
+        { slug: 'b', display_name: 'B', visibility: 'list', priority: 2, supported_reasoning_levels: [{ effort: 'low' }] },
+        { slug: 'hidden', visibility: 'hide', priority: 0 },
+        { slug: 'a', display_name: 'A', visibility: 'list', priority: 1, supported_reasoning_levels: [{ effort: 'low' }, { effort: 'ultra' }] },
+      ],
+    });
+    expect(parseCodexModelsCache(cache)).toEqual([
+      { id: 'a', label: 'A', efforts: ['low', 'ultra'] },
+      { id: 'b', label: 'B', efforts: ['low'] },
+    ]);
+    expect(parseCodexModelsCache('not json')).toEqual([]);
   });
 });
 

@@ -12,12 +12,13 @@ import {
   isLocalAgentSafeMode,
   loadLocalAgentModelOptions,
   loadLocalAgents,
+  saveSourceEffort,
   saveSourceModel,
   setLocalAgentSafeMode,
 } from '../core/agent/aiSources.js';
 
 /**
- * AI 来源状态（面板切换器 + 设置页共用）：检测本机 agent、当前来源、各来源模型选项、安全模式。
+ * AI 来源状态（面板切换器 + 设置页共用）：检测本机 agent、当前来源、各来源模型 / 思考强度选项、安全模式。
  * @param {{ providersReady?: boolean }} options  内置服务商列表加载完后重算默认来源
  */
 export function useAiSource({ providersReady = false } = {}) {
@@ -63,6 +64,11 @@ export function useAiSource({ providersReady = false } = {}) {
     setModelVersion((value) => value + 1);
   }, []);
 
+  const selectEffort = useCallback((targetSourceId, effort) => {
+    saveSourceEffort(targetSourceId, effort);
+    setModelVersion((value) => value + 1);
+  }, []);
+
   const setSafeMode = useCallback((enabled) => {
     setLocalAgentSafeMode(enabled);
     setSafeModeState(Boolean(enabled));
@@ -88,6 +94,7 @@ export function useAiSource({ providersReady = false } = {}) {
     redetect: () => detect({ refresh: true }),
     selectSource,
     selectModel,
+    selectEffort,
     setSafeMode,
   };
 }
