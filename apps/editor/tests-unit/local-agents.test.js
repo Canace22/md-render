@@ -343,9 +343,9 @@ describe('来源选择', () => {
   });
 
   it('来源列表：不可用的写明原因', () => {
-    const list = buildAiSourceList({ detected: [detected('codex', 'needs-login'), detected('gemini', 'unsupported')], builtinProviders: ['minimax'] });
+    const list = buildAiSourceList({ detected: [detected('codex', 'needs-login'), detected('qwen', 'unsupported')], builtinProviders: ['minimax'] });
     expect(list.find((item) => item.id === 'local:codex')).toMatchObject({ available: false, reason: '未登录' });
-    expect(list.find((item) => item.id === 'local:gemini')).toMatchObject({ available: false, reason: '即将支持' });
+    expect(list.find((item) => item.id === 'local:qwen')).toMatchObject({ available: false, reason: '即将支持' });
     expect(list.find((item) => item.id === 'minimax')).toMatchObject({ kind: 'api', builtinKey: true });
     expect(parseSourceId('local:cursor')).toEqual({ kind: 'local', id: 'cursor' });
   });

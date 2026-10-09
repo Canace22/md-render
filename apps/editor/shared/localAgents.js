@@ -66,7 +66,6 @@ export const LOCAL_AGENTS = Object.freeze([
     installHint: 'curl https://cursor.com/install -fsS | bash',
     loginHint: '在终端运行一次 `cursor-agent login` 完成登录',
   },
-  { id: 'gemini', label: 'Gemini CLI', kind: LOCAL_AGENT_KINDS.AGENT, bins: ['gemini'], priority: 40, supported: false },
   { id: 'qwen', label: 'Qwen Code', kind: LOCAL_AGENT_KINDS.AGENT, bins: ['qwen'], priority: 50, supported: false },
   { id: 'opencode', label: 'OpenCode', kind: LOCAL_AGENT_KINDS.AGENT, bins: ['opencode'], priority: 60, supported: false },
   {
