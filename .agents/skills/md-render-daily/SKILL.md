@@ -1,126 +1,85 @@
 ---
 name: md-render-daily
-description: 在本项目改「今日速记 / Daily 速记面板」时的规范——数据模型在 apps/editor/renderer/src/utils/dailyWorkspace.js（纯函数），store 动作在 useEditorStore.js，UI 在 components/DailyNotebook.jsx。核心约定：切日期是「纯视图变更」，破坏性结转（carryOver）只在真正跨到今天时跑一次。涉及"今日速记""daily 面板""切日期数据丢了/被重置""待办池""昨天笔记带到今天""跨天结转""carryOver""速记不能换行/富文本"时触发。略主动。
+description: 在本项目改「今日速记 / Daily」时的规范——一天一篇 BlockNote 大纲（幕布式），块级纯函数在 apps/editor/shared/daily/（dailyBlocks.js、dailyMarkdown.js），工作区纯函数在 renderer/src/utils/dailyWorkspace.js，文件格式在 shared/migration/dailyFormat.js，UI 在 components/DailyNotebook.jsx + components/daily/。核心约定：切日期是纯视图；结转只在进入真实今天时跑且幂等；磁盘是干净大纲 Markdown + 数据块兜底。涉及"今日速记""daily""大纲""切日期数据丢了/被重置""未完成任务带到今天""carryOver""速记贴图""read_daily / add_daily_entry / complete_daily_task""Daily/日期.md 格式"时触发。略主动。
 ---
 
-# 今日速记（Daily 速记面板）改动规范
+# 今日速记（幕布式大纲）改动规范
 
-这块的命脉是**区分两种操作语义**：翻看日期（纯视图）和跨天结转（数据迁移）。混淆这两者就会出现"切几次日期数据被重置"这类 bug。
+一天 = 一篇 BlockNote 文档（块数组）。默认三个顶层标题分区：`📝 今日任务` / `📅 事件` / `💡 笔记`。
+**分区就是顶层标题**：标题之后、下一个标题之前的块都属于它；用户把内容缩进到标题下面（标题有 children）时按 children 算。
 
-## 模型与三层职责
+## 分层
 
 ```mermaid
 flowchart TD
-    UI["DailyNotebook.jsx<br/>(只触发动作, 不算数据)"] -->|onSetCurrentDate / onAddItem...| S["useEditorStore.js<br/>(store 动作 + 持久化备份)"]
-    S -->|调用纯函数| U["dailyWorkspace.js<br/>(纯函数, 无副作用)"]
-    U -->|返回新 workspace| S
+    UI["DailyNotebook.jsx + daily/DailyToolbar.jsx<br/>daily/DailyOutlineEditor.jsx（BlockNote，懒加载）"] -->|onSetBlocks / onSetCurrentDate| S["useEditorStore.js<br/>setDailyBlocks / appendDailyMarkdown / setDailyTaskDone / setDailyCurrentDate"]
+    S --> W["utils/dailyWorkspace.js<br/>哪一天、结转、旧数据转换（纯函数）"]
+    W --> B["shared/daily/dailyBlocks.js<br/>分区、追加、拿走未完成任务、勾选"]
+    W --> M["shared/daily/dailyMarkdown.js<br/>块 ↔ Markdown"]
+    F["shared/migration/dailyFormat.js<br/>Daily/日期.md 读写"] --> M
+    A["agent: createHost / toolRegistry / docTools"] --> S
 ```
 
-- `dailyWorkspace.js`：纯函数，输入旧 workspace 返回新 workspace，**不碰 localStorage、不发 IPC**。
-- `useEditorStore.js`：在 `set` 里调纯函数，再 `persistDailyWorkspaceBackup(...)` 落盘。
-- `DailyNotebook.jsx`：`memo` 容器组件，只把用户操作转发成 store 动作，不自己算迁移逻辑。
-  视图拆在 `components/daily/`：`DailyEntryList.jsx`（task/event/note 合并的单列表 + 类型筛选）、
-  `DailyItemRow.jsx`（单条渲染与行内编辑）、`DailyTodoColumn.jsx`（待办池）、
-  `dailyOptions.jsx`（类型/优先级/类别选项与排序比较器 `compareDailyItems`）、
-  `DailyContentEditor.jsx`（正文输入区，今日记录与待办池共用）、
-  `DailyRichTextEditor.jsx`（BlockNote 富文本，仅浏览器懒加载）、
-  `DailyRichContent.jsx`（只读富文本渲染）。
-  三种类型共用一个列表，靠类型 Tag 区分；新增类型要同时补 `DAILY_TYPE_OPTIONS` 与排序权重。
+数据形状：`{ currentDate, entries: { 'YYYY-MM-DD': { date, blocks } } }`。没有 todoPool（旧数据 normalize 时并进去）。
+`shared/` 下的文件主进程（迁移）和 renderer 共用，**不能依赖 DOM / BlockNote**。
 
-数据形状：`{ currentDate, entries: { 'YYYY-MM-DD': { date, items[] } }, todoPool[] }`。item 有 `type`（task/event/note）、`done`、`createdAt`、`updatedAt`，正文是 `text` +（可选）`richText`。
+## 关键约定
 
-## 最关键的坑：切日期 ≠ 结转
+1. **切日期 ≠ 结转**。手动翻日期只走 `setDailyCurrentDate`（改 currentDate）；只有切到真实今天（含「今天」按钮、凌晨跨天定时器）才跑 `carryOverIncompleteTasks`。
+2. **结转**：所有 `< 今天` 的日子里**未勾选、非空**的 `checkListItem`（连同子级）拿走，追加到今天「今日任务」末尾；今天已有同名未完成任务的跳过（`dedupeTasks`），所以幂等。已勾选、笔记、事件原地不动。今天没内容时先套模板，空占位行会被替换。
+3. **空就删**：`isDailyBlocksEmpty`（只剩标题和空行）的一天从 entries 删掉，不写文件；编辑器对没内容的日子显示模板但不落盘。
+4. **编辑器是非受控的**：`DailyOutlineEditor` 挂载时取初值，按日期 `key` 重挂；改动防抖 400ms 往上抛（失焦、卸载时立即抛）。外部改动（AI 写入、结转、文件被改）= store 里的 blocks 不是自己上次抛出去的那份 → `replaceBlocks` 整篇替换；防抖未落时以用户输入为准。卸载前那次保存要落到**挂载时的日期**（dateRef），别用新日期的闭包。
+5. **图片**：粘贴走 `useEditorImageUpload` 的 `insertImagesFromFiles`（占位 → 存进内容库 `assets/` → 回填 local-media://）；`blob:` 占位没回填前不保存（`hasPendingImagePlaceholders`）。Markdown 里写本地绝对路径（带空格用 `<...>`），读回再转 local-media://。
+6. **BlockNote schema**：`buildSchema` 默认会去掉 heading，速记必须显式传 `excludeDefaultBlocks`（现在只去掉 table/video/audio/file）。
 
-`carryOverIncompleteTasks(ws, dateKey)` 是**破坏性**的：它会把所有 `< dateKey` 的未完成 task 扫进 `todoPool`（并从那天删掉），并把**所有早于今天、未删除的 note 全部汇聚到今天**（从原日期移走）。已完成 task、event 留在原地不动。
+## 文件格式（Daily/YYYY-MM-DD.md）
 
-> 注意：note 的结转是「扫所有历史日期」而不是「只看昨天一天」。早期版本只搬 `dateKey - 1` 那天的 note，结果跳过几天 / 重装后没逐天打开就**断链**，旧笔记被卡在过去某天显示不出来。现在按文本去重、按 `createdAt` 排序后统一带到今天，幂等。
+```markdown
+---
+date: 2026-10-09
+---
 
-**绝不能把它绑在每次切日期上。** 用户来回翻日期只是想"看"，不是想"迁移"。一旦每次切换都跑 carryOver，来回翻几下就把当天条目搬空 —— 表现就是"数据被重置"。
+## 📝 今日任务
 
-正确做法：
-- 手动翻日期（前后箭头、点某天）→ 用纯视图函数 `setDailyCurrentDate(ws, dateKey)`，**只改 `currentDate`**。
-- 只有切到**真实今天**（`dateKey === getTodayDateKey()`，含"今天"按钮和凌晨跨天定时器）→ 才跑 `carryOverIncompleteTasks`。
+- [ ] 一些需要 hotfix 的问题
+- 剧情播放预研
+  - 价值：整合配音、美术资源
+  ![截图](</Users/xx/MdRender/assets/截图.png>)
 
-store 里的判断：
-
-```js
-const nextWs = dateKey === getTodayDateKey()
-  ? carryOverIncompleteTasks(state.dailyWorkspace, dateKey)
-  : setDailyWorkspaceCurrentDate(state.dailyWorkspace, dateKey);
+<!-- md-render:data
+{"version":2,"hash":"…","blocks":[…]}
+-->
 ```
 
-## 正文是富文本：`richText` 是源，`text` 是投影
+- 正文是给人和 AI 看的干净大纲；数据块存完整 block JSON（颜色、id）。**正文 hash 对得上才用 JSON，否则按正文重新解析**（外部在 Obsidian 里勾选、加行都能读进来）。
+- 旧格式（`## 记录` + `[type:: task]` Dataview 字段）只读：`parseLegacyDailyItems` → `legacyItemsToBlocks`，分区标题 id 固定为 `<日期>-section-<key>`、条目沿用旧 id，迁移按 id 合并不会重复。
+- `Todo.md` 只写「已并入」说明。加载后缓存里 Todo.md 记磁盘原样（`buildLoadedDailyCache`），下一次写回就把旧待办清掉，避免反复并入。
+- 硬性要求：`parse(serialize(x))` 完全相等（`findDailyRoundTripMismatches`，迁移时不为空就不切换）。
 
-条目正文有两份：
+## AI 工具（app 内和 MCP 共用，见 riskLevels.js）
 
-- `richText`：BlockNote 的 block 数组（段落 + 三种列表），存颜色/加粗这些 Markdown 表达不了的样式。
-- `text`：由 `richText` 派生的**多行** Markdown 风格纯文本（`- ` / `1. ` / `- [ ] ` 前缀），
-  给去重、carryOver、Agent 工具、导出、搜索用。
+| 工具 | 作用 |
+|---|---|
+| `read_daily` | 返回 `{ date, markdown, undoneTasks }` |
+| `add_daily_entry` | `type` = task/event/note 选分区；`text` 可多行大纲，任务分区的普通行自动变成 `- [ ]` |
+| `add_todo_entry` | 兼容旧名：加到今天的今日任务 |
+| `complete_daily_task` | 按文字勾选（先全等，再包含）；没找到返回「勾选失败：…」 |
 
-规则都收口在 `utils/dailyRichText.js`（纯函数）+ `dailyWorkspace.js` 的 `resolveContent/applyContent`：
+新增工具要同时改：`toolRegistry.js`（定义 + handler + label）、`createHost.js`、`shared/capabilities/riskLevels.js`、`shared/vaultAgentsMd.js`（给直接读文件的 agent 的映射表）、`server/mcp-bridge/README.md`。
 
-- **有 `richText` 就以它为准**，`text` 每次归一化时重新派生 → 两者永远不会漂移。
-- 单段无样式的内容**不存** `richText`（`hasRichFormatting` 判断），避免给纯文本条目白存一份结构。
-- `text` 空 → 条目被丢弃（沿用原有「清空即删除」语义）。
-- 搬运条目（move / sendToTodo / carryOver / promoteTodo）必须把 `richText` 一起带走，否则来回一趟格式就没了。
+## 验证
 
-### 坑 1：`normalizeText` 把换行也压掉了
+默认不主动跑测试；用户要求时跑 `pnpm test:unit`。重点用例：
+1. 切到过去 / 未来 / 来回切 → entries 不变
+2. 进入今天 → 昨天未勾任务连子级搬到今日任务；已勾选、笔记不动
+3. 重复进入今天 → 不重复
+4. 今天已有同名任务 → 不重复加，旧日子清掉
+5. 今天没内容 → 套模板，任务替换空占位行
+6. 编辑器写回只剩模板 → 那天被删掉
+7. `add_daily_entry` 多行缩进 → 顶层变任务、子级保留；分区不存在则新建
+8. 文件往返一致；外部勾选 / 加行能读回；旧格式能读成大纲且 id 保留
+9. 旧条目 + 待办池 normalize → 大纲，待办并进今日任务
+10. 粘贴截图 → 存进 assets/，Markdown 是本地绝对路径
 
-原来 item/todo 的 `text` 走 `String(v).replace(/\s+/g,' ')`，**`\s` 含 `\n`**，
-所以哪怕 UI 让你输入了换行，落盘也会被压成一行——这就是「速记不能换行」的真正原因。
-现在正文走 `normalizeContentText`（保留 `\n`，只压行内空白），
-`normalizeText` 只留给 `buildTodoDedupKey` 做去重（去重就是要忽略换行差异）。
-
-### 坑 2：单测是 node 环境，BlockNote 不能静态 import
-
-`apps/editor/vitest.config.js` 是 `environment: 'node'`，daily 的组件测试用 `renderToStaticMarkup` 直接渲染
-`DailyItemRow`（含 `isEditing` 分支）。BlockNote 的 React 层要 DOM，静态 import 会让**现有 daily 测试全挂**。
-
-做法：`DailyRichTextEditor.jsx` 单独一个文件，`DailyContentEditor.jsx` 里用
-`lazy(() => import(...))` + `canUseDOM` 守卫，没有 DOM 时渲染 `Input.TextArea` 降级。
-`lazy` 不渲染就不发起 import，所以 node 路径永远碰不到 BlockNote；顺带还拿到了代码分割。
-
-> 注意：**不要用 `React.lazy` 而不加 DOM 守卫**——`renderToStaticMarkup` 遇到未 resolve 的 lazy 会直接抛。
-
-### 坑 3：段落可能挂子列表，别用 `<p>` 渲染
-
-只读展示（`DailyRichContent.jsx`）按 block 结构渲染 React 元素（不走 `dangerouslySetInnerHTML`，
-所以不需要 HTML 消毒，node 环境也能静态渲染）。但段落底下可以缩进出子列表，
-`<ul>` 套在 `<p>` 里是非法嵌套、浏览器会自动断标签，所以段落用 `<div class="daily-rich-paragraph">`。
-
-### 颜色
-
-只认 BlockNote 的 9 个色名（gray/brown/red/orange/yellow/green/blue/purple/pink），
-色值在 `styles.css` 里以 `--daily-rich-text-*` / `--daily-rich-bg-*` 收口，
-**逐一对齐 `@blocknote/core` 的调色板**，保证「编辑时看到的」＝「保存后看到的」。
-BlockNote 0.47 亮/暗共用同一套色值，所以这里也不做暗色覆盖。
-
-## 其它约定
-
-- 改数据只走 `dailyWorkspace.js` 的纯函数，再在 store 动作里 `persistDailyWorkspaceBackup`，别在组件里直接算。
-- carryOver 必须**幂等**：重复进入今天不应产生重复笔记 / 重复待办（靠 `buildTodoDedupKey` 文本去重）。
-- merge（跨 session / 备份恢复）以 preferred 为准，只用 fallback 补 preferred 没有的 id，避免已删除条目"复活"。
-
-## 验证（改代码类）
-
-默认**不主动跑测试**，用户要求时再跑 `pnpm test:unit`（vitest）。改动后先列 10 条 case 自查，重点覆盖：
-1. 切到过去日期 → 那天条目不被删
-2. 切到未来日期 → 今天的未完成 task 不被搬进待办池
-3. 来回切 N 次日期 → 今天条目集合不变、todoPool 不变
-4. 切到真实今天 → 昨天未完成 task 进待办池
-5. 已完成 task 不进待办池
-6. 昨天 note 带到今天，重复进入今天不产生重复（幂等）
-7. 非法日期 → 回退到原 currentDate
-8. 空 workspace 进入今天 → 无害空操作
-9. 富文本条目移到待办池再取回 → `richText` 与 `text` 都还在
-10. 改回纯文本 → 旧 `richText` 被清掉，不留残影
-
-富文本相关测试参考 `apps/editor/tests-unit/daily-rich-text.test.jsx`。
-schema/文档往返可以在 node 里直接验：`BlockNoteEditor.create({ schema })` 读 `editor.document`
-（见 [[md-render-blocknote-core]] 的「node 里能验什么」）。
-
-测试参考 `apps/editor/tests-unit/dailyWorkspace-switch-date.test.js`。
-
-## 完成标准
-
-切日期纯视图、结转只在进入今天时跑；纯函数无副作用、carryOver 幂等；10 case 自查通过，daily 相关单测全绿。
+测试：`tests-unit/dailyWorkspace-switch-date.test.js`、`daily-markdown.test.js`、`migration-daily-format.test.js`、`vault-file-sync.test.js`、`agent-create-host.test.js`。
+`shared/daily` 的块能被真实 BlockNote 吃进去，可以在 vitest 里 `BlockNoteEditor.create({ schema, initialContent })` 验证。

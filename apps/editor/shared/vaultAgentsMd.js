@@ -15,8 +15,8 @@ const DIRECTORY_CONVENTIONS = [
   '|---|---|',
   '| `Projects/` | 母稿（权威位置）。`Projects/内置文档/` 是从旧版数据库迁出来的文档 |',
   '| `Artifacts/` | 派生产物：平台版、方案、报告……不要改母稿，派生内容新建在这里 |',
-  '| `Daily/YYYY-MM-DD.md` | 今日速记：一行一条，`- [ ]` 是任务，属性是 Dataview 行内字段 `[key:: value]` |',
-  '| `Todo.md` | 待办池 |',
+  '| `Daily/YYYY-MM-DD.md` | 今日速记：一天一篇大纲，分区标题是 `## 📝 今日任务` / `## 📅 事件` / `## 💡 笔记`；`- [ ]` 未完成任务、`- [x]` 已完成，缩进两格是子级，图片写本地绝对路径。文件末尾的 `<!-- md-render:data -->` 注释是 app 用的缓存，不用管；改了正文 app 会按正文重新解析 |',
+  '| `Todo.md` | 旧待办池（已并入今日速记，可忽略） |',
   '| `Canvas/白板.canvas` | 灵感白板（JSON Canvas，Obsidian 能打开） |',
   '| `.agent/memory/editorial.md` | AI 编辑部记忆：只追加，不改写 |',
   '| `.agent/proposals/` | 待用户确认的改动（app 生成，不要手改） |',
@@ -40,7 +40,7 @@ const TOOL_FILE_MAPPING = [
   '| `create_agent_artifact` / `create_new_doc` | 在 `Artifacts/内容运营/` 新建文件，frontmatter 写 `platform`、`sources` |',
   '| `update_doc_meta` | 改 frontmatter 对应字段 |',
   '| `read_editorial_memory` / `update_editorial_memory` | 读 / 往对应小节末尾追加 `.agent/memory/editorial.md` |',
-  '| `read_daily` / `add_daily_entry` / `add_todo_entry` | 读写 `Daily/<日期>.md`、`Todo.md`（格式照抄已有行） |',
+  '| `read_daily` / `add_daily_entry` / `add_todo_entry` / `complete_daily_task` | 读写 `Daily/<日期>.md`：追加到对应分区标题下面（任务写 `- [ ] `），做完把 `- [ ]` 改成 `- [x]` |',
   '| `search_docs` / `list_docs` / `recall_related_docs` | 在 `Projects/`、`Artifacts/` 里搜索 |',
 ].join('\n');
 

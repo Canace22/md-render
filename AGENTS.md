@@ -101,7 +101,7 @@ pnpm test:e2e     # E2E 测试（playwright）
 | `md-render-wechat` | 微信公众号格式化 |
 | `md-render-external-api-proxy` | 前端调第三方 API 的代理化（CORS、可配置） |
 | `md-render-binary-asset` | 二进制媒体存盘；编辑器用 local-media://，磁盘写相对路径 |
-| `md-render-daily` | 今日速记面板（切日期 / carryOver 约定） |
+| `md-render-daily` | 今日速记大纲（切日期 / 结转 / 文件格式 / AI 工具约定） |
 | `md-render-blocknote-core` | BlockNote 底层接入与避坑 |
 | `md-render-agent` | Agent 工具、引擎、面板 |
 | `md-render-excalidraw-canvas` | Excalidraw 无限画布的同步、保存与交互边界 |

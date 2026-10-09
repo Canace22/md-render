@@ -3,5 +3,5 @@ group: 今日速记
 aliases: [复盘, 今日小结, daily review, 整理 daily]
 entry: [slash, welcome]
 input: none
-tools: [read_daily, add_daily_entry, add_todo_entry]
+tools: [read_daily, add_daily_entry, complete_daily_task]
 output: answer
