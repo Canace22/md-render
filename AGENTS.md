@@ -33,6 +33,7 @@ pnpm test:e2e     # E2E 测试（playwright）
 | 本地文件桥接（Electron/Web 路由） | `apps/editor/renderer/src/utils/localProjectBridge.js` + `apps/editor/renderer/src/utils/webFsBridge.js` |
 | AI 助手（agent 引擎/工具/面板） | `apps/editor/renderer/src/core/agent/`（`agentEngine.js` + `toolRegistry.js`） |
 | 代理服务端 | `server/ai-proxy/` + `server/mcp-bridge/` |
+| 本机 HTTP MCP（外部 AI 直连） | `apps/editor/main/mcpHttp.js`（由 `agentBridge.js` 启动） |
 | BlockNote 底层机制包 | `packages/blocknote-core/` |
 | CSS 变量 | `apps/editor/renderer/src/styles/design-tokens.css` |
 

@@ -22,6 +22,7 @@ import {
   INVOKE_TIMEOUT_MS,
 } from '../shared/agentBridgeTools.js';
 import { AGENT_INSTRUCTIONS } from '../shared/appKnowledge.js';
+import { MCP_HTTP_CONFIG_FILE, startMcpHttpServer } from './mcpHttp.js';
 
 const HOST = '127.0.0.1';
 const INVOKE_CHANNEL = 'agent-bridge:invoke';
@@ -29,7 +30,7 @@ const REPLY_CHANNEL = 'agent-bridge:reply';
 const MAX_BODY_BYTES = 1_000_000;
 export const HANDSHAKE_FILE_NAME = 'agent-bridge.json';
 
-/** 当前运行中的桥：{ server, handshakeFile, token }；退出时据此清理 */
+/** 当前运行中的桥：{ server, handshakeFile, token, mcpHttp }；退出时据此清理 */
 let activeBridge = null;
 
 /** 主进程 → renderer 的在途请求：id -> { resolve, reject, timer } */
@@ -71,6 +72,25 @@ const callRenderer = (getMainWindow, name, args) =>
     win.webContents.send(INVOKE_CHANNEL, { id, name, args });
   });
 
+/** 拉对外安全工具（OpenAI 风格定义） */
+const listSafeTools = async (getMainWindow) => {
+  const reply = await callRenderer(getMainWindow, LIST_TOOLS_NAME, {});
+  return filterSafeToolDefs(Array.isArray(reply?.result) ? reply.result : []);
+};
+
+/** 校验后执行一个工具；不在白名单直接拒绝 */
+const invokeSafeTool = async (getMainWindow, name, args) => {
+  const checked = validateInvoke({ name, args });
+  if (!checked.ok) return { ok: false, result: checked.error };
+  return callRenderer(getMainWindow, checked.name, checked.args);
+};
+
+/** 本机 HTTP MCP 的连接信息（设置页展示用）；没启动返回 null */
+export const getMcpHttpInfo = () => {
+  const mcp = activeBridge?.mcpHttp;
+  return mcp?.server?.listening ? { url: mcp.url, token: mcp.token } : null;
+};
+
 const sendJson = (res, code, obj) => {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
@@ -94,13 +114,15 @@ export const removeHandshakeFileIfOwned = (file, token) => {
 /** 关闭控制桥并删除握手文件。app 退出（before-quit）时调用；重复调用安全。 */
 export function stopAgentBridge() {
   if (!activeBridge) return;
-  const { server, handshakeFile, token } = activeBridge;
+  const { server, handshakeFile, token, mcpHttp } = activeBridge;
   activeBridge = null;
-  try {
-    server.close();
-  } catch {
-    /* noop */
-  }
+  [server, mcpHttp?.server].forEach((srv) => {
+    try {
+      srv?.close();
+    } catch {
+      /* noop */
+    }
+  });
   removeHandshakeFileIfOwned(handshakeFile, token);
 }
 
@@ -143,10 +165,8 @@ export function startAgentBridge({ getMainWindow, ipcMain, app, port = 0 } = {})
 
     if (req.method === 'GET' && url.pathname === '/tools') {
       try {
-        const reply = await callRenderer(getMainWindow, LIST_TOOLS_NAME, {});
-        const defs = Array.isArray(reply?.result) ? reply.result : [];
         // instructions 和 app 内 AI 的产品规则同源（shared/appKnowledge.js）
-        return sendJson(res, 200, { ok: true, tools: filterSafeToolDefs(defs), instructions: AGENT_INSTRUCTIONS });
+        return sendJson(res, 200, { ok: true, tools: await listSafeTools(getMainWindow), instructions: AGENT_INSTRUCTIONS });
       } catch (error) {
         return sendJson(res, 502, { ok: false, error: error.message });
       }
@@ -172,7 +192,19 @@ export function startAgentBridge({ getMainWindow, ipcMain, app, port = 0 } = {})
   });
 
   const handshakeFile = path.join(app.getPath('userData'), HANDSHAKE_FILE_NAME);
-  activeBridge = { server, handshakeFile, token };
+  activeBridge = { server, handshakeFile, token, mcpHttp: null };
+
+  // 本机 HTTP MCP：固定端口 + 固定 token，给支持 HTTP 传输的 MCP 客户端直连
+  try {
+    activeBridge.mcpHttp = startMcpHttpServer({
+      configFile: path.join(app.getPath('userData'), MCP_HTTP_CONFIG_FILE),
+      listTools: () => listSafeTools(getMainWindow),
+      callTool: (name, args) => invokeSafeTool(getMainWindow, name, args),
+      instructions: AGENT_INSTRUCTIONS,
+    });
+  } catch (error) {
+    console.warn('[mcp-http] failed to start:', error.message);
+  }
 
   server.listen(port, HOST, () => {
     const actualPort = server.address().port;

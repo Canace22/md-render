@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getMdRenderRootPath } from '../localProject.js';
+import { getMcpHttpInfo } from '../agentBridge.js';
 import { backupDatabase, rebuildIndexFromWorkspace } from '../database.js';
 import { planMigration } from '../migration/planMigration.js';
 import { executeMigration, rollbackMigration } from '../migration/executeMigration.js';
@@ -133,6 +134,7 @@ export function registerMigrationHandlers({
       agentsMdExists: fs.existsSync(path.join(vaultRoot, AGENTS_MD)),
       mcpBridgeEntry: findMcpBridgeEntry(),
       handshakePath: app ? path.join(app.getPath('userData'), HANDSHAKE_FILE) : '',
+      mcpHttp: getMcpHttpInfo(),
     };
   }));
 

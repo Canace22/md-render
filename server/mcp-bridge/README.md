@@ -15,6 +15,30 @@
   读、导航、可逆写直接执行；改正文、删除生成**待确认提案**，立即返回，用户在 app 收件箱里确认；
   重建 / 清空白板、安全修复不对外。AI 面板关着也能用；每次调用都记进内容库 `.agent/activity/`。
 
+## 更简单：本机 HTTP MCP（不用装本目录）
+
+MD Render 桌面版启动后会在 `http://127.0.0.1:27183/mcp` 开一个 Streamable HTTP MCP，工具和风险分级与本 stdio 版完全一样。
+token 首次启动生成，存在 `<userData>/md-render/mcp-http.json`（可在里面改端口；也可用环境变量 `MD_RENDER_MCP_PORT` 临时覆盖）。
+
+在 **设置 → 内容库与外部 agent** 里点「复制 Claude Code 命令」或「复制 HTTP MCP 配置」即可，形如：
+
+```bash
+claude mcp add --transport http md-render http://127.0.0.1:27183/mcp --header "Authorization: Bearer <token>"
+```
+
+```json
+{ "mcpServers": { "md-render": { "type": "http", "url": "http://127.0.0.1:27183/mcp", "headers": { "Authorization": "Bearer <token>" } } } }
+```
+
+- 只监听本机；必须带 token；浏览器网页（非本机 Origin）的请求会被拒绝。
+- 只回 JSON、不开 SSE 推送，所以 app 重启后需要客户端自己重新拉工具列表。
+- **Claude Desktop** 不能用「添加自定义连接器」（那是 Anthropic 云端去连，只认公网 https）。在设置页点「复制 Claude Desktop 配置」，粘到 设置 → Developer → Edit Config，用 `mcp-remote` 转到本机 HTTP MCP（需要装 Node）：
+
+  ```json
+  { "mcpServers": { "md-render": { "command": "npx", "args": ["-y", "mcp-remote", "http://127.0.0.1:27183/mcp", "--header", "Authorization:${AUTH_HEADER}"], "env": { "AUTH_HEADER": "Bearer <token>" } } } }
+  ```
+- claude.ai 网页版 / ChatGPT 的连接器要求公网 HTTPS，连不上本机地址，这类客户端还得走云端中继（未实现）。
+
 ## 安装
 
 ```bash
@@ -56,10 +80,12 @@ npm install
   `search_docs`、`search_external_knowledge`、`list_recent_docs`、`get_workspace_brief`、`recall_related_docs`、
   `read_editorial_memory`、`read_daily`、`render_platform_html`、`get_proposal_status`、`inspect_app_health`
 - **可逆写**（直接生效）：`create_new_doc`、`create_content_entry`、`create_agent_artifact`、`create_folder`、
-  `add_daily_entry`、`add_todo_entry`、`append_canvas_cards`、`update_doc_meta`、`move_workspace_item`、
+  `add_daily_entry`、`add_todo_entry`、`complete_daily_task`、`append_canvas_cards`、`update_doc_meta`、`move_workspace_item`、
   `rename_workspace_item`、`update_editorial_memory`
 - **提案**（立即返回 `pending`，用户在收件箱确认）：`propose_edit`、`write_active_doc`、`delete_workspace_items`
 - **导航**：`open_surface`、`open_canvas`、`open_workspace_item`
+
+今日速记：`read_daily` 返回当天大纲 Markdown 和未完成任务清单 → 替用户做完某项后 `complete_daily_task` 勾掉；`add_daily_entry` 可以一次追加多行大纲（两格缩进是子级）。
 
 改正文的推荐流程：`read_doc` 拿 `baseHash` → `propose_edit(id, content, baseHash)` → 隔一会儿 `get_proposal_status`。返回「内容已变化」就重新读。
 
