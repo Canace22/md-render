@@ -91,6 +91,7 @@ import { createCommands } from '../core/commands/commandRegistry.js';
 import { hasDbBridge } from '../services/electronBridge.js';
 import { FILE_CONVERT_TOOLS, isFileConvertSupported } from '../services/fileConvertTools.js';
 import { useFileConvertTool } from '../hooks/useFileConvertTool.js';
+import { useImageLightbox } from '../hooks/useImageLightbox.js';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
@@ -1126,32 +1127,14 @@ function MarkdownEditor() {
 
   const [previewData, setPreviewData] = useState({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
   const [previewLoading, setPreviewLoading] = useState(false);
-  // 图片放大查看器：lightbox.index < 0 表示关闭
-  const [lightbox, setLightbox] = useState({ images: [], index: -1 });
-
-  // 双击编辑器内图片：收集当前文档所有图片，打开 lightbox 并定位到被双击的那张。
-  // 单击不拦截，交给 BlockNote 选中图片块，这样键盘删除键才能删掉图片。
-  const handlePaperDoubleClick = useCallback((event) => {
-    const img = event.target.closest?.('img.bn-visual-media');
-    if (!img) return;
-    const paper = event.currentTarget;
-    const imgs = Array.from(paper.querySelectorAll('img.bn-visual-media'));
-    const images = imgs.map((node) => node.currentSrc || node.src).filter(Boolean);
-    const index = imgs.indexOf(img);
-    if (index < 0 || !images.length) return;
-    event.preventDefault();
-    setLightbox({ images, index });
-  }, []);
-
-  // 关闭大图后把焦点还给编辑器，否则键盘操作（删除等）落不到图片块上
-  const closeLightbox = useCallback(() => {
-    setLightbox((prev) => ({ ...prev, index: -1 }));
-    activeEditorRef.current?.focus?.();
-  }, []);
-  const changeLightboxIndex = useCallback(
-    (next) => setLightbox((prev) => ({ ...prev, index: next })),
-    [],
-  );
+  // 图片放大查看器：双击编辑器内图片打开；关闭后把焦点还给编辑器，否则键盘操作（删除等）落不到图片块上
+  const focusActiveEditor = useCallback(() => activeEditorRef.current?.focus?.(), []);
+  const {
+    lightbox,
+    openFromEvent: handlePaperDoubleClick,
+    close: closeLightbox,
+    changeIndex: changeLightboxIndex,
+  } = useImageLightbox(focusActiveEditor);
   const canSaveLocalProjectFile = localProjectSupported
     && Boolean(selectedProjectRootPath && selectedFile?.relativePath)
     && !selectedNeedsConversion;
