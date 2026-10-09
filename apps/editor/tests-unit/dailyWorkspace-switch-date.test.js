@@ -1,142 +1,126 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDailyEntryItem,
+  appendDailyMarkdown,
   carryOverIncompleteTasks,
+  getDailyBlocksForEditor,
   getDailyEntry,
+  getDailyMarkdown,
+  normalizeDailyWorkspace,
   setDailyCurrentDate,
-  toggleDailyEntryTaskDone,
+  setDailyEntryBlocks,
+  setDailyTaskDone,
+  shiftDateKey,
 } from '../renderer/src/utils/dailyWorkspace.js';
+import { markdownToBlocks } from '../shared/daily/dailyMarkdown.js';
 
-// 构造一个含未完成任务 + 笔记的今天，再补一条昨天的笔记
-function buildWorkspace(today) {
-  let ws = { currentDate: today, entries: {}, todoPool: [] };
-  ws = addDailyEntryItem(ws, today, { type: 'task', text: '写周报' });
-  ws = addDailyEntryItem(ws, today, { type: 'note', text: '今天的想法' });
-  return ws;
-}
+const TODAY = '2026-10-09';
+const YESTERDAY = shiftDateKey(TODAY, -1);
+const TWO_DAYS_AGO = shiftDateKey(TODAY, -2);
+const TOMORROW = shiftDateKey(TODAY, 1);
 
-const TODAY = '2026-06-16';
-const YESTERDAY = '2026-06-15';
-const TOMORROW = '2026-06-17';
+const DAY = (md) => markdownToBlocks(md);
+const build = (days, currentDate = TODAY) => Object.entries(days).reduce(
+  (ws, [date, md]) => setDailyEntryBlocks(ws, date, DAY(md)),
+  { currentDate, entries: {} },
+);
 
-describe('setDailyCurrentDate (纯视图切换)', () => {
-  it('case1: 只改 currentDate，不动条目', () => {
-    const ws = buildWorkspace(TODAY);
-    const next = setDailyCurrentDate(ws, YESTERDAY);
-    expect(next.currentDate).toBe(YESTERDAY);
-    // 今天的条目原封不动
-    expect(getDailyEntry(next, TODAY).items).toHaveLength(2);
+const base = () => build({
+  [YESTERDAY]: '## 📝 今日任务\n\n- [ ] 写周报\n  - 收集数据\n- [x] 回邮件\n\n## 💡 笔记\n\n- 昨天的想法',
+  [TODAY]: '## 📝 今日任务\n\n- [ ] 今天的事',
+});
+
+describe('切日期是纯视图', () => {
+  it('切到过去 / 未来 / 来回切：不搬任何内容', () => {
+    let ws = base();
+    const before = JSON.stringify(ws.entries);
+    [YESTERDAY, TOMORROW, TWO_DAYS_AGO, YESTERDAY].forEach((date) => { ws = setDailyCurrentDate(ws, date); });
+    expect(JSON.stringify(ws.entries)).toBe(before);
+    expect(ws.currentDate).toBe(YESTERDAY);
   });
 
-  it('case2: 来回切日期多次，今天的数据不丢失/不重置', () => {
-    let ws = buildWorkspace(TODAY);
-    const before = getDailyEntry(ws, TODAY).items.map((i) => i.id).sort();
-    for (const d of [YESTERDAY, TOMORROW, YESTERDAY, TODAY, TOMORROW, YESTERDAY]) {
-      ws = setDailyCurrentDate(ws, d);
-    }
-    const after = getDailyEntry(ws, TODAY).items.map((i) => i.id).sort();
-    expect(after).toEqual(before);
-    // 任务没有被偷偷搬进待办池
-    expect(ws.todoPool).toHaveLength(0);
-  });
-
-  it('case3: 切到未来日期不会把今天的未完成任务搬走', () => {
-    const ws = buildWorkspace(TODAY);
-    const next = setDailyCurrentDate(ws, TOMORROW);
-    expect(getDailyEntry(next, TODAY).items.filter((i) => i.type === 'task')).toHaveLength(1);
-    expect(next.todoPool).toHaveLength(0);
-  });
-
-  it('case4: 切到过去日期不会删除过去那天的条目', () => {
-    let ws = buildWorkspace(TODAY);
-    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'note', text: '昨天的笔记' });
-    const next = setDailyCurrentDate(ws, YESTERDAY);
-    expect(getDailyEntry(next, YESTERDAY).items).toHaveLength(1);
-  });
-
-  it('case5: 非法日期回退到原 currentDate', () => {
-    const ws = buildWorkspace(TODAY);
-    const next = setDailyCurrentDate(ws, 'not-a-date');
-    expect(next.currentDate).toBe(TODAY);
+  it('非法日期回退到原 currentDate', () => {
+    expect(setDailyCurrentDate(base(), 'not-a-date').currentDate).toBe(TODAY);
   });
 });
 
-describe('carryOverIncompleteTasks (进入今天才结转)', () => {
-  it('case6: 昨天未完成任务沉到待办池', () => {
-    let ws = { currentDate: YESTERDAY, entries: {}, todoPool: [] };
-    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'task', text: '昨天没做完' });
+describe('进入今天：结转未完成任务', () => {
+  it('昨天没勾的任务连同子级搬到今天「今日任务」，已勾选和笔记留在原地', () => {
+    const ws = carryOverIncompleteTasks(base(), TODAY);
+    expect(getDailyMarkdown(ws, TODAY)).toBe('## 📝 今日任务\n\n- [ ] 今天的事\n- [ ] 写周报\n  - 收集数据');
+    const yesterday = getDailyMarkdown(ws, YESTERDAY);
+    expect(yesterday).toContain('- [x] 回邮件');
+    expect(yesterday).toContain('- 昨天的想法');
+    expect(yesterday).not.toContain('写周报');
+  });
+
+  it('幂等：重复进入今天不会重复', () => {
+    const once = carryOverIncompleteTasks(base(), TODAY);
+    const twice = carryOverIncompleteTasks(once, TODAY);
+    expect(getDailyMarkdown(twice, TODAY)).toBe(getDailyMarkdown(once, TODAY));
+  });
+
+  it('今天已有同名未完成任务：不重复加，但旧的那天也清掉', () => {
+    const ws = build({ [YESTERDAY]: '- [ ] 同一件事', [TODAY]: '## 📝 今日任务\n\n- [ ] 同一件事' });
     const next = carryOverIncompleteTasks(ws, TODAY);
-    expect(next.todoPool.map((t) => t.text)).toContain('昨天没做完');
-    expect(getDailyEntry(next, YESTERDAY).items.filter((i) => i.type === 'task')).toHaveLength(0);
+    expect(getDailyMarkdown(next, TODAY).match(/同一件事/g)).toHaveLength(1);
+    expect(next.entries[YESTERDAY]).toBeUndefined();
   });
 
-  it('case7: 已完成的任务不会被搬进待办池', () => {
-    let ws = { currentDate: YESTERDAY, entries: {}, todoPool: [] };
-    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'task', text: '昨天做完了' });
-    const taskId = getDailyEntry(ws, YESTERDAY).items[0].id;
-    ws = toggleDailyEntryTaskDone(ws, YESTERDAY, taskId);
-    const next = carryOverIncompleteTasks(ws, TODAY);
-    expect(next.todoPool).toHaveLength(0);
+  it('今天还没写过：用模板，任务替换掉空占位行', () => {
+    const ws = build({ [TWO_DAYS_AGO]: '- [ ] 很久以前的事' });
+    const md = getDailyMarkdown(carryOverIncompleteTasks(ws, TODAY), TODAY);
+    expect(md).toContain('## 📝 今日任务\n\n- [ ] 很久以前的事');
+    expect(md).toContain('## 📅 事件');
   });
 
-  it('case8: 昨天的笔记带到今天，重复结转不产生重复笔记（幂等）', () => {
-    let ws = { currentDate: YESTERDAY, entries: {}, todoPool: [] };
-    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'note', text: '昨天的灵感' });
-    let next = carryOverIncompleteTasks(ws, TODAY);
-    next = carryOverIncompleteTasks(next, TODAY);
-    const todayNotes = getDailyEntry(next, TODAY).items.filter((i) => i.type === 'note');
-    expect(todayNotes.filter((n) => n.text === '昨天的灵感')).toHaveLength(1);
+  it('空 workspace 进入今天：无害空操作', () => {
+    const ws = carryOverIncompleteTasks({ currentDate: YESTERDAY, entries: {} }, TODAY);
+    expect(ws).toEqual({ currentDate: TODAY, entries: {} });
+  });
+});
+
+describe('写入', () => {
+  it('编辑器写回空内容（只剩模板）就删掉这一天', () => {
+    const ws = setDailyEntryBlocks(base(), TODAY, getDailyBlocksForEditor({ entries: {} }, TODAY));
+    expect(ws.entries[TODAY]).toBeUndefined();
   });
 
-  it('case9: 今天的条目在结转后保留', () => {
-    let ws = { currentDate: TODAY, entries: {}, todoPool: [] };
-    ws = addDailyEntryItem(ws, TODAY, { type: 'task', text: '今天的任务' });
-    const next = carryOverIncompleteTasks(ws, TODAY);
-    expect(getDailyEntry(next, TODAY).items.map((i) => i.text)).toContain('今天的任务');
+  it('往任务分区追加多行大纲：顶层变成待勾选任务，子级保留', () => {
+    const ws = appendDailyMarkdown(base(), TODAY, 'task', '整理素材\n  - 截图\n  - 配音');
+    expect(getDailyMarkdown(ws, TODAY)).toBe('## 📝 今日任务\n\n- [ ] 今天的事\n- [ ] 整理素材\n  - 截图\n  - 配音');
   });
 
-  it('case10: 没有昨天数据时结转是无害的空操作', () => {
-    const ws = { currentDate: TODAY, entries: {}, todoPool: [] };
-    const next = carryOverIncompleteTasks(ws, TODAY);
-    expect(next.currentDate).toBe(TODAY);
-    expect(next.todoPool).toHaveLength(0);
-    expect(Object.keys(next.entries)).toHaveLength(0);
+  it('分区不存在时新建分区', () => {
+    const ws = appendDailyMarkdown(base(), TODAY, 'note', '- 一个点子');
+    expect(getDailyMarkdown(ws, TODAY)).toContain('## 💡 笔记\n\n- 一个点子');
   });
 
-  it('case11: 跨多天（含中间空档）的历史笔记都汇聚到今天，原日期不再保留', () => {
-    let ws = { currentDate: '2026-06-15', entries: {}, todoPool: [] };
-    // 6/15、6/18 都有笔记，6/16、6/17 空着；今天是 6/22（中间断链）
-    ws = addDailyEntryItem(ws, '2026-06-15', { type: 'note', text: '6/15 的想法' });
-    ws = addDailyEntryItem(ws, '2026-06-18', { type: 'note', text: '6/18 的想法' });
-    const next = carryOverIncompleteTasks(ws, '2026-06-22');
-    const todayNotes = getDailyEntry(next, '2026-06-22').items
-      .filter((i) => i.type === 'note')
-      .map((i) => i.text);
-    expect(todayNotes).toEqual(['6/15 的想法', '6/18 的想法']);
-    // 历史日期的 note 被移走
-    expect(getDailyEntry(next, '2026-06-15').items.filter((i) => i.type === 'note')).toHaveLength(0);
-    expect(getDailyEntry(next, '2026-06-18').items.filter((i) => i.type === 'note')).toHaveLength(0);
+  it('勾选任务：先完全匹配再包含匹配；找不到返回 found=false', () => {
+    const done = setDailyTaskDone(base(), TODAY, '今天的事');
+    expect(done.found).toBe(true);
+    expect(getDailyMarkdown(done.dailyWorkspace, TODAY)).toContain('- [x] 今天的事');
+    expect(setDailyTaskDone(base(), YESTERDAY, '周报').text).toBe('写周报');
+    expect(setDailyTaskDone(base(), TODAY, '不存在').found).toBe(false);
   });
+});
 
-  it('case12: 历史 event 不被带到今天，留在原日期', () => {
-    let ws = { currentDate: YESTERDAY, entries: {}, todoPool: [] };
-    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'event', text: '昨天的会议' });
-    ws = addDailyEntryItem(ws, YESTERDAY, { type: 'note', text: '昨天的笔记' });
-    const next = carryOverIncompleteTasks(ws, TODAY);
-    expect(getDailyEntry(next, YESTERDAY).items.map((i) => i.text)).toEqual(['昨天的会议']);
-    expect(getDailyEntry(next, TODAY).items.filter((i) => i.type === 'note')).toHaveLength(1);
-  });
-
-  it('case13: 多天历史笔记重复结转保持幂等（不重复、不复活）', () => {
-    let ws = { currentDate: '2026-06-15', entries: {}, todoPool: [] };
-    ws = addDailyEntryItem(ws, '2026-06-15', { type: 'note', text: 'A' });
-    ws = addDailyEntryItem(ws, '2026-06-18', { type: 'note', text: 'B' });
-    let next = carryOverIncompleteTasks(ws, '2026-06-22');
-    next = carryOverIncompleteTasks(next, '2026-06-22');
-    next = carryOverIncompleteTasks(next, '2026-06-22');
-    const todayNotes = getDailyEntry(next, '2026-06-22').items
-      .filter((i) => i.type === 'note')
-      .map((i) => i.text);
-    expect(todayNotes).toEqual(['A', 'B']);
+describe('旧数据转换', () => {
+  it('旧条目 + 待办池 → 大纲；待办并到当前日期的「今日任务」', () => {
+    const ws = normalizeDailyWorkspace({
+      currentDate: YESTERDAY,
+      entries: {
+        [YESTERDAY]: {
+          items: [
+            { id: 't1', type: 'task', done: true, text: '旧任务' },
+            { id: 'e1', type: 'event', text: '开会' },
+            { id: 'n1', type: 'note', text: '第一行\n- 子项', richText: [] },
+          ],
+        },
+      },
+      todoPool: [{ id: 'todo-1', text: '旧待办' }],
+    });
+    expect(getDailyMarkdown(ws, YESTERDAY)).toBe('## 📝 今日任务\n\n- [x] 旧任务\n- [ ] 旧待办\n\n## 📅 事件\n\n- 开会\n\n## 💡 笔记\n\n- 第一行\n  - 子项');
+    expect(ws.todoPool).toBeUndefined();
+    expect(getDailyEntry(ws, YESTERDAY).blocks[1].id).toBe('t1');
   });
 });

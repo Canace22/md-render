@@ -51,6 +51,7 @@ export const TOOL_RISKS = Object.freeze({
   create_folder: REVERSIBLE,
   add_daily_entry: REVERSIBLE,
   add_todo_entry: REVERSIBLE,
+  complete_daily_task: REVERSIBLE,
   append_canvas_cards: REVERSIBLE,
   update_doc_meta: REVERSIBLE,
   move_workspace_item: REVERSIBLE,

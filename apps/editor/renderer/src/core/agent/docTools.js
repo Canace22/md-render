@@ -69,7 +69,7 @@ export const DOC_TOOL_DEFINITIONS = Object.freeze([
   ),
   fn(
     'read_daily',
-    '读取某天的今日速记（任务、事件、笔记）和待办池数量；不传日期读今天。',
+    '读取某天的今日速记大纲，返回 Markdown（分区：今日任务 / 事件 / 笔记；`- [ ]` 未完成、`- [x]` 已完成，缩进是子级，图片是本地绝对路径）和未完成任务列表；不传日期读今天。',
     { dateKey: { type: 'string', description: 'YYYY-MM-DD，不传表示今天' } },
   ),
   fn(

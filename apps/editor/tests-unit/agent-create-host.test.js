@@ -145,4 +145,18 @@ describe('编辑部记忆迁到文件后（M1）', () => {
       useEditorStore.setState({ vaultStorage: { memory: false, daily: false, canvas: false, docs: false } });
     }
   });
+
+  it('今日速记：追加大纲 → 读到 Markdown 和未完成任务 → 勾掉', async () => {
+    const host = makeHost();
+    const date = '2026-10-01';
+    useEditorStore.setState({ dailyWorkspace: { currentDate: date, entries: {} } });
+    await host.addDailyEntry({ type: 'task', text: '剧情播放预研\n  - 整合配音', dateKey: date });
+    const daily = host.readDaily(date);
+    expect(daily.markdown).toContain('- [ ] 剧情播放预研\n  - 整合配音');
+    expect(daily.undoneTasks).toEqual(['剧情播放预研']);
+    expect(await host.completeDailyTask({ text: '剧情播放', dateKey: date })).toMatch(/^已勾选：剧情播放预研/);
+    expect(host.readDaily(date).undoneTasks).toEqual([]);
+    expect(await host.completeDailyTask({ text: '不存在', dateKey: date })).toMatch(/^勾选失败/);
+  });
 });
+

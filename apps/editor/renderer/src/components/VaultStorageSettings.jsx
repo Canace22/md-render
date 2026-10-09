@@ -6,7 +6,7 @@ import { rebuildVaultIndex } from '../utils/vaultBridge.js';
 import { runVaultRollback } from '../services/vaultMigration.js';
 import MigrationWizard from './MigrationWizard.jsx';
 
-const ITEM_LABELS = Object.freeze({ memory: '编辑部记忆', daily: 'Daily 与待办池', canvas: '灵感白板', docs: '内置文档' });
+const ITEM_LABELS = Object.freeze({ memory: '编辑部记忆', daily: '今日速记', canvas: '灵感白板', docs: '内置文档' });
 
 /**
  * 设置 → 数据存储：看各类数据存在哪、迁移到文件（U5 入口）、切回旧存储（M7）、从文件重建索引。

@@ -34,7 +34,8 @@ import {
   buildExcalidrawElementsFromItems,
   countRenderableCanvasCards,
 } from '../../utils/excalidrawCanvas.js';
-import { getDailyEntry, getTodayDateKey, normalizeDateKey } from '../../utils/dailyWorkspace.js';
+import { getDailyEntry, getDailyMarkdown, getTodayDateKey, normalizeDateKey } from '../../utils/dailyWorkspace.js';
+import { findSectionDef, listUndoneTaskTexts } from '../../../../shared/daily/dailyBlocks.js';
 import {
   clearAiServerOverride,
   getAiServerConfiguration,
@@ -83,6 +84,7 @@ const DEFAULT_RECENT_DOCS = 4;
 
 const toJson = (value) => JSON.stringify(value);
 const cleanText = (value) => String(value ?? '').trim();
+const resolveDailyDateKey = (state, dateKey) => normalizeDateKey(dateKey || state.dailyWorkspace?.currentDate || getTodayDateKey());
 const lower = (value) => cleanText(value).toLowerCase();
 
 /** 选中的文件优先用编辑器里的 markdown（可能比树里的 content 新） */
@@ -270,26 +272,26 @@ export function createHost({
     },
 
     addDailyEntry: async ({ type = 'task', text = '', dateKey = '' } = {}) => {
-      const value = cleanText(text);
+      const value = String(text ?? '').trim();
       if (!value) return '添加失败：内容为空。';
       const state = getState();
-      const targetDateKey = normalizeDateKey(dateKey || state.dailyWorkspace?.currentDate || getTodayDateKey());
-      state.addDailyItem(targetDateKey, type, value);
+      const targetDateKey = resolveDailyDateKey(state, dateKey);
+      const section = findSectionDef(type);
+      state.appendDailyMarkdown(targetDateKey, section.key, value);
       state.setDailyCurrentDate(targetDateKey);
       state.setSurface('daily');
-      return `已添加到 ${targetDateKey}：${type}「${value}」。`;
+      return `已添加到 ${targetDateKey} 的「${section.match}」：${value}`;
     },
 
-    /** 某天的速记（只读，去掉富文本，只给纯文字和属性） */
+    /** 某天的速记：大纲 Markdown + 未完成任务（给 AI 看，不带内部字段） */
     readDaily: (dateKey = '') => {
       const { dailyWorkspace } = getState();
       const key = normalizeDateKey(dateKey || getTodayDateKey());
-      const entry = getDailyEntry(dailyWorkspace, key);
       return {
         ok: true,
         date: key,
-        items: entry.items.map(({ id, type, done, priority, category, text }) => ({ id, type, done, priority, category: category || '', text })),
-        todoPoolCount: dailyWorkspace?.todoPool?.length ?? 0,
+        markdown: getDailyMarkdown(dailyWorkspace, key),
+        undoneTasks: listUndoneTaskTexts(getDailyEntry(dailyWorkspace, key).blocks),
       };
     },
 
@@ -297,9 +299,18 @@ export function createHost({
       const value = cleanText(text);
       if (!value) return '添加失败：待办内容为空。';
       const state = getState();
-      state.addTodoItem(value);
+      const today = getTodayDateKey();
+      state.appendDailyMarkdown(today, 'task', value);
       state.setSurface('daily');
-      return `已加入待办池：${value}。`;
+      return `已加到今天（${today}）的「今日任务」：${value}。`;
+    },
+
+    completeDailyTask: async ({ text = '', dateKey = '', done = true } = {}) => {
+      const state = getState();
+      const targetDateKey = resolveDailyDateKey(state, dateKey);
+      const result = state.setDailyTaskDone(targetDateKey, cleanText(text), done);
+      if (!result.found) return `勾选失败：没找到 ${targetDateKey} 里文字匹配「${cleanText(text)}」的任务，先用 read_daily 看看原文。`;
+      return `${done ? '已勾选' : '已取消勾选'}：${result.text}（${targetDateKey}）`;
     },
 
     openCanvas: async () => {

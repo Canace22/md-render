@@ -19,7 +19,7 @@ const COLOR_ICON_SIZE = 20;
 const COLOR_SWATCH_SIZE = 16;
 /** Mantine Toolbar 的 focus trap 需要延后把焦点交回编辑器 */
 const FOCUS_RESTORE_DELAY_MS = 0;
-const COLOR_NAMES = Object.freeze([
+export const COLOR_NAMES = Object.freeze([
   'default',
   'gray',
   'brown',
@@ -44,7 +44,7 @@ const hasColorStyle = (editor, kind) => {
   return spec?.type === styleName && spec?.propSchema === 'string';
 };
 
-function ColorIcon({ textColor, backgroundColor, size = COLOR_SWATCH_SIZE }) {
+export function ColorIcon({ textColor, backgroundColor, size = COLOR_SWATCH_SIZE }) {
   return (
     <div
       className="bn-color-icon"

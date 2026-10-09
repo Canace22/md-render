@@ -285,8 +285,6 @@ export default function AgentPanel({ open = true, onClose }) {
   // 直接写当前文档（插入引用用，无需 diff 确认）
   const applyContentFromOutside = useEditorStore((s) => s.applyContentFromOutside);
   const createGeneratedFile = useEditorStore((s) => s.createGeneratedFile);
-  const addDailyItem = useEditorStore((s) => s.addDailyItem);
-  const addTodoItem = useEditorStore((s) => s.addTodoItem);
   const setWorkspaceCanvas = useEditorStore((s) => s.setWorkspaceCanvas);
   const setDailyCurrentDate = useEditorStore((s) => s.setDailyCurrentDate);
   const setSurface = useEditorStore((s) => s.setSurface);

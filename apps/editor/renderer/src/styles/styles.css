@@ -10117,597 +10117,152 @@ body.is-resizing-agent-panel {
   border-radius: 4px;
 }
 
-/* ===== Daily Notebook ===== */
-.daily-notebook {
-  display: flex;
+/* ===== 今日速记（幕布式大纲） ===== */
+.daily-outline {
   flex: 1;
-  flex-direction: column;
-  gap: 16px;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px;
-  background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0)),
-    var(--color-bg-page);
-}
-
-.daily-notebook-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.9fr) minmax(280px, 1fr);
-  gap: 16px;
-}
-
-.daily-notebook-hero-copy,
-.daily-notebook-date-panel,
-.daily-notebook-card {
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
-}
-
-.daily-notebook-hero-copy,
-.daily-notebook-date-panel {
-  padding: 20px;
-}
-
-.daily-notebook-eyebrow {
-  display: inline-flex;
-  width: max-content;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-}
-
-.daily-notebook-hero-copy h1 {
-  margin-top: 14px;
-  font-size: 30px;
-  line-height: 1.15;
-  font-weight: 600;
-}
-
-.daily-notebook-hero-copy p,
-.daily-notebook-section-head p {
-  margin-top: 10px;
-  color: var(--color-text-secondary);
-  line-height: 1.7;
-}
-
-.daily-notebook-date-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  justify-content: space-between;
-}
-
-.daily-notebook-date-actions,
-.daily-notebook-date-input-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.daily-notebook-date-picker {
-  flex: 1;
-}
-
-.daily-notebook-date-input-row {
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--color-bg-sidebar) 84%, transparent);
-  color: var(--color-text-secondary);
-}
-
-.daily-notebook-date-input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--color-text-primary);
-  font: inherit;
-  outline: none;
-}
-
-.daily-notebook-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
-  gap: 16px;
-  min-height: 0;
-  align-items: stretch;
-}
-
-.daily-notebook-main-column {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.daily-notebook-card.ant-card .ant-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 18px;
-  min-height: 0;
-}
-
-.daily-notebook-todo-column.ant-card .ant-card-body {
-  flex: 1;
-}
-
-.daily-notebook-section-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.daily-notebook-section-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-}
-
-.daily-notebook-section-count {
-  margin: 0;
-  font-weight: 400;
-}
-
-.daily-notebook-section-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.daily-notebook-add-trigger {
-  color: var(--color-text-secondary);
-}
-
-.daily-notebook-add-trigger:hover {
-  color: var(--color-text-primary) !important;
-}
-
-.daily-notebook-section-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--color-text-primary);
-}
-
-.daily-notebook-composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
-}
-
-.daily-notebook-composer.has-category {
-  grid-template-columns: 92px minmax(0, 1fr) auto;
-}
-
-.daily-notebook-category-select {
-  width: 100%;
-}
-
-.daily-notebook-category-menu-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.daily-notebook-category-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.daily-notebook-category-tag {
-  margin: 0;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--category-color) 36%, transparent);
-  background: color-mix(in srgb, var(--category-color) 14%, transparent);
-  color: var(--category-color);
-  cursor: pointer;
-}
-
-.daily-notebook-category-placeholder {
-  flex-shrink: 0;
-  padding: 0 8px;
-  height: 22px;
-  border: 1px dashed var(--color-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.daily-notebook-category-placeholder:hover {
-  border-color: var(--color-text-secondary);
-  color: var(--color-text-primary);
-}
-
-/* 类型标签：三种条目合并在一个列表里，靠它区分任务 / 笔记 / 事件 */
-.daily-notebook-type-tag.ant-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--type-color) 26%, transparent);
-  background: color-mix(in srgb, var(--type-color) 10%, transparent);
-  color: var(--color-text-secondary);
-}
-
-.daily-notebook-type-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--type-color);
-}
-
-.daily-notebook-type-filter {
-  align-self: flex-start;
-  max-width: 100%;
-}
-
-.daily-notebook-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.daily-notebook-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--color-bg-surface) 88%, transparent);
-}
-
-.daily-notebook-item.is-empty {
-  border-style: dashed;
-}
-
-.daily-notebook-item-text.is-placeholder {
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.daily-notebook-item-main {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.daily-notebook-item-text-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.daily-notebook-check {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.daily-notebook-check.is-done {
-  background: rgba(34, 197, 94, 0.14);
-  border-color: rgba(34, 197, 94, 0.24);
-  color: #15803d;
-}
-
-.daily-notebook-item-priority-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.daily-notebook-priority-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  border: none;
-  padding: 0;
-}
-
-.daily-notebook-priority-trigger {
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.daily-notebook-priority-trigger:hover {
-  transform: scale(1.3);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-}
-
-.daily-notebook-priority-trigger:active {
-  transform: scale(1.1);
-}
-
-.daily-notebook-item-editor-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-}
-
-.daily-notebook-item-editor-input {
-  min-width: 0;
-}
-
-.daily-notebook-item-editor-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.daily-notebook-item-editor-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.daily-notebook-item-text {
-  flex: 1;
-  min-width: 0;
-  color: var(--color-text-primary);
-  line-height: 1.65;
-  word-break: break-word;
-}
-
-.daily-notebook-item-editor {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.daily-notebook-item.is-done .daily-notebook-item-text {
-  text-decoration: line-through;
-  color: var(--color-text-secondary);
-}
-
-.daily-notebook-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-/* 日期选择器扁平化：去掉边框和背景，仅在 hover/聚焦时轻微提示 */
-.daily-notebook-item-date-picker.ant-picker {
-  width: auto;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding-inline: 4px;
-  border-radius: 6px;
-}
-
-.daily-notebook-item-date-picker .ant-picker-input {
-  width: auto;
-}
-
-.daily-notebook-item-date-picker.ant-picker:hover,
-.daily-notebook-item-date-picker.ant-picker.ant-picker-focused {
-  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
-  border: none;
-  box-shadow: none;
-}
-
-/* "MM-DD" 只需约 5 个字符宽 */
-.daily-notebook-item-date-picker .ant-picker-input > input {
-  width: 42px;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-/* 批量操作栏 */
-.daily-notebook-batch-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  background: var(--color-bg-secondary, rgba(0,0,0,0.03));
-  border-radius: 8px;
-  flex-wrap: wrap;
-}
-
-.daily-notebook-batch-count {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-right: 4px;
-}
-
-.daily-notebook-batch-checkbox {
-  flex-shrink: 0;
-}
-
-.daily-notebook-todo-column {
-  min-height: 0;
-  height: 100%;
-}
-
-.daily-notebook-todo-column.ant-card {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.daily-notebook-todo-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-/* ── 今日速记富文本 ─────────────────────────────────────────────────────
-   色值与 @blocknote/core 的调色板逐一对齐，保证「编辑时看到的」和
-   「保存后看到的」完全一致。BlockNote 自身亮/暗主题共用同一套色值，
-   这里不另做暗色覆盖，避免出现只有速记页配色不同的割裂感。 */
-.daily-rich-content,
-.daily-notebook-rich-editor {
-  --daily-rich-text-gray: #9b9a97;
-  --daily-rich-text-brown: #64473a;
-  --daily-rich-text-red: #e03e3e;
-  --daily-rich-text-orange: #d9730d;
-  --daily-rich-text-yellow: #dfab01;
-  --daily-rich-text-green: #4d6461;
-  --daily-rich-text-blue: #0b6e99;
-  --daily-rich-text-purple: #6940a5;
-  --daily-rich-text-pink: #ad1a72;
-  --daily-rich-bg-gray: #ebeced;
-  --daily-rich-bg-brown: #e9e5e3;
-  --daily-rich-bg-red: #fbe4e4;
-  --daily-rich-bg-orange: #f6e9d9;
-  --daily-rich-bg-yellow: #fbf3db;
-  --daily-rich-bg-green: #ddedea;
-  --daily-rich-bg-blue: #ddebf1;
-  --daily-rich-bg-purple: #eae4f2;
-  --daily-rich-bg-pink: #f4dfeb;
-}
-
-.daily-rich-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.daily-rich-content.is-placeholder {
-  display: inline;
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.daily-rich-paragraph {
-  margin: 0;
-  min-height: 1em;
-  white-space: pre-wrap;
-}
-
-.daily-rich-content code {
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.06));
-  font-size: 0.92em;
-}
-
-.daily-rich-list {
-  margin: 0;
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.daily-rich-list li {
-  white-space: pre-wrap;
-}
-
-.daily-rich-list.is-checklist {
-  list-style: none;
-  padding-left: 2px;
-}
-
-.daily-rich-list.is-checklist > li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.daily-rich-checkbox {
-  width: 14px;
-  height: 14px;
-  margin-top: 4px;
-  flex-shrink: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-}
-
-.daily-rich-checkbox.is-checked {
-  background: rgba(34, 197, 94, 0.5);
-  border-color: rgba(34, 197, 94, 0.6);
-}
-
-/* 富文本输入框：BlockNote 自带样式，这里只收口边框与内边距 */
-.daily-notebook-rich-editor {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  padding: 48px 64px 96px;
   background: var(--color-bg-surface);
-  padding: 4px 0;
-  max-height: 320px;
-  overflow-y: auto;
 }
 
-.daily-notebook-rich-editor:focus-within {
-  border-color: var(--color-accent, #1677ff);
+.daily-outline-header,
+.daily-outline-body {
+  max-width: 880px;
+  margin: 0 auto;
 }
 
-.daily-notebook-rich-editor .bn-editor {
-  padding-inline: 12px;
+.daily-outline-header h1 {
+  margin: 0 0 var(--space-m);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.daily-outline-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s);
+  margin-bottom: var(--space-l);
+}
+
+.daily-outline-btn-group {
+  display: inline-flex;
+  border-radius: var(--radius-m);
+  background: var(--color-bg-inline-code);
+  color: var(--color-text-secondary);
+}
+
+.daily-outline-btn-group .ant-btn {
+  color: var(--color-text-secondary);
+}
+
+.daily-outline-calendar {
+  width: 280px;
+}
+
+/* 分区标题和幕布一样醒目，子级用竖线串起来 */
+.daily-outline-editor .bn-block-content[data-content-type="heading"] {
+  padding-top: 14px;
+}
+
+/* 缩进：子级整体右移一个圆点宽（24px），子级的圆点正好对齐父级文字；
+   层级竖线用 BlockNote 自带的那条（::before），挪到父级圆点正下方，不再自己另画一条 */
+.daily-outline-editor .bn-block-group .bn-block-group {
+  margin-left: 24px;
+}
+
+.daily-outline-editor .bn-block-group .bn-block-group > .bn-block-outer:not([data-prev-depth-changed])::before {
+  left: -12px;
+}
+
+/* 图片：速记里当缩略图看，限宽限高、顶部对齐裁切，双击看大图 */
+.daily-outline-editor .bn-block-content[data-content-type="image"] {
   padding-block: 6px;
 }
 
-.daily-notebook-rich-editor .bn-block-content {
-  font-size: 14px;
+.daily-outline-editor [data-content-type="image"] .bn-file-block-content-wrapper {
+  max-width: min(100%, 420px);
 }
 
-.daily-notebook-editor-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
+.daily-outline-editor [data-content-type="image"] .bn-visual-media {
+  max-height: 280px;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+}
+
+.daily-outline-editor .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
+  color: var(--color-text-secondary);
+  text-decoration: line-through;
+}
+
+/* 块菜单（点行首手柄）：顶部两排图标按钮 + 列表项，参照幕布 */
+.daily-block-menu {
+  min-width: 200px;
+}
+
+.daily-block-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+}
+
+.daily-block-menu-tool,
+.daily-block-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.daily-block-menu-tool:hover,
+.daily-block-menu-icon:hover {
+  background: var(--color-bg-inline-code);
+}
+
+.daily-block-menu-tool.is-active,
+.daily-block-menu-icon.is-active {
+  background: var(--color-bg-active);
+  color: var(--color-text-active);
+}
+
+.daily-block-menu-icons {
+  display: grid;
+  grid-template-columns: repeat(4, 32px);
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+}
+
+.daily-block-menu-icon {
+  font-size: 16px;
+}
+
+.daily-slash-emoji {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.daily-block-menu .daily-block-menu-danger {
+  color: var(--color-danger, #dc2626);
+}
+
+.daily-outline-fallback {
+  white-space: pre-wrap;
+  font-family: inherit;
   color: var(--color-text-secondary);
 }
 
-@media (max-width: 1180px) {
-  .daily-notebook-hero,
-  .daily-notebook-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 820px) {
-  .daily-notebook {
-    padding: 16px;
-  }
-
-  .daily-notebook-composer {
-    grid-template-columns: 1fr;
-  }
-
-  .daily-notebook-item-editor-row {
-    grid-template-columns: 1fr;
+  .daily-outline {
+    padding: 24px 16px 64px;
   }
 }
 

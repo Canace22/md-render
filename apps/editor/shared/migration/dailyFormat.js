@@ -1,23 +1,33 @@
 /**
- * Daily / 待办池 ↔ Markdown 文件（Daily/YYYY-MM-DD.md、Todo.md）。
+ * Daily ↔ Markdown 文件（Daily/YYYY-MM-DD.md）。
  *
- * 格式：一条记录一个列表项，属性用 Dataview 行内字段 `[key:: value]`，Obsidian 能直接看、能勾选。
- * Markdown 表达不了的富文本（颜色、下划线、背景色……）放在文件末尾的 HTML 注释里，
- * 读回时只有正文没被外部改过才套用，改过就以文件里的文字为准。
+ * 新格式：一天一篇大纲 Markdown（标题分区 + 嵌套列表 + 勾选任务 + 图片），任何 AI / Obsidian 都能直接读。
+ * Markdown 表达不了的东西（颜色、块 id……）放在文件末尾 HTML 注释里的 block JSON；
+ * 读回时只有正文没被外部改过（hash 对得上）才用 JSON，改过就按 Markdown 重新解析。
+ *
+ * 旧格式（一条条记录 + Dataview 字段 + Todo.md 待办池）只读不写，读出来交给 renderer 转成大纲。
  *
  * 硬性要求：parse(serialize(x)) 和 x 完全相等（见单测）。纯函数，不依赖 DOM。
  */
+import { blocksToMarkdown, markdownToBlocks } from '../daily/dailyMarkdown.js';
+import { isDailyBlocksEmpty, legacyItemsToBlocks } from '../daily/dailyBlocks.js';
 
 const DATA_BLOCK_START = '<!-- md-render:data';
 const DATA_BLOCK_END = '-->';
+const DATA_VERSION = 2;
 const DEFAULT_PRIORITY = 'medium';
 const CONTINUATION_INDENT = '  ';
 const FIELD_RE = /\s\[([a-zA-Z]+)::\s*([^\]]*)\]/g;
 const FIELD_TAIL_RE = /(\s\[[a-zA-Z]+::[^\]]*\])+\s*$/;
 const LIST_ITEM_RE = /^- (?:\[( |x|X)\] )?(.*)$/;
 const DAILY_FILE_RE = /^(\d{4}-\d{2}-\d{2})\.md$/;
+const FRONTMATTER_RE = /^---\n[\s\S]*?\n---\n?/;
+const LEGACY_FIELD_RE = /\[type::\s*(task|event|note)\]/;
+const HASH_SEED = 5381;
+const HASH_SHIFT = 5;
+const HASH_RADIX = 36;
 const TODO_TITLE = '# 待办池';
-const DAILY_HEADING = '## 记录';
+const TODO_MERGED_NOTICE = '> 待办池已并入今日速记：未完成任务会自动带到当天的「今日任务」。';
 const UNSAFE_PLACEHOLDER = '（见数据块）';
 
 export const TODO_FILE_NAME = 'Todo.md';
@@ -55,27 +65,31 @@ const serializeItem = ({ checkbox, text, fields, richText }) => {
   return { lines, override: Object.keys(override).length ? override : null };
 };
 
-const serializeDataBlock = (overrides) => {
-  if (!Object.keys(overrides).length) return [];
-  return ['', DATA_BLOCK_START, JSON.stringify({ items: overrides }), DATA_BLOCK_END];
-};
+const serializeDataBlock = (data) => ['', DATA_BLOCK_START, JSON.stringify(data), DATA_BLOCK_END];
+
+const serializeLegacyDataBlock = (overrides) => (Object.keys(overrides).length ? serializeDataBlock({ items: overrides }) : []);
 
 /* ── 解析 ─────────────────────────────────────────────────── */
 
 const splitDataBlock = (markdown) => {
   const text = String(markdown ?? '').replace(/\r\n/g, '\n');
   const start = text.lastIndexOf(DATA_BLOCK_START);
-  if (start < 0) return { body: text, overrides: {} };
+  if (start < 0) return { body: text, data: null };
   const end = text.indexOf(DATA_BLOCK_END, start);
-  if (end < 0) return { body: text, overrides: {} };
-  // 数据块后面也可能有人手动追加条目，一并算进正文
+  if (end < 0) return { body: text, data: null };
+  // 数据块后面也可能有人手动追加内容，一并算进正文
   const body = `${text.slice(0, start)}\n${text.slice(end + DATA_BLOCK_END.length)}`;
   try {
-    const data = JSON.parse(text.slice(start + DATA_BLOCK_START.length, end).trim());
-    return { body, overrides: data?.items ?? {} };
+    return { body, data: JSON.parse(text.slice(start + DATA_BLOCK_START.length, end).trim()) };
   } catch {
-    return { body, overrides: {} };
+    return { body, data: null };
   }
+};
+
+/** 旧格式：数据块里按 id 存的原文 / 富文本 */
+const splitLegacyDataBlock = (markdown) => {
+  const { body, data } = splitDataBlock(markdown);
+  return { body, overrides: data?.items ?? {} };
 };
 
 const readFields = (line) => {
@@ -117,37 +131,50 @@ const applyOverride = (item, override) => {
   return next;
 };
 
-/* ── Daily ────────────────────────────────────────────────── */
+/* ── Daily（大纲） ─────────────────────────────────────────── */
 
-const dailyItemFields = (item) => [
-  ['type', item.type],
-  ['priority', item.priority === DEFAULT_PRIORITY ? '' : item.priority],
-  ['category', item.category || ''],
-  ['id', item.id],
-  ['created', toIso(item.createdAt)],
-  ['updated', toIso(item.updatedAt)],
-];
+/** djb2：只用来判断正文有没有被外部改过 */
+const hashText = (text) => {
+  let hash = HASH_SEED;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << HASH_SHIFT) + hash + text.charCodeAt(index)) | 0;
+  }
+  return (hash >>> 0).toString(HASH_RADIX);
+};
+
+const stripFrontmatter = (text) => text.replace(FRONTMATTER_RE, '').trim();
 
 /** 一天 → Markdown */
 export const serializeDailyEntry = (entry) => {
-  const overrides = {};
-  const lines = ['---', `date: ${entry.date}`, '---', '', DAILY_HEADING, ''];
-  entry.items.forEach((item) => {
-    const serialized = serializeItem({
-      checkbox: item.type === 'task' ? Boolean(item.done) : null,
-      text: item.text,
-      fields: dailyItemFields(item),
-      richText: item.richText,
-    });
-    lines.push(...serialized.lines);
-    if (serialized.override) overrides[item.id] = serialized.override;
-  });
-  return `${[...lines, ...serializeDataBlock(overrides)].join('\n')}\n`;
+  const blocks = Array.isArray(entry?.blocks) ? entry.blocks : [];
+  const body = blocksToMarkdown(blocks);
+  const lines = ['---', `date: ${entry.date}`, '---', ''];
+  if (body) lines.push(body);
+  if (blocks.length) lines.push(...serializeDataBlock({ version: DATA_VERSION, hash: hashText(body), blocks }));
+  return `${lines.join('\n')}\n`;
 };
+
+const isLegacyDaily = (body, data) => Boolean(data?.items) || LEGACY_FIELD_RE.test(body);
 
 /** Markdown → 一天（日期以文件名为准） */
 export const parseDailyEntry = (markdown, dateKey) => {
-  const { body, overrides } = splitDataBlock(markdown);
+  const { body, data } = splitDataBlock(markdown);
+  if (isLegacyDaily(body, data)) {
+    return { date: dateKey, blocks: legacyItemsToBlocks(parseLegacyDailyItems(markdown, dateKey), dateKey) };
+  }
+  const text = stripFrontmatter(body);
+  if (Array.isArray(data?.blocks) && data.hash === hashText(text)) return { date: dateKey, blocks: data.blocks };
+  return { date: dateKey, blocks: markdownToBlocks(text) };
+};
+
+/** 一天 → 给 AI 看的 Markdown（不带 frontmatter 和数据块） */
+export const dailyEntryToMarkdown = (entry) => blocksToMarkdown(entry?.blocks ?? []);
+
+/* ── 旧版 Daily（一条条记录 + Dataview 字段），只读 ──────────── */
+
+/** 旧格式 Markdown → 一条条记录 */
+const parseLegacyDailyItems = (markdown, dateKey) => {
+  const { body, overrides } = splitLegacyDataBlock(markdown);
   const items = collectListItems(body).map((raw) => {
     const type = ['task', 'event', 'note'].includes(raw.fields.type) ? raw.fields.type : (raw.checkbox == null ? 'note' : 'task');
     const item = {
@@ -162,10 +189,10 @@ export const parseDailyEntry = (markdown, dateKey) => {
     if (raw.fields.category) item.category = raw.fields.category;
     return applyOverride(item, overrides[item.id]);
   }).filter((item) => item.text);
-  return { date: dateKey, items };
+  return items;
 };
 
-/* ── 待办池 ───────────────────────────────────────────────── */
+/* ── 旧版待办池（Todo.md） ─────────────────────────────────── */
 
 const todoFields = (item) => [
   ['source', item.sourceDate || ''],
@@ -183,11 +210,11 @@ export const serializeTodoPool = (todoPool = []) => {
     lines.push(...serialized.lines);
     if (serialized.override) overrides[item.id] = serialized.override;
   });
-  return `${[...lines, ...serializeDataBlock(overrides)].join('\n')}\n`;
+  return `${[...lines, ...serializeLegacyDataBlock(overrides)].join('\n')}\n`;
 };
 
 export const parseTodoPool = (markdown) => {
-  const { body, overrides } = splitDataBlock(markdown);
+  const { body, overrides } = splitLegacyDataBlock(markdown);
   return collectListItems(body).map((raw) => {
     const item = {
       id: raw.fields.id || `todo-${Math.random().toString(36).slice(2, 8)}`,
@@ -203,49 +230,44 @@ export const parseTodoPool = (markdown) => {
 
 /* ── 整个 Daily 工作区 ────────────────────────────────────── */
 
+const hasBlocks = (entry) => Array.isArray(entry?.blocks) && entry.blocks.length > 0;
+
 /**
- * 整个 dailyWorkspace → 文件列表（相对内容库根目录）。没有条目的日子不写文件。
+ * 整个 dailyWorkspace → 文件列表（相对内容库根目录）。没内容的日子不写文件。
+ * Todo.md 只写一句「已并入」说明：旧待办读出来后由 renderer 并到今天。
  * @returns {Array<{ relativePath: string, content: string }>}
  */
 export const serializeDailyWorkspace = (dailyWorkspace) => [
   ...Object.values(dailyWorkspace?.entries ?? {})
-    .filter((entry) => entry.items.length > 0)
+    .filter(hasBlocks)
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((entry) => ({ relativePath: `${DAILY_DIR_NAME}/${dailyFileName(entry.date)}`, content: serializeDailyEntry(entry) })),
-  { relativePath: TODO_FILE_NAME, content: serializeTodoPool(dailyWorkspace?.todoPool ?? []) },
+  { relativePath: TODO_FILE_NAME, content: `${TODO_TITLE}\n\n${TODO_MERGED_NOTICE}\n` },
 ];
 
 /**
- * 文件 → dailyWorkspace（currentDate 由调用方决定）
+ * 文件 → dailyWorkspace（currentDate 由调用方决定）。
+ * todoPool 只会来自旧的 Todo.md，renderer normalize 时并进今天。
  * @param {{ dailyFiles: Array<{ fileName: string, content: string }>, todoContent?: string }} files
  */
 export const parseDailyWorkspace = ({ dailyFiles = [], todoContent = '' }, currentDate) => {
   const entries = {};
   dailyFiles.forEach(({ fileName, content }) => {
     const dateKey = parseDailyFileName(fileName);
-    if (dateKey) entries[dateKey] = parseDailyEntry(content, dateKey);
+    if (!dateKey) return;
+    const entry = parseDailyEntry(content, dateKey);
+    if (!isDailyBlocksEmpty(entry.blocks)) entries[dateKey] = entry;
   });
   return { currentDate, entries, todoPool: todoContent ? parseTodoPool(todoContent) : [] };
 };
 
-/**
- * 往返校验：列出转换前后不一致的条目 id（迁移时不为空就不切换）
- */
+/** 往返校验：列出转换前后不一致的日期（迁移时不为空就不切换） */
 export const findDailyRoundTripMismatches = (dailyWorkspace) => {
-  const mismatches = [];
   const same = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-  Object.values(dailyWorkspace?.entries ?? {}).forEach((entry) => {
-    const back = parseDailyEntry(serializeDailyEntry(entry), entry.date);
-    entry.items.forEach((item, index) => {
-      if (!same(item, back.items[index])) mismatches.push({ date: entry.date, id: item.id });
-    });
-    if (back.items.length !== entry.items.length) mismatches.push({ date: entry.date, id: '(数量不一致)' });
-  });
-  const todoBack = parseTodoPool(serializeTodoPool(dailyWorkspace?.todoPool ?? []));
-  (dailyWorkspace?.todoPool ?? []).forEach((item, index) => {
-    if (!same(item, todoBack[index])) mismatches.push({ date: 'todo', id: item.id });
-  });
-  return mismatches;
+  return Object.values(dailyWorkspace?.entries ?? {})
+    .filter(hasBlocks)
+    .filter((entry) => !same(entry.blocks, parseDailyEntry(serializeDailyEntry(entry), entry.date).blocks))
+    .map((entry) => ({ date: entry.date, id: '(大纲)' }));
 };
 
 function sortKeys(value) {

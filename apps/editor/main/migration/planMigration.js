@@ -83,7 +83,7 @@ async function planMemory(vaultRoot, memoryContents = []) {
   };
 }
 
-/** Daily：已有同名日记就按 id 合并（以 app 里的为准，补上文件里独有的条目），绝不丢数据 */
+/** Daily：已有同名日记就按顶层块 id 合并（以 app 里的为准，补上文件里独有的块），绝不丢数据 */
 async function planDaily(vaultRoot, dailyWorkspace) {
   if (!dailyWorkspace) return { files: [], skipped: '没有 Daily 数据' };
   const mismatches = findDailyRoundTripMismatches(dailyWorkspace);
@@ -113,7 +113,7 @@ const mergeDailyFile = (file, existing) => {
   const dateKey = path.basename(file.relativePath, '.md');
   const mine = parseDailyEntry(file.content, dateKey);
   const theirs = parseDailyEntry(existing, dateKey);
-  return serializeDailyEntry({ date: dateKey, items: mergeById(mine.items, theirs.items) });
+  return serializeDailyEntry({ date: dateKey, blocks: mergeById(mine.blocks, theirs.blocks) });
 };
 
 /** 白板：目标文件已存在且内容不同就不切换这一步，避免覆盖 */
@@ -208,7 +208,7 @@ export const buildMigrationReport = (plan) => {
       : `- 合并 ${plan.memory.copyCount} 份副本 → \`${EDITORIAL_MEMORY_PATH}\`，${plan.memory.entryCount} 条，去重 ${plan.memory.duplicateCount} 条（原副本不删除）`, '');
   }
   if (plan.daily) {
-    lines.push('## Daily 与待办池', '', plan.daily.skipped ? `- ${plan.daily.skipped}` : `- ${plan.daily.dayCount} 天 → \`Daily/*.md\`，待办池 → \`Todo.md\``);
+    lines.push('## Daily', '', plan.daily.skipped ? `- ${plan.daily.skipped}` : `- ${plan.daily.dayCount} 天 → \`Daily/*.md\`（一天一篇大纲），旧待办池并入当天「今日任务」`);
     plan.daily.merged?.forEach((file) => lines.push(`- \`${file}\` 已存在，按 id 合并（不丢条目）`));
     plan.daily.mismatches?.forEach((item) => lines.push(`- ⚠️ 转换不一致：${item.date} ${item.id}`));
     lines.push('');

@@ -1,142 +1,41 @@
+/**
+ * 今日速记工作区（纯函数，无副作用）：一天 = 一篇大纲（BlockNote 块数组）。
+ *
+ * 形状：{ currentDate, entries: { 'YYYY-MM-DD': { date, blocks } } }
+ * 块级操作在 shared/daily/dailyBlocks.js，这里只管「哪一天」和跨天结转。
+ */
 import {
-  hasRichFormatting,
-  normalizeRichText,
-  richTextToPlainText,
-} from './dailyRichText.js';
+  createDailyTemplate,
+  dedupeTasks,
+  extractUndoneTasks,
+  findSectionDef,
+  insertIntoSection,
+  isDailyBlocksEmpty,
+  legacyItemToBlock,
+  legacyItemsToBlocks,
+  setTaskChecked,
+  toSectionItems,
+} from '../../../shared/daily/dailyBlocks.js';
+import { blocksToMarkdown, markdownToBlocks } from '../../../shared/daily/dailyMarkdown.js';
 
-const DAILY_ITEM_TYPES = new Set(['task', 'event', 'note']);
-const DAILY_PRIORITIES = new Set(['high', 'medium', 'low']);
-
-export const DAILY_TASK_CATEGORY_OPTIONS = Object.freeze([
-  { value: 'work', label: '工作', color: '#3b82f6' },
-  { value: 'creation', label: '创作', color: '#a855f7' },
-  { value: 'learning', label: '学习', color: '#06b6d4' },
-  { value: 'life', label: '生活', color: '#22c55e' },
-  { value: 'personal', label: '个人', color: '#f97316' },
-]);
-
-const DAILY_TASK_CATEGORIES = new Set(DAILY_TASK_CATEGORY_OPTIONS.map((option) => option.value));
-const DAILY_CATEGORY_ITEM_TYPES = new Set(['task', 'note']);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const padNumber = (value) => String(value).padStart(2, '0');
 
-const formatDateKey = (date) => {
-  return `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}`;
-};
-
-const createTimestamp = (value) => {
-  if (Number.isFinite(value)) return value;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : Date.now();
-};
-
-const createDailyId = (prefix) => {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-};
+const formatDateKey = (date) => `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}`;
 
 const toDateAtNoon = (dateKey) => {
   const [year, month, day] = normalizeDateKey(dateKey).split('-').map(Number);
   return new Date(year, month - 1, day, 12, 0, 0, 0);
 };
 
-// 去重 / 索引用：压掉所有空白（含换行），保证同一条内容换行差异不会被当成两条
-const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+export const getTodayDateKey = (baseDate = new Date()) => formatDateKey(baseDate);
 
-// 正文用：保留换行（富文本的纯文本投影是多行的），只压缩行内空白
-const normalizeContentText = (value) => String(value ?? '')
-  .replace(/\r\n?/g, '\n')
-  .split('\n')
-  .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim())
-  .join('\n')
-  .replace(/\n{3,}/g, '\n\n')
-  .trim();
-
-/**
- * 统一解析「正文」：富文本存在时以富文本为准，纯文本投影由它派生，
- * 保证两者永远不会漂移；只有纯文本（旧数据 / Agent 写入）时不强行造富文本。
- */
-const resolveContent = (text, richText) => {
-  const blocks = normalizeRichText(richText);
-  if (blocks.length > 0 && hasRichFormatting(blocks)) {
-    return { text: richTextToPlainText(blocks), richText: blocks };
-  }
-  const plainText = blocks.length > 0 ? richTextToPlainText(blocks) : normalizeContentText(text);
-  return { text: plainText, richText: [] };
-};
-
-const applyContent = (target, { text, richText }) => {
-  target.text = text;
-  if (richText.length > 0) target.richText = richText;
-  else delete target.richText;
-  return target;
-};
-
-const normalizeDailyItem = (item, dateKey, index) => {
-  const content = resolveContent(item?.text, item?.richText);
-  if (!content.text) return null;
-
-  const type = DAILY_ITEM_TYPES.has(item?.type) ? item.type : 'note';
-  const priority = DAILY_PRIORITIES.has(item?.priority) ? item.priority : 'medium';
-  const category = DAILY_CATEGORY_ITEM_TYPES.has(type) && DAILY_TASK_CATEGORIES.has(item?.category)
-    ? item.category
-    : '';
-  const createdAt = createTimestamp(item?.createdAt);
-
-  const normalized = applyContent({
-    id: typeof item?.id === 'string' && item.id.trim() ? item.id : `${dateKey}-${type}-${index}`,
-    type,
-    priority,
-    done: type === 'task' ? Boolean(item?.done) : false,
-    createdAt,
-    updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
-  }, content);
-
-  if (DAILY_CATEGORY_ITEM_TYPES.has(type) && category) {
-    normalized.category = category;
-  }
-
-  return normalized;
-};
-
-const normalizeTodoItem = (item, index) => {
-  const content = resolveContent(item?.text, item?.richText);
-  if (!content.text) return null;
-
-  const createdAt = createTimestamp(item?.createdAt);
-  const sourceDate = item?.sourceDate ? normalizeDateKey(item.sourceDate, '') : '';
-  const category = DAILY_TASK_CATEGORIES.has(item?.category) ? item.category : '';
-
-  const normalized = applyContent({
-    id: typeof item?.id === 'string' && item.id.trim() ? item.id : `todo-${index}`,
-    sourceDate,
-    createdAt,
-    updatedAt: createTimestamp(item?.updatedAt ?? createdAt),
-  }, content);
-
-  if (category) {
-    normalized.category = category;
-  }
-
-  return normalized;
-};
-
-export const getTodayDateKey = (baseDate = new Date()) => {
-  return formatDateKey(baseDate);
-};
-
-export const normalizeDateKey = (value, fallback = getTodayDateKey()) => {
-  if (typeof value === 'string' && DATE_KEY_RE.test(value.trim())) {
-    return value.trim();
-  }
-
+export function normalizeDateKey(value, fallback = getTodayDateKey()) {
+  if (typeof value === 'string' && DATE_KEY_RE.test(value.trim())) return value.trim();
   const parsed = value instanceof Date ? value : new Date(value);
-  if (Number.isFinite(parsed.getTime())) {
-    return formatDateKey(parsed);
-  }
-
-  return fallback;
-};
+  return Number.isFinite(parsed.getTime()) ? formatDateKey(parsed) : fallback;
+}
 
 export const shiftDateKey = (dateKey, offsetDays) => {
   const date = toDateAtNoon(dateKey);
@@ -144,431 +43,132 @@ export const shiftDateKey = (dateKey, offsetDays) => {
   return formatDateKey(date);
 };
 
-export const formatDailyHeading = (dateKey) => {
-  return toDateAtNoon(dateKey).toLocaleDateString('zh-CN', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  });
+/** 10月9日，星期五 */
+export const formatDailyHeading = (dateKey) => toDateAtNoon(dateKey).toLocaleDateString('zh-CN', {
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+});
+
+export const createEmptyDailyWorkspace = (baseDate) => ({ currentDate: normalizeDateKey(baseDate), entries: {} });
+
+export const createEmptyDailyEntry = (dateKey) => ({ date: normalizeDateKey(dateKey), blocks: [] });
+
+/* ── 归一化（含旧数据转换） ───────────────────────────────── */
+
+const normalizeEntry = (entry, dateKey) => {
+  if (Array.isArray(entry?.blocks)) return entry.date === dateKey ? entry : { ...entry, date: dateKey };
+  // 旧数据：一条条记录（task/event/note）
+  return { date: dateKey, blocks: legacyItemsToBlocks(Array.isArray(entry?.items) ? entry.items : [], dateKey) };
 };
 
-export const formatDailyMetaDate = (dateKey) => {
-  if (!dateKey) return '未记录来源';
-  return toDateAtNoon(dateKey).toLocaleDateString('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-  });
-};
-
-export const createEmptyDailyWorkspace = (baseDate) => {
-  return {
-    currentDate: normalizeDateKey(baseDate),
-    entries: {},
-    todoPool: [],
-  };
-};
-
-export const createEmptyDailyEntry = (dateKey) => {
-  return {
-    date: normalizeDateKey(dateKey),
-    items: [],
-  };
-};
-
-export const getDailyEntry = (dailyWorkspace, dateKey) => {
-  const normalized = normalizeDailyWorkspace(dailyWorkspace, dateKey);
-  const key = normalizeDateKey(dateKey, normalized.currentDate);
-  return normalized.entries[key] ?? createEmptyDailyEntry(key);
+/** 旧待办池并进某天的「今日任务」（按文本去重，重复执行不会多出来） */
+const foldLegacyTodoPool = (entries, todoPool, dateKey) => {
+  const tasks = todoPool.filter((item) => String(item?.text ?? '').trim() || item?.richText?.length)
+    .map((item) => legacyItemToBlock(item, { checked: false }));
+  if (!tasks.length) return entries;
+  const blocks = entries[dateKey]?.blocks?.length ? entries[dateKey].blocks : createDailyTemplate();
+  return { ...entries, [dateKey]: { date: dateKey, blocks: insertIntoSection(blocks, 'task', dedupeTasks(blocks, tasks)) } };
 };
 
 export const normalizeDailyWorkspace = (raw, baseDate) => {
-  const fallbackDate = normalizeDateKey(baseDate);
-  const currentDate = normalizeDateKey(raw?.currentDate, fallbackDate);
+  const currentDate = normalizeDateKey(raw?.currentDate, normalizeDateKey(baseDate));
   const rawEntries = raw?.entries && typeof raw.entries === 'object' ? raw.entries : {};
-
-  const entries = Object.fromEntries(
-    Object.entries(rawEntries)
-      .map(([dateKey, entry]) => {
-        const normalizedDate = normalizeDateKey(dateKey, currentDate);
-        const items = Array.isArray(entry?.items)
-          ? entry.items
-              .map((item, index) => normalizeDailyItem(item, normalizedDate, index))
-              .filter(Boolean)
-          : [];
-        return [normalizedDate, { date: normalizedDate, items }];
-      }),
-  );
-
-  const todoPool = Array.isArray(raw?.todoPool)
-    ? raw.todoPool.map((item, index) => normalizeTodoItem(item, index)).filter(Boolean)
-    : [];
-
-  return {
-    currentDate,
-    entries,
-    todoPool,
-  };
-};
-
-const pickLatestByTimestamp = (current, incoming) => {
-  if (!current) return incoming;
-  if (!incoming) return current;
-  const currentUpdatedAt = createTimestamp(current.updatedAt ?? current.createdAt);
-  const incomingUpdatedAt = createTimestamp(incoming.updatedAt ?? incoming.createdAt);
-  return incomingUpdatedAt >= currentUpdatedAt ? incoming : current;
-};
-
-const mergeItemLists = (preferredItems, fallbackItems, sorter) => {
-  const mergedById = new Map();
-  for (const item of fallbackItems) {
-    mergedById.set(item.id, item);
+  let entries = {};
+  Object.entries(rawEntries).forEach(([key, entry]) => {
+    const dateKey = normalizeDateKey(key, '');
+    if (!dateKey) return;
+    const normalized = normalizeEntry(entry, dateKey);
+    if (!isDailyBlocksEmpty(normalized.blocks)) entries[dateKey] = normalized;
+  });
+  if (Array.isArray(raw?.todoPool) && raw.todoPool.length) {
+    // 并到「当前日期」（不晚于今天）；之后进入今天时结转会把没做完的带过去
+    const today = getTodayDateKey();
+    entries = foldLegacyTodoPool(entries, raw.todoPool, currentDate < today ? currentDate : today);
   }
-  for (const item of preferredItems) {
-    mergedById.set(item.id, pickLatestByTimestamp(mergedById.get(item.id), item));
-  }
-  return [...mergedById.values()].sort(sorter);
+  return { currentDate, entries };
 };
 
+export const getDailyEntry = (dailyWorkspace, dateKey) => {
+  const key = normalizeDateKey(dateKey, dailyWorkspace?.currentDate);
+  const entry = dailyWorkspace?.entries?.[key];
+  return Array.isArray(entry?.blocks) ? entry : createEmptyDailyEntry(key);
+};
+
+/** 编辑器初始内容：有内容用内容，没有给模板 */
+export const getDailyBlocksForEditor = (dailyWorkspace, dateKey) => {
+  const { blocks } = getDailyEntry(dailyWorkspace, dateKey);
+  return blocks.length ? blocks : createDailyTemplate();
+};
+
+/** 以 preferred 为准，fallback 只补 preferred 没有的日期 */
 export const mergeDailyWorkspaces = (preferred, fallback, baseDate) => {
   const primary = normalizeDailyWorkspace(preferred, baseDate);
   const secondary = normalizeDailyWorkspace(fallback, primary.currentDate);
-  const allDateKeys = new Set([
-    ...Object.keys(secondary.entries),
-    ...Object.keys(primary.entries),
-  ]);
-  const entries = {};
-
-  for (const dateKey of allDateKeys) {
-    const primaryEntry = primary.entries[dateKey];
-    const secondaryEntry = secondary.entries[dateKey] ?? createEmptyDailyEntry(dateKey);
-
-    if (primaryEntry) {
-      // preferred 已有此日期的 entry：以 preferred 为准，
-      // 只用 secondary 补充 preferred 里没有的 id（避免已移走/删除的条目复活）
-      const primaryIds = new Set(primaryEntry.items.map((i) => i.id));
-      const secondaryOnlyItems = secondaryEntry.items.filter((i) => !primaryIds.has(i.id));
-      const merged = mergeItemLists(
-        primaryEntry.items,
-        secondaryOnlyItems,
-        (left, right) => left.createdAt - right.createdAt || left.updatedAt - right.updatedAt,
-      );
-      entries[dateKey] = { date: dateKey, items: merged };
-    } else {
-      // preferred 没有此日期：直接用 secondary 的数据（跨 session 恢复）
-      entries[dateKey] = { date: dateKey, items: secondaryEntry.items };
-    }
-  }
-
-  return {
-    currentDate: primary.currentDate || secondary.currentDate,
-    entries,
-    todoPool: mergeItemLists(
-      primary.todoPool,
-      secondary.todoPool,
-      (left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt,
-    ),
-  };
+  return { currentDate: primary.currentDate, entries: { ...secondary.entries, ...primary.entries } };
 };
 
-const buildTodoDedupKey = (text, sourceDate) => {
-  return `${normalizeText(text)}::${sourceDate}`;
+/* ── 修改 ─────────────────────────────────────────────────── */
+
+const withEntryBlocks = (dailyWorkspace, dateKey, blocks) => {
+  const entries = { ...(dailyWorkspace?.entries ?? {}) };
+  if (isDailyBlocksEmpty(blocks)) delete entries[dateKey];
+  else entries[dateKey] = { date: dateKey, blocks };
+  return { ...dailyWorkspace, entries };
 };
 
-// 纯视图切换：只改 currentDate，不搬运/删除任何条目。
-// 用于用户手动翻日期（前后箭头、点某天），避免每次切换都触发破坏性结转。
+/** 纯视图切换：只改 currentDate，不搬运任何内容 */
 export const setDailyCurrentDate = (dailyWorkspace, dateKey) => {
   const normalized = normalizeDailyWorkspace(dailyWorkspace, dateKey);
-  return {
-    ...normalized,
-    currentDate: normalizeDateKey(dateKey, normalized.currentDate),
-  };
+  return { ...normalized, currentDate: normalizeDateKey(dateKey, normalized.currentDate) };
 };
 
+/** 编辑器写回一整天 */
+export const setDailyEntryBlocks = (dailyWorkspace, dateKey, blocks) => (
+  withEntryBlocks(normalizeDailyWorkspace(dailyWorkspace, dateKey), normalizeDateKey(dateKey), Array.isArray(blocks) ? blocks : [])
+);
+
+/**
+ * 跨天结转（破坏性，只在真正进入今天时跑）：过去所有日子里没勾掉的任务（连同子级）
+ * 搬到今天「今日任务」末尾；今天已有同名未完成任务的不重复加。幂等。
+ */
 export const carryOverIncompleteTasks = (dailyWorkspace, targetDateKey) => {
   const normalized = normalizeDailyWorkspace(dailyWorkspace, targetDateKey);
-  const currentDate = normalizeDateKey(targetDateKey, normalized.currentDate);
-  const todoPool = [...normalized.todoPool];
-  const todoKeys = new Set(
-    todoPool.map((item) => buildTodoDedupKey(item.text, item.sourceDate || '')),
-  );
-  const entries = {};
-  // 收集所有早于今天、未删除的 note，统一汇聚到今天；不再只看昨天一天，
-  // 这样即使中间跳过几天（断链）或重装后没逐天打开，历史笔记也都会带过来。
-  const carriedNotes = [];
-
-  for (const [dateKey, entry] of Object.entries(normalized.entries)) {
-    if (dateKey >= currentDate) {
-      entries[dateKey] = entry;
-      continue;
-    }
-
-    const nextItems = [];
-    for (const item of entry.items) {
-      if (item.type === 'task' && !item.done) {
-        const dedupKey = buildTodoDedupKey(item.text, dateKey);
-        if (!todoKeys.has(dedupKey)) {
-          todoKeys.add(dedupKey);
-          todoPool.unshift({
-            id: createDailyId('todo'),
-            text: item.text,
-            ...(item.richText ? { richText: item.richText } : {}),
-            sourceDate: dateKey,
-            ...(item.category ? { category: item.category } : {}),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          });
-        }
-        continue;
-      }
-      // 历史日期的 note 全部收走带到今天；已完成任务、event 留在原日期不动。
-      if (item.type === 'note') {
-        carriedNotes.push(item);
-        continue;
-      }
-      nextItems.push(item);
-    }
-
-    entries[dateKey] = { ...entry, items: nextItems };
-  }
-
-  // 把收集到的历史笔记移到今天（幂等：按文本去重，今天已有相同文本的跳过；按创建时间先后排序）
-  if (carriedNotes.length > 0) {
-    const todayEntry = entries[currentDate] ?? createEmptyDailyEntry(currentDate);
-    const seenTexts = new Set(
-      todayEntry.items.filter((i) => i.type === 'note').map((i) => i.text),
-    );
-    const notesToMove = [];
-    for (const note of [...carriedNotes].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))) {
-      if (seenTexts.has(note.text)) continue;
-      seenTexts.add(note.text);
-      notesToMove.push(note);
-    }
-    if (notesToMove.length > 0) {
-      entries[currentDate] = {
-        ...todayEntry,
-        items: [...todayEntry.items, ...notesToMove],
-      };
-    }
-  }
-
-  return {
-    ...normalized,
-    currentDate,
-    entries,
-    todoPool,
-  };
-};
-
-const updateEntry = (dailyWorkspace, dateKey, updater) => {
-  const normalized = normalizeDailyWorkspace(dailyWorkspace, dateKey);
-  const key = normalizeDateKey(dateKey, normalized.currentDate);
-  const currentEntry = normalized.entries[key] ?? createEmptyDailyEntry(key);
-  const nextEntry = updater(currentEntry, normalized);
-
-  return {
-    ...normalized,
-    currentDate: key,
-    entries: {
-      ...normalized.entries,
-      [key]: nextEntry,
-    },
-  };
-};
-
-export const addDailyEntryItem = (dailyWorkspace, dateKey, payload) => {
-  const type = DAILY_ITEM_TYPES.has(payload?.type) ? payload.type : 'note';
-  const priority = DAILY_PRIORITIES.has(payload?.priority) ? payload.priority : 'medium';
-  const category = DAILY_CATEGORY_ITEM_TYPES.has(type) && DAILY_TASK_CATEGORIES.has(payload?.category)
-    ? payload.category
-    : '';
-  const content = resolveContent(payload?.text, payload?.richText);
-  if (!content.text) return normalizeDailyWorkspace(dailyWorkspace, dateKey);
-
-  const nextItem = applyContent({
-    id: createDailyId(type),
-    type,
-    priority,
-    done: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }, content);
-
-  if (category) {
-    nextItem.category = category;
-  }
-
-  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
-    ...entry,
-    items: [...entry.items, nextItem],
-  }));
-};
-
-export const toggleDailyEntryTaskDone = (dailyWorkspace, dateKey, itemId) => {
-  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
-    ...entry,
-    items: entry.items.map((item) => {
-      if (item.id !== itemId || item.type !== 'task') return item;
-      return {
-        ...item,
-        done: !item.done,
-        updatedAt: Date.now(),
-      };
-    }),
-  }));
-};
-
-export const removeDailyEntryItem = (dailyWorkspace, dateKey, itemId) => {
-  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
-    ...entry,
-    items: entry.items.filter((item) => item.id !== itemId),
-  }));
-};
-
-export const moveDailyEntryItem = (dailyWorkspace, fromDate, itemId, toDate) => {
-  const fromNormalized = normalizeDateKey(fromDate);
-  const toNormalized = normalizeDateKey(toDate);
-  if (!fromNormalized || !toNormalized || fromNormalized === toNormalized) return normalizeDailyWorkspace(dailyWorkspace);
-
-  const normalized = normalizeDailyWorkspace(dailyWorkspace);
-  const fromEntry = normalized.entries?.[fromNormalized];
-  const item = fromEntry?.items?.find((i) => i.id === itemId);
-  if (!item) return normalized;
-
-  const withoutItem = removeDailyEntryItem(normalized, fromNormalized, itemId);
-  return updateEntry(withoutItem, toNormalized, (entry) => ({
-    ...entry,
-    items: [...entry.items, { ...item, updatedAt: Date.now() }],
-  }));
-};
-
-export const updateDailyEntryItem = (dailyWorkspace, dateKey, itemId, text, richText) => {
-  const content = resolveContent(text, richText);
-  if (!content.text) return removeDailyEntryItem(dailyWorkspace, dateKey, itemId);
-
-  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
-    ...entry,
-    items: entry.items.map((item) => {
-      if (item.id !== itemId) return item;
-      return applyContent({ ...item, updatedAt: Date.now() }, content);
-    }),
-  }));
-};
-
-export const updateDailyEntryItemPriority = (dailyWorkspace, dateKey, itemId, priority) => {
-  const nextPriority = DAILY_PRIORITIES.has(priority) ? priority : 'medium';
-  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
-    ...entry,
-    items: entry.items.map((item) => {
-      if (item.id !== itemId) return item;
-      return {
-        ...item,
-        priority: nextPriority,
-        updatedAt: Date.now(),
-      };
-    }),
-  }));
-};
-
-export const updateDailyEntryItemCategory = (dailyWorkspace, dateKey, itemId, category) => {
-  const nextCategory = DAILY_TASK_CATEGORIES.has(category) ? category : '';
-  return updateEntry(dailyWorkspace, dateKey, (entry) => ({
-    ...entry,
-    items: entry.items.map((item) => {
-      if (item.id !== itemId || !DAILY_CATEGORY_ITEM_TYPES.has(item.type)) return item;
-      const nextItem = {
-        ...item,
-        updatedAt: Date.now(),
-      };
-      if (nextCategory) {
-        nextItem.category = nextCategory;
-      } else {
-        delete nextItem.category;
-      }
-      return nextItem;
-    }),
-  }));
-};
-
-export const addTodoPoolItem = (dailyWorkspace, text, sourceDate = '', category = '', richText) => {
-  const content = resolveContent(text, richText);
-  if (!content.text) return normalizeDailyWorkspace(dailyWorkspace);
-
-  const normalized = normalizeDailyWorkspace(dailyWorkspace);
-  const nextItem = applyContent({
-    id: createDailyId('todo'),
-    sourceDate: sourceDate ? normalizeDateKey(sourceDate, '') : '',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }, content);
-
-  if (DAILY_TASK_CATEGORIES.has(category)) {
-    nextItem.category = category;
-  }
-
-  return {
-    ...normalized,
-    todoPool: [nextItem, ...normalized.todoPool],
-  };
-};
-
-export const sendDailyEntryTaskToTodo = (dailyWorkspace, dateKey, itemId) => {
-  const normalized = normalizeDailyWorkspace(dailyWorkspace, dateKey);
-  const key = normalizeDateKey(dateKey, normalized.currentDate);
-  const entry = normalized.entries[key] ?? createEmptyDailyEntry(key);
-  const target = entry.items.find((item) => item.id === itemId && item.type === 'task' && !item.done);
-  if (!target) return normalized;
-
-  const withTodo = addTodoPoolItem(normalized, target.text, key, target.category, target.richText);
-  return updateEntry(withTodo, key, (currentEntry) => ({
-    ...currentEntry,
-    items: currentEntry.items.filter((item) => item.id !== itemId),
-  }));
-};
-
-export const promoteTodoToDaily = (dailyWorkspace, todoId, dateKey) => {
-  const normalized = carryOverIncompleteTasks(dailyWorkspace, dateKey);
-  const todo = normalized.todoPool.find((item) => item.id === todoId);
-  if (!todo) return normalized;
-
-  const withoutTodo = {
-    ...normalized,
-    todoPool: normalized.todoPool.filter((item) => item.id !== todoId),
-  };
-
-  return addDailyEntryItem(withoutTodo, dateKey, {
-    type: 'task',
-    text: todo.text,
-    richText: todo.richText,
-    category: todo.category,
+  const today = normalizeDateKey(targetDateKey, normalized.currentDate);
+  let next = { ...normalized, currentDate: today };
+  const carried = [];
+  Object.keys(normalized.entries).filter((key) => key < today).sort().forEach((key) => {
+    const { blocks, tasks } = extractUndoneTasks(normalized.entries[key].blocks);
+    if (!tasks.length) return;
+    carried.push(...tasks);
+    next = withEntryBlocks(next, key, blocks);
   });
+  if (!carried.length) return next;
+  const todayBlocks = getDailyBlocksForEditor(next, today);
+  return withEntryBlocks(next, today, insertIntoSection(todayBlocks, 'task', dedupeTasks(todayBlocks, carried)));
 };
 
-export const updateTodoPoolItemCategory = (dailyWorkspace, todoId, category) => {
-  const nextCategory = DAILY_TASK_CATEGORIES.has(category) ? category : '';
-  const normalized = normalizeDailyWorkspace(dailyWorkspace);
-
-  return {
-    ...normalized,
-    todoPool: normalized.todoPool.map((item) => {
-      if (item.id !== todoId) return item;
-      const nextItem = {
-        ...item,
-        updatedAt: Date.now(),
-      };
-      if (nextCategory) {
-        nextItem.category = nextCategory;
-      } else {
-        delete nextItem.category;
-      }
-      return nextItem;
-    }),
-  };
+/**
+ * 往某天某个分区追加一段大纲 Markdown（AI / 外部工具写入用）。
+ * 任务分区里的普通行自动变成待勾选任务。
+ */
+export const appendDailyMarkdown = (dailyWorkspace, dateKey, sectionKey, markdown) => {
+  const key = normalizeDateKey(dateKey);
+  const section = findSectionDef(sectionKey).key;
+  const added = toSectionItems(markdownToBlocks(markdown), section);
+  if (!added.length) return normalizeDailyWorkspace(dailyWorkspace, key);
+  const normalized = normalizeDailyWorkspace(dailyWorkspace, key);
+  return withEntryBlocks(normalized, key, insertIntoSection(getDailyBlocksForEditor(normalized, key), section, added));
 };
 
-export const removeTodoPoolItem = (dailyWorkspace, todoId) => {
-  const normalized = normalizeDailyWorkspace(dailyWorkspace);
-  return {
-    ...normalized,
-    todoPool: normalized.todoPool.filter((item) => item.id !== todoId),
-  };
+/** 勾选 / 取消勾选某天的任务；返回 { dailyWorkspace, found, text } */
+export const setDailyTaskDone = (dailyWorkspace, dateKey, text, done = true) => {
+  const key = normalizeDateKey(dateKey);
+  const normalized = normalizeDailyWorkspace(dailyWorkspace, key);
+  const result = setTaskChecked(getDailyEntry(normalized, key).blocks, text, done);
+  if (!result.found) return { dailyWorkspace: normalized, found: false };
+  return { dailyWorkspace: withEntryBlocks(normalized, key, result.blocks), found: true, text: result.text };
 };
+
+/** 某天的大纲 Markdown（复制给 AI、Agent 读取用） */
+export const getDailyMarkdown = (dailyWorkspace, dateKey) => blocksToMarkdown(getDailyEntry(dailyWorkspace, dateKey).blocks);

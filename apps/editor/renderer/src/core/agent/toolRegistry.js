@@ -189,16 +189,16 @@ export const TOOL_DEFINITIONS = Object.freeze([
     type: 'function',
     function: {
       name: 'add_daily_entry',
-      description: '向今日速记 / Daily 面板添加一条任务、事件或笔记。适合处理“加个今天待办”“记个今天的会议”“补一条今日记录”这类请求。',
+      description: '往今日速记某一天的分区里追加内容：task=今日任务（自动变成待勾选任务）、event=事件、note=笔记。text 可以是多行大纲 Markdown，用两格缩进写子级。适合处理“加个今天待办”“记个今天的会议”“补一条今日记录”“把这几条拆成子任务记上”这类请求。',
       parameters: {
         type: 'object',
         properties: {
           type: {
             type: 'string',
-            description: '条目类型：task、event 或 note',
+            description: '分区：task（今日任务）、event（事件）或 note（笔记）',
             enum: ['task', 'event', 'note'],
           },
-          text: { type: 'string', description: '条目内容' },
+          text: { type: 'string', description: '要追加的内容，支持多行大纲 Markdown（- 列表、- [ ] 任务、两格缩进表示子级）' },
           dateKey: { type: 'string', description: '可选，目标日期，格式 YYYY-MM-DD；不传则默认当前 Daily 日期/今天' },
         },
         required: ['type', 'text'],
@@ -209,11 +209,27 @@ export const TOOL_DEFINITIONS = Object.freeze([
     type: 'function',
     function: {
       name: 'add_todo_entry',
-      description: '往 Daily 的待办池添加一条待办。适合处理“先记个待办，稍后再安排到哪天”这类请求。',
+      description: '往今天的「今日任务」加一条待勾选任务（旧的待办池已并入今日速记，没做完的任务会自动顺延到第二天）。',
       parameters: {
         type: 'object',
         properties: {
           text: { type: 'string', description: '待办内容' },
+        },
+        required: ['text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'complete_daily_task',
+      description: '勾选（或取消勾选）今日速记里的一条任务。按文字匹配：先找完全相同的，再找包含这段文字的。适合在你替用户完成了速记里的某项任务之后调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: '任务文字（read_daily 返回的原文最稳）' },
+          dateKey: { type: 'string', description: '可选，YYYY-MM-DD；不传则默认当前 Daily 日期/今天' },
+          done: { type: 'boolean', description: '可选，默认 true；传 false 表示取消勾选' },
         },
         required: ['text'],
       },
@@ -652,7 +668,14 @@ const EXECUTORS = {
     const text = String(args?.text ?? '').trim();
     if (!text) return '添加失败：待办内容为空。';
     const result = await host.addTodoEntry?.({ text });
-    return typeof result === 'string' ? result : '已加入待办池。';
+    return typeof result === 'string' ? result : '已加到今天的「今日任务」。';
+  },
+
+  complete_daily_task: async (args, host) => {
+    const text = String(args?.text ?? '').trim();
+    if (!text) return '操作失败：任务文字为空。';
+    const result = await host.completeDailyTask?.({ text, dateKey: args?.dateKey, done: args?.done !== false });
+    return typeof result === 'string' ? result : '当前环境不支持勾选速记任务。';
   },
 
   write_active_doc: async (args, host) => {
@@ -937,6 +960,7 @@ const _localToolLabels = Object.freeze({
   get_active_doc_meta: '读取稿件元数据',
   add_daily_entry: '添加今日条目',
   add_todo_entry: '添加待办',
+  complete_daily_task: '勾选速记任务',
   get_daily_overview: '查看 Daily 概况',
   write_active_doc: '写入当前文档',
   create_new_doc: '新建文档',

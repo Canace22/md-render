@@ -64,23 +64,14 @@ import {
   saveLocalProjectMetadata,
 } from '../utils/localProjectBridge.js';
 import {
-  addDailyEntryItem,
-  addTodoPoolItem,
+  appendDailyMarkdown,
   carryOverIncompleteTasks,
   getTodayDateKey,
   mergeDailyWorkspaces,
-  moveDailyEntryItem,
   normalizeDailyWorkspace,
-  promoteTodoToDaily,
-  removeDailyEntryItem,
-  removeTodoPoolItem,
-  sendDailyEntryTaskToTodo,
   setDailyCurrentDate as setDailyWorkspaceCurrentDate,
-  toggleDailyEntryTaskDone,
-  updateDailyEntryItem,
-  updateDailyEntryItemCategory,
-  updateDailyEntryItemPriority,
-  updateTodoPoolItemCategory,
+  setDailyEntryBlocks,
+  setDailyTaskDone,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
 import { DEFAULT_TREE_SORT_MODE, normalizeTreeSortMode } from '../utils/treeSort.js';
@@ -954,7 +945,7 @@ export const useEditorStore = create(
         }
       },
       setDailyCurrentDate: (dateKey) => set((state) => {
-        // 只有切到“真实今天”才做破坏性结转（昨日未完成任务沉到待办池、笔记带到今天）；
+        // 只有切到“真实今天”才做破坏性结转（过去没勾掉的任务带到今天「今日任务」）；
         // 手动翻看其它日期只是纯视图切换，不动数据，避免来回切日期把条目搬走/重置。
         const nextDailyWorkspace = dateKey === getTodayDateKey()
           ? carryOverIncompleteTasks(state.dailyWorkspace, dateKey)
@@ -962,113 +953,27 @@ export const useEditorStore = create(
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      addDailyItem: (dateKey, type, text, category, priority, richText) => set((state) => {
-        const nextDailyWorkspace = addDailyEntryItem(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          { type, text, category, priority, richText },
-        );
+      /** 大纲编辑器写回一整天（编辑器侧已防抖） */
+      setDailyBlocks: (dateKey, blocks) => set((state) => {
+        const nextDailyWorkspace = setDailyEntryBlocks(state.dailyWorkspace, dateKey, blocks);
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      toggleDailyTaskDone: (dateKey, itemId) => set((state) => {
-        const nextDailyWorkspace = toggleDailyEntryTaskDone(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          itemId,
-        );
+      /** 往某天某分区（task / event / note）追加一段大纲 Markdown（AI 写入用） */
+      appendDailyMarkdown: (dateKey, section, markdown) => set((state) => {
+        const nextDailyWorkspace = appendDailyMarkdown(state.dailyWorkspace, dateKey, section, markdown);
         persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
         return { dailyWorkspace: nextDailyWorkspace };
       }),
-      deleteDailyItem: (dateKey, itemId) => set((state) => {
-        const nextDailyWorkspace = removeDailyEntryItem(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          itemId,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      updateDailyItem: (dateKey, itemId, text, richText) => set((state) => {
-        const nextDailyWorkspace = updateDailyEntryItem(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          itemId,
-          text,
-          richText,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      updateDailyItemPriority: (dateKey, itemId, priority) => set((state) => {
-        const nextDailyWorkspace = updateDailyEntryItemPriority(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          itemId,
-          priority,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      updateDailyItemCategory: (dateKey, itemId, category) => set((state) => {
-        const nextDailyWorkspace = updateDailyEntryItemCategory(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          itemId,
-          category,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      moveDailyItem: (fromDate, itemId, toDate) => set((state) => {
-        const nextDailyWorkspace = moveDailyEntryItem(
-          carryOverIncompleteTasks(state.dailyWorkspace, fromDate),
-          fromDate,
-          itemId,
-          toDate,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      moveDailyItems: (fromDate, itemIds, toDate) => set((state) => {
-        // 串行叠加，避免每次只拿旧快照导致后续覆盖前面
-        const base = carryOverIncompleteTasks(state.dailyWorkspace, fromDate);
-        const nextDailyWorkspace = itemIds.reduce(
-          (workspace, itemId) => moveDailyEntryItem(workspace, fromDate, itemId, toDate),
-          base,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      moveDailyTaskToTodo: (dateKey, itemId) => set((state) => {
-        const nextDailyWorkspace = sendDailyEntryTaskToTodo(
-          carryOverIncompleteTasks(state.dailyWorkspace, dateKey),
-          dateKey,
-          itemId,
-        );
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      addTodoItem: (text, category, richText) => set((state) => {
-        const nextDailyWorkspace = addTodoPoolItem(state.dailyWorkspace, text, '', category, richText);
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      promoteTodoToDaily: (todoId, dateKey) => set((state) => {
-        const nextDailyWorkspace = promoteTodoToDaily(state.dailyWorkspace, todoId, dateKey);
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      removeTodoItem: (todoId) => set((state) => {
-        const nextDailyWorkspace = removeTodoPoolItem(state.dailyWorkspace, todoId);
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
-      updateTodoItemCategory: (todoId, category) => set((state) => {
-        const nextDailyWorkspace = updateTodoPoolItemCategory(state.dailyWorkspace, todoId, category);
-        persistDailyWorkspaceBackup(nextDailyWorkspace, state.projectRootPath);
-        return { dailyWorkspace: nextDailyWorkspace };
-      }),
+      /** 勾选 / 取消勾选任务；返回 { found, text } */
+      setDailyTaskDone: (dateKey, text, done = true) => {
+        const result = setDailyTaskDone(get().dailyWorkspace, dateKey, text, done);
+        if (result.found) {
+          set({ dailyWorkspace: result.dailyWorkspace });
+          persistDailyWorkspaceBackup(result.dailyWorkspace, get().projectRootPath);
+        }
+        return { found: result.found, text: result.text };
+      },
       /** 迁移后：Daily 以内容库文件为准（保留当前查看的日期） */
       applyDailyWorkspaceFromFiles: (fileWorkspace) => {
         const currentDate = get().dailyWorkspace?.currentDate;

@@ -1,288 +1,76 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, DatePicker } from 'antd';
-import dayjs from 'dayjs';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import DailyEntryList, { ALL_TYPES_FILTER } from './daily/DailyEntryList.jsx';
-import DailyTodoColumn from './daily/DailyTodoColumn.jsx';
-import { compareDailyItems } from './daily/dailyOptions.jsx';
+import { lazy, memo, Suspense, useCallback, useMemo } from 'react';
+import DailyToolbar from './daily/DailyToolbar.jsx';
 import { useCopyText } from '../hooks/useCopyText.js';
+import { useEditorImageUpload } from '../hooks/useEditorImageUpload.js';
+import { useEditorStore } from '../store/useEditorStore.js';
 import {
   formatDailyHeading,
+  getDailyBlocksForEditor,
   getDailyEntry,
+  getDailyMarkdown,
   getTodayDateKey,
   shiftDateKey,
 } from '../utils/dailyWorkspace.js';
 
-const DEFAULT_PRIORITY = 'medium';
+// BlockNote 依赖 DOM：lazy 只在真正渲染时才 import，node 单测的静态渲染碰不到它
+const DailyOutlineEditor = lazy(() => import('./daily/DailyOutlineEditor.jsx'));
 
-const createPendingInlineId = () =>
-  `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+const canUseDOM = typeof window !== 'undefined' && typeof window.document?.createElement === 'function';
 
-function DailyNotebook({
-  dailyWorkspace,
-  onSetCurrentDate,
-  onAddItem,
-  onToggleTaskDone,
-  onDeleteItem,
-  onUpdateItem,
-  onMoveItem,
-  onMoveItems,
-  onMoveTaskToTodo,
-  onAddTodo,
-  onPromoteTodo,
-  onRemoveTodo,
-  onUpdateItemPriority,
-  onUpdateItemCategory,
-  onUpdateTodoCategory,
-}) {
-  const [editingItem, setEditingItem] = useState(null);
-  const [pendingInlineItems, setPendingInlineItems] = useState([]);
-  const [pendingTodos, setPendingTodos] = useState([]);
-  const [typeFilter, setTypeFilter] = useState(ALL_TYPES_FILTER);
-  const { copiedId, copy: handleCopy } = useCopyText();
-  const currentDate = dailyWorkspace?.currentDate || getTodayDateKey();
-  const dailyEntry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
-  const todoPool = useMemo(() => {
-    return [...(dailyWorkspace?.todoPool ?? [])].sort((left, right) => right.updatedAt - left.updatedAt);
-  }, [dailyWorkspace]);
+/** 编辑器还没加载好（或没有 DOM）时，先把当天内容按 Markdown 摆出来 */
+function DailyOutlineFallback({ markdown }) {
+  return <pre className="daily-outline-fallback">{markdown || '今天还没有记录。'}</pre>;
+}
 
-  // 待保存的行内新建条目排在最前，已保存条目按「未完成任务 → 事件 → 笔记 → 已完成」统一排序
-  const allItems = useMemo(() => {
-    const pending = pendingInlineItems.map((item) => ({
-      id: item.id,
-      type: item.type,
-      text: '',
-      category: item.category,
-      priority: item.priority ?? DEFAULT_PRIORITY,
-      done: false,
-      isPending: true,
-    }));
-    return [...pending, ...[...dailyEntry.items].sort(compareDailyItems)];
-  }, [dailyEntry.items, pendingInlineItems]);
+/**
+ * 今日速记（幕布式）：一天一篇大纲，默认「今日任务 / 事件 / 笔记」三个分区，
+ * 可以嵌套、勾选、贴图；过去没勾掉的任务在进入今天时自动带过来。
+ */
+function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localProjectSupported, assetRootPath }) {
+  const today = getTodayDateKey();
+  const currentDate = dailyWorkspace?.currentDate || today;
+  const entry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
+  const { uploadFile } = useEditorImageUpload({ localProjectSupported, selectedProjectRootPath: assetRootPath });
+  const { copiedId, copy } = useCopyText();
 
-  const countByType = useMemo(() => {
-    return allItems.reduce((counts, item) => {
-      counts[item.type] = (counts[item.type] ?? 0) + 1;
-      return counts;
-    }, {});
-  }, [allItems]);
+  const handleShift = useCallback((offset) => onSetCurrentDate(shiftDateKey(currentDate, offset)), [currentDate, onSetCurrentDate]);
+  const handleToday = useCallback(() => onSetCurrentDate(getTodayDateKey()), [onSetCurrentDate]);
 
-  const visibleItems = useMemo(() => {
-    if (typeFilter === ALL_TYPES_FILTER) return allItems;
-    return allItems.filter((item) => item.type === typeFilter);
-  }, [allItems, typeFilter]);
+  // 点按钮时编辑器已失焦并把最后的改动存进 store，直接读最新状态
+  const handleCopy = useCallback(() => {
+    copy(currentDate, getDailyMarkdown(useEditorStore.getState().dailyWorkspace, currentDate));
+  }, [copy, currentDate]);
 
-  const removePendingInline = useCallback((itemId) => {
-    setPendingInlineItems((current) => current.filter((item) => item.id !== itemId));
-  }, []);
-
-  const handleStartInlineAdd = useCallback((type) => {
-    const id = createPendingInlineId();
-    setPendingInlineItems((current) => [
-      { id, type, priority: type === 'task' ? DEFAULT_PRIORITY : undefined },
-      ...current,
-    ]);
-    setEditingItem({ id, value: '', richText: [], isPending: true });
-    // 当前筛选如果会把新条目挡住，就切到它所属的类型
-    setTypeFilter((current) => (current === ALL_TYPES_FILTER || current === type ? current : type));
-  }, []);
-
-  const handleUpdatePendingInline = useCallback((itemId, patch) => {
-    setPendingInlineItems((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
-    );
-  }, []);
-
-  const handleStartInlineAddTodo = useCallback(() => {
-    const id = createPendingInlineId();
-    setPendingTodos((current) => [{ id }, ...current]);
-    setEditingItem({ id, value: '', richText: [], isPending: true, isTodo: true });
-  }, []);
-
-  const todoItems = useMemo(() => {
-    const pending = pendingTodos.map((item) => ({ id: item.id, text: '', isPending: true }));
-    return [...pending, ...todoPool];
-  }, [pendingTodos, todoPool]);
-
-  const handleStartEdit = useCallback((item) => {
-    setEditingItem({
-      id: item.id,
-      value: item.text,
-      richText: item.richText,
-      isPending: Boolean(item.isPending),
-    });
-  }, []);
-
-  // 富文本编辑器抛上来的是 { text, richText }：text 是纯文本投影，
-  // 仍然用它判断「空内容 → 删除」，richText 才是保存用的正文
-  const handleEditDraftChange = useCallback(({ text, richText }) => {
-    setEditingItem((current) => (current ? { ...current, value: text, richText } : current));
-  }, []);
-
-  const handleCancelEdit = useCallback(() => {
-    if (!editingItem?.id) {
-      setEditingItem(null);
-      return;
-    }
-
-    const nextValue = editingItem.value?.trim();
-    if (editingItem.isPending) {
-      if (editingItem.isTodo) {
-        setPendingTodos((current) => current.filter((item) => item.id !== editingItem.id));
-      } else {
-        removePendingInline(editingItem.id);
-      }
-    } else if (!nextValue) {
-      onDeleteItem(currentDate, editingItem.id);
-    }
-    setEditingItem(null);
-  }, [currentDate, editingItem, onDeleteItem, removePendingInline]);
-
-  const handleSaveEdit = useCallback(() => {
-    const nextValue = editingItem?.value?.trim();
-    if (!editingItem?.id) return;
-
-    if (editingItem.isPending) {
-      if (!nextValue) {
-        handleCancelEdit();
-        return;
-      }
-      if (editingItem.isTodo) {
-        onAddTodo(nextValue, undefined, editingItem.richText);
-        setPendingTodos((current) => current.filter((item) => item.id !== editingItem.id));
-        setEditingItem(null);
-        return;
-      }
-      const pendingItem = pendingInlineItems.find((item) => item.id === editingItem.id);
-      const type = pendingItem?.type ?? 'note';
-      onAddItem(
-        currentDate,
-        type,
-        nextValue,
-        pendingItem?.category,
-        pendingItem?.priority,
-        editingItem.richText,
-      );
-      removePendingInline(editingItem.id);
-      setEditingItem(null);
-      return;
-    }
-
-    if (!nextValue) {
-      onDeleteItem(currentDate, editingItem.id);
-      setEditingItem(null);
-      return;
-    }
-
-    onUpdateItem(currentDate, editingItem.id, nextValue, editingItem.richText);
-    setEditingItem(null);
-  }, [
-    currentDate,
-    editingItem,
-    handleCancelEdit,
-    onAddItem,
-    onAddTodo,
-    onDeleteItem,
-    onUpdateItem,
-    pendingInlineItems,
-    removePendingInline,
-  ]);
-
-  useEffect(() => {
-    setEditingItem(null);
-    setPendingInlineItems([]);
-    setPendingTodos([]);
-  }, [currentDate]);
-
-  const handleDeleteItem = useCallback((itemId) => {
-    if (pendingInlineItems.some((item) => item.id === itemId)) {
-      removePendingInline(itemId);
-      if (editingItem?.id === itemId) setEditingItem(null);
-      return;
-    }
-    onDeleteItem(currentDate, itemId);
-  }, [currentDate, editingItem?.id, onDeleteItem, pendingInlineItems, removePendingInline]);
-
-  const handleDeleteTodoItem = useCallback((itemId) => {
-    if (pendingTodos.some((item) => item.id === itemId)) {
-      setPendingTodos((current) => current.filter((item) => item.id !== itemId));
-      if (editingItem?.id === itemId) setEditingItem(null);
-      return;
-    }
-    onRemoveTodo(itemId);
-  }, [editingItem?.id, onRemoveTodo, pendingTodos]);
-
-  const editingDraft = useMemo(
-    () => ({ text: editingItem?.value ?? '', richText: editingItem?.richText }),
-    [editingItem?.value, editingItem?.richText],
-  );
+  const fallback = <DailyOutlineFallback markdown={getDailyMarkdown(dailyWorkspace, currentDate)} />;
 
   return (
-    <div className="daily-notebook" data-testid="daily-surface">
-      <section className="daily-notebook-hero">
-        <div className="daily-notebook-hero-copy">
-          <h1>{formatDailyHeading(currentDate)}</h1>
-          <p>把今天真正要处理的任务、事件和笔记放在一页里；做不完的再沉到待办池，明天手动带回来。</p>
-        </div>
-
-        <div className="daily-notebook-date-panel">
-          <div className="daily-notebook-date-actions">
-            <Button icon={<ChevronLeft size={14} strokeWidth={1.8} />} onClick={() => onSetCurrentDate(shiftDateKey(currentDate, -1))} />
-            <DatePicker
-              value={dayjs(currentDate)}
-              format="YYYY-MM-DD"
-              allowClear={false}
-              className="daily-notebook-date-picker"
-              onChange={(date) => {
-                if (date) onSetCurrentDate(date.format('YYYY-MM-DD'));
-              }}
-            />
-            <Button icon={<ChevronRight size={14} strokeWidth={1.8} />} onClick={() => onSetCurrentDate(shiftDateKey(currentDate, 1))} />
-          </div>
-        </div>
-      </section>
-
-      <section className="daily-notebook-grid">
-        <div className="daily-notebook-main-column">
-          <DailyEntryList
-            items={visibleItems}
-            countByType={countByType}
-            totalCount={allItems.length}
-            typeFilter={typeFilter}
-            onTypeFilterChange={setTypeFilter}
-            onStartInlineAdd={handleStartInlineAdd}
-            currentDate={currentDate}
-            editingItemId={editingItem?.isTodo ? null : editingItem?.id ?? null}
-            editingDraft={editingDraft}
-            copiedId={copiedId}
-            onStartEdit={handleStartEdit}
-            onEditDraftChange={handleEditDraftChange}
-            onSaveEdit={handleSaveEdit}
-            onCancelEdit={handleCancelEdit}
-            onToggleTask={(itemId) => onToggleTaskDone(currentDate, itemId)}
-            onMoveTaskToTodo={(itemId) => onMoveTaskToTodo(currentDate, itemId)}
-            onMoveItem={(itemId, toDate) => onMoveItem(currentDate, itemId, toDate)}
-            onMoveItems={(itemIds, toDate) => onMoveItems(currentDate, itemIds, toDate)}
-            onDeleteItem={handleDeleteItem}
-            onUpdatePriority={(itemId, priority) => onUpdateItemPriority(currentDate, itemId, priority)}
-            onUpdateCategory={(itemId, category) => onUpdateItemCategory(currentDate, itemId, category)}
-            onUpdatePendingItem={handleUpdatePendingInline}
-            onCopy={handleCopy}
-          />
-        </div>
-
-        <DailyTodoColumn
-          items={todoItems}
-          totalCount={todoPool.length}
-          editingItem={editingItem}
-          onStartInlineAdd={handleStartInlineAddTodo}
-          onEditDraftChange={handleEditDraftChange}
-          onSaveEdit={handleSaveEdit}
-          onCancelEdit={handleCancelEdit}
-          onPromoteTodo={(todoId) => onPromoteTodo(todoId, currentDate)}
-          onDeleteTodo={handleDeleteTodoItem}
-          onUpdateTodoCategory={onUpdateTodoCategory}
+    <div className="daily-outline" data-testid="daily-surface">
+      <header className="daily-outline-header">
+        <h1>{formatDailyHeading(currentDate)}</h1>
+        <DailyToolbar
+          dateKey={currentDate}
+          isToday={currentDate === today}
+          copied={copiedId === currentDate}
+          onShift={handleShift}
+          onToday={handleToday}
+          onPick={onSetCurrentDate}
+          onCopy={handleCopy}
         />
+      </header>
+
+      <section className="daily-outline-body">
+        {canUseDOM ? (
+          <Suspense fallback={fallback}>
+            <DailyOutlineEditor
+              key={currentDate}
+              dateKey={currentDate}
+              initialBlocks={getDailyBlocksForEditor(dailyWorkspace, currentDate)}
+              storeBlocks={entry.blocks}
+              uploadFile={uploadFile}
+              onSave={onSetBlocks}
+            />
+          </Suspense>
+        ) : fallback}
       </section>
     </div>
   );

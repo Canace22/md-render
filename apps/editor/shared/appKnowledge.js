@@ -9,7 +9,7 @@
 export const APP_SURFACES = Object.freeze([
   { id: 'overview', label: '总览', description: '查看工作区和近期内容概况' },
   { id: 'paper', label: '文档工作区', description: '编辑 Markdown 稿件与管理文档目录' },
-  { id: 'daily', label: '今日速记', description: '管理任务、事件、笔记和待办池' },
+  { id: 'daily', label: '今日速记', description: '每天一篇大纲：今日任务、事件、笔记，未完成任务自动顺延' },
   { id: 'canvas', label: '灵感白板', description: '用卡片和连线整理点子与结构' },
   { id: 'creation-board', label: '创作看板', description: '按稿件状态管理内容流程' },
   { id: 'publishing', label: '发布队列', description: '查看待发布内容和目标平台' },
@@ -80,7 +80,7 @@ export const APP_OPERATION_RULES = Object.freeze([
   '当用户明确要求保留原稿、另存为新文档或生成平台版本时，必须新建资产，不要改写原文；平台版本优先调用 create_agent_artifact，artifactType=platform_draft。',
   '改稿件状态、标签、目标平台等元数据用 update_doc_meta，不要改正文里的文字来代替。',
   '需要公众号排版好的 HTML 时调用 render_platform_html，不要自己拼样式。',
-  '当用户要求添加今日任务、事件、今日记录或待办时，优先调用 add_daily_entry 或 add_todo_entry，直接落到 Daily 面板。',
+  '当用户要求添加今日任务、事件、今日记录或待办时，优先调用 add_daily_entry，直接落到今日速记对应分区；可以一次写多行、用缩进写子级。用户让你处理今日速记里的任务时，先 read_daily 看清楚，做完后用 complete_daily_task 勾掉。',
   '当用户要求开选题、开稿、建资料单或建待发布稿时，优先调用 create_content_entry，而不是只给建议。',
   '当用户要求打开白板、往白板加卡片、在灵感白板上画流程/关系图时，优先调用 open_canvas、append_canvas_cards、replace_canvas 或 clear_canvas。',
   '如果用户明确要“画到白板上”“操作白板”，不要只返回 Mermaid 或文字步骤，要直接调用白板工具落到页面。',

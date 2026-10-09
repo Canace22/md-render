@@ -10,7 +10,7 @@ import {
   readVaultDailyFiles,
   writeVaultText,
 } from '../utils/vaultBridge.js';
-import { buildCanvasFileMap, buildDailyFileMap, dailyFilesToMap, diffFileMaps } from '../utils/vaultFileSync.js';
+import { buildCanvasFileMap, buildDailyFileMap, buildLoadedDailyCache, dailyFilesToMap, diffFileMaps } from '../utils/vaultFileSync.js';
 import { onLocalProjectDiskChanged } from '../utils/localProjectBridge.js';
 import { recordToolActivity } from '../core/agent/activityLog.js';
 
@@ -79,7 +79,7 @@ export function useVaultStorage() {
       dailyCacheRef.current = fileMap;
       const currentDate = useEditorStore.getState().dailyWorkspace?.currentDate;
       useEditorStore.getState().applyDailyWorkspaceFromFiles(parseDailyWorkspace(files, currentDate));
-      dailyCacheRef.current = buildDailyFileMap(useEditorStore.getState().dailyWorkspace);
+      dailyCacheRef.current = buildLoadedDailyCache(useEditorStore.getState().dailyWorkspace, fileMap);
     };
     load().catch((error) => console.error('[vault] 读取 Daily 失败:', error));
     const unsubscribe = useEditorStore.subscribe((state, prev) => {

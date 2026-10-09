@@ -383,25 +383,14 @@ function MarkdownEditor() {
     storageMode,
     surface,
     dailyWorkspace,
+    projectRootPath,
     publishingPlatforms,
     setTheme,
     setCopyStyle,
     setPublishingPlatforms,
     setSurface,
     setDailyCurrentDate,
-    addDailyItem,
-    toggleDailyTaskDone,
-    deleteDailyItem,
-    updateDailyItem,
-    updateDailyItemPriority,
-    updateDailyItemCategory,
-    moveDailyItem,
-    moveDailyItems,
-    moveDailyTaskToTodo,
-    addTodoItem,
-    promoteTodoToDaily,
-    removeTodoItem,
-    updateTodoItemCategory,
+    setDailyBlocks,
     hydrateDailyWorkspaceFromDisk,
     setWorkspaceCanvas,
     setFileTags,
@@ -2659,19 +2648,9 @@ function MarkdownEditor() {
           <DailyNotebook
             dailyWorkspace={dailyWorkspace}
             onSetCurrentDate={setDailyCurrentDate}
-            onAddItem={addDailyItem}
-            onToggleTaskDone={toggleDailyTaskDone}
-            onDeleteItem={deleteDailyItem}
-            onUpdateItem={updateDailyItem}
-            onMoveItem={moveDailyItem}
-            onMoveItems={moveDailyItems}
-            onMoveTaskToTodo={moveDailyTaskToTodo}
-            onAddTodo={addTodoItem}
-            onPromoteTodo={promoteTodoToDaily}
-            onRemoveTodo={removeTodoItem}
-            onUpdateItemPriority={updateDailyItemPriority}
-            onUpdateItemCategory={updateDailyItemCategory}
-            onUpdateTodoCategory={updateTodoItemCategory}
+            onSetBlocks={setDailyBlocks}
+            localProjectSupported={localProjectSupported}
+            assetRootPath={projectRootPath}
           />
         ) : surface === 'overview' ? (
           <CreationDashboard

@@ -6,6 +6,7 @@ import { planMigration } from '../main/migration/planMigration.js';
 import { executeMigration, rollbackMigration } from '../main/migration/executeMigration.js';
 import { isStepOnFiles, readDailyFiles, readMigrationState, readVaultText, writeVaultText } from '../main/migration/vaultFiles.js';
 import { parseDailyWorkspace } from '../shared/migration/dailyFormat.js';
+import { normalizeDailyWorkspace } from '../renderer/src/utils/dailyWorkspace.js';
 
 const T = Date.UTC(2026, 9, 5, 1, 0, 0);
 
@@ -19,11 +20,12 @@ const payload = () => ({
       { id: 'doc-3', type: 'file', name: '索引', content: '见 [[周报]]' },
     ],
   },
-  dailyWorkspace: {
+  // renderer 交给主进程前已 normalize 成大纲（旧待办并进当天）
+  dailyWorkspace: normalizeDailyWorkspace({
     currentDate: '2026-10-05',
     entries: { '2026-10-05': { date: '2026-10-05', items: [{ id: 'task-1', type: 'task', priority: 'medium', done: false, createdAt: T, updatedAt: T, text: '写稿' }] } },
     todoPool: [{ id: 'todo-1', sourceDate: '', createdAt: T, updatedAt: T, text: '待办' }],
-  },
+  }),
   canvasState: { nodes: [{ id: 'c1', sourceId: 'doc-1', position: { x: 0, y: 0 } }], edges: [] },
   memoryContents: ['# 编辑部记忆\n\n## 平台经验库\n\n- 2026-09-01：标题要短'],
   localStorageExport: { 'md-renderer-theme': 'dark' },
@@ -68,7 +70,8 @@ describe('正式迁移', () => {
     expect(progress).toContain('校验');
 
     const back = parseDailyWorkspace(await readDailyFiles(vault), '2026-10-05');
-    expect(back).toEqual(payload().dailyWorkspace);
+    expect(back.entries).toEqual(payload().dailyWorkspace.entries);
+    expect(back.todoPool).toEqual([]);
 
     const state = await readMigrationState(vault);
     expect(isStepOnFiles(state, 'daily')).toBe(true);
