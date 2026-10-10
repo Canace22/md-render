@@ -61,3 +61,15 @@ export type {
   BuildSchemaInput,
   CustomInlineContentSpecs,
 } from './schema/buildSchema.js';
+
+// [[双链]] 链接样式与点击跳转
+export {
+  findWikilinks,
+  createWikilinkPlugin,
+  WIKILINK_CLASS,
+  WIKILINK_SYNTAX_CLASS,
+  WIKILINK_EDITING_CLASS,
+  wikilinkNameFromEvent,
+  WIKILINK_NAME_ATTR,
+} from './utils/wikilink.js';
+export type { IWikilinkMatch } from './utils/wikilink.js';
