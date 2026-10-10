@@ -40,6 +40,8 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 11. **只做视觉标记（评论高亮等）别改文档、也别上 BlockNote 自带 comments。** 自带 comments 依赖 Yjs 线程存储，且评论 mark 不进 Markdown；用 backgroundColor 样式又会写进正文和撤销栈。做法：数据另存（块 id + 引文 + 偏移），用 CSS Custom Highlight API（`CSS.highlights` + `::highlight()`）画；`editor.onChange` 后下一帧重新定位。取选区 DOM 用公开的 `editor.prosemirrorView.domAtPos`，块内容节点是 `.bn-block[data-id] > .bn-block-content`。现成实现：`utils/commentAnchors.js` + `hooks/useCommentHighlights.js`。
 
+12. **给块加 CSS 计数器（标题编号等）别用 `counter-reset` 分层。** 每个块都包在自己的 `.bn-block-outer > .bn-block` 里，标题之间不是兄弟节点，挂在某个标题上的 `counter-reset` 只管它自己的子孙，后面的标题读不到。做法：计数器统一在外层容器（`#markdown-output`）上 `counter-reset`，各级标题用 `counter-set` 清零下级。编号画在 `h*` 的 `::before` 上时，要排除空块 `:not(:has(> .ProseMirror-trailingBreak:only-child))`——BlockNote 的占位提示也是 `.bn-inline-content::before`，会被覆盖；空块也不该占号。现成实现：`styles.css` 里的 `.heading-numbered`。
+
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
 ```bash

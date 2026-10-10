@@ -4810,6 +4810,55 @@ body.theme-light #markdown-output code {
     border: none;
 }
 
+/* 标题自动编号（顶栏开关）：CSS 计数器只画在显示层，不写进 Markdown。
+   H1 当文档/章标题不编号，只让下面的编号从 1 重新开始；H2 → 1.  H3 → 1.1  H4 → 1.1.1。
+   编辑器里各标题嵌在不同的 .bn-block-outer 里，不是兄弟节点，counter-reset 管不到后面的标题，
+   所以计数器统一在 #markdown-output 上建，各级标题用 counter-set 清零下级。
+   空标题（只有 trailingBreak）不占号，它的 ::before 留给 BlockNote 的占位提示。 */
+#markdown-output.heading-numbered {
+    counter-reset: md-h2 md-h3 md-h4;
+}
+
+#markdown-output.heading-numbered > h1,
+#markdown-output.heading-numbered .bn-block-content > h1 {
+    counter-set: md-h2 0 md-h3 0 md-h4 0;
+}
+
+#markdown-output.heading-numbered > h2,
+#markdown-output.heading-numbered .bn-block-content > h2:not(:has(> .ProseMirror-trailingBreak:only-child)) {
+    counter-increment: md-h2;
+    counter-set: md-h3 0 md-h4 0;
+}
+
+#markdown-output.heading-numbered > h3,
+#markdown-output.heading-numbered .bn-block-content > h3:not(:has(> .ProseMirror-trailingBreak:only-child)) {
+    counter-increment: md-h3;
+    counter-set: md-h4 0;
+}
+
+#markdown-output.heading-numbered > h4,
+#markdown-output.heading-numbered .bn-block-content > h4:not(:has(> .ProseMirror-trailingBreak:only-child)) {
+    counter-increment: md-h4;
+}
+
+#markdown-output.heading-numbered > h2::before,
+#markdown-output.heading-numbered .bn-block-content > h2:not(:has(> .ProseMirror-trailingBreak:only-child))::before {
+    content: counter(md-h2) ".";
+    margin-right: 0.4em;
+}
+
+#markdown-output.heading-numbered > h3::before,
+#markdown-output.heading-numbered .bn-block-content > h3:not(:has(> .ProseMirror-trailingBreak:only-child))::before {
+    content: counter(md-h2) "." counter(md-h3);
+    margin-right: 0.4em;
+}
+
+#markdown-output.heading-numbered > h4::before,
+#markdown-output.heading-numbered .bn-block-content > h4:not(:has(> .ProseMirror-trailingBreak:only-child))::before {
+    content: counter(md-h2) "." counter(md-h3) "." counter(md-h4);
+    margin-right: 0.4em;
+}
+
 .blocknote-editor .bn-editor h1,
 .blocknote-editor .bn-editor h2,
 .blocknote-editor .bn-editor h3,
