@@ -26,6 +26,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install mcp-bridge dependencies
+        # server/mcp-bridge 不在 pnpm workspace 里，打包时要把它 bundle 进 resources
+        run: npm ci --prefix server/mcp-bridge
+
       - name: Build Electron app
         run: pnpm electron:build
         env:
