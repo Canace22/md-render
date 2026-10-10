@@ -78,7 +78,9 @@ import { DEFAULT_TREE_SORT_MODE, normalizeTreeSortMode } from '../utils/treeSort
 import { createAgentSlice } from './slices/agentSlice.js';
 import { createProposalSlice } from './slices/proposalSlice.js';
 import { createVaultSlice } from './slices/vaultSlice.js';
-import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
+import { createCommentSlice } from './slices/commentSlice.js';
+import { normalizeCommentThreads } from '../utils/commentThreads.js';
+import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
@@ -93,6 +95,7 @@ const DAILY_WORKSPACE_STORAGE_KEY = 'md-renderer-daily-workspace';
 const SIDEBAR_FILE_KIND_STORAGE_KEY = 'md-renderer-sidebar-file-kind';
 const SIDEBAR_SORT_MODE_STORAGE_KEY = 'md-renderer-sidebar-sort-mode';
 const SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY = 'md-renderer-sidebar-expanded-folders';
+const COMMENT_THREADS_STORAGE_KEY = 'md-renderer-comment-threads';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
@@ -189,6 +192,9 @@ const buildStateFromLocalStorage = () => {
   const sidebarSortMode = normalizeTreeSortMode(
     window.localStorage.getItem(SIDEBAR_SORT_MODE_STORAGE_KEY),
   );
+  const commentThreads = normalizeCommentThreads(
+    safeParseJSON(window.localStorage.getItem(COMMENT_THREADS_STORAGE_KEY), {}),
+  );
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -207,6 +213,7 @@ const buildStateFromLocalStorage = () => {
       sidebarFileKind,
       expandedFolderIds,
       sidebarSortMode,
+      commentThreads,
     },
     version: 0,
   };
@@ -247,6 +254,7 @@ const buildStateFromDb = (raw) => {
         safeParseJSON(raw.sidebar_expanded_folders, []),
       ),
       sidebarSortMode: normalizeTreeSortMode(raw.sidebar_sort_mode),
+      commentThreads: normalizeCommentThreads(safeParseJSON(raw.comment_threads_json, {})),
     },
     version: 0,
   };
@@ -280,6 +288,9 @@ const buildStateMap = (state) => {
   }
   if (state.sidebarSortMode != null) {
     map.sidebar_sort_mode = normalizeTreeSortMode(state.sidebarSortMode);
+  }
+  if (state.commentThreads != null) {
+    map.comment_threads_json = JSON.stringify(normalizeCommentThreads(state.commentThreads));
   }
   return map;
 };
@@ -374,6 +385,7 @@ const editorStorage = {
           sidebarFileKind: SIDEBAR_FILE_KIND_ALL,
           expandedFolderIds: [],
           sidebarSortMode: DEFAULT_TREE_SORT_MODE,
+          commentThreads: {},
         },
         version: 0,
       };
@@ -424,6 +436,12 @@ const editorStorage = {
           window.localStorage.setItem(
             SIDEBAR_SORT_MODE_STORAGE_KEY,
             normalizeTreeSortMode(state.sidebarSortMode),
+          );
+        }
+        if (state.commentThreads != null) {
+          window.localStorage.setItem(
+            COMMENT_THREADS_STORAGE_KEY,
+            JSON.stringify(normalizeCommentThreads(state.commentThreads)),
           );
         }
       } catch { /* ignore */ }
@@ -483,6 +501,12 @@ const editorStorage = {
           normalizeTreeSortMode(state.sidebarSortMode),
         );
       }
+      if (state.commentThreads != null) {
+        window.localStorage.setItem(
+          COMMENT_THREADS_STORAGE_KEY,
+          JSON.stringify(normalizeCommentThreads(state.commentThreads)),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -506,6 +530,7 @@ const persistConfig = {
     sidebarFileKind: state.sidebarFileKind,
     expandedFolderIds: state.expandedFolderIds,
     sidebarSortMode: state.sidebarSortMode,
+    commentThreads: state.commentThreads,
   }),
 };
 
@@ -889,6 +914,7 @@ export const useEditorStore = create(
       ...createAgentSlice(set, get),
       ...createProposalSlice(set, get),
       ...createVaultSlice(set, get),
+      ...createCommentSlice(set, get),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

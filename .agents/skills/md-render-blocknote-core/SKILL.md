@@ -38,6 +38,8 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 10. **在编辑器外改正文，别直接调 `updateFileContentById`。** 编辑器实例只在 `selectedId / contentResetKey / editorReloadToken` 变化时重建，只改 store 的话画面不变；落盘又只在编辑器 onChange 里做，本地项目文件也不会写。统一走 store 的 `applyContentFromOutside(fileId, content)`：它先写 store，再排请求给 `MarkdownEditor`——当前文档用 `editor.replaceBlocks` 整篇替换（等同一次正常编辑：onChange 落盘、可 Cmd/Ctrl+Z），编辑器没挂载或是别的文档就直接落盘。现有调用：AI 提案应用（`proposalSlice`）、外部改动「恢复为修改前」、版本历史恢复、AI 面板插入引用、灵感摘录。要往正文**追加**内容时，先按格式拼好整篇（参考 `core/agent/referenceBlock.js` / `inspirationNote.js`：BlockNote JSON 追加块、Markdown 追加文本），绝不能把 Markdown 字符串直接拼到 `__bn:` JSON 后面。编辑器自己的 onChange 仍用 `updateSelectedFileContent`，不要改成它（会循环）。
 
+11. **只做视觉标记（评论高亮等）别改文档、也别上 BlockNote 自带 comments。** 自带 comments 依赖 Yjs 线程存储，且评论 mark 不进 Markdown；用 backgroundColor 样式又会写进正文和撤销栈。做法：数据另存（块 id + 引文 + 偏移），用 CSS Custom Highlight API（`CSS.highlights` + `::highlight()`）画；`editor.onChange` 后下一帧重新定位。取选区 DOM 用公开的 `editor.prosemirrorView.domAtPos`，块内容节点是 `.bn-block[data-id] > .bn-block-content`。现成实现：`utils/commentAnchors.js` + `hooks/useCommentHighlights.js`。
+
 ## 重建 dist 的命令（沙箱无 tsc bin 时）
 
 ```bash

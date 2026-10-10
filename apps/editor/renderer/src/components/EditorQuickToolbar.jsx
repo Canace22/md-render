@@ -1,6 +1,6 @@
 import { Dropdown } from 'antd';
 import {
-  ChevronDown, ClipboardCopy, Copy, Download, Eye, FileCode2, Rocket, Share2,
+  ChevronDown, ClipboardCopy, Copy, Download, Eye, FileCode2, MessageSquare, Rocket, Share2,
 } from 'lucide-react';
 import { EXPORT_FORMATS } from './DocActionMenuItems.jsx';
 
@@ -60,6 +60,9 @@ export default function EditorQuickToolbar({
   onPreviewWeChat,
   onCopyWeChat,
   copyStyleName,
+  commentCount = 0,
+  commentsOpen = false,
+  onToggleComments,
 }) {
   const handlers = {
     'prepare-publish': onPreparePublish,
@@ -87,6 +90,18 @@ export default function EditorQuickToolbar({
       data-disabled={disabled ? 'true' : undefined}
     >
       {leading && <div className="outline-quick-toolbar-leading">{leading}</div>}
+      {onToggleComments && (
+        <button
+          type="button"
+          className={`editor-comment-trigger${commentsOpen ? ' is-active' : ''}`}
+          title={commentsOpen ? '收起评论' : '评论'}
+          aria-pressed={commentsOpen}
+          onClick={onToggleComments}
+        >
+          <MessageSquare size={ICON_SIZE} strokeWidth={ICON_STROKE} />
+          {commentCount > 0 && <span>{commentCount}</span>}
+        </button>
+      )}
       <Dropdown
         menu={{
           items: buildMenuItems({ styleSuffix, isOutline }),

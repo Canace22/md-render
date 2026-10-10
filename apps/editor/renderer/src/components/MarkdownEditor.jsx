@@ -32,6 +32,7 @@ import BookmarkCard from './BookmarkCard.jsx';
 import WorkspaceSidebar from './WorkspaceSidebar.jsx';
 import FilePreviewPanel from './FilePreviewPanel.jsx';
 import TocPanel from './TocPanel.jsx';
+import CommentsPanel from './CommentsPanel.jsx';
 import AgentPanel from './AgentPanel.jsx';
 import DiffOverlay from './DiffOverlay.jsx';
 import EditorTopBar from './EditorTopBar.jsx';
@@ -114,6 +115,7 @@ import {
   getDocumentStatus,
 } from '../store/creationUtils.js';
 import { useEditorStore, useSelectedFile } from '../store/useEditorStore.js';
+import { countOpenThreads } from '../utils/commentThreads.js';
 import {
   buildUniqueName,
   buildUniqueNameInFolder,
@@ -445,6 +447,11 @@ function MarkdownEditor() {
     updateTabTitle,
     setAiQuotedSelection,
   } = useEditorStore();
+  const commentsPanelOpen = useEditorStore((state) => state.commentsPanelOpen);
+  const setCommentsPanelOpen = useEditorStore((state) => state.setCommentsPanelOpen);
+  const openCommentCount = useEditorStore((state) => countOpenThreads(state.commentThreads, state.selectedId));
+  // 评论面板展开时占住右侧，目录先让开
+  const commentsVisible = commentsPanelOpen && editorMode !== 'preview';
   const publishingPlatformLabelMap = useMemo(
     () => buildPublishingPlatformLabelMap(publishingPlatforms),
     [publishingPlatforms],
@@ -2798,6 +2805,9 @@ function MarkdownEditor() {
               onPreviewWeChat={() => setWechatPreviewOpen(true)}
               onCopyWeChat={handleCopyToWeChat}
               copyStyleName={getTemplateById(copyStyle).name}
+              commentCount={openCommentCount}
+              commentsOpen={commentsPanelOpen}
+              onToggleComments={() => setCommentsPanelOpen(!commentsPanelOpen)}
             />
             <div className={`editor-layout${outlinePage.showMindMap ? ' is-mindmap' : ''}`}>
               {/* 大纲页的导图：编辑器常挂载只是藏起来，切回大纲光标和撤销栈都还在 */}
@@ -2873,9 +2883,12 @@ function MarkdownEditor() {
                   )}
                 </div>
               </div>
-              {scriptPage.isScript ? (
-                <ScriptPanel script={scriptPage} />
-              ) : (
+              {/* 评论面板常挂载（收起时只负责正文高亮）；展开时让出右侧，不再叠目录 */}
+              {editorMode !== 'preview' && (
+                <CommentsPanel editor={editor} fileId={selectedFile?.id} />
+              )}
+              {scriptPage.isScript && <ScriptPanel script={scriptPage} />}
+              {!scriptPage.isScript && !commentsVisible && (
                 <TocPanel
                   markdown={resolvedMarkdown}
                   collapsed={tocCollapsed}
