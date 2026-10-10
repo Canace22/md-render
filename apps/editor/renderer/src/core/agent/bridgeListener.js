@@ -11,7 +11,7 @@ import {
   isSafeTool,
   filterSafeToolDefs,
   LIST_TOOLS_NAME,
-} from '../../../../shared/agentBridgeTools.js';
+} from '@shared/agentBridgeTools.js';
 
 /**
  * 桥接调用不能卡在「等用户点应用 / 确认删除」上（MCP 客户端会一直挂着）：

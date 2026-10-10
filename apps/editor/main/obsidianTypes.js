@@ -9,7 +9,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { buildObsidianTypeMap } from '../shared/properties.js';
+import { buildObsidianTypeMap } from '@shared/properties.js';
 
 const OBSIDIAN_DIR_NAME = '.obsidian';
 const TYPES_FILENAME = 'types.json';

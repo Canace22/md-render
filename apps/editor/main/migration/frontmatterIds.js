@@ -5,7 +5,7 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
-import { parseFrontmatterDocument, updateFrontmatterInMarkdown } from '../../shared/frontmatterDocument.js';
+import { parseFrontmatterDocument, updateFrontmatterInMarkdown } from '@shared/frontmatterDocument.js';
 
 const PROJECTS_DIR = 'Projects';
 const MARKDOWN_RE = /\.(md|markdown)$/i;

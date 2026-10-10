@@ -6,7 +6,7 @@ import { zh } from '@blocknote/core/locales';
 import { buildSchema } from '@narrative/blocknote-core';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
-import { isDailyBlocksEmpty } from '../../../../shared/daily/dailyBlocks.js';
+import { isDailyBlocksEmpty } from '@shared/daily/dailyBlocks.js';
 import { useEditorStore } from '../../store/useEditorStore.js';
 import {
   classifyClipboardFiles,

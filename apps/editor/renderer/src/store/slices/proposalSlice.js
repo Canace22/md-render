@@ -6,8 +6,8 @@ import {
   checkProposalApplicable,
   isPending,
   resolveProposal,
-} from '../../../../shared/capabilities/proposals.js';
-import { isSameContentHash } from '../../../../shared/capabilities/contentHash.js';
+} from '@shared/capabilities/proposals.js';
+import { isSameContentHash } from '@shared/capabilities/contentHash.js';
 import { findNodeById } from '../workspaceUtils.js';
 import { saveProposalFile } from '../../utils/agentDataBridge.js';
 

@@ -3,7 +3,7 @@ import {
   parseFrontmatterDocument,
   replaceMarkdownBody,
   updateFrontmatterInMarkdown,
-} from '../shared/frontmatterDocument.js';
+} from '@shared/frontmatterDocument.js';
 import {
   frontmatterToMetadata,
   buildObsidianTypeMap,
@@ -15,7 +15,7 @@ import {
   groupProperties,
   listAddableProperties,
   resolveVisibleProperties,
-} from '../shared/properties.js';
+} from '@shared/properties.js';
 
 const RICH_MARKDOWN = [
   '---',

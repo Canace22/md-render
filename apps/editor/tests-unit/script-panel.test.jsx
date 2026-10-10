@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import ScriptBeatTab from '../renderer/src/components/script/ScriptBeatTab.jsx';
 import ScriptResourceTab from '../renderer/src/components/script/ScriptResourceTab.jsx';
 import ScriptPanel from '../renderer/src/components/script/ScriptPanel.jsx';
-import { analyzeScript } from '../shared/script/screenplay.js';
-import { analyzeBeats } from '../shared/script/scriptBeats.js';
+import { analyzeScript } from '@shared/script/screenplay.js';
+import { analyzeBeats } from '@shared/script/scriptBeats.js';
 
 const text = (value) => [{ type: 'text', text: value, styles: {} }];
 const heading = (id, value, level = 2) => ({ id, type: 'heading', props: { level }, content: text(value), children: [] });

@@ -23,6 +23,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@shared': path.join(__dirname, 'shared'),
       '@narrative/blocknote-core': blocknoteCoreDist,
     },
   },

@@ -2,7 +2,7 @@ import { lazy, memo, Suspense, useCallback, useMemo, useState } from 'react';
 import DailyToolbar from './daily/DailyToolbar.jsx';
 import MindMapView from './outline/MindMapView.jsx';
 import OutlineViewSwitch, { MINDMAP_VIEW, OUTLINE_VIEW } from './outline/OutlineViewSwitch.jsx';
-import { blocksToMindTree } from '../../../shared/outline/outlineTree.js';
+import { blocksToMindTree } from '@shared/outline/outlineTree.js';
 import { useCopyText } from '../hooks/useCopyText.js';
 import { useEditorImageUpload } from '../hooks/useEditorImageUpload.js';
 import { useEditorStore } from '../store/useEditorStore.js';

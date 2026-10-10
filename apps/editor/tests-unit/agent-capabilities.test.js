@@ -2,8 +2,8 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { hashContent, isSameContentHash } from '../shared/capabilities/contentHash.js';
-import { getToolRisk, isExternallyAllowed, shouldLogActivity, RISK_LEVELS } from '../shared/capabilities/riskLevels.js';
+import { hashContent, isSameContentHash } from '@shared/capabilities/contentHash.js';
+import { getToolRisk, isExternallyAllowed, shouldLogActivity, RISK_LEVELS } from '@shared/capabilities/riskLevels.js';
 import {
   PROPOSAL_STATUS,
   buildDeleteProposal,
@@ -13,8 +13,8 @@ import {
   resolveProposal,
   summarizeProposal,
   toProposalStatus,
-} from '../shared/capabilities/proposals.js';
-import { activityDateKey, buildActivityEntry, pickActivityTarget, summarizeResult } from '../shared/capabilities/activity.js';
+} from '@shared/capabilities/proposals.js';
+import { activityDateKey, buildActivityEntry, pickActivityTarget, summarizeResult } from '@shared/capabilities/activity.js';
 import {
   appendActivityEntry,
   readActivityEntries,

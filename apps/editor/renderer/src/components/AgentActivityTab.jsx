@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
-import { activityDateKey } from '../../../shared/capabilities/activity.js';
-import { shouldLogActivity } from '../../../shared/capabilities/riskLevels.js';
+import { activityDateKey } from '@shared/capabilities/activity.js';
+import { shouldLogActivity } from '@shared/capabilities/riskLevels.js';
 import { getRecentActivity, subscribeActivity } from '../core/agent/activityLog.js';
 import { getToolLabel } from '../core/agent/toolRegistry.js';
 import { fetchActivityEntries, isAgentDataSupported } from '../utils/agentDataBridge.js';

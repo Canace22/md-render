@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { LOCAL_AGENTS, LOCAL_AGENT_KINDS, isRunnableAgent } from '../../../shared/localAgents.js';
+import { LOCAL_AGENTS, LOCAL_AGENT_KINDS, isRunnableAgent } from '@shared/localAgents.js';
 
 const STATUS_TEXT = Object.freeze({
   ready: '可用',

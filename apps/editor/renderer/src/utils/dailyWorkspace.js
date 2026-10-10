@@ -15,8 +15,8 @@ import {
   legacyItemsToBlocks,
   setTaskChecked,
   toSectionItems,
-} from '../../../shared/daily/dailyBlocks.js';
-import { blocksToMarkdown, markdownToBlocks } from '../../../shared/daily/dailyMarkdown.js';
+} from '@shared/daily/dailyBlocks.js';
+import { blocksToMarkdown, markdownToBlocks } from '@shared/daily/dailyMarkdown.js';
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 

@@ -35,7 +35,7 @@ import {
   countRenderableCanvasCards,
 } from '../../utils/excalidrawCanvas.js';
 import { getDailyEntry, getDailyMarkdown, getTodayDateKey, normalizeDateKey } from '../../utils/dailyWorkspace.js';
-import { findSectionDef, listUndoneTaskTexts } from '../../../../shared/daily/dailyBlocks.js';
+import { findSectionDef, listUndoneTaskTexts } from '@shared/daily/dailyBlocks.js';
 import {
   clearAiServerOverride,
   getAiServerConfiguration,
@@ -57,11 +57,11 @@ import { loadKnowledgeSources } from './knowledgeSources.js';
 import { searchExternalKnowledge } from '../../services/externalKnowledgeService.js';
 import { readUrl as readPublicUrl } from '../../services/urlReaderService.js';
 import { getSurfaceLabel } from './surfaceLabels.js';
-import { hashContent } from '../../../../shared/capabilities/contentHash.js';
-import { toProposalStatus } from '../../../../shared/capabilities/proposals.js';
+import { hashContent } from '@shared/capabilities/contentHash.js';
+import { toProposalStatus } from '@shared/capabilities/proposals.js';
 import { renderPlatformHtml } from '../../utils/platformRender.js';
 import { readVaultText, writeVaultText } from '../../utils/vaultBridge.js';
-import { EDITORIAL_MEMORY_PATH } from '../../../../shared/migration/memoryMerge.js';
+import { EDITORIAL_MEMORY_PATH } from '@shared/migration/memoryMerge.js';
 
 export const CONTENT_ENTRY_PRESETS = Object.freeze({
   topic: { draftStatus: 'idea', fallbackName: '新选题' },

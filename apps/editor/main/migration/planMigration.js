@@ -5,9 +5,9 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
-import { hashContent } from '../../shared/capabilities/contentHash.js';
-import { BUILTIN_DOCS_DIR, planBuiltinDocsMigration, sanitizeFileName } from '../../shared/migration/docsPlan.js';
-import { parseFrontmatterDocument } from '../../shared/frontmatterDocument.js';
+import { hashContent } from '@shared/capabilities/contentHash.js';
+import { BUILTIN_DOCS_DIR, planBuiltinDocsMigration, sanitizeFileName } from '@shared/migration/docsPlan.js';
+import { parseFrontmatterDocument } from '@shared/frontmatterDocument.js';
 import {
   findDailyRoundTripMismatches,
   parseDailyEntry,
@@ -16,9 +16,9 @@ import {
   serializeDailyWorkspace,
   serializeTodoPool,
   TODO_FILE_NAME,
-} from '../../shared/migration/dailyFormat.js';
-import { serializeCanvasState } from '../../shared/migration/canvasFormat.js';
-import { EDITORIAL_MEMORY_PATH, mergeEditorialMemories } from '../../shared/migration/memoryMerge.js';
+} from '@shared/migration/dailyFormat.js';
+import { serializeCanvasState } from '@shared/migration/canvasFormat.js';
+import { EDITORIAL_MEMORY_PATH, mergeEditorialMemories } from '@shared/migration/memoryMerge.js';
 import { MIGRATION_STEPS, readTextIfExists, resolveVaultPath } from './vaultFiles.js';
 
 const ARTIFACTS_DIR = 'Artifacts';

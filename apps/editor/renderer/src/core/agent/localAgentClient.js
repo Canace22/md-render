@@ -7,7 +7,7 @@
  * md-render 工具（mcp）走控制桥，活动记录由桥那边记，这里不重复记。
  */
 
-import { getLocalAgent } from '../../../../shared/localAgents.js';
+import { getLocalAgent } from '@shared/localAgents.js';
 import { ENGINE_RULES } from './agentEngine.js';
 import { AGENT_INSTRUCTIONS } from './appKnowledge.js';
 import { recordToolActivity } from './activityLog.js';

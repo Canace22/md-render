@@ -9,7 +9,7 @@ import { stripFileExtension } from '../utils/fileDisplayName.js';
 import {
   VERSION_RETENTION_DAYS,
   VERSION_SNAPSHOT_INTERVAL_MINUTES,
-} from '../../../shared/versionHistory.js';
+} from '@shared/versionHistory.js';
 
 const MODAL_WIDTH = 960;
 const VIEW_PREVIEW = 'preview';

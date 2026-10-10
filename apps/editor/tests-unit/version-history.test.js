@@ -21,7 +21,7 @@ import {
   shouldSaveVersion,
   syncDocuments,
 } from '../main/database.js';
-import { VERSION_RETENTION_MS, VERSION_SNAPSHOT_INTERVAL_MS } from '../shared/versionHistory.js';
+import { VERSION_RETENTION_MS, VERSION_SNAPSHOT_INTERVAL_MS } from '@shared/versionHistory.js';
 import { formatVersionTime } from '../renderer/src/utils/versionHistory.js';
 
 const T0 = new Date(2026, 9, 8, 10, 0).getTime();

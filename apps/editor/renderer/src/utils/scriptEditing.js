@@ -12,15 +12,15 @@ import {
   cycleElementText,
   nextSceneNumber,
   suggestSpeakers,
-} from '../../../shared/script/screenplay.js';
+} from '@shared/script/screenplay.js';
 import {
   BEAT_SECTION_TITLE,
   buildBeatRenumbering,
   findBeatSection,
   formatBeatText,
   toggleBeatSceneText,
-} from '../../../shared/script/scriptBeats.js';
-import { inlineToPlainText } from '../../../shared/daily/dailyMarkdown.js';
+} from '@shared/script/scriptBeats.js';
+import { inlineToPlainText } from '@shared/daily/dailyMarkdown.js';
 
 const SCENE_HEADING_LEVEL = 2;
 const BEAT_SECTION_LEVEL = 1;

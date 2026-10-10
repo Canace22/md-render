@@ -6,8 +6,8 @@ import {
   parseTodoPool,
   serializeDailyEntry,
   serializeDailyWorkspace,
-} from '../shared/migration/dailyFormat.js';
-import { markdownToBlocks } from '../shared/daily/dailyMarkdown.js';
+} from '@shared/migration/dailyFormat.js';
+import { markdownToBlocks } from '@shared/daily/dailyMarkdown.js';
 import { normalizeDailyWorkspace } from '../renderer/src/utils/dailyWorkspace.js';
 
 const DATE = '2026-10-05';

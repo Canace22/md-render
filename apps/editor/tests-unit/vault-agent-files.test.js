@@ -4,7 +4,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { syncVaultAgentFiles, MANAGED_MARKER_FILE } from '../main/vaultAgentFiles.js';
 import { readSkillEntries } from '../main/skillFiles.js';
-import { MANAGED_END, mergeAgentsMd } from '../shared/vaultAgentsMd.js';
+import { MANAGED_END, mergeAgentsMd } from '@shared/vaultAgentsMd.js';
 import { buildSkillRegistry, findSkillById } from '../renderer/src/core/agent/skillRegistry.js';
 import { BUILTIN_SKILL_ENTRIES } from '../renderer/src/core/agent/builtinSkills.js';
 

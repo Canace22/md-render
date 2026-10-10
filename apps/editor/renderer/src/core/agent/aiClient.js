@@ -10,8 +10,8 @@
  */
 
 import { AI_PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from './aiProviders.js';
-import { readChatStream } from '../../../../shared/sseChat.js';
-import { getLocalAgent, isRunnableAgent } from '../../../../shared/localAgents.js';
+import { readChatStream } from '@shared/sseChat.js';
+import { getLocalAgent, isRunnableAgent } from '@shared/localAgents.js';
 import {
   SOURCE_KINDS,
   buildAiSourceList,

@@ -9,7 +9,7 @@ import {
   insertScene,
   renumberScenes,
 } from '../renderer/src/utils/scriptEditing.js';
-import { inlineToPlainText } from '../shared/daily/dailyMarkdown.js';
+import { inlineToPlainText } from '@shared/daily/dailyMarkdown.js';
 
 const para = (text = '') => ({ type: 'paragraph', content: text ? [{ type: 'text', text, styles: {} }] : [] });
 const heading = (text) => ({ type: 'heading', props: { level: 2 }, content: [{ type: 'text', text, styles: {} }] });

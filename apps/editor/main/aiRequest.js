@@ -7,7 +7,7 @@
  * Main 只传 providerId + messages 给 server，server 解析 key 并转发。
  */
 
-import { readChatStream } from '../shared/sseChat.js';
+import { readChatStream } from '@shared/sseChat.js';
 
 const AI_PROXY_TIMEOUT_MS = 60000;
 const KNOWLEDGE_SEARCH_TIMEOUT_MS = 30000;

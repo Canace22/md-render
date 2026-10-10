@@ -7,7 +7,7 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
-import { hashContent } from '../../shared/capabilities/contentHash.js';
+import { hashContent } from '@shared/capabilities/contentHash.js';
 import { MIGRATION_DIR, readMigrationState, resolveVaultPath, writeMigrationState, writeTextFile } from './vaultFiles.js';
 import { planMigration } from './planMigration.js';
 

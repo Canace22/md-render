@@ -4,7 +4,7 @@ import {
   buildClippingTags,
   buildObsidianClippingMarkdown,
   formatObsidianDate,
-} from '../../../shared/frontmatter.js';
+} from '@shared/frontmatter.js';
 
 const CONTENT_SELECTORS = [
   'article',

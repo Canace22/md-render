@@ -3,7 +3,7 @@
  * 同时在内存里留最近一批，供活动记录页实时刷新（Web 版只有内存）。
  */
 
-import { buildActivityEntry } from '../../../../shared/capabilities/activity.js';
+import { buildActivityEntry } from '@shared/capabilities/activity.js';
 import { saveActivityEntry } from '../../utils/agentDataBridge.js';
 
 const MAX_MEMORY_ENTRIES = 200;
