@@ -1,10 +1,8 @@
 name: CI
 
+# 日常提交 / PR 不自动跑，只在 Actions 页签手动触发（发版走 release.yml 的 tag 流程）
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   electron-pack:

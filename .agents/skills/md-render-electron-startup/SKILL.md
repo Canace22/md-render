@@ -23,7 +23,7 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
 
 ## 打包 / CI 发版（`package-electron.mjs`、`ci.yml`、`release.yml`）
 
-Release 只在推 `v*` tag 时跑；`ci.yml` 有 macOS 和 Windows 两个打包任务，改打包链路先看 PR 上这两项是否全绿。CI 日志过期会返回 410，排查要趁早。
+Release 和 Pages 部署只在推 `v*` tag 时跑；`ci.yml` 有 macOS 和 Windows 两个打包任务，但只能手动触发（push/PR 不跑），改打包链路先在 Actions 页签手动跑一次 CI 确认两项全绿再打 tag。CI 日志过期会返回 410，排查要趁早。
 
 Windows 上踩过的坑（macOS 都不会暴露）：
 
