@@ -603,11 +603,11 @@ export default function AgentPanel({ open = true, onClose }) {
         dateKey: getTodayDateKey(),
         sources: sourceMessage?.files ?? [],
       });
-      if (!result?.ok) throw new Error(result?.error || '写入灵感笔记失败');
+      if (!result?.ok) throw new Error(result?.error || '记到今日速记失败');
       setPinnedIndex(index);
-      message.success(`已记到「${result.name || '灵感.md'}」`);
+      message.success(`已记到 ${result.dateKey} 速记的「${result.section}」`);
     } catch (error) {
-      message.error(error?.message || '写入灵感笔记失败');
+      message.error(error?.message || '记到今日速记失败');
     }
   }, [messages, host, activeSession?.title]);
 

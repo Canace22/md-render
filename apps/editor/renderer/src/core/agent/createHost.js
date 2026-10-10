@@ -52,7 +52,7 @@ import {
 } from '../../services/electronBridge.js';
 import { buildAgentArtifactPayload } from './artifactUtils.js';
 import { buildAgentHealthSnapshot, runSafeRepair } from './appSupport.js';
-import { appendInspirationEntry, INSPIRATION_NOTE_NAME } from './inspirationNote.js';
+import { buildInspirationDailyMarkdown, INSPIRATION_DAILY_SECTION } from './inspirationNote.js';
 import { loadKnowledgeSources } from './knowledgeSources.js';
 import { searchExternalKnowledge } from '../../services/externalKnowledgeService.js';
 import { readUrl as readPublicUrl } from '../../services/urlReaderService.js';
@@ -549,29 +549,12 @@ export function createHost({
       aiProxyBase: readAiServerBase(),
     }),
 
+    /** 对话灵感记到某天（默认今天）速记的「笔记」分区；不切页面，落盘走速记同步 */
     pinInspiration: async ({ text, title, dateKey = getTodayDateKey(), sources = [] } = {}) => {
-      const state = getState();
-      const existing = (state.workspace?.children ?? []).find(
-        (file) => file?.type === 'file' && file.name === INSPIRATION_NOTE_NAME,
-      );
-      const content = appendInspirationEntry(
-        existing ? readFileContent(state, existing) : '',
-        { text, title, dateKey, sources },
-      );
-      if (existing) {
-        state.applyContentFromOutside(existing.id, content);
-        return { ok: true, fileId: existing.id, name: existing.name, created: false };
-      }
-
-      const previousSelectedId = state.selectedId;
-      const result = await state.createGeneratedFile({
-        name: INSPIRATION_NOTE_NAME,
-        content,
-        contextNodeId: state.workspace?.id,
-        meta: { draftStatus: CONTENT_ENTRY_PRESETS.material.draftStatus },
-      });
-      if (result?.ok && previousSelectedId) getState().selectNode(previousSelectedId);
-      return { ...result, created: Boolean(result?.ok) };
+      const markdown = buildInspirationDailyMarkdown({ text, title, sources });
+      const targetDateKey = normalizeDateKey(dateKey);
+      getState().appendDailyMarkdown(targetDateKey, INSPIRATION_DAILY_SECTION, markdown);
+      return { ok: true, dateKey: targetDateKey, section: findSectionDef(INSPIRATION_DAILY_SECTION).match };
     },
 
     /** 执行 server 端注册的脚本工具（pdf_to_docx / video_to_audio 等），返回结构化摘要 */
