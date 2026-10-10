@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getUpdaterBridge } from '../services/electronBridge.js';
+import { getPlatform, getUpdaterBridge } from '../services/electronBridge.js';
+
+// mac 包未签名，Squirrel.Mac 会拒绝安装更新，只能引导用户去 Release 页手动下载
+const RELEASES_URL = 'https://github.com/Canace22/md-render/releases/latest';
+const isManualUpdate = () => getPlatform() === 'darwin';
 
 /**
  * 自动更新通知条 —— 类似 Claude APP 的顶部 banner
@@ -25,6 +29,10 @@ export default function UpdateNotifier() {
     getUpdaterBridge()?.download();
   }, []);
 
+  const handleOpenReleases = useCallback(() => {
+    window.open(RELEASES_URL, '_blank', 'noopener,noreferrer');
+  }, []);
+
   const handleInstall = useCallback(() => {
     getUpdaterBridge()?.install();
   }, []);
@@ -41,9 +49,15 @@ export default function UpdateNotifier() {
         {state.status === 'available' && (
           <>
             <span>新版本 v{state.version} 可用</span>
-            <button className="update-banner-btn" onClick={handleDownload}>
-              下载更新
-            </button>
+            {isManualUpdate() ? (
+              <button className="update-banner-btn" onClick={handleOpenReleases}>
+                前往下载
+              </button>
+            ) : (
+              <button className="update-banner-btn" onClick={handleDownload}>
+                下载更新
+              </button>
+            )}
           </>
         )}
 
