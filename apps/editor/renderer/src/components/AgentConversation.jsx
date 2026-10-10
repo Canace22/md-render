@@ -190,7 +190,7 @@ const AgentMessage = ({
               <button
                 type="button"
                 className={`agent-panel__copy-btn${pinnedIndex === index ? ' is-copied' : ''}`}
-                title={pinnedIndex === index ? '已记下' : '记到灵感笔记'}
+                title={pinnedIndex === index ? '已记下' : '记到今日速记'}
                 disabled={running || pinnedIndex === index}
                 onClick={() => onPin(index, parsed.displayText)}
               >

@@ -65,6 +65,8 @@ date: 2026-10-09
 | `add_todo_entry` | 兼容旧名：加到今天的今日任务 |
 | `complete_daily_task` | 按文字勾选（先全等，再包含）；没找到返回「勾选失败：…」 |
 
+AI 面板「📌 记下来」（`createHost.pinInspiration`）也写速记：`core/agent/inspirationNote.js` 把灵感拼成「- 灵感 · 会话名」+ 缩进正文 + 来源，追加到当天「💡 笔记」。正文里的 `#` 标题要去掉，否则会被解析成新分区。
+
 新增工具要同时改：`toolRegistry.js`（定义 + handler + label）、`createHost.js`、`shared/capabilities/riskLevels.js`、`shared/vaultAgentsMd.js`（给直接读文件的 agent 的映射表）、`server/mcp-bridge/README.md`。
 
 ## 大纲页面 / 思维导图（和速记共用）
