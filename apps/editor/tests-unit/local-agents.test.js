@@ -26,6 +26,7 @@ import {
 } from '../main/localAgents/models.js';
 import { startLocalAgentRun } from '../main/localAgents/runner.js';
 import { parseEnvOutput, readShellEnv } from '../main/localAgents/shellEnv.js';
+import { resolveSpawnCommand } from '../main/localAgents/winCommand.js';
 import { isSafeWorkDir, resolveWorkDir } from '../main/localAgents/workDir.js';
 import {
   filterAllowedTools,
@@ -454,5 +455,69 @@ describe('shell 环境（代理变量）', () => {
   it('.zshrc 打印的欢迎语不影响解析', () => {
     const output = 'Welcome!\n__MD_RENDER_ENV__PATH=/bin\0https_proxy=http://127.0.0.1:7890\0';
     expect(parseEnvOutput(output)).toEqual({ PATH: '/bin', https_proxy: 'http://127.0.0.1:7890' });
+  });
+});
+
+describe('Windows 启动脚本', () => {
+  const NPM_SHIM = [
+    '@ECHO off',
+    'IF EXIST "%dp0%\\node.exe" (',
+    '  SET "_prog=%dp0%\\node.exe"',
+    ') ELSE (',
+    '  SET "_prog=node"',
+    ')',
+    'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*',
+  ].join('\r\n');
+  const PNPM_SHIM = '@IF EXIST "%~dp0\\node.exe" (\r\n  "%~dp0\\node.exe"  "%~dp0\\..\\pnpm\\global\\5\\node_modules\\cli.js" %*\r\n)';
+  const EXE_SHIM = '@ECHO off\r\n"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*';
+  const win = (content, exists = () => false) => ({ platform: 'win32', readFile: () => content, exists });
+
+  it('npm 的 .cmd 解析成 node + js，不再直接 spawn .cmd', () => {
+    expect(resolveSpawnCommand('C:\\npm\\codex.cmd', ['--version'], win(NPM_SHIM))).toEqual({
+      command: 'node',
+      args: ['C:\\npm\\node_modules\\@openai\\codex\\bin\\codex.js', '--version'],
+    });
+  });
+
+  it('同目录有 node.exe 时用它', () => {
+    const result = resolveSpawnCommand('C:\\npm\\codex.cmd', [], win(NPM_SHIM, (file) => file === 'C:\\npm\\node.exe'));
+    expect(result.command).toBe('C:\\npm\\node.exe');
+  });
+
+  it('pnpm 的 %~dp0 写法和指向 exe 的 .cmd 都能解析', () => {
+    expect(resolveSpawnCommand('C:\\pnpm\\x.cmd', [], win(PNPM_SHIM)).args).toEqual(['C:\\pnpm\\global\\5\\node_modules\\cli.js']);
+    expect(resolveSpawnCommand('C:\\npm\\claude.cmd', ['-p'], win(EXE_SHIM))).toEqual({
+      command: 'C:\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe',
+      args: ['-p'],
+    });
+  });
+
+  it('解析不了的 .cmd 返回 null；exe 和非 Windows 原样返回', () => {
+    expect(resolveSpawnCommand('C:\\x\\odd.cmd', [], win('@echo hi'))).toBeNull();
+    expect(resolveSpawnCommand('C:\\x\\claude.exe', ['-p'], win(''))).toEqual({ command: 'C:\\x\\claude.exe', args: ['-p'] });
+    expect(resolveSpawnCommand('/bin/codex.cmd', [], { platform: 'darwin' })).toEqual({ command: '/bin/codex.cmd', args: [] });
+  });
+
+  it('Windows 候选只有 .exe / .cmd，并兜底 npm 全局目录', () => {
+    const files = buildCandidatePaths(getLocalAgent('codex'), { pathEnv: '', home: 'H', platform: 'win32' }).map((item) => item.file);
+    expect(files.every((file) => /\.(exe|cmd)$/.test(file))).toBe(true);
+    expect(files).toContain(path.join('H', 'AppData/Roaming/npm', 'codex.cmd'));
+  });
+
+  it('检测时 .cmd 解析失败的候选跳过，能解析的照常检测', async () => {
+    const good = path.join('H', 'AppData/Roaming/npm', 'codex.cmd');
+    const list = await detectAllLocalAgents({
+      getEnv: async () => ({ PATH: '' }),
+      isExecutable: (file) => file === good || file.endsWith('claude.cmd'),
+      resolveCommand: (file) => (file === good ? { command: 'node', args: [] } : null),
+      realPath: (file) => file,
+      run: async (file, args) => ({ ok: true, output: args[0] === '--version' ? '0.9.0' : 'Logged in' }),
+      probe: async () => false,
+      platform: 'win32',
+      home: 'H',
+    });
+    const byId = Object.fromEntries(list.map((item) => [item.id, item]));
+    expect(byId.codex).toMatchObject({ installed: true, path: good, status: 'ready' });
+    expect(byId.claude.installed).toBe(false);
   });
 });

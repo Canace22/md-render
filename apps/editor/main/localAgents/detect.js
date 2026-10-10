@@ -14,7 +14,8 @@ import {
   LOCAL_AGENT_KINDS,
   LOCAL_AGENT_STATUS,
 } from '@shared/localAgents.js';
-import { COMMON_BIN_DIRS, expandHome, getAgentEnv } from './shellEnv.js';
+import { expandHome, getAgentEnv, getCommonBinDirs } from './shellEnv.js';
+import { resolveSpawnCommand } from './winCommand.js';
 
 export const DETECT_TIMEOUT_MS = 3000;
 const PROBE_TIMEOUT_MS = 1500;
@@ -42,24 +43,38 @@ const resolveRealPath = (file) => {
   }
 };
 
+const failedResult = (error) => ({ ok: false, code: error?.code ?? 1, timedOut: false, output: error?.message ?? '' });
+
 /** 跑一条短命令，超时 / 失败都不抛，返回 { ok, code, output } */
 export const runShortCommand = (command, args, { env, timeout = DETECT_TIMEOUT_MS } = {}) => new Promise((resolve) => {
-  execFile(command, args, {
-    env: { ...env, NO_COLOR: '1' },
-    timeout,
-    killSignal: 'SIGKILL',
-    maxBuffer: COMMAND_MAX_BUFFER,
-  }, (error, stdout, stderr) => {
-    const output = stripVTControlCharacters(`${stdout ?? ''}\n${stderr ?? ''}`).trim();
-    resolve({ ok: !error, code: error ? (error.code ?? 1) : 0, timedOut: Boolean(error?.killed), output });
-  });
+  const target = resolveSpawnCommand(command, args);
+  if (!target) {
+    resolve(failedResult(new Error(`无法解析启动脚本 ${command}`)));
+    return;
+  }
+  try {
+    execFile(target.command, target.args, {
+      env: { ...env, NO_COLOR: '1' },
+      timeout,
+      killSignal: 'SIGKILL',
+      maxBuffer: COMMAND_MAX_BUFFER,
+      windowsHide: true,
+    }, (error, stdout, stderr) => {
+      const output = stripVTControlCharacters(`${stdout ?? ''}\n${stderr ?? ''}`).trim();
+      resolve({ ok: !error, code: error ? (error.code ?? 1) : 0, timedOut: Boolean(error?.killed), output });
+    });
+  } catch (error) {
+    // spawn 的部分错误（如 EINVAL）是同步抛的，不能让它变成整项检测失败
+    resolve(failedResult(error));
+  }
 });
 
 /** 候选路径（按优先级），纯函数 */
 export const buildCandidatePaths = (agent, { pathEnv = '', home = os.homedir(), platform = process.platform } = {}) => {
-  const exe = (name) => (platform === 'win32' ? [`${name}.cmd`, `${name}.exe`, name] : [name]);
+  // Windows 上不带扩展名的同名文件是给 Git Bash 用的 sh 脚本，不能直接执行
+  const exe = (name) => (platform === 'win32' ? [`${name}.exe`, `${name}.cmd`] : [name]);
   const pathDirs = String(pathEnv).split(path.delimiter).filter(Boolean);
-  const extraDirs = [...(agent.extraDirs ?? []), ...COMMON_BIN_DIRS].map((dir) => expandHome(dir, home));
+  const extraDirs = [...(agent.extraDirs ?? []), ...getCommonBinDirs(platform)].map((dir) => expandHome(dir, home));
   const candidates = [];
   [...pathDirs, ...extraDirs].forEach((dir) => {
     agent.bins.forEach((bin) => exe(bin).forEach((name) => candidates.push({ bin, file: path.join(dir, name) })));
@@ -97,6 +112,7 @@ const defaultDeps = () => ({
   getEnv: getAgentEnv,
   isExecutable,
   realPath: resolveRealPath,
+  resolveCommand: resolveSpawnCommand,
   run: runShortCommand,
   probe: async (url) => {
     try {
@@ -115,6 +131,8 @@ const locateBinary = async (agent, env, deps) => {
   const candidates = buildCandidatePaths(agent, { pathEnv: env.PATH, home: deps.home, platform: deps.platform });
   for (const { bin, file } of candidates) {
     if (!deps.isExecutable(file)) continue;
+    // 解析不了的 .cmd 启动脚本跑不起来，当作没找到
+    if (!deps.resolveCommand(file, [], { platform: deps.platform })) continue;
     const versionResult = await deps.run(file, ['--version'], { env });
     if (agent.ambiguousBins?.includes(bin) && !isCursorBinary({ realPath: deps.realPath(file), versionOutput: versionResult.output })) {
       continue;

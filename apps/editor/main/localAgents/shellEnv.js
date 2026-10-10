@@ -26,6 +26,20 @@ export const COMMON_BIN_DIRS = Object.freeze([
   '~/.local/share/fnm/aliases/default/bin',
 ]);
 
+/** Windows 上 npm / pnpm / scoop / Claude 安装器的 bin 目录：刚装的 CLI 可能还不在 Electron 继承的 PATH 里 */
+export const WINDOWS_BIN_DIRS = Object.freeze([
+  '~/AppData/Roaming/npm',
+  '~/AppData/Local/pnpm',
+  '~/scoop/shims',
+  '~/.local/bin',
+  '~/.bun/bin',
+  '~/.cursor/bin',
+]);
+
+export const getCommonBinDirs = (platform = process.platform) => (
+  platform === 'win32' ? WINDOWS_BIN_DIRS : COMMON_BIN_DIRS
+);
+
 export const expandHome = (dir, home = os.homedir()) => (
   dir === '~' ? home : dir.startsWith('~/') ? path.join(home, dir.slice(2)) : dir
 );
@@ -65,11 +79,11 @@ export const readShellEnv = async (shell, read = readLoginShellEnv) => {
 };
 
 /** 合并 PATH：login shell 的 → 当前进程的 → 常见目录（去重） */
-export const mergePath = ({ shellPath = '', processPath = '', home = os.homedir() } = {}) => {
+export const mergePath = ({ shellPath = '', processPath = '', home = os.homedir(), platform = process.platform } = {}) => {
   const dirs = [
     ...String(shellPath).split(path.delimiter),
     ...String(processPath).split(path.delimiter),
-    ...COMMON_BIN_DIRS.map((dir) => expandHome(dir, home)),
+    ...getCommonBinDirs(platform).map((dir) => expandHome(dir, home)),
   ].filter(Boolean);
   return [...new Set(dirs)].join(path.delimiter);
 };
@@ -86,6 +100,8 @@ export const getAgentEnv = ({ refresh = false } = {}) => {
   const shellEnvPromise = process.platform === 'win32' ? Promise.resolve({}) : readShellEnv(shell);
   cachedEnv = shellEnvPromise.then((shellEnv) => {
     const env = { ...shellEnv, ...process.env };
+    // Windows 的 process.env 展开后键名是 Path，删掉大小写变体，只留下面合并好的 PATH
+    Object.keys(env).filter((key) => key !== 'PATH' && key.toUpperCase() === 'PATH').forEach((key) => delete env[key]);
     env.PATH = mergePath({ shellPath: shellEnv.PATH, processPath: process.env.PATH });
     // 从 Electron 继承的这个变量会让 node 写的 CLI 以 Electron 身份启动
     delete env.ELECTRON_RUN_AS_NODE;
