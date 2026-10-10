@@ -80,7 +80,7 @@ import { createProposalSlice } from './slices/proposalSlice.js';
 import { createVaultSlice } from './slices/vaultSlice.js';
 import { createCommentSlice } from './slices/commentSlice.js';
 import { normalizeCommentThreads } from '../utils/commentThreads.js';
-import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
+import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
