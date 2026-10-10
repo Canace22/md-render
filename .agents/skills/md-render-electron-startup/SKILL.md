@@ -25,6 +25,8 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
 
 Release 和 Pages 部署只在推 `v*` tag 时跑；`ci.yml` 有 macOS 和 Windows 两个打包任务，但只能手动触发（push/PR 不跑），改打包链路先在 Actions 页签手动跑一次 CI 确认两项全绿再打 tag。CI 日志过期会返回 410，排查要趁早。
 
+**推了却没触发流水线**：先 `git ls-remote --tags origin` 看远端有没有这个 `v*` tag——多半是 tag 根本没推上去，只推了分支（分支 push 不触发任何流水线）。`release:tag` 现在默认自动提交 bump，并用 `git push --atomic origin <分支> <tag>` 一起推、推完核对远端 tag；改这个脚本不要退回「bump 后不提交就退出」的旧行为。
+
 Windows 上踩过的坑（macOS 都不会暴露）：
 
 1. **Node 版本**：workflow 的 `node-version` 要和本地一致（现为 22）。`better-sqlite3@12` 只发 Node 20+ 预编译包，Node 18 会退回 node-gyp 源码编译，而 `windows-latest` 的新版 Visual Studio 不被 pnpm 9 自带的 node-gyp 识别 → `find VS` 报错。

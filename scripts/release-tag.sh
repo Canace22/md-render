@@ -5,8 +5,8 @@
 #   bash scripts/release-tag.sh --minor      # minor bump
 #   bash scripts/release-tag.sh --major      # major bump
 #   bash scripts/release-tag.sh --no-bump    # 不 bump，使用 package.json 现有版本
-#   bash scripts/release-tag.sh --commit     # bump 后自动提交 package.json
-#   bash scripts/release-tag.sh --no-push    # 仅本地创建 tag
+#   bash scripts/release-tag.sh --no-commit  # bump 后不自动提交（需手动提交后重跑）
+#   bash scripts/release-tag.sh --no-push    # 仅本地创建 tag（不推分支和 tag）
 #   bash scripts/release-tag.sh --dry-run    # 预览，不写入
 #   bash scripts/release-tag.sh --message "自定义说明"
 set -euo pipefail
@@ -17,7 +17,7 @@ cd "$ROOT"
 PUSH=true
 DRY_RUN=false
 AUTO_BUMP=true
-AUTO_COMMIT=false
+AUTO_COMMIT=true
 BUMP_TYPE=""
 CUSTOM_MESSAGE=""
 
@@ -28,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=true; shift ;;
     --no-bump) AUTO_BUMP=false; shift ;;
     --commit) AUTO_COMMIT=true; shift ;;
+    --no-commit) AUTO_COMMIT=false; shift ;;
     --patch) BUMP_TYPE="patch"; shift ;;
     --minor) BUMP_TYPE="minor"; shift ;;
     --major) BUMP_TYPE="major"; shift ;;
@@ -195,13 +196,14 @@ if git ls-remote --tags origin "refs/tags/${TAG}" 2>/dev/null | grep -q .; then
   fail "远程 origin 已存在 tag: $TAG"
 fi
 
-if [[ "$BUMPED" == true && "$DRY_RUN" != true ]]; then
+# 版本文件有未提交改动（本次 bump 或上次中断残留）时，tag 会指向旧版本号的提交，必须先提交
+if [[ "$DRY_RUN" != true && -n "$(git status --porcelain -- "${VERSION_FILES[@]}")" ]]; then
   if [[ "$AUTO_COMMIT" == true ]]; then
     git add "${VERSION_FILES[@]}"
-    git commit -m "chore: bump version to ${VERSION}"
+    git commit -m "chore: bump version to ${VERSION}" -- "${VERSION_FILES[@]}"
     info "已提交版本 bump"
-  elif [[ -n "$(git status --porcelain -- "${VERSION_FILES[@]}")" ]]; then
-    fail "版本已写入 package.json，请先提交或使用 --commit 自动提交"
+  else
+    fail "版本已写入 package.json，请先提交，或去掉 --no-commit 自动提交"
   fi
 fi
 
@@ -258,9 +260,23 @@ fi
 git tag -a "$TAG" -m "$TAG_MESSAGE"
 info "已创建 annotated tag: $TAG"
 
-if [[ "$PUSH" == true ]]; then
-  git push origin "$TAG"
-  info "已推送到 origin: $TAG"
-else
-  warn "跳过推送。如需推送: git push origin $TAG"
+BRANCH="$(git symbolic-ref --short -q HEAD || true)"
+
+if [[ "$PUSH" != true ]]; then
+  warn "跳过推送。如需推送: git push --atomic origin ${BRANCH:-HEAD} $TAG"
+  exit 0
 fi
+
+# 分支和 tag 一起推：bump 提交不会只留在本地，任一失败则都不推
+if [[ -n "$BRANCH" ]]; then
+  git push --atomic origin "$BRANCH" "refs/tags/${TAG}"
+  info "已推送到 origin: ${BRANCH} + ${TAG}"
+else
+  git push origin "refs/tags/${TAG}"
+  info "已推送到 origin: $TAG（detached HEAD，未推分支）"
+fi
+
+if ! git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+  fail "远程 origin 未找到 tag ${TAG}，Release 流水线不会触发，请检查 origin 地址: $(git remote get-url origin)"
+fi
+info "远程已存在 ${TAG}，Release / Pages 流水线将自动触发（Actions 页签查看）"
