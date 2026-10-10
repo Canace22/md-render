@@ -33,6 +33,10 @@ Windows 上踩过的坑（macOS 都不会暴露）：
 2. **spawn pnpm**：Windows 上 pnpm 是 `pnpm.cmd`，`spawn('pnpm')` 不开 shell 会 `ENOENT`。脚本里调 pnpm 一律走 `runPnpm()`（优先用 `npm_execpath` 交给 `process.execPath` 执行），不要新增裸 `spawn('pnpm')`。
 3. **staging 必须与仓库同盘**：pnpm 9 `deploy` 用 `path.relative(项目目录, 目标/node_modules)` 算 modulesDir，跨盘（仓库 D:、TEMP 在 C:）会得到绝对路径并被拼回项目目录，报 symlink `ENOENT`，路径形如 `D:\...\apps\editor\C:\...`。所以 Windows staging 放在仓库同级 `.md-render-electron-builder`，不要改回 `%TEMP%`。
 
+macOS universal 包踩过的坑：
+
+4. **CI 上 `.node` 只有 arm64**：electron-builder 在 CI 默认用硬链接拷文件，universal 构建先打 x64 再 rebuild arm64，arm64 的 `.node` 原地覆盖时把 x64 临时包里的那份也改了，合并时两份相同就跳过 lipo → Intel Mac 打不开（Electron 本体仍是 universal，很难察觉）。脚本里已设 `USE_HARD_LINKS=false`，并在 mac 打包后用 `lipo -archs` 检查所有 `.node` 同时含 `x86_64 + arm64`，缺了直接失败。验证已发布的包：解开 dmg（`7z x`），对 `app.asar.unpacked/**/*.node` 执行 `file`。
+
 排查顺序：先看失败在哪一步（Install / Build / Check output），再拿日志最后 60 行定位；能在 Linux 复现的部分（vite build、pnpm deploy）可用 `pnpm --filter @md-render/editor electron:pack --linux` 验证，Windows 专属问题用 `path.win32` 模拟路径或以 CI 的 Windows 任务为准。重推同名 tag 前先删远端 tag。
 
 ## 边界

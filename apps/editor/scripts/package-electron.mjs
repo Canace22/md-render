@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -21,6 +21,8 @@ const STAGING_ROOT = isWindows
 const STAGING_APP_DIR = path.join(STAGING_ROOT, 'app');
 const STAGING_HOME = path.join(STAGING_ROOT, 'home');
 const APP_RELEASE_DIR = path.join(appDir, 'release');
+// mac 包是 universal：里面每个原生模块（.node）都必须同时带这两个架构，缺 x86_64 时 Intel Mac 打不开
+const MAC_REQUIRED_ARCHS = ['x86_64', 'arm64'];
 
 const electronBuilderCli = require.resolve('electron-builder/out/cli/cli.js', {
   paths: [appDir],
@@ -107,6 +109,27 @@ async function copyArtifactsBack() {
   });
 }
 
+function readMachOArchs(file) {
+  return execFileSync('lipo', ['-archs', file], { encoding: 'utf8' }).trim().split(/\s+/);
+}
+
+// 打包成功不代表 .node 是双架构的（曾经只有 arm64 也照样出 dmg），这里兜底检查，缺架构直接失败
+async function assertUniversalNativeModules() {
+  const entries = await fs.readdir(APP_RELEASE_DIR, { recursive: true });
+  const nodeFiles = entries.filter((file) => file.includes('.app') && file.endsWith('.node'));
+  if (nodeFiles.length === 0) {
+    throw new Error('mac 包里没找到原生模块 .node 文件，检查打包产物');
+  }
+  for (const file of nodeFiles) {
+    const archs = readMachOArchs(path.join(APP_RELEASE_DIR, file));
+    const missing = MAC_REQUIRED_ARCHS.filter((arch) => !archs.includes(arch));
+    if (missing.length > 0) {
+      throw new Error(`${file} 缺少架构 ${missing.join(', ')}（现有 ${archs.join(', ')}）`);
+    }
+  }
+  console.log(`原生模块架构检查通过：${nodeFiles.length} 个 .node 均含 ${MAC_REQUIRED_ARCHS.join(' + ')}`);
+}
+
 async function main() {
   await runPnpm(['exec', 'vite', 'build'], {
     cwd: appDir,
@@ -141,6 +164,10 @@ async function main() {
     ...process.env,
     npm_config_devdir: path.join(STAGING_HOME, '.electron-gyp'),
     ELECTRON_MIRROR: process.env.ELECTRON_MIRROR ?? 'https://npmmirror.com/mirrors/electron/',
+    // CI 上 electron-builder 默认用硬链接拷文件。universal 构建先打 x64 再 rebuild arm64，
+    // arm64 的 .node 会原地覆盖 staging 里的文件，连带把 x64 临时包里硬链过去的那份也改成 arm64，
+    // 最终合并时两份相同、跳过 lipo，Intel Mac 加载 better-sqlite3 失败。关掉硬链接，每个架构各拷一份。
+    USE_HARD_LINKS: 'false',
   };
   if (isWindows) {
     builderEnv.USERPROFILE = STAGING_HOME;
@@ -156,6 +183,10 @@ async function main() {
   });
 
   await copyArtifactsBack();
+
+  if (platformFlag === '--mac') {
+    await assertUniversalNativeModules();
+  }
 }
 
 main().catch((error) => {
