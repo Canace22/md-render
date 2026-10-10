@@ -43,7 +43,6 @@ import {
   collectMetaFilterCounts,
   findNodeById,
   getFolderChannelLabel,
-  resolveTargetFolderId,
   KNOWLEDGE_NODE_TYPE_OPTIONS,
   META_FILTER_STATUS_NONE,
   META_FILTER_STATUS_NONE_LABEL,
@@ -713,14 +712,14 @@ const WorkspaceSidebar = ({
       return;
     }
     event.preventDefault();
-    const targetNodeId = resolveTargetFolderId(workspace, selectedId);
+    // 空白处代表根目录（根节点本身不渲染）：新建落到根目录，而不是当前选中项所在的文件夹
     setContextMenu({
       kind: 'workspace',
-      nodeId: targetNodeId ?? workspace?.id ?? 'root',
+      nodeId: workspace?.id ?? 'root',
       x: event.clientX,
       y: event.clientY,
     });
-  }, [selectedId, workspace]);
+  }, [workspace]);
 
   // 拖到目录树空白处 = 移到根目录（根节点本身不渲染，没有别的落点）
   const handleTreeBackgroundDragOver = useCallback((event) => {
