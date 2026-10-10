@@ -492,16 +492,29 @@ describe('Windows 启动脚本', () => {
     });
   });
 
-  it('解析不了的 .cmd 返回 null；exe 和非 Windows 原样返回', () => {
-    expect(resolveSpawnCommand('C:\\x\\odd.cmd', [], win('@echo hi'))).toBeNull();
+  it('认不出的 .cmd 走 cmd.exe 并转义参数；有换行参数时返回 null', () => {
+    const cursorShim = '@echo off\r\n"%~dp0versions\\%VERSION%\\node.exe" "%~dp0versions\\%VERSION%\\index.js" %*';
+    const result = resolveSpawnCommand('C:\\Users\\A B\\cursor-agent.cmd', ['--workspace', 'C:\\my docs', 'a&b'], win(cursorShim));
+    expect(result.command).toBe('cmd.exe');
+    expect(result.options).toEqual({ windowsVerbatimArguments: true });
+    expect(result.args.slice(0, 3)).toEqual(['/d', '/s', '/c']);
+    expect(result.args[3]).toBe('"C:\\Users\\A^ B\\cursor-agent.cmd ^^^"--workspace^^^" ^^^"C:\\my^^^ docs^^^" ^^^"a^^^&b^^^""');
+    expect(resolveSpawnCommand('C:\\x\\odd.cmd', ['-p', 'line1\nline2'], win('@echo hi'))).toBeNull();
+  });
+
+  it('pnpm 写法省掉反斜杠也能认；exe 和非 Windows 原样返回', () => {
+    expect(resolveSpawnCommand('C:\\x\\a.cmd', [], win('"%~dp0lib\\cli.js" %*')).args).toEqual(['C:\\x\\lib\\cli.js']);
     expect(resolveSpawnCommand('C:\\x\\claude.exe', ['-p'], win(''))).toEqual({ command: 'C:\\x\\claude.exe', args: ['-p'] });
     expect(resolveSpawnCommand('/bin/codex.cmd', [], { platform: 'darwin' })).toEqual({ command: '/bin/codex.cmd', args: [] });
   });
 
-  it('Windows 候选只有 .exe / .cmd，并兜底 npm 全局目录', () => {
+  it('Windows 候选只有 .exe / .cmd，并兜底 npm、fnm 默认 Node、Cursor 安装目录', () => {
     const files = buildCandidatePaths(getLocalAgent('codex'), { pathEnv: '', home: 'H', platform: 'win32' }).map((item) => item.file);
     expect(files.every((file) => /\.(exe|cmd)$/.test(file))).toBe(true);
     expect(files).toContain(path.join('H', 'AppData/Roaming/npm', 'codex.cmd'));
+    expect(files).toContain(path.join('H', 'AppData/Roaming/fnm/aliases/default', 'codex.cmd'));
+    const cursorFiles = buildCandidatePaths(getLocalAgent('cursor'), { pathEnv: '', home: 'H', platform: 'win32' }).map((item) => item.file);
+    expect(cursorFiles).toContain(path.join('H', 'AppData/Local/cursor-agent', 'cursor-agent.cmd'));
   });
 
   it('检测时 .cmd 解析失败的候选跳过，能解析的照常检测', async () => {

@@ -112,8 +112,9 @@ export const startLocalAgentRun = ({
   });
 
   const target = resolveSpawnCommand(command, args);
-  if (!target) throw new Error(`无法启动 ${command}：解析不了这个启动脚本，请用官方方式重新安装`);
+  if (!target) throw new Error(`无法启动 ${command}：它的 .cmd 启动脚本经 cmd.exe 传不了多行参数，请改用 npm 或官方安装器安装`);
   const child = spawn(target.command, target.args, {
+    ...target.options,
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
