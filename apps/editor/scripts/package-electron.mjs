@@ -46,11 +46,20 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+// Windows 上 pnpm 是 pnpm.cmd，spawn 不开 shell 找不到；优先用 pnpm 传入的 npm_execpath（JS 入口）交给当前 node 执行
+function runPnpm(args, options = {}) {
+  const pnpmCli = process.env.npm_execpath;
+  if (pnpmCli && /pnpm/i.test(pnpmCli) && /\.c?js$/i.test(pnpmCli)) {
+    return runCommand(process.execPath, [pnpmCli, ...args], options);
+  }
+  return runCommand('pnpm', args, { shell: isWindows, ...options });
+}
+
 async function prepareStagingDirectory() {
   await fs.rm(STAGING_ROOT, { recursive: true, force: true });
   await fs.mkdir(STAGING_HOME, { recursive: true });
 
-  await runCommand('pnpm', [
+  await runPnpm([
     '--dir',
     workspaceRoot,
     '--filter',
@@ -98,7 +107,7 @@ async function copyArtifactsBack() {
 }
 
 async function main() {
-  await runCommand('pnpm', ['exec', 'vite', 'build'], {
+  await runPnpm(['exec', 'vite', 'build'], {
     cwd: appDir,
     env: {
       ...process.env,
