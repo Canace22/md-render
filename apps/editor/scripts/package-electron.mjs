@@ -14,8 +14,9 @@ const mode = cliArgs.includes('pack') ? 'pack' : 'build';
 const explicitPlatform = cliArgs.find((a) => ['--mac', '--win', '--linux'].includes(a));
 
 const isWindows = process.platform === 'win32';
+// Windows 上 staging 必须和仓库同盘：pnpm 9 deploy 用 path.relative 算 modulesDir，跨盘会拼出非法路径
 const STAGING_ROOT = isWindows
-  ? path.join(process.env.TEMP || 'C:\\Temp', 'md-render-electron-builder')
+  ? path.join(path.dirname(workspaceRoot), '.md-render-electron-builder')
   : '/private/tmp/md-render-electron-builder';
 const STAGING_APP_DIR = path.join(STAGING_ROOT, 'app');
 const STAGING_HOME = path.join(STAGING_ROOT, 'home');
