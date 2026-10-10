@@ -10216,6 +10216,7 @@ body.is-resizing-agent-panel {
 
 .daily-outline-toolbar {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-s);
   margin-bottom: var(--space-l);
@@ -10359,6 +10360,24 @@ body.is-resizing-agent-panel {
 /* ===== 大纲页面 / 思维导图（大纲页和今日速记共用） ===== */
 .outline-view-switch {
   flex-shrink: 0;
+}
+
+/* 图标和文字默认是 inline 基线对齐，改成 flex 居中 */
+.outline-view-switch .ant-segmented-item-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.outline-view-switch .ant-segmented-item-icon {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
+.outline-view-switch .ant-segmented-item-icon + * {
+  margin-inline-start: 0;
 }
 
 .outline-quick-toolbar-leading {
