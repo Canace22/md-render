@@ -41,6 +41,7 @@ macOS universal 包踩过的坑：
 
 5. **Release 要带更新元数据**：updater 先读 Release 里的 `latest.yml`（win）/ `latest-mac.yml`（mac）判断新版本，mac 更新包是 `.zip` 不是 `.dmg`。`release.yml` 上传 artifact 时只传 `.exe` / `.dmg` 会让检查一直报错，而 `UpdateNotifier` 遇到 error 不显示，表现为「自动更新静默失效」。改上传路径时保留这些文件，Check output 步骤里有兜底检查。
 6. **mac 未签名装不上更新**：Squirrel.Mac 校验签名，CI 当前 `CSC_IDENTITY_AUTO_DISCOVERY=false` 不签名，所以 mac 只提示并跳转 Release 页下载（`UpdateNotifier` 的 `isManualUpdate`）。配好 Apple 签名和公证后才能去掉这个降级。
+7. **点下载像没反应**：第一条 `download-progress` 要等连上 GitHub、拿到 blockmap 之后才推，网络慢时会等很久。所以点击时提示条先自己切到「下载中 0%」；用户点了下载之后的 `error` 要显示出来并给「前往下载」；30 分钟一次的后台检查不能把下载中的状态覆盖掉（`UpdateNotifier` 的 `mergeUpdaterStatus`）。
 
 排查顺序：先看失败在哪一步（Install / Build / Check output），再拿日志最后 60 行定位；能在 Linux 复现的部分（vite build、pnpm deploy）可用 `pnpm --filter @md-render/editor electron:pack --linux` 验证，Windows 专属问题用 `path.win32` 模拟路径或以 CI 的 Windows 任务为准。重推同名 tag 前先删远端 tag。
 
