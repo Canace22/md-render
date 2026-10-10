@@ -1690,6 +1690,8 @@ export const useEditorStore = create(
         content = '',
         contextNodeId,
         meta = {},
+        // false：只建文件不切过去（批量生成设定卡等场景）
+        select = true,
       } = {}) => {
         const { workspace, selectedId, openTabs, vaultStorage } = get();
         // 内置文档已迁到文件：落在根目录（内置区）的新文档改写到 Projects/内置文档
@@ -1739,7 +1741,7 @@ export const useEditorStore = create(
             };
             const nextWorkspace = addChildNode(workspace, target.parentFolderId, node, true);
             persistWorkspace(nextWorkspace);
-            set({
+            set(!select ? { workspace: nextWorkspace } : {
               workspace: nextWorkspace,
               selectedId: node.id,
               markdown: normalizedContent,
@@ -1768,7 +1770,7 @@ export const useEditorStore = create(
         };
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFile, true);
         persistWorkspace(nextWorkspace);
-        set({
+        set(!select ? { workspace: nextWorkspace } : {
           workspace: nextWorkspace,
           selectedId: fileId,
           markdown: normalizedContent,
