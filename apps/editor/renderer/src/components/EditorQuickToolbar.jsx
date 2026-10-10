@@ -1,6 +1,6 @@
 import { Dropdown } from 'antd';
 import {
-  ChevronDown, ClipboardCopy, Copy, Download, Eye, Rocket, Share2,
+  ChevronDown, ClipboardCopy, Copy, Download, Eye, FileCode2, Rocket, Share2,
 } from 'lucide-react';
 import { EXPORT_FORMATS } from './DocActionMenuItems.jsx';
 
@@ -10,26 +10,37 @@ const EXPORT_KEY_PREFIX = 'export:';
 
 const icon = (Comp) => <Comp size={ICON_SIZE} strokeWidth={ICON_STROKE} />;
 
-/** 菜单结构：通用动作（发布 / 复制 / 导出）在前，公众号专属动作收在最后一组 */
-const buildMenuItems = (styleSuffix) => [
-  { key: 'prepare-publish', icon: icon(Rocket), label: '准备发布…' },
+const copyAndExportItems = () => [
   { key: 'copy-rich', icon: icon(ClipboardCopy), label: '复制富文本' },
+  { key: 'copy-markdown', icon: icon(FileCode2), label: '复制为 Markdown' },
   {
     key: 'export',
     icon: icon(Download),
     label: '导出为',
     children: EXPORT_FORMATS.map((f) => ({ key: `${EXPORT_KEY_PREFIX}${f.key}`, label: f.label })),
   },
-  { type: 'divider' },
-  {
-    type: 'group',
-    label: `公众号${styleSuffix}`,
-    children: [
-      { key: 'preview-wechat', icon: icon(Eye), label: '预览公众号格式' },
-      { key: 'copy-wechat', icon: icon(Copy), label: '复制为公众号格式' },
-    ],
-  },
 ];
+
+/**
+ * 菜单结构：通用动作（发布 / 复制 / 导出）在前，公众号专属动作收在最后一组。
+ * 「复制为 Markdown」方便贴给 AI；大纲页是记录 / 梳理用的，不走发布流程，只留复制和导出。
+ */
+export const buildMenuItems = ({ styleSuffix = '', isOutline = false } = {}) => {
+  if (isOutline) return copyAndExportItems();
+  return [
+    { key: 'prepare-publish', icon: icon(Rocket), label: '准备发布…' },
+    ...copyAndExportItems(),
+    { type: 'divider' },
+    {
+      type: 'group',
+      label: `公众号${styleSuffix}`,
+      children: [
+        { key: 'preview-wechat', icon: icon(Eye), label: '预览公众号格式' },
+        { key: 'copy-wechat', icon: icon(Copy), label: '复制为公众号格式' },
+      ],
+    },
+  ];
+};
 
 /**
  * 编辑区顶部的文档动作栏（参照 Obsidian 的 view-header：独占一条细栏，不遮挡正文）。
@@ -39,9 +50,12 @@ const buildMenuItems = (styleSuffix) => [
  * 复制 / 导出的成败提示由调用方的 message 负责，这里只分发点击。
  */
 export default function EditorQuickToolbar({
+  leading = null,
   disabled,
+  isOutline = false,
   onPreparePublish,
   onCopyRichText,
+  onCopyMarkdown,
   onExportAs,
   onPreviewWeChat,
   onCopyWeChat,
@@ -50,6 +64,7 @@ export default function EditorQuickToolbar({
   const handlers = {
     'prepare-publish': onPreparePublish,
     'copy-rich': onCopyRichText,
+    'copy-markdown': onCopyMarkdown,
     'preview-wechat': onPreviewWeChat,
     'copy-wechat': onCopyWeChat,
   };
@@ -71,9 +86,10 @@ export default function EditorQuickToolbar({
       data-testid="editor-quick-toolbar"
       data-disabled={disabled ? 'true' : undefined}
     >
+      {leading && <div className="outline-quick-toolbar-leading">{leading}</div>}
       <Dropdown
         menu={{
-          items: buildMenuItems(styleSuffix),
+          items: buildMenuItems({ styleSuffix, isOutline }),
           onClick: handleClick,
           className: 'editor-share-menu',
         }}

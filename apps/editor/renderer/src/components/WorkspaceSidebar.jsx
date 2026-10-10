@@ -33,6 +33,8 @@ import {
   CalendarDays,
   SlidersHorizontal,
   TriangleAlert,
+  ListTree,
+  Clapperboard,
 } from 'lucide-react';
 import {
   filterWorkspace,
@@ -175,6 +177,8 @@ const TreeNode = ({
   onRemoveLocalProject,
   onManualSyncLocalProject,
   onAddFile,
+  onAddOutline,
+  onAddScript,
   onAddFolder,
   onRename,
   onDelete,
@@ -408,6 +412,12 @@ const TreeNode = ({
               <button type="button" onClick={runAndClose(() => onAddFile(node.id))}>
                 <File size={14} strokeWidth={1.5} /> 新建文件
               </button>
+              <button type="button" onClick={runAndClose(() => onAddOutline(node.id))}>
+                <ListTree size={14} strokeWidth={1.5} /> 新建大纲
+              </button>
+              <button type="button" onClick={runAndClose(() => onAddScript(node.id))}>
+                <Clapperboard size={14} strokeWidth={1.5} /> 新建剧本
+              </button>
               <button type="button" onClick={runAndClose(() => onAddFolder(node.id))}>
                 <Folder size={14} strokeWidth={1.5} /> 新建文件夹
               </button>
@@ -467,6 +477,8 @@ const TreeNode = ({
               onRemoveLocalProject={onRemoveLocalProject}
               onManualSyncLocalProject={onManualSyncLocalProject}
               onAddFile={onAddFile}
+              onAddOutline={onAddOutline}
+              onAddScript={onAddScript}
               onAddFolder={onAddFolder}
               onRename={onRename}
               onDelete={onDelete}
@@ -538,6 +550,8 @@ const WorkspaceSidebar = ({
   onRemoveLocalProject,
   onManualSyncLocalProject,
   onAddFile,
+  onAddOutline,
+  onAddScript,
   onAddFolder,
   onRename,
   onDelete,
@@ -685,13 +699,14 @@ const WorkspaceSidebar = ({
   }, [closeContextMenu, contextMenu]);
 
   const handleCreateFromSidebar = useCallback(async (kind, contextNodeId) => {
-    const create = kind === 'folder' ? onAddFolder : onAddFile;
+    const creators = { folder: onAddFolder, outline: onAddOutline, script: onAddScript, file: onAddFile };
+    const create = creators[kind] ?? onAddFile;
     const result = await create?.(contextNodeId);
     if (result?.ok && result.nodeId) {
       handleStartRename(result.nodeId, result.name);
       closeContextMenu();
     }
-  }, [closeContextMenu, onAddFile, onAddFolder, workspace]);
+  }, [closeContextMenu, onAddFile, onAddFolder, onAddOutline, onAddScript, workspace]);
 
   const handleTreeBackgroundContextMenu = useCallback((event) => {
     if (event.target.closest('.tree-node-row') || event.target.closest('.tree-node-context-menu')) {
@@ -1070,6 +1085,17 @@ const WorkspaceSidebar = ({
                 <button
                   type="button"
                   className="sidebar-add-icon"
+                  onClick={() => handleCreateFromSidebar('outline')}
+                  title="新建大纲"
+                  aria-label="新建大纲"
+                >
+                  <ListTree size={18} strokeWidth={1.5} />
+                </button>
+              )}
+              {allowStructureActions && (
+                <button
+                  type="button"
+                  className="sidebar-add-icon"
                   onClick={() => handleCreateFromSidebar('folder')}
                   title="新建文件夹"
                   aria-label="新建文件夹"
@@ -1092,6 +1118,8 @@ const WorkspaceSidebar = ({
             {filteredWorkspace
               ? renderTree(filteredWorkspace, selectedId, onSelect, {
                   onAddFile: (nodeId) => handleCreateFromSidebar('file', nodeId),
+                  onAddOutline: (nodeId) => handleCreateFromSidebar('outline', nodeId),
+                  onAddScript: (nodeId) => handleCreateFromSidebar('script', nodeId),
                   onAddFolder: (nodeId) => handleCreateFromSidebar('folder', nodeId),
                   onRename,
                   onDelete,
@@ -1134,6 +1162,12 @@ const WorkspaceSidebar = ({
               >
                 <button type="button" onClick={() => handleCreateFromSidebar('file', contextMenu.nodeId)}>
                   <File size={14} strokeWidth={1.5} /> 新建文件
+                </button>
+                <button type="button" onClick={() => handleCreateFromSidebar('outline', contextMenu.nodeId)}>
+                  <ListTree size={14} strokeWidth={1.5} /> 新建大纲
+                </button>
+                <button type="button" onClick={() => handleCreateFromSidebar('script', contextMenu.nodeId)}>
+                  <Clapperboard size={14} strokeWidth={1.5} /> 新建剧本
                 </button>
                 <button type="button" onClick={() => handleCreateFromSidebar('folder', contextMenu.nodeId)}>
                   <Folder size={14} strokeWidth={1.5} /> 新建文件夹

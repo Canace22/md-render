@@ -1,6 +1,7 @@
 import { ChevronRight, Copy, Download, History } from 'lucide-react';
 import { getWorkspaceFileKind, SIDEBAR_FILE_KIND_DOCUMENT } from '../store/workspaceUtils.js';
 import { needsConversion } from '../utils/fileConverters.js';
+import { isOutlinePage } from '../../../shared/outline/outlineTree.js';
 
 export const EXPORT_FORMATS = Object.freeze([
   { key: 'md', label: 'Markdown' },
@@ -17,7 +18,7 @@ export const isEditableDocNode = (node) => (
 );
 
 /**
- * 文件右键菜单里的文档操作：版本历史、导出、复制公众号。
+ * 文件右键菜单里的文档操作：版本历史、导出、复制公众号（大纲页不走发布，不给这项）。
  * 右键时节点已被选中，所以 docActions 里的 handler 直接作用于当前文档。
  */
 export default function DocActionMenuItems({ node, docActions, runAndClose }) {
@@ -46,9 +47,11 @@ export default function DocActionMenuItems({ node, docActions, runAndClose }) {
           ))}
         </div>
       </div>
-      <button type="button" onClick={runAndClose(() => docActions.copyToWechat?.())}>
-        <Copy size={14} strokeWidth={1.5} /> 复制公众号
-      </button>
+      {!isOutlinePage(node) && (
+        <button type="button" onClick={runAndClose(() => docActions.copyToWechat?.())}>
+          <Copy size={14} strokeWidth={1.5} /> 复制公众号
+        </button>
+      )}
     </>
   );
 }

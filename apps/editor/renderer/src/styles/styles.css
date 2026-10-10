@@ -4439,16 +4439,54 @@ body.theme-light #markdown-output code {
 }
 
 .image-lightbox__img {
-    max-width: 92vw;
-    max-height: 92vh;
-    transform-origin: center center;
-    transition: transform 0.05s linear;
+    /* 尺寸由 useLightboxZoom 按原图像素算出，不用 transform: scale，放大后不糊 */
+    flex-shrink: 0;
+    max-width: none;
+    max-height: none;
+    cursor: grab;
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.image-lightbox__img:active {
+    cursor: grabbing;
+}
+
+.image-lightbox__toolbar {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    z-index: 1;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.image-lightbox__toolbar button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 13px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.image-lightbox__toolbar button:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .image-lightbox__close,
 .image-lightbox__nav {
     position: absolute;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4488,6 +4526,7 @@ body.theme-light #markdown-output code {
 
 .image-lightbox__counter {
     position: absolute;
+    z-index: 1;
     bottom: 22px;
     left: 50%;
     transform: translateX(-50%);
@@ -4600,6 +4639,13 @@ body.theme-light #markdown-output code {
     line-height: var(--editor-body-line-height);
 }
 
+/* 待办复选框容器默认固定 24px 高，正文行高约 30px，复选框会比文字偏上；跟正文行高对齐 */
+.blocknote-editor .bn-block-content[data-content-type="checkListItem"] > div:has(> input) {
+    height: calc(var(--editor-body-size) * var(--editor-body-line-height));
+    display: flex;
+    align-items: center;
+}
+
 .blocknote-editor .bn-editor blockquote {
     border-left: 3px solid rgba(148, 163, 184, 0.48);
     color: #667085;
@@ -4607,6 +4653,30 @@ body.theme-light #markdown-output code {
 
 .blocknote-editor .bn-editor a {
     color: #3b82f6;
+}
+
+/* [[双链]]：和普通链接同色，点击跳转到文档 */
+.blocknote-editor .bn-editor .bn-wikilink {
+    color: #3b82f6;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(59, 130, 246, 0.35);
+    text-underline-offset: 3px;
+}
+
+.blocknote-editor .bn-editor .bn-wikilink:hover {
+    text-decoration-color: currentColor;
+}
+
+/* 方括号等语法默认隐藏，只露出文档名；光标进入链接时淡色显示，方便编辑 */
+.blocknote-editor .bn-editor .bn-wikilink-syntax {
+    display: none;
+}
+
+.blocknote-editor .bn-editor .bn-wikilink-syntax--editing {
+    display: inline;
+    opacity: 0.4;
+    text-decoration: none;
 }
 .blocknote-editor .bn-editor strong {
     color: #344054;
@@ -6191,6 +6261,11 @@ body.theme-dark .blocknote-editor .bn-editor blockquote {
 
 body.theme-dark .blocknote-editor .bn-editor a {
     color: #67e8f9;
+}
+
+body.theme-dark .blocknote-editor .bn-editor .bn-wikilink {
+    color: #67e8f9;
+    text-decoration-color: rgba(103, 232, 249, 0.35);
 }
 
 body.theme-dark .blocknote-editor.bn-container,
@@ -10161,31 +10236,46 @@ body.is-resizing-agent-panel {
   width: 280px;
 }
 
+/* 大纲正文用更深的文字色，不再偏灰（已勾选的待办仍按下面规则置灰） */
+.blocknote-editor.bn-container:is(.daily-outline-editor, .outline-editor) {
+  --bn-colors-editor-text: #0f172a;
+}
+
+.blocknote-editor.bn-container[data-color-scheme="dark"]:is(.daily-outline-editor, .outline-editor) {
+  --bn-colors-editor-text: #f8fafc;
+}
+
+/* 全局规则把 p / li 写死成 #475467，会盖掉上面的变量；大纲里让它们跟随变量 */
+:is(.daily-outline-editor, .outline-editor) .bn-editor p,
+:is(.daily-outline-editor, .outline-editor) .bn-editor li {
+  color: var(--bn-colors-editor-text);
+}
+
 /* 分区标题和幕布一样醒目，子级用竖线串起来 */
-.daily-outline-editor .bn-block-content[data-content-type="heading"] {
+:is(.daily-outline-editor, .outline-editor) .bn-block-content[data-content-type="heading"] {
   padding-top: 14px;
 }
 
 /* 缩进：子级整体右移一个圆点宽（24px），子级的圆点正好对齐父级文字；
    层级竖线用 BlockNote 自带的那条（::before），挪到父级圆点正下方，不再自己另画一条 */
-.daily-outline-editor .bn-block-group .bn-block-group {
+:is(.daily-outline-editor, .outline-editor) .bn-block-group .bn-block-group {
   margin-left: 24px;
 }
 
-.daily-outline-editor .bn-block-group .bn-block-group > .bn-block-outer:not([data-prev-depth-changed])::before {
+:is(.daily-outline-editor, .outline-editor) .bn-block-group .bn-block-group > .bn-block-outer:not([data-prev-depth-changed])::before {
   left: -12px;
 }
 
 /* 图片：速记里当缩略图看，限宽限高、顶部对齐裁切，双击看大图 */
-.daily-outline-editor .bn-block-content[data-content-type="image"] {
+:is(.daily-outline-editor, .outline-editor) .bn-block-content[data-content-type="image"] {
   padding-block: 6px;
 }
 
-.daily-outline-editor [data-content-type="image"] .bn-file-block-content-wrapper {
+:is(.daily-outline-editor, .outline-editor) [data-content-type="image"] .bn-file-block-content-wrapper {
   max-width: min(100%, 420px);
 }
 
-.daily-outline-editor [data-content-type="image"] .bn-visual-media {
+:is(.daily-outline-editor, .outline-editor) [data-content-type="image"] .bn-visual-media {
   max-height: 280px;
   object-fit: cover;
   object-position: top left;
@@ -10193,7 +10283,7 @@ body.is-resizing-agent-panel {
   border-radius: var(--radius-m);
 }
 
-.daily-outline-editor .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
+:is(.daily-outline-editor, .outline-editor) .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
   color: var(--color-text-secondary);
   text-decoration: line-through;
 }
@@ -10264,6 +10354,300 @@ body.is-resizing-agent-panel {
   .daily-outline {
     padding: 24px 16px 64px;
   }
+}
+
+/* ===== 大纲页面 / 思维导图（大纲页和今日速记共用） ===== */
+.outline-view-switch {
+  flex-shrink: 0;
+}
+
+.outline-quick-toolbar-leading {
+  margin-right: auto;
+}
+
+/* 大纲页切到导图：编辑器常挂载只是藏起来，导图占满正文区 */
+.editor-layout.is-mindmap > .paper-stage,
+.editor-layout.is-mindmap > .toc-curtain {
+  display: none;
+}
+
+.daily-outline.is-mindmap {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 24px;
+}
+
+.daily-outline.is-mindmap .daily-outline-header {
+  width: 100%;
+}
+
+.daily-outline.is-mindmap .daily-outline-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  display: flex;
+}
+
+.mindmap-view {
+  --mm-line: color-mix(in srgb, var(--color-text-secondary) 45%, transparent);
+  --mm-gap: 28px;
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  background: var(--color-bg-surface);
+  touch-action: none;
+}
+
+.mindmap-view:active {
+  cursor: grabbing;
+}
+
+.mindmap-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  width: max-content;
+}
+
+.mm-branch {
+  display: flex;
+  align-items: center;
+}
+
+.mm-node {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 420px;
+  padding: 4px 8px;
+  border-radius: var(--radius-m);
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.mm-node:hover {
+  background: var(--color-bg-inline-code);
+}
+
+.mm-node--task {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mm-node--root {
+  padding: 12px 28px;
+  border-radius: var(--radius-m);
+  background: var(--color-text-primary);
+  color: var(--color-bg-surface);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.mm-node--root:hover {
+  background: var(--color-text-primary);
+}
+
+.mm-node--heading {
+  padding: 8px 18px;
+  background: var(--color-bg-inline-code);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.mm-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mm-text.is-done {
+  color: var(--color-text-secondary);
+  text-decoration: line-through;
+}
+
+/* 导图里的 [[双链]]：只显示文档名，点击打开文档 */
+.mm-link {
+  color: #3b82f6;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(59, 130, 246, 0.35);
+  text-underline-offset: 3px;
+}
+
+.mm-link:hover {
+  text-decoration-color: currentColor;
+}
+
+body.theme-dark .mm-link {
+  color: #67e8f9;
+  text-decoration-color: rgba(103, 232, 249, 0.35);
+}
+
+.mm-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--color-text-secondary);
+  border-radius: 3px;
+  color: var(--color-bg-surface);
+}
+
+.mm-check.is-checked {
+  border-color: var(--color-text-secondary);
+  background: var(--color-text-secondary);
+}
+
+.mm-image {
+  display: block;
+  max-width: 240px;
+  max-height: 160px;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
+}
+
+/* 折叠按钮：挂在节点右边线上，收起时显示子孙数量 */
+.mm-toggle {
+  position: absolute;
+  top: 50%;
+  right: -10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--mm-line);
+  border-radius: 9px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.mm-node:hover > .mm-toggle,
+.mm-toggle.is-collapsed {
+  opacity: 1;
+}
+
+/* 连线：父节点 → 竖线 → 每个子节点一段横线 */
+.mm-children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--mm-gap);
+}
+
+.mm-children::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: var(--mm-gap);
+  border-top: 1.5px solid var(--mm-line);
+}
+
+.mm-child {
+  position: relative;
+  padding: 6px 0 6px var(--mm-gap);
+}
+
+.mm-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-left: 1.5px solid var(--mm-line);
+}
+
+.mm-child:first-child::before {
+  top: 50%;
+}
+
+.mm-child:last-child::before {
+  bottom: 50%;
+}
+
+.mm-child:only-child::before {
+  display: none;
+}
+
+.mm-child::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: calc(var(--mm-gap) - 4px);
+  border-top: 1.5px solid var(--mm-line);
+}
+
+.mindmap-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  background: var(--color-bg-surface);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  cursor: default;
+}
+
+.mindmap-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mindmap-controls button:hover:not(:disabled) {
+  background: var(--color-bg-inline-code);
+  color: var(--color-text-primary);
+}
+
+.mindmap-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mindmap-scale {
+  min-width: 48px !important;
+}
+
+/* 大纲页导图：占满正文区（文档动作栏下方） */
+.outline-mindmap-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── 命令面板（Cmd/Ctrl+K）─────────────────────────────────────────────── */
@@ -11193,4 +11577,172 @@ body.is-resizing-agent-panel {
 .tree-context-submenu:hover > .tree-context-submenu-panel,
 .tree-context-submenu:focus-within > .tree-context-submenu-panel {
     display: block;
+}
+
+/* ── 剧本页面（layout: script） ───────────────────────────── */
+
+/* 场景标题像场记条：浅底色 + 左侧色条，一眼分出每场戏 */
+#markdown-output .blocknote-editor.script-editor .bn-block-content[data-content-type="heading"] {
+    margin-top: var(--space-m);
+    padding: 2px var(--space-s);
+    border-left: 3px solid var(--color-brand-primary);
+    border-radius: var(--radius-s);
+    background: var(--color-bg-active);
+}
+
+.script-panel {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 260px;
+    min-height: 0;
+    border-left: 1px solid var(--color-border);
+    background: var(--color-bg-surface);
+}
+
+.script-panel-tabs {
+    padding: var(--space-m) var(--space-m) 0;
+}
+
+.script-panel-actions {
+    display: flex;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m) var(--space-xs);
+}
+
+.script-panel-hint {
+    margin: 0;
+    padding: 0 var(--space-m) var(--space-s);
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption);
+    line-height: var(--line-height-caption);
+}
+
+.script-panel-hint kbd {
+    padding: 0 4px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-s);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.script-panel-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: var(--space-l);
+}
+
+.script-panel-section {
+    padding: var(--space-s) var(--space-s) 0;
+    border-top: 1px solid var(--color-border);
+}
+
+.script-panel-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 28px;
+    padding: 0 var(--space-s);
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption);
+    font-weight: var(--font-weight-medium);
+}
+
+.script-panel-section-head em {
+    margin-left: 6px;
+    font-style: normal;
+    opacity: 0.7;
+}
+
+.script-panel-list {
+    margin: 0;
+    padding: 0 0 var(--space-s);
+    list-style: none;
+}
+
+.script-panel-row {
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius-m);
+}
+
+.script-panel-row:hover {
+    background: var(--color-bg-active);
+}
+
+.script-panel-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+    padding: 5px var(--space-s);
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    text-align: left;
+    cursor: pointer;
+}
+
+.script-panel-main:disabled {
+    cursor: default;
+}
+
+.script-panel-main strong,
+.script-panel-main span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.script-panel-main strong {
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-medium);
+}
+
+.script-panel-main span {
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption);
+}
+
+.script-card-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: var(--space-xs);
+    border: none;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.script-card-link:hover {
+    color: var(--color-brand-primary);
+}
+
+.script-panel-empty {
+    margin: 0;
+    padding: var(--space-xs) var(--space-s) var(--space-s);
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption);
+}
+
+.script-card-link.is-linked {
+    color: var(--color-brand-primary);
+}
+
+.script-beat-input.ant-input {
+    margin: 0 var(--space-s) var(--space-s);
+    width: calc(100% - 2 * var(--space-s));
+}
+
+.script-beat-act-title {
+    padding: var(--space-xs) var(--space-s) 0;
+    color: var(--color-text-primary);
+    font-size: var(--text-caption);
+    font-weight: var(--font-weight-bold);
 }

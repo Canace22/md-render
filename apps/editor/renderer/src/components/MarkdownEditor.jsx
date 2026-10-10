@@ -11,6 +11,9 @@ import DocHeader from './DocHeader.jsx';
 import ExternalChangeBanner from './ExternalChangeBanner.jsx';
 import EditorQuickToolbar from './EditorQuickToolbar.jsx';
 import EditorFormattingToolbarController from './EditorFormattingToolbar.jsx';
+import EditorSlashMenu from './EditorSlashMenu.jsx';
+import EditorDocLinks from './EditorDocLinks.jsx';
+import { useOpenWikilink } from '../hooks/useWikilinkNavigation.js';
 import FolderFileList from './FolderFileList.jsx';
 import DocEmptyState from './DocEmptyState.jsx';
 import CreationDashboard from './CreationDashboard.jsx';
@@ -52,6 +55,7 @@ import {
   isVsCodeMarkdownClipboard,
   normalizeFrontmatterForPaste,
   normalizeMarkdown,
+  tightenListSpacing,
 } from '../utils/markdownUtils';
 import {
   rewriteMarkdownImagesForDisk,
@@ -59,6 +63,8 @@ import {
 } from '../utils/localMediaMarkdown.js';
 import { applyThemeToBody } from '../utils/themeUtils';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
+import { docFilePath, findDocByWikiName, listWorkspaceDocs } from '../utils/docMentionItems.js';
+import { wikilinksToPathLinks } from '../utils/wikilinkText.js';
 import { copyToWeChat } from '../utils/wechatCopy';
 import { copyHtmlWithExecCommand } from '../utils/clipboardUtils.js';
 import { getTemplateById } from '../utils/wechatTemplates';
@@ -92,6 +98,12 @@ import { hasDbBridge } from '../services/electronBridge.js';
 import { FILE_CONVERT_TOOLS, isFileConvertSupported } from '../services/fileConvertTools.js';
 import { useFileConvertTool } from '../hooks/useFileConvertTool.js';
 import { useImageLightbox } from '../hooks/useImageLightbox.js';
+import { useOutlinePage } from '../hooks/useOutlinePage.js';
+import { PAGE_LAYOUT_KEY, PAGE_LAYOUT_OUTLINE, PAGE_LAYOUT_SCRIPT, withTitleHeading } from '../../../shared/outline/outlineTree.js';
+import { useScriptPage } from '../hooks/useScriptPage.js';
+import ScriptPanel from './script/ScriptPanel.jsx';
+import MindMapView from './outline/MindMapView.jsx';
+import OutlineViewSwitch from './outline/OutlineViewSwitch.jsx';
 import LocalProjectConflictModal from './LocalProjectConflictModal.jsx';
 import {
   buildActiveTopicSummary,
@@ -1266,6 +1278,15 @@ function MarkdownEditor() {
     }
   }, [enqueueProjectFileSave, localProjectSupported, setDiskSavePending]);
 
+  // 粘贴截图和斜杠菜单「图片」共用：先占位，再异步存盘并把 URL 回填到当前文档
+  const insertImagesIntoFile = (targetEditor, imageFiles) => {
+    const sourceFileId = selectedFile?.id ?? '';
+    return insertImagesFromFiles(targetEditor, imageFiles, uploadFile, {
+      fileId: sourceFileId,
+      onResolved: (resolutions) => persistResolvedImages(sourceFileId, resolutions, targetEditor),
+    });
+  };
+
   const editor = useCreateBlockNote(
     {
       ...BLOCKNOTE_OPTIONS,
@@ -1289,15 +1310,7 @@ function MarkdownEditor() {
           if (unsupportedFiles.length > 0 || imageFiles.length === 0) {
             message.warning('暂不支持粘贴非图片附件，请使用文件导入');
           }
-          const sourceFileId = selectedFile?.id ?? '';
-          if (imageFiles.length > 0) {
-            void insertImagesFromFiles(pasteEditor, imageFiles, uploadFile, {
-              fileId: sourceFileId,
-              onResolved: (resolutions) => (
-                persistResolvedImages(sourceFileId, resolutions, pasteEditor)
-              ),
-            });
-          }
+          if (imageFiles.length > 0) void insertImagesIntoFile(pasteEditor, imageFiles);
           return true;
         }
 
@@ -1357,6 +1370,9 @@ function MarkdownEditor() {
     },
     [selectedId, contentResetKey, editorReloadToken],
   );
+  const outlinePage = useOutlinePage(editor, selectedFile);
+  const scriptPage = useScriptPage(editor, selectedFile);
+  const openWikilink = useOpenWikilink(workspace);
 
   useEffect(() => {
     activeEditorRef.current = editor;
@@ -1599,6 +1615,31 @@ function MarkdownEditor() {
     }
   };
 
+  const handleCopyMarkdown = async () => {
+    if (hasPendingImagePlaceholders(editor.document)) {
+      message.warning('图片仍在上传，请稍后再复制');
+      return false;
+    }
+    const docs = listWorkspaceDocs(workspace);
+    const body = wikilinksToPathLinks(
+      tightenListSpacing(normalizeMarkdown(editor.blocksToMarkdownLossy(editor.document))),
+      (name) => docFilePath(findDocByWikiName(docs, name)),
+    );
+    const text = withTitleHeading(stripFileExtension(selectedFile?.name), body);
+    if (!text) {
+      message.warning('没有可复制的内容');
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success('已复制 Markdown');
+      return true;
+    } catch {
+      message.error('复制失败，请重试');
+      return false;
+    }
+  };
+
   const handleCopyToWeChat = async () => {
     if (hasPendingImagePlaceholders(editor.document)) {
       message.warning('图片仍在上传，请稍后再复制');
@@ -1797,6 +1838,20 @@ function MarkdownEditor() {
       ? { ok: true, nodeId: node.id, name: node.name, type: node.type }
       : { ok: false };
   }, [localProjectSupported, desktopProjectSupported, resolveLocalCreateTarget, addFile, insertLocalProjectNode]);
+
+  // 大纲页面 = 普通 .md + frontmatter `layout: outline`（Obsidian / 其他 AI 照常能读）
+  const handleAddOutline = useCallback(async (contextNodeId) => {
+    const result = await handleAddFile(contextNodeId);
+    if (result?.ok) setFileFrontmatterProperty(result.nodeId, PAGE_LAYOUT_KEY, PAGE_LAYOUT_OUTLINE);
+    return result;
+  }, [handleAddFile, setFileFrontmatterProperty]);
+
+  // 剧本页面同理：frontmatter `layout: script`
+  const handleAddScript = useCallback(async (contextNodeId) => {
+    const result = await handleAddFile(contextNodeId);
+    if (result?.ok) setFileFrontmatterProperty(result.nodeId, PAGE_LAYOUT_KEY, PAGE_LAYOUT_SCRIPT);
+    return result;
+  }, [handleAddFile, setFileFrontmatterProperty]);
 
   const handleAddFolder = useCallback(async (contextNodeId) => {
     if (localProjectSupported) {
@@ -2555,6 +2610,8 @@ function MarkdownEditor() {
         onRemoveLocalProject={handleRemoveLocalProject}
         onManualSyncLocalProject={handleManualSyncLocalProject}
         onAddFile={handleAddFile}
+        onAddOutline={handleAddOutline}
+        onAddScript={handleAddScript}
         onAddFolder={handleAddFolder}
         onMoveNode={handleMoveNode}
         onPinNode={pinNode}
@@ -2729,15 +2786,29 @@ function MarkdownEditor() {
           <>
             {/* 文档级动作：参照 Obsidian 的视图头部，独占一条细栏，不遮挡正文 */}
             <EditorQuickToolbar
+              leading={outlinePage.isOutline
+                ? <OutlineViewSwitch value={outlinePage.view} onChange={outlinePage.setView} />
+                : null}
               disabled={!selectedFile}
+              isOutline={outlinePage.isOutline}
               onPreparePublish={handleOpenPreparePublish}
               onCopyRichText={handleCopyRichText}
+              onCopyMarkdown={handleCopyMarkdown}
               onExportAs={handleExportAs}
               onPreviewWeChat={() => setWechatPreviewOpen(true)}
               onCopyWeChat={handleCopyToWeChat}
               copyStyleName={getTemplateById(copyStyle).name}
             />
-            <div className="editor-layout">
+            <div className={`editor-layout${outlinePage.showMindMap ? ' is-mindmap' : ''}`}>
+              {/* 大纲页的导图：编辑器常挂载只是藏起来，切回大纲光标和撤销栈都还在 */}
+              {outlinePage.showMindMap && (
+                <MindMapView
+                  key={selectedFile.id}
+                  tree={outlinePage.mindTree}
+                  onSelectNode={outlinePage.handleSelectNode}
+                  onOpenLink={openWikilink}
+                />
+              )}
               <div className="paper-stage">
                 <div className="paper-surface" data-testid="paper-surface">
                   <DiffOverlay />
@@ -2774,13 +2845,13 @@ function MarkdownEditor() {
                       >
                         <BlockNoteView
                           editor={editor}
-                          className="blocknote-editor"
+                          className={`blocknote-editor${outlinePage.isOutline ? ' outline-editor' : ''}${scriptPage.isScript ? ' script-editor' : ''}`}
                           data-testid="blocknote-editor"
                           theme={resolvedTheme}
                           editable={Boolean(selectedFile) && !selectedReadOnly}
                           formattingToolbar={false}
                           linkToolbar
-                          slashMenu
+                          slashMenu={false}
                           sideMenu={false}
                           filePanel={false}
                           tableHandles
@@ -2791,17 +2862,26 @@ function MarkdownEditor() {
                             enableAiRewrite
                             selectionSkillIds={selectionToolbarSkillIds}
                           />
+                          <EditorSlashMenu onInsertImages={insertImagesIntoFile} />
+                          <EditorDocLinks
+                            workspace={workspace}
+                            currentFileId={selectedFile?.id}
+                          />
                         </BlockNoteView>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-              <TocPanel
-                markdown={resolvedMarkdown}
-                collapsed={tocCollapsed}
-                onToggle={toggleTocCollapsed}
-              />
+              {scriptPage.isScript ? (
+                <ScriptPanel script={scriptPage} />
+              ) : (
+                <TocPanel
+                  markdown={resolvedMarkdown}
+                  collapsed={tocCollapsed}
+                  onToggle={toggleTocCollapsed}
+                />
+              )}
             </div>
             {/* 底部状态栏 */}
             <StatusBar content={resolvedMarkdown} backlinks={0} />
