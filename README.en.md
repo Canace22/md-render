@@ -2,23 +2,34 @@
 
 [中文](./README.md)
 
-**A local writing workbench for WeChat Official Account and blog authors: jot down ideas, draft, let AI revise, then paste a nicely formatted post straight into WeChat — all in one app.**
+**A local-first personal workbench: use Daily notes to capture ideas and manage each day's work, write articles, scripts, notes or any long-form text as documents, with an AI assistant always at hand.**
 
-- **Desktop (macOS)**: [download the installer](https://github.com/Canace22/md-render/releases/latest) — recommended for ongoing writing.
+- **Desktop (macOS)**: [download the installer](https://github.com/Canace22/md-render/releases/latest) — recommended for everyday use.
 - **Web**: [open it in your browser](https://canace22.github.io/md-render/) — nothing to install, good for a quick try.
 
-Your drafts live on your own computer, optionally as plain `.md` files any editor can open. The UI is in Chinese.
+Your content lives on your own computer and can be saved as plain `.md` files any editor can open. The UI is in Chinese.
 
 ## What it helps you do
 
-A post usually goes like this:
+**Daily notes: your starting point each day**
 
-1. **Capture**: "今日速记" (Daily notes) keeps tasks, ideas, and events per day; unfinished tasks carry over automatically.
-2. **Write**: Markdown editing with live preview, code highlighting, Mermaid diagrams, tables, table of contents, light / dark themes.
-3. **Improve**: the AI assistant on the right polishes, expands, suggests titles, and produces WeChat / Xiaohongshu / Zhihu versions; type `/编辑部审稿` to have nine editor personas review your draft. Before AI edits your text, it shows exactly which lines change and waits for you to confirm.
-4. **Publish**: pick a layout template and copy to WeChat in one click, or export to MD / HTML / PDF / DOCX.
+Jot down ideas, to-dos, and events, filed by day; anything unfinished carries over to tomorrow. Meant to be the first page you open each day to plan and review your work.
 
-Also included: topic board, material inbox, idea canvas, publishing schedule, and a knowledge base with `[[Document Name]]` wikilinks, graph view, and full-text search.
+**Documents: write anything**
+
+Articles, scripts, technical docs, reading notes — all Markdown, with live preview, code highlighting, Mermaid diagrams, tables, table of contents, and light / dark themes.
+
+- Comes with a few default folders, and you can open any folder on your computer to edit the `.md` files in it directly.
+- `[[Document Name]]` wikilinks, backlinks, graph view, and full-text search turn scattered documents into your own knowledge base.
+- A whiteboard / idea canvas for outlining structure, plotting stories, or sketching ideas.
+
+**AI assistant: docked on the right**
+
+Polishes, expands, suggests titles, and rewrites for different platforms; type `/编辑部审稿` to have nine editor personas review your draft. Before AI edits your text, it shows exactly which lines change and waits for you to confirm. Every capability is a skill file, so you can add your own.
+
+**Publishing: ready when you are**
+
+Copy to WeChat Official Account formatting in one click (several templates), or export to MD / HTML / PDF / DOCX. For WeChat writers there's also a topic board, material inbox, publishing schedule, and pre-publish checklist.
 
 ## Getting started
 
@@ -81,9 +92,9 @@ The desktop app connects to `http://localhost:8788` by default. To deploy elsewh
 3. Click **复制到微信公众号** (Copy to WeChat) at the top of the preview.
 4. Paste into the WeChat editor.
 
-### Keep drafts in your own folder (desktop)
+### Open your own folder (desktop)
 
-Choose a folder in **设置 → 本地项目目录** (Settings → Local project folder). Every draft is then saved as a `.md` file there. If you change files outside the app, click "从磁盘同步" (Sync from disk).
+Choose any folder in **设置 → 本地项目目录** (Settings → Local project folder). The `.md` files in it become your documents, and new documents are saved there too. If you change files outside the app, click "从磁盘同步" (Sync from disk).
 
 The app doesn't sync across devices. Compare and restore past versions via `Cmd/Ctrl + K` → 查看文档版本历史; for long-term history, put the folder under Git.
 
