@@ -7,7 +7,7 @@
 编辑器里粘贴的图片，用 Obsidian 打开同一份 `.md` 时显示成原文链接，不能出图。链接形如：
 
 ```
-![hash.png](local-media://users/canace/Documents/MdRender/素材/截图-xxx.png)
+![hash.png](local-media://users/test/Documents/MdRender/素材/截图-xxx.png)
 ```
 
 连续两张图还会粘在同一行：`...png)![...`

@@ -16,7 +16,7 @@
     "properties": {
       "input": {
         "type": "string",
-        "description": "输入 PDF 文件绝对路径（必须是 macOS 上可访问的路径，比如 /Users/canace/Desktop/xxx.pdf）"
+        "description": "输入 PDF 文件绝对路径（必须是 macOS 上可访问的路径，比如 /Users/you/Desktop/xxx.pdf）"
       },
       "output": {
         "type": "string",
