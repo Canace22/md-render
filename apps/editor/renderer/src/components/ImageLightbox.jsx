@@ -1,32 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { message } from 'antd';
+import { Copy, Maximize2, Scan } from 'lucide-react';
+import { useLightboxZoom } from '../hooks/useLightboxZoom.js';
+import { copyImageToClipboard } from '../utils/imageClipboard.js';
 
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 8;
-const ZOOM_STEP = 1.15;
-
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const isCopyShortcut = (event) => (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c';
 
 /**
  * 图片放大查看器（lightbox）。
- * - 遮罩点击 / ESC 关闭
+ * - 打开时按窗口大小完整显示；双击 / 「1:1」看原始像素（Retina 截图最清楚）
  * - 滚轮缩放、按住拖动平移
- * - 多图时左右切换（按钮 + ← / → 键）
+ * - 「复制」按钮或 ⌘C / Ctrl+C 把原图复制到剪贴板
+ * - 遮罩点击 / ESC 关闭；多图时左右切换（按钮 + ← / → 键）
  *
- * 受控组件：images 为图片 URL 数组，index 为当前下标，open 为 -1 时关闭。
- * 切图时自动复位缩放与平移。
+ * 受控组件：images 为图片 URL 数组，index 为当前下标，-1 表示关闭。
  */
 export default function ImageLightbox({ images = [], index = -1, onClose, onIndexChange }) {
   const open = index >= 0 && index < images.length;
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef(null);
-
-  // 切换图片或打开时复位
-  useEffect(() => {
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
-  }, [index]);
+  const src = open ? images[index] : '';
+  const zoom = useLightboxZoom(src);
 
   const goPrev = useCallback(() => {
     if (images.length < 2) return;
@@ -38,42 +31,32 @@ export default function ImageLightbox({ images = [], index = -1, onClose, onInde
     onIndexChange?.((index + 1) % images.length);
   }, [images.length, index, onIndexChange]);
 
-  // 键盘：ESC 关闭，左右切换
+  const handleCopy = useCallback(async () => {
+    try {
+      await copyImageToClipboard(src);
+      message.success('图片已复制');
+    } catch (error) {
+      message.error(error?.message || '复制图片失败');
+    }
+  }, [src]);
+
+  // 键盘：ESC 关闭，左右切换，⌘C 复制
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event) => {
       if (event.key === 'Escape') onClose?.();
       else if (event.key === 'ArrowLeft') goPrev();
       else if (event.key === 'ArrowRight') goNext();
+      else if (isCopyShortcut(event)) {
+        event.preventDefault(); // 不让底下编辑器把选中的块也复制走
+        void handleCopy();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, goPrev, goNext]);
+  }, [open, onClose, goPrev, goNext, handleCopy]);
 
   if (!open) return null;
-
-  const handleWheel = (event) => {
-    event.preventDefault();
-    const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-    setScale((prev) => clamp(prev * factor, MIN_SCALE, MAX_SCALE));
-  };
-
-  const handleMouseDown = (event) => {
-    event.preventDefault();
-    dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y };
-  };
-
-  const handleMouseMove = (event) => {
-    if (!dragRef.current) return;
-    setOffset({
-      x: dragRef.current.ox + (event.clientX - dragRef.current.x),
-      y: dragRef.current.oy + (event.clientY - dragRef.current.y),
-    });
-  };
-
-  const endDrag = () => {
-    dragRef.current = null;
-  };
 
   // 点空白区域（非图片、非按钮）关闭
   const handleOverlayClick = (event) => {
@@ -88,17 +71,26 @@ export default function ImageLightbox({ images = [], index = -1, onClose, onInde
       role="dialog"
       aria-modal="true"
       onClick={handleOverlayClick}
-      onWheel={handleWheel}
-      onMouseMove={handleMouseMove}
-      onMouseUp={endDrag}
-      onMouseLeave={endDrag}
+      onWheel={zoom.onWheel}
+      onMouseMove={zoom.onMouseMove}
+      onMouseUp={zoom.endDrag}
+      onMouseLeave={zoom.endDrag}
     >
-      <button
-        type="button"
-        className="image-lightbox__close"
-        aria-label="关闭"
-        onClick={onClose}
-      >
+      <div className="image-lightbox__toolbar">
+        <button type="button" title="适应窗口" aria-label="适应窗口" onClick={zoom.fit}>
+          <Maximize2 size={16} />
+        </button>
+        <button type="button" title="原始大小 1:1（双击图片也可切换）" aria-label="原始大小" onClick={zoom.actual}>
+          <Scan size={16} />
+          <span>1:1</span>
+        </button>
+        <button type="button" title="复制图片（⌘C）" aria-label="复制图片" onClick={handleCopy}>
+          <Copy size={16} />
+          <span>复制</span>
+        </button>
+      </div>
+
+      <button type="button" className="image-lightbox__close" aria-label="关闭" onClick={onClose}>
         ×
       </button>
 
@@ -125,16 +117,16 @@ export default function ImageLightbox({ images = [], index = -1, onClose, onInde
       )}
 
       <img
+        key={src}
         className="image-lightbox__img"
-        src={images[index]}
+        src={src}
         alt=""
         draggable={false}
+        onLoad={zoom.onLoad}
         onClick={stop}
-        onMouseDown={handleMouseDown}
-        style={{
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-          cursor: dragRef.current ? 'grabbing' : 'grab',
-        }}
+        onDoubleClick={zoom.toggle}
+        onMouseDown={zoom.onMouseDown}
+        style={zoom.imgStyle}
       />
     </div>,
     document.body,

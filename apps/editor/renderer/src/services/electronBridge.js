@@ -46,6 +46,7 @@ export const dbSaveVersionSnapshot = (docId, content) => (
 
 export const selectCoverImage = () => getElectronAPI()?.selectCoverImage?.();
 export const saveBinaryAsset = (payload) => getElectronAPI()?.saveBinaryAsset?.(payload);
+export const copyImageToClipboardNative = (src) => getElectronAPI()?.copyImageToClipboard?.(src);
 export const pickFile = (payload) => getElectronAPI()?.pickFile?.(payload);
 export const pickSavePath = (payload) => getElectronAPI()?.pickSavePath?.(payload);
 

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createLocalProjectFile: (payload) => ipcRenderer.invoke('create-local-project-file', payload),
   createLocalProjectFolder: (payload) => ipcRenderer.invoke('create-local-project-folder', payload),
   saveBinaryAsset: (payload) => ipcRenderer.invoke('save-binary-asset', payload),
+  copyImageToClipboard: (src) => ipcRenderer.invoke('copy-image-to-clipboard', src),
   renameLocalProjectEntry: (payload) => ipcRenderer.invoke('rename-local-project-entry', payload),
   deleteLocalProjectEntry: (payload) => ipcRenderer.invoke('delete-local-project-entry', payload),
   registerLocalProjectWatch: (payload) => ipcRenderer.invoke('register-local-project-watch', payload),
