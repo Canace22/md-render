@@ -7,7 +7,7 @@ import {
   toEditorImageSrc,
 } from '../renderer/src/utils/localMediaMarkdown.js';
 
-const PROJECT_ROOT = '/Users/canace/Documents/MdRender';
+const PROJECT_ROOT = '/Users/test/Documents/MdRender';
 const NESTED_NOTE = 'Projects/原稿/判断模型降智的方式.md';
 const ROOT_NOTE = 'readme.md';
 const CONTEXT_NESTED = { projectRootPath: PROJECT_ROOT, noteRelativePath: NESTED_NOTE };
@@ -32,7 +32,7 @@ describe('local-media markdown round-trip', () => {
   });
 
   it('旧稿里的 local-media 绝对路径再保存时改成相对路径', () => {
-    const src = 'local-media://users/canace/Documents/MdRender/%E7%B4%A0%E6%9D%90/%E6%88%AA%E5%9B%BE-old.png';
+    const src = 'local-media://users/test/Documents/MdRender/%E7%B4%A0%E6%9D%90/%E6%88%AA%E5%9B%BE-old.png';
     const disk = rewriteMarkdownImagesForDisk(`![old](${src})`, CONTEXT_NESTED);
     expect(disk).toBe('![old](../../素材/截图-old.png)');
   });

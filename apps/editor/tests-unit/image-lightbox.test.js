@@ -37,8 +37,8 @@ describe('lightbox 缩放比例', () => {
 
 describe('主进程写剪贴板', () => {
   it('local-media 地址解析出带中文的绝对路径', () => {
-    const url = 'local-media:///Users/canace/%E5%86%85%E5%AE%B9/assets/%E6%88%AA%E5%9B%BE.png';
-    expect(localMediaUrlToPath(url)).toBe('/Users/canace/内容/assets/截图.png');
+    const url = 'local-media:///Users/test/%E5%86%85%E5%AE%B9/assets/%E6%88%AA%E5%9B%BE.png';
+    expect(localMediaUrlToPath(url)).toBe('/Users/test/内容/assets/截图.png');
   });
 
   it('data URL 与 local-media 分别走对应的 nativeImage 构造', () => {
