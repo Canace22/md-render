@@ -8,6 +8,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { resolveSpawnCommand } from './winCommand.js';
 
 export const RUN_TIMEOUT_MS = 30 * 60 * 1000;
 const KILL_GRACE_MS = 1500;
@@ -110,7 +111,9 @@ export const startLocalAgentRun = ({
     }
   });
 
-  const child = spawn(command, args, {
+  const target = resolveSpawnCommand(command, args);
+  if (!target) throw new Error(`无法启动 ${command}：解析不了这个启动脚本，请用官方方式重新安装`);
+  const child = spawn(target.command, target.args, {
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
