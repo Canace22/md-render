@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeEditorialMemories } from '../shared/migration/memoryMerge.js';
+import { mergeEditorialMemories } from '@shared/migration/memoryMerge.js';
 import { appendMemoryEntry, buildMemoryTemplate } from '../renderer/src/core/agent/editorialMemory.js';
 
 const withEntries = (entries) => entries.reduce(

@@ -11,7 +11,7 @@ import {
   setDailyTaskDone,
   shiftDateKey,
 } from '../renderer/src/utils/dailyWorkspace.js';
-import { markdownToBlocks } from '../shared/daily/dailyMarkdown.js';
+import { markdownToBlocks } from '@shared/daily/dailyMarkdown.js';
 
 const TODAY = '2026-10-09';
 const YESTERDAY = shiftDateKey(TODAY, -1);

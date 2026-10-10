@@ -5,8 +5,8 @@ import {
   imageUrlToMarkdown,
   markdownToBlocks,
   parseInline,
-} from '../shared/daily/dailyMarkdown.js';
-import { isDailyBlocksEmpty, createDailyTemplate } from '../shared/daily/dailyBlocks.js';
+} from '@shared/daily/dailyMarkdown.js';
+import { isDailyBlocksEmpty, createDailyTemplate } from '@shared/daily/dailyBlocks.js';
 
 const roundTrip = (md) => blocksToMarkdown(markdownToBlocks(md));
 

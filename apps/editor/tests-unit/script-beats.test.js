@@ -8,8 +8,8 @@ import {
   parseBeatText,
   toggleBeatSceneText,
   unplacedBeats,
-} from '../shared/script/scriptBeats.js';
-import { analyzeScript, buildSceneNumberMap, sceneNumberAt } from '../shared/script/screenplay.js';
+} from '@shared/script/scriptBeats.js';
+import { analyzeScript, buildSceneNumberMap, sceneNumberAt } from '@shared/script/screenplay.js';
 
 const text = (value) => [{ type: 'text', text: value, styles: {} }];
 const heading = (id, value, level = 2) => ({ id, type: 'heading', props: { level }, content: text(value), children: [] });

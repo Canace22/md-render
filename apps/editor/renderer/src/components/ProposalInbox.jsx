@@ -4,7 +4,7 @@ import { Check, ChevronDown, ChevronRight, ExternalLink, Inbox, X } from 'lucide
 import { useEditorStore } from '../store/useEditorStore.js';
 import { selectPendingProposals } from '../store/proposalSelectors.js';
 import { diffLines, countDiff } from '../core/agent/lineDiff.js';
-import { PROPOSAL_KINDS, summarizeProposal } from '../../../shared/capabilities/proposals.js';
+import { PROPOSAL_KINDS, summarizeProposal } from '@shared/capabilities/proposals.js';
 
 const RECENT_RESOLVED_LIMIT = 10;
 const STATUS_LABELS = Object.freeze({

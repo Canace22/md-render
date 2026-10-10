@@ -2,7 +2,7 @@
  * Markdown 文本处理工具
  */
 
-import { parseMarkdownFrontmatter } from '../../../shared/frontmatter.js';
+import { parseMarkdownFrontmatter } from '@shared/frontmatter.js';
 
 export const normalizeMarkdown = (value) => {
   const str = value ?? '';

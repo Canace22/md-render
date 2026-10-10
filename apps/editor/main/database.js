@@ -4,13 +4,13 @@ const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 import path from 'path';
 import { app } from 'electron';
-import { EDITOR_STATE_KEYS } from '../shared/stateKeys.js';
+import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
 import {
   VERSION_LIST_LIMIT,
   VERSION_PRUNE_INTERVAL_MS,
   VERSION_RETENTION_MS,
   VERSION_SNAPSHOT_INTERVAL_MS,
-} from '../shared/versionHistory.js';
+} from '@shared/versionHistory.js';
 
 let db = null;
 

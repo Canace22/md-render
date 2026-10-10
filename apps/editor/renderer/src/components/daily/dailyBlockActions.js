@@ -1,5 +1,5 @@
 import { message } from 'antd';
-import { blocksToMarkdown } from '../../../../shared/daily/dailyMarkdown.js';
+import { blocksToMarkdown } from '@shared/daily/dailyMarkdown.js';
 import { insertImagesFromFiles, pickImageFiles } from '../../hooks/useEditorImageUpload.js';
 import {
   getBlockTypeUpdate,

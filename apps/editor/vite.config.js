@@ -6,6 +6,8 @@ import electron from 'vite-plugin-electron/simple';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererRoot = path.join(__dirname, 'renderer');
+// renderer / main 共用的纯函数目录，统一用 @shared/xxx 引用，避免 ../../../../shared 长链
+const sharedAlias = { '@shared': path.join(__dirname, 'shared') };
 
 // blocknote-core 仅消费 dist 构建产物（纯 JS），避免把包的 .ts 源码引入 renderer 构建链
 const blocknoteCoreDist = path.join(
@@ -42,6 +44,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
+        ...sharedAlias,
         // 明确消费包的 dist 构建产物（ESM），不引入包的 .ts 源码
         '@narrative/blocknote-core': blocknoteCoreDist,
       },
@@ -61,6 +64,7 @@ export default defineConfig(({ mode }) => {
           },
           vite: {
             root: __dirname,
+            resolve: { alias: sharedAlias },
             build: {
               outDir: 'dist-electron',
               rollupOptions: {
@@ -74,6 +78,7 @@ export default defineConfig(({ mode }) => {
           input: path.join(__dirname, 'main/preload.js'),
           vite: {
             root: __dirname,
+            resolve: { alias: sharedAlias },
             build: {
               outDir: 'dist-electron',
               rollupOptions: {

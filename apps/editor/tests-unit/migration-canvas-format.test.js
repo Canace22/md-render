@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_CANVAS_PATH, EXCALIDRAW_CANVAS_PATH, parseCanvasFiles, serializeCanvasState } from '../shared/migration/canvasFormat.js';
+import { CARD_CANVAS_PATH, EXCALIDRAW_CANVAS_PATH, parseCanvasFiles, serializeCanvasState } from '@shared/migration/canvasFormat.js';
 
 const filesToInput = (files) => ({
   canvasContent: files.find((f) => f.relativePath === CARD_CANVAS_PATH)?.content ?? '',

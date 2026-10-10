@@ -6,7 +6,7 @@
 import { useEditorStore } from '../store/useEditorStore.js';
 import { findAgentMetaFile } from '../store/workspaceUtils.js';
 import { EDITORIAL_MEMORY_DOC_NAME } from '../core/agent/editorialMemory.js';
-import { EDITORIAL_MEMORY_PATH } from '../../../shared/migration/memoryMerge.js';
+import { EDITORIAL_MEMORY_PATH } from '@shared/migration/memoryMerge.js';
 import { normalizeDailyWorkspace } from '../utils/dailyWorkspace.js';
 import { ensureMdRenderWorkspace } from '../utils/localProjectBridge.js';
 import {

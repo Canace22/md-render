@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../renderer/src/utils/agentDataBridge.js', () => ({ saveProposalFile: vi.fn(() => Promise.resolve(null)) }));
 
 import { createProposalSlice, PROPOSAL_BUSY_MESSAGE, PROPOSAL_STALE_MESSAGE } from '../renderer/src/store/slices/proposalSlice.js';
-import { hashContent } from '../shared/capabilities/contentHash.js';
+import { hashContent } from '@shared/capabilities/contentHash.js';
 import { selectPendingEditForSelected } from '../renderer/src/store/proposalSelectors.js';
 
 // 用最小假 store 驱动 proposalSlice：真 findNodeById + 假的跨 slice 写入方法。

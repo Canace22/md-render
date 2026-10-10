@@ -171,6 +171,7 @@ React Component
 apps/
 └── editor/
     ├── main/                    # Electron 主进程（main.js、preload.js）
+    ├── shared/                  # main / renderer 共用的纯函数（统一用 @shared/xxx 引用）
     ├── renderer/                # 渲染进程（Vite + React）
     │   ├── index.html
     │   └── src/
@@ -187,7 +188,8 @@ packages/
 │   └── src/
 │       ├── parser.js            # Markdown 解析器 → token 数组
 │       └── renderer.js          # token 数组 → HTML 字符串
-└── blocknote-core/              # BlockNote 底层机制包（@narrative/blocknote-core）
+├── blocknote-core/              # BlockNote 底层机制包（@narrative/blocknote-core）
+└── json-tool/                   # JSON 解析工具组件（@md-render/json-tool，editor 懒加载）
 server/
 ├── ai-proxy/                    # AI 请求代理
 └── mcp-bridge/                  # Agent 控制桥 MCP server
@@ -220,6 +222,11 @@ server/
 | 常量（模块级） | UPPER_SNAKE_CASE | `STORAGE_KEY`, `DEFAULT_FILE_ID` |
 | 事件处理 | handle 前缀 | `handleChange`, `handleSubmit` |
 | 异步数据获取 | fetch/load/save 前缀 | `fetchNotionPages`, `saveWorkspace` |
+
+### 引用 shared
+
+`apps/editor/shared/` 下的模块统一写 `import ... from '@shared/xxx.js'`，不要写 `../../../shared/xxx.js` 这类长相对路径。
+别名在 `vite.config.js`（renderer + main + preload）和 `vitest.config.js` 里配置；`shared/` 内部互相引用仍用 `./` 相对路径。
 
 ### 导入顺序
 

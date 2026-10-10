@@ -20,8 +20,8 @@ import {
   validateInvoke,
   LIST_TOOLS_NAME,
   INVOKE_TIMEOUT_MS,
-} from '../shared/agentBridgeTools.js';
-import { AGENT_INSTRUCTIONS } from '../shared/appKnowledge.js';
+} from '@shared/agentBridgeTools.js';
+import { AGENT_INSTRUCTIONS } from '@shared/appKnowledge.js';
 import { MCP_HTTP_CONFIG_FILE, startMcpHttpServer } from './mcpHttp.js';
 
 const HOST = '127.0.0.1';

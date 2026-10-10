@@ -7,8 +7,8 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
-import { hashContent } from '../shared/capabilities/contentHash.js';
-import { AGENTS_MD_FILE, mergeAgentsMd } from '../shared/vaultAgentsMd.js';
+import { hashContent } from '@shared/capabilities/contentHash.js';
+import { AGENTS_MD_FILE, mergeAgentsMd } from '@shared/vaultAgentsMd.js';
 import { SKILL_FILE_NAME, SKILL_MANIFEST_PATH } from './skillFiles.js';
 
 export const MANAGED_MARKER_FILE = '.md-render-managed.json';

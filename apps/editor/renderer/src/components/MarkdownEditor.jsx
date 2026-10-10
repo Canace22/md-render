@@ -100,7 +100,7 @@ import { FILE_CONVERT_TOOLS, isFileConvertSupported } from '../services/fileConv
 import { useFileConvertTool } from '../hooks/useFileConvertTool.js';
 import { useImageLightbox } from '../hooks/useImageLightbox.js';
 import { useOutlinePage } from '../hooks/useOutlinePage.js';
-import { PAGE_LAYOUT_KEY, PAGE_LAYOUT_OUTLINE, PAGE_LAYOUT_SCRIPT, withTitleHeading } from '../../../shared/outline/outlineTree.js';
+import { PAGE_LAYOUT_KEY, PAGE_LAYOUT_OUTLINE, PAGE_LAYOUT_SCRIPT, withTitleHeading } from '@shared/outline/outlineTree.js';
 import { useScriptPage } from '../hooks/useScriptPage.js';
 import ScriptPanel from './script/ScriptPanel.jsx';
 import MindMapView from './outline/MindMapView.jsx';

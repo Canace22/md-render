@@ -7,7 +7,7 @@
  * 纯模块：不读文件、不碰 IPC / store，读取由调用方完成后把原始文本传进来。
  */
 
-import { parseFrontmatterDocument } from '../../../../shared/frontmatterDocument.js';
+import { parseFrontmatterDocument } from '@shared/frontmatterDocument.js';
 
 export const SKILL_SOURCES = Object.freeze({ BUILTIN: 'builtin', VAULT: 'vault' });
 export const SKILL_ENTRIES = Object.freeze([

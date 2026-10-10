@@ -13,7 +13,7 @@ import {
   LOCAL_AGENTS,
   LOCAL_AGENT_KINDS,
   LOCAL_AGENT_STATUS,
-} from '../../shared/localAgents.js';
+} from '@shared/localAgents.js';
 import { COMMON_BIN_DIRS, expandHome, getAgentEnv } from './shellEnv.js';
 
 export const DETECT_TIMEOUT_MS = 3000;

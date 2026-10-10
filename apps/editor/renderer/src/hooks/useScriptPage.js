@@ -8,7 +8,7 @@ import {
   characterCardName,
   isScriptPage,
   locationCardName,
-} from '../../../shared/script/screenplay.js';
+} from '@shared/script/screenplay.js';
 import {
   cycleCurrentElement,
   insertAction,

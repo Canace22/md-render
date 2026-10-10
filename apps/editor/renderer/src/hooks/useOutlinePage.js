@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { blocksToMindTree, isOutlinePage } from '../../../shared/outline/outlineTree.js';
+import { blocksToMindTree, isOutlinePage } from '@shared/outline/outlineTree.js';
 import { MINDMAP_VIEW, OUTLINE_VIEW } from '../components/outline/OutlineViewSwitch.jsx';
 import { focusOutlineBlock } from '../components/outline/focusOutlineBlock.js';
 import { stripFileExtension } from '../utils/fileDisplayName.js';

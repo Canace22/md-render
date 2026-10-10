@@ -4,7 +4,7 @@ import {
   metadataToFrontmatterPatch,
   normalizeDate,
   pickCustomProperties,
-} from '../../../shared/properties.js';
+} from '@shared/properties.js';
 import {
   createId,
   createDefaultWorkspace,

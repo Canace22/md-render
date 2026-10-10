@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useEditorStore } from '../store/useEditorStore.js';
-import { parseDailyWorkspace } from '../../../shared/migration/dailyFormat.js';
-import { parseCanvasFiles } from '../../../shared/migration/canvasFormat.js';
+import { parseDailyWorkspace } from '@shared/migration/dailyFormat.js';
+import { parseCanvasFiles } from '@shared/migration/canvasFormat.js';
 import {
   ensureVaultDocIds,
   fetchMigrationState,

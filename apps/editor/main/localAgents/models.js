@@ -10,7 +10,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { getLocalAgent } from '../../shared/localAgents.js';
+import { getLocalAgent } from '@shared/localAgents.js';
 import { runShortCommand } from './detect.js';
 import { getAgentEnv } from './shellEnv.js';
 

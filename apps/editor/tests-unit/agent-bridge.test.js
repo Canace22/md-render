@@ -11,7 +11,7 @@ import {
   SAFE_TOOL_NAMES,
   BLOCKED_TOOLS,
   LIST_TOOLS_NAME,
-} from '../shared/agentBridgeTools.js';
+} from '@shared/agentBridgeTools.js';
 import { handleBridgeRequest, toBridgeHost } from '../renderer/src/core/agent/bridgeListener.js';
 import {
   removeHandshakeFileIfOwned,
@@ -242,7 +242,7 @@ describe('MCP bridgeClient（P0-1）', () => {
 
 describe('MCP instructions（P2-9）', () => {
   it('instructions 和 app 内 system prompt 同源，包含操作规则', async () => {
-    const { AGENT_INSTRUCTIONS, APP_OPERATION_RULES } = await import('../shared/appKnowledge.js');
+    const { AGENT_INSTRUCTIONS, APP_OPERATION_RULES } = await import('@shared/appKnowledge.js');
     expect(AGENT_INSTRUCTIONS).toContain('md-render 产品知识');
     expect(AGENT_INSTRUCTIONS).toContain(APP_OPERATION_RULES[0]);
     expect(AGENT_INSTRUCTIONS).toContain('propose_edit');

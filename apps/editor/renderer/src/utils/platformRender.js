@@ -7,7 +7,7 @@ import { MarkdownParser, MarkdownRenderer } from '../core';
 import { convertToWeChatHTML } from './wechatCopy.js';
 import { TEMPLATES } from './wechatTemplates.js';
 import { isBlockNoteContent, normalizeMarkdown } from './markdownUtils.js';
-import { parseMarkdownFrontmatter } from '../../../shared/frontmatter.js';
+import { parseMarkdownFrontmatter } from '@shared/frontmatter.js';
 
 export const PLATFORM_HTML_TEMPLATE_IDS = Object.freeze(TEMPLATES.map((template) => template.id));
 export const MAX_PLATFORM_HTML_CHARS = 60000;
