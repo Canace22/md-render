@@ -85,9 +85,11 @@ AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工
 - 别的界面要触发 skill（如文档工具栏），调 store 的 `requestAgentSkill(skillId)` 并打开面板，由 AgentPanel 消费，不要在别处直接调 `runAgent`。
 - skill 不能带代码；不需要 AI 的功能（PDF→Word、视频→音频）不做成 skill，放在工作区右键菜单（`FileConvertMenuItems`）。
 
-## 会话管理（全局，不持久化）
+## 会话管理（全局，持久化）
 
-- 会话状态在 `useEditorStore`（`agentSessions` / `activeAgentSessionId` + 相关 action），**故意不进 persist 的 partialize 白名单**：切页保留、关 app 清空。要做"关 app 还在"才把字段加进 partialize。
+- 会话状态在 `useEditorStore`（`agentSessions` / `activeAgentSessionId` + 相关 action），已进 persist：关 app 再开能继续看对话和产出物卡片（产出物本体是工作区文件，消息里只存 fileId）。
+- 落盘键：Electron 存 SQLite `agent_sessions_json`（登记在 `shared/stateKeys.js`，不登记 main 会丢弃），Web 存 localStorage `md-renderer-agent-sessions`；格式 `{ activeId, sessions }`。
+- 序列化/恢复只走 `sessionUtils` 的 `serializeAgentSessions` / `restoreAgentSessions`：最多留 `MAX_PERSISTED_SESSIONS` 个最近会话；恢复时把 `typing` 收成已停止、`running` 工具收成 `interrupted`，`retry` 参数（含完整 prompt）不落盘。给消息加新的「运行中」临时字段时，记得在 `settleMessage` 里收口。
 - 别新建独立 store（AGENTS.md 约定）。纯逻辑放 `sessionUtils.js`，store 里只调它。
 - 删当前会话自动选下一个；删光自动补一个空会话（`removeSession` 已处理）。
 

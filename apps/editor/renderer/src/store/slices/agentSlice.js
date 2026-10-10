@@ -7,7 +7,7 @@ import {
 import { normalizeAgentSessionMode } from '../../core/agent/chatMode.js';
 
 export const createAgentSlice = (set, get) => ({
-  // AI 助手会话（全局内存态，故意不进 persist：切页不丢、关 app 清空）
+  // AI 助手会话：进 persist（关 app 后可继续查看），序列化/恢复见 sessionUtils
   agentSessions: [createSession()],
   activeAgentSessionId: null,
 
