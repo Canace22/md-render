@@ -11,6 +11,29 @@ export const normalizeMarkdown = (value) => {
 
 const CODE_FENCE_OPEN_REGEX = /^```([\w-]+)?\s*$/;
 
+const LIST_ITEM_REGEX = /^\s*(?:[-*+]|\d+[.)])\s/;
+const FENCE_LINE_REGEX = /^\s*```/;
+
+/**
+ * 列表项之间的空行去掉，变成紧凑列表（BlockNote 转出来每项之间都空一行，贴给别人看着松）。
+ * 只删「上一行是列表项、下一行也是列表项」中间的空行；代码块里不动，
+ * 列表项下面带段落的（多段落列表项）也不动。
+ */
+export const tightenListSpacing = (markdown) => {
+  const lines = String(markdown ?? '').split('\n');
+  const out = [];
+  let inFence = false;
+  lines.forEach((line, i) => {
+    if (FENCE_LINE_REGEX.test(line)) inFence = !inFence;
+    if (!inFence && line.trim() === '' && LIST_ITEM_REGEX.test(out.at(-1) ?? '')) {
+      const next = lines.slice(i + 1).find((l) => l.trim() !== '');
+      if (next !== undefined && LIST_ITEM_REGEX.test(next)) return;
+    }
+    out.push(line);
+  });
+  return out.join('\n');
+};
+
 const MARKDOWN_PASTE_PATTERNS = [
   /(^|\n) {0,3}#{1,6}\s+\S+/,
   /(^|\n) {0,3}>\s+\S+/,
