@@ -64,3 +64,42 @@ jobs:
             apps/editor/release/*.dmg
             apps/editor/release/*.blockmap
           retention-days: 7
+
+  electron-pack-win:
+    name: Electron 打包（Windows）
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install mcp-bridge dependencies
+        run: npm ci --prefix server/mcp-bridge
+
+      - name: Build Electron app
+        run: pnpm electron:build:win
+
+      - name: Check build output
+        shell: pwsh
+        run: |
+          $releaseDir = "apps/editor/release"
+          if (!(Test-Path $releaseDir)) {
+            Write-Error "release directory not found"
+            exit 1
+          }
+          Get-ChildItem $releaseDir
+          if ((Get-ChildItem "$releaseDir/*.exe").Count -eq 0) {
+            Write-Error "exe file not found"
+            exit 1
+          }

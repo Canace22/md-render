@@ -14,8 +14,9 @@ const mode = cliArgs.includes('pack') ? 'pack' : 'build';
 const explicitPlatform = cliArgs.find((a) => ['--mac', '--win', '--linux'].includes(a));
 
 const isWindows = process.platform === 'win32';
+// Windows 上 staging 必须和仓库同盘：pnpm 9 deploy 用 path.relative 算 modulesDir，跨盘会拼出非法路径
 const STAGING_ROOT = isWindows
-  ? path.join(process.env.TEMP || 'C:\\Temp', 'md-render-electron-builder')
+  ? path.join(path.dirname(workspaceRoot), '.md-render-electron-builder')
   : '/private/tmp/md-render-electron-builder';
 const STAGING_APP_DIR = path.join(STAGING_ROOT, 'app');
 const STAGING_HOME = path.join(STAGING_ROOT, 'home');
@@ -46,11 +47,20 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+// Windows 上 pnpm 是 pnpm.cmd，spawn 不开 shell 找不到；优先用 pnpm 传入的 npm_execpath（JS 入口）交给当前 node 执行
+function runPnpm(args, options = {}) {
+  const pnpmCli = process.env.npm_execpath;
+  if (pnpmCli && /pnpm/i.test(pnpmCli) && /\.c?js$/i.test(pnpmCli)) {
+    return runCommand(process.execPath, [pnpmCli, ...args], options);
+  }
+  return runCommand('pnpm', args, { shell: isWindows, ...options });
+}
+
 async function prepareStagingDirectory() {
   await fs.rm(STAGING_ROOT, { recursive: true, force: true });
   await fs.mkdir(STAGING_HOME, { recursive: true });
 
-  await runCommand('pnpm', [
+  await runPnpm([
     '--dir',
     workspaceRoot,
     '--filter',
@@ -98,7 +108,7 @@ async function copyArtifactsBack() {
 }
 
 async function main() {
-  await runCommand('pnpm', ['exec', 'vite', 'build'], {
+  await runPnpm(['exec', 'vite', 'build'], {
     cwd: appDir,
     env: {
       ...process.env,

@@ -1,9 +1,9 @@
 ---
 name: md-render-electron-startup
-description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突、preload 失效或主进程 ESM/CJS 加载崩溃。用户说“electron:dev 白屏”“Electron 启动不了”“Vite ready 但没界面”时使用。
+description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突、preload 失效、主进程 ESM/CJS 加载崩溃，以及 Electron 打包 / CI 发版失败（尤其 Windows）。用户说“electron:dev 白屏”“Electron 启动不了”“Vite ready 但没界面”“打包失败”“Release 没出来”“Windows 发布失败”“改 package-electron.mjs / release.yml”时使用。
 ---
 
-# Electron 启动诊断
+# Electron 启动与打包诊断
 
 先区分“页面尚未挂载”和“主进程已崩溃”，再做最小修复。
 
@@ -20,6 +20,18 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
 6. 新 worktree 里 `pnpm install` 后 Vite 报 `Failed to resolve import "dayjs"`：`dayjs` 只是 antd 的传递依赖，没写进任何 package.json，主仓靠旧的扁平 node_modules 才解析得到。严格安装的新环境必然报错，且它被 `MarkdownEditor → DailyNotebook` 静态引用，整个应用都起不来。属于既有缺失依赖，不是当次改动引入的。
 7. 若 Electron 33/Node 20 在 `cjsPreparseModuleExports` 报 `module.exports` 异常，先检查同一 ESM 入口中的多个 CommonJS 静态 import。对确认的 CommonJS 包使用 `createRequire(import.meta.url)` 同步加载，不改动其他 ESM 依赖。
 8. 打包后日志出现 `icudtl.dat not found in bundle`，GPU / network service 连续崩溃时，先查 `.app/Contents/Frameworks/` 的符号链接。`fs.cp` 默认会把相对链接改成指向临时 staging 目录的绝对链接；回拷产物必须设置 `verbatimSymlinks: true`。修复后从正式安装路径启动，确认链接留在 bundle 内、控制桥能回复，再清理 staging；不要因此改 GPU 开关或先尝试重新签名。
+
+## 打包 / CI 发版（`package-electron.mjs`、`ci.yml`、`release.yml`）
+
+Release 只在推 `v*` tag 时跑；`ci.yml` 有 macOS 和 Windows 两个打包任务，改打包链路先看 PR 上这两项是否全绿。CI 日志过期会返回 410，排查要趁早。
+
+Windows 上踩过的坑（macOS 都不会暴露）：
+
+1. **Node 版本**：workflow 的 `node-version` 要和本地一致（现为 22）。`better-sqlite3@12` 只发 Node 20+ 预编译包，Node 18 会退回 node-gyp 源码编译，而 `windows-latest` 的新版 Visual Studio 不被 pnpm 9 自带的 node-gyp 识别 → `find VS` 报错。
+2. **spawn pnpm**：Windows 上 pnpm 是 `pnpm.cmd`，`spawn('pnpm')` 不开 shell 会 `ENOENT`。脚本里调 pnpm 一律走 `runPnpm()`（优先用 `npm_execpath` 交给 `process.execPath` 执行），不要新增裸 `spawn('pnpm')`。
+3. **staging 必须与仓库同盘**：pnpm 9 `deploy` 用 `path.relative(项目目录, 目标/node_modules)` 算 modulesDir，跨盘（仓库 D:、TEMP 在 C:）会得到绝对路径并被拼回项目目录，报 symlink `ENOENT`，路径形如 `D:\...\apps\editor\C:\...`。所以 Windows staging 放在仓库同级 `.md-render-electron-builder`，不要改回 `%TEMP%`。
+
+排查顺序：先看失败在哪一步（Install / Build / Check output），再拿日志最后 60 行定位；能在 Linux 复现的部分（vite build、pnpm deploy）可用 `pnpm --filter @md-render/editor electron:pack --linux` 验证，Windows 专属问题用 `path.win32` 模拟路径或以 CI 的 Windows 任务为准。重推同名 tag 前先删远端 tag。
 
 ## 边界
 

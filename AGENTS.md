@@ -109,7 +109,7 @@ pnpm test:e2e     # E2E 测试（playwright）
 | `md-render-kb-source` | 知识库节点 / 外部来源、FTS 同步与索引膨胀修复 |
 | `md-render-asset-derivation` | 派生资产：保留原稿、生成新稿、记录来源素材 |
 | `md-render-architecture-boundary` | 跨 renderer/main/server 的架构边界重整 |
-| `md-render-electron-startup` | Electron 开发启动、白屏、preload 与 ESM/CJS 崩溃诊断 |
+| `md-render-electron-startup` | Electron 开发启动、白屏、preload、ESM/CJS 崩溃，以及打包 / CI 发版（Windows）诊断 |
 | `skill-harvest` | 判断并生成新 skill（沉淀机制执行器） |
 | `pre-commit-secrets` | 提交/push 前扫描敏感信息 |
 | `human-readable-docs` | 写/改/审 README 等给人看的文档：先答“是什么、给谁、怎么开始” |
