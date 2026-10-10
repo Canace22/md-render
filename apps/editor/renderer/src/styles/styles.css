@@ -10237,6 +10237,12 @@ body.is-resizing-agent-panel {
   width: 280px;
 }
 
+.daily-outline-calendar-header {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+}
+
 /* 大纲正文用更深的文字色，不再偏灰（已勾选的待办仍按下面规则置灰） */
 .blocknote-editor.bn-container:is(.daily-outline-editor, .outline-editor) {
   --bn-colors-editor-text: #0f172a;

@@ -1,10 +1,31 @@
 import { memo, useState } from 'react';
-import { Button, Calendar, Popover, Tooltip } from 'antd';
+import { Button, Calendar, Popover, Select, Tooltip } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
+// 仅注册中文语言包（不切全局 locale），供 Calendar 按 locale 渲染星期/月份
+import 'dayjs/locale/zh-cn';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 
 const ICON_SIZE = 15;
 const ICON_STROKE = 1.8;
+const YEAR_RANGE = 10;
+const MONTHS_PER_YEAR = 12;
+const MONTH_OPTIONS = Array.from({ length: MONTHS_PER_YEAR }, (_, month) => ({ value: month, label: `${month + 1}月` }));
+
+/** 日历头部：只保留年、月下拉（速记只需选“天”，不需要 Month/Year 视图切换） */
+function renderCalendarHeader({ value, onChange }) {
+  const currentYear = value.year();
+  const yearOptions = Array.from({ length: YEAR_RANGE * 2 + 1 }, (_, i) => {
+    const year = currentYear - YEAR_RANGE + i;
+    return { value: year, label: `${year}年` };
+  });
+  return (
+    <div className="daily-outline-calendar-header">
+      <Select size="small" value={currentYear} options={yearOptions} onChange={(year) => onChange(value.year(year))} />
+      <Select size="small" value={value.month()} options={MONTH_OPTIONS} onChange={(month) => onChange(value.month(month))} />
+    </div>
+  );
+}
 
 /** 日期栏：前一天 / 后一天 / 今天 / 日历跳转 / 复制为 Markdown / 大纲⇄导图（幕布式） */
 function DailyToolbar({ dateKey, isToday, copied, onShift, onToday, onPick, onCopy, viewSwitch = null }) {
@@ -14,6 +35,8 @@ function DailyToolbar({ dateKey, isToday, copied, onShift, onToday, onPick, onCo
     <div className="daily-outline-calendar">
       <Calendar
         fullscreen={false}
+        locale={zhCN.Calendar}
+        headerRender={renderCalendarHeader}
         value={dayjs(dateKey)}
         onSelect={(date, info) => {
           if (info?.source && info.source !== 'date') return;
