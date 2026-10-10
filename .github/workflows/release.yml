@@ -49,12 +49,21 @@ jobs:
             echo "Error: dmg file not found"
             exit 1
           fi
+          if [ ! -f "$release_dir/latest-mac.yml" ]; then
+            echo "Error: latest-mac.yml not found (auto update needs it)"
+            exit 1
+          fi
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-mac
-          path: apps/editor/release/*.dmg
+          # 自动更新需要 latest-mac.yml 判断新版本，zip 是 mac 更新包
+          path: |
+            apps/editor/release/*.dmg
+            apps/editor/release/*.zip
+            apps/editor/release/*.blockmap
+            apps/editor/release/latest-mac.yml
 
   release-win:
     name: Windows 发布
@@ -90,6 +99,10 @@ jobs:
             Write-Error "release directory not found"
             exit 1
           }
+          if (!(Test-Path "$releaseDir/latest.yml")) {
+            Write-Error "latest.yml not found (auto update needs it)"
+            exit 1
+          }
           Get-ChildItem $releaseDir
           $exeFiles = Get-ChildItem "$releaseDir/*.exe"
           if ($exeFiles.Count -eq 0) {
@@ -101,7 +114,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-win
-          path: apps/editor/release/*.exe
+          # 自动更新需要 latest.yml 判断新版本，blockmap 用于增量下载
+          path: |
+            apps/editor/release/*.exe
+            apps/editor/release/*.exe.blockmap
+            apps/editor/release/latest.yml
 
   publish-release:
     name: 发布 GitHub Release

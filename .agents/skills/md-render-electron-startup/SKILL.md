@@ -37,6 +37,11 @@ macOS universal 包踩过的坑：
 
 4. **CI 上 `.node` 只有 arm64**：electron-builder 在 CI 默认用硬链接拷文件，universal 构建先打 x64 再 rebuild arm64，arm64 的 `.node` 原地覆盖时把 x64 临时包里的那份也改了，合并时两份相同就跳过 lipo → Intel Mac 打不开（Electron 本体仍是 universal，很难察觉）。脚本里已设 `USE_HARD_LINKS=false`，并在 mac 打包后用 `lipo -archs` 检查所有 `.node` 同时含 `x86_64 + arm64`，缺了直接失败。验证已发布的包：解开 dmg（`7z x`），对 `app.asar.unpacked/**/*.node` 执行 `file`。
 
+自动更新（electron-updater）踩过的坑：
+
+5. **Release 要带更新元数据**：updater 先读 Release 里的 `latest.yml`（win）/ `latest-mac.yml`（mac）判断新版本，mac 更新包是 `.zip` 不是 `.dmg`。`release.yml` 上传 artifact 时只传 `.exe` / `.dmg` 会让检查一直报错，而 `UpdateNotifier` 遇到 error 不显示，表现为「自动更新静默失效」。改上传路径时保留这些文件，Check output 步骤里有兜底检查。
+6. **mac 未签名装不上更新**：Squirrel.Mac 校验签名，CI 当前 `CSC_IDENTITY_AUTO_DISCOVERY=false` 不签名，所以 mac 只提示并跳转 Release 页下载（`UpdateNotifier` 的 `isManualUpdate`）。配好 Apple 签名和公证后才能去掉这个降级。
+
 排查顺序：先看失败在哪一步（Install / Build / Check output），再拿日志最后 60 行定位；能在 Linux 复现的部分（vite build、pnpm deploy）可用 `pnpm --filter @md-render/editor electron:pack --linux` 验证，Windows 专属问题用 `path.win32` 模拟路径或以 CI 的 Windows 任务为准。重推同名 tag 前先删远端 tag。
 
 ## 边界
