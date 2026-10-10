@@ -170,6 +170,18 @@ const pastePendingImages = (editor, files) => {
   }));
 };
 
+/** 弹系统文件框选图片（菜单关掉后 input 不能挂在菜单里，所以临时建一个），只返回图片文件 */
+export const pickImageFiles = () => new Promise((resolve) => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.onchange = () => resolve(
+    Array.from(input.files ?? []).filter((file) => file.type?.startsWith('image/')),
+  );
+  input.click();
+});
+
 export const insertImagesFromFiles = async (
   editor,
   files,

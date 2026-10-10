@@ -1,5 +1,8 @@
-import { lazy, memo, Suspense, useCallback, useMemo } from 'react';
+import { lazy, memo, Suspense, useCallback, useMemo, useState } from 'react';
 import DailyToolbar from './daily/DailyToolbar.jsx';
+import MindMapView from './outline/MindMapView.jsx';
+import OutlineViewSwitch, { MINDMAP_VIEW, OUTLINE_VIEW } from './outline/OutlineViewSwitch.jsx';
+import { blocksToMindTree } from '../../../shared/outline/outlineTree.js';
 import { useCopyText } from '../hooks/useCopyText.js';
 import { useEditorImageUpload } from '../hooks/useEditorImageUpload.js';
 import { useEditorStore } from '../store/useEditorStore.js';
@@ -25,6 +28,7 @@ function DailyOutlineFallback({ markdown }) {
 /**
  * 今日速记（幕布式）：一天一篇大纲，默认「今日任务 / 事件 / 笔记」三个分区，
  * 可以嵌套、勾选、贴图；过去没勾掉的任务在进入今天时自动带过来。
+ * 可切到思维导图（只读）看全貌，点节点回到大纲对应那一行。
  */
 function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localProjectSupported, assetRootPath }) {
   const today = getTodayDateKey();
@@ -32,6 +36,14 @@ function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localPro
   const entry = useMemo(() => getDailyEntry(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
   const { uploadFile } = useEditorImageUpload({ localProjectSupported, selectedProjectRootPath: assetRootPath });
   const { copiedId, copy } = useCopyText();
+  const [view, setView] = useState(OUTLINE_VIEW);
+  const [focusBlockId, setFocusBlockId] = useState(null);
+  const isMindMap = view === MINDMAP_VIEW;
+  const editorBlocks = useMemo(() => getDailyBlocksForEditor(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
+  const mindTree = useMemo(
+    () => (isMindMap ? blocksToMindTree(editorBlocks, formatDailyHeading(currentDate)) : null),
+    [isMindMap, editorBlocks, currentDate],
+  );
 
   const handleShift = useCallback((offset) => onSetCurrentDate(shiftDateKey(currentDate, offset)), [currentDate, onSetCurrentDate]);
   const handleToday = useCallback(() => onSetCurrentDate(getTodayDateKey()), [onSetCurrentDate]);
@@ -41,10 +53,21 @@ function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localPro
     copy(currentDate, getDailyMarkdown(useEditorStore.getState().dailyWorkspace, currentDate));
   }, [copy, currentDate]);
 
+  const handleViewChange = useCallback((next) => {
+    setFocusBlockId(null);
+    setView(next);
+  }, []);
+
+  // 导图里点节点：回到大纲并把光标放到那一行
+  const handleSelectNode = useCallback((blockId) => {
+    setFocusBlockId(blockId);
+    setView(OUTLINE_VIEW);
+  }, []);
+
   const fallback = <DailyOutlineFallback markdown={getDailyMarkdown(dailyWorkspace, currentDate)} />;
 
   return (
-    <div className="daily-outline" data-testid="daily-surface">
+    <div className={`daily-outline${isMindMap ? ' is-mindmap' : ''}`} data-testid="daily-surface">
       <header className="daily-outline-header">
         <h1>{formatDailyHeading(currentDate)}</h1>
         <DailyToolbar
@@ -55,19 +78,23 @@ function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localPro
           onToday={handleToday}
           onPick={onSetCurrentDate}
           onCopy={handleCopy}
+          viewSwitch={<OutlineViewSwitch value={view} onChange={handleViewChange} />}
         />
       </header>
 
       <section className="daily-outline-body">
-        {canUseDOM ? (
+        {isMindMap && canUseDOM ? (
+          <MindMapView key={currentDate} tree={mindTree} onSelectNode={handleSelectNode} />
+        ) : canUseDOM ? (
           <Suspense fallback={fallback}>
             <DailyOutlineEditor
               key={currentDate}
               dateKey={currentDate}
-              initialBlocks={getDailyBlocksForEditor(dailyWorkspace, currentDate)}
+              initialBlocks={editorBlocks}
               storeBlocks={entry.blocks}
               uploadFile={uploadFile}
               onSave={onSetBlocks}
+              focusBlockId={focusBlockId}
             />
           </Suspense>
         ) : fallback}

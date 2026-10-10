@@ -14,11 +14,13 @@ import {
   insertImagesFromFiles,
 } from '../../hooks/useEditorImageUpload.js';
 import { useImageLightbox } from '../../hooks/useImageLightbox.js';
+import { useTwoStageSelectAll } from '../../hooks/useTwoStageSelectAll.js';
 import EditorFormattingToolbarController from '../EditorFormattingToolbar.jsx';
 import ImageLightbox from '../ImageLightbox.jsx';
 import DailyBlockMenu from './DailyBlockMenu.jsx';
 import DailySlashMenu from './DailySlashMenu.jsx';
 import { DAILY_IMAGE_SOURCE_ID } from './dailyBlockActions.js';
+import { focusOutlineBlock } from '../outline/focusOutlineBlock.js';
 
 /**
  * 今日速记的大纲编辑器（一天一篇 BlockNote 文档）。
@@ -55,7 +57,7 @@ const createPasteHandler = (uploadFile) => ({ event, editor, defaultPasteHandler
   return true;
 };
 
-function DailyOutlineEditor({ dateKey, initialBlocks, storeBlocks, uploadFile, onSave }) {
+function DailyOutlineEditor({ dateKey, initialBlocks, storeBlocks, uploadFile, onSave, focusBlockId = null }) {
   // 挂载时固定：日期、初值、回调（卸载前最后一次保存也必须落到这一天）
   const dateRef = useRef(dateKey);
   const onSaveRef = useRef(onSave);
@@ -73,6 +75,14 @@ function DailyOutlineEditor({ dateKey, initialBlocks, storeBlocks, uploadFile, o
     uploadFile,
     pasteHandler: createPasteHandler(uploadFile),
   });
+
+  // Cmd/Ctrl+A 与主编辑器一致：单按选当前节点，长按才全选整篇
+  const {
+    handleSelectAllBlurCapture,
+    handleSelectAllKeyDownCapture,
+    handleSelectAllKeyUpCapture,
+    resetSelectAllState,
+  } = useTwoStageSelectAll(editor);
 
   const flush = useCallback(() => {
     clearTimeout(timerRef.current);
@@ -95,6 +105,11 @@ function DailyOutlineEditor({ dateKey, initialBlocks, storeBlocks, uploadFile, o
     if (timerRef.current) flush();
   }, [flush]);
 
+  // 从导图点回来：光标落到那一行并滚进视野（只在挂载时跑一次）
+  useEffect(() => {
+    focusOutlineBlock(editor, focusBlockId);
+  }, [editor]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 外部改动：整篇替换（自己刚存的、或双方都是空的，不动）
   useEffect(() => {
     if (storeBlocks === lastEmittedRef.current || timerRef.current) return;
@@ -112,6 +127,10 @@ function DailyOutlineEditor({ dateKey, initialBlocks, storeBlocks, uploadFile, o
     <div
       className="daily-outline-editor-shell"
       onBlur={() => timerRef.current && flush()}
+      onBlurCapture={handleSelectAllBlurCapture}
+      onKeyDownCapture={handleSelectAllKeyDownCapture}
+      onKeyUpCapture={handleSelectAllKeyUpCapture}
+      onPointerDownCapture={resetSelectAllState}
       onDoubleClick={openFromEvent}
     >
       <BlockNoteView

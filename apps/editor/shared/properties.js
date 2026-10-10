@@ -1,4 +1,5 @@
 import { formatObsidianDate } from './frontmatter.js';
+import { PAGE_LAYOUT_KEY, PAGE_LAYOUT_OPTIONS } from './outline/outlineTree.js';
 
 /**
  * 属性 schema 层：内部字段 ↔ frontmatter 属性的映射、控件类型、值编解码。
@@ -82,6 +83,7 @@ export const EXTRA_PROPERTY_DEFINITIONS = Object.freeze({
   updated: { label: '更新日期', widget: 'date', obsidianType: 'date', group: 'basic' },
   category: { label: '分类', widget: 'text', obsidianType: 'text', group: 'basic' },
   categories: { label: '分类', widget: 'list', obsidianType: 'multitext', group: 'basic' },
+  [PAGE_LAYOUT_KEY]: { label: '页面', widget: 'select', obsidianType: 'text', options: PAGE_LAYOUT_OPTIONS, group: 'basic' },
 });
 
 export const EXTRA_PROPERTY_LABELS = Object.freeze(Object.fromEntries(
