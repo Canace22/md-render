@@ -11,6 +11,7 @@ export const EDITOR_STATE_KEYS = Object.freeze([
   'sidebar_file_kind',
   'sidebar_expanded_folders',
   'sidebar_sort_mode',
+  'heading_numbering',
   'comment_threads_json',
   'agent_sessions_json',
 ]);

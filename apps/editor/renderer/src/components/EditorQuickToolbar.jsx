@@ -1,6 +1,7 @@
 import { Dropdown } from 'antd';
 import {
-  ChevronDown, ClipboardCopy, Copy, Download, Eye, FileCode2, MessageSquare, Rocket, Share2,
+  ChevronDown, ClipboardCopy, Copy, Download, Eye, FileCode2, ListOrdered, MessageSquare, Rocket,
+  Share2,
 } from 'lucide-react';
 import { EXPORT_FORMATS } from './DocActionMenuItems.jsx';
 
@@ -63,6 +64,8 @@ export default function EditorQuickToolbar({
   commentCount = 0,
   commentsOpen = false,
   onToggleComments,
+  headingNumbering = false,
+  onToggleHeadingNumbering,
 }) {
   const handlers = {
     'prepare-publish': onPreparePublish,
@@ -90,6 +93,18 @@ export default function EditorQuickToolbar({
       data-disabled={disabled ? 'true' : undefined}
     >
       {leading && <div className="outline-quick-toolbar-leading">{leading}</div>}
+      {/* 大纲页是幕布式记录，不需要章节编号 */}
+      {onToggleHeadingNumbering && !isOutline && (
+        <button
+          type="button"
+          className={`editor-comment-trigger${headingNumbering ? ' is-active' : ''}`}
+          title={headingNumbering ? '关闭标题编号' : '标题自动编号'}
+          aria-pressed={headingNumbering}
+          onClick={onToggleHeadingNumbering}
+        >
+          <ListOrdered size={ICON_SIZE} strokeWidth={ICON_STROKE} />
+        </button>
+      )}
       {onToggleComments && (
         <button
           type="button"

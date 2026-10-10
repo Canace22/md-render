@@ -449,6 +449,8 @@ function MarkdownEditor() {
   } = useEditorStore();
   const commentsPanelOpen = useEditorStore((state) => state.commentsPanelOpen);
   const setCommentsPanelOpen = useEditorStore((state) => state.setCommentsPanelOpen);
+  const headingNumbering = useEditorStore((state) => state.headingNumbering);
+  const toggleHeadingNumbering = useEditorStore((state) => state.toggleHeadingNumbering);
   const openCommentCount = useEditorStore((state) => countOpenThreads(state.commentThreads, state.selectedId));
   // 评论面板展开时占住右侧，目录先让开
   const commentsVisible = commentsPanelOpen && editorMode !== 'preview';
@@ -1379,6 +1381,9 @@ function MarkdownEditor() {
   );
   const outlinePage = useOutlinePage(editor, selectedFile);
   const scriptPage = useScriptPage(editor, selectedFile);
+  // 标题编号走 CSS 计数器，只加个 class，正文和 Markdown 都不动；大纲页不编号
+  const showHeadingNumbers = headingNumbering && !outlinePage.isOutline;
+  const paperContentClassName = `paper-content${showHeadingNumbers ? ' heading-numbered' : ''}`;
   const openWikilink = useOpenWikilink(workspace);
 
   useEffect(() => {
@@ -2808,6 +2813,8 @@ function MarkdownEditor() {
               commentCount={openCommentCount}
               commentsOpen={commentsPanelOpen}
               onToggleComments={() => setCommentsPanelOpen(!commentsPanelOpen)}
+              headingNumbering={headingNumbering}
+              onToggleHeadingNumbering={toggleHeadingNumbering}
             />
             <div className={`editor-layout${outlinePage.showMindMap ? ' is-mindmap' : ''}`}>
               {/* 大纲页的导图：编辑器常挂载只是藏起来，切回大纲光标和撤销栈都还在 */}
@@ -2840,11 +2847,11 @@ function MarkdownEditor() {
                   {editorMode === 'preview' ? (
                     <div
                       id="markdown-output"
-                      className="paper-content"
+                      className={paperContentClassName}
                       dangerouslySetInnerHTML={{ __html: wechatSourceHtml }}
                     />
                   ) : (
-                    <div id="markdown-output" className="paper-content">
+                    <div id="markdown-output" className={paperContentClassName}>
                       <div
                         className="blocknote-paper"
                         onDoubleClick={handlePaperDoubleClick}
