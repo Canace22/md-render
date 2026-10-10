@@ -1,8 +1,10 @@
 name: Deploy to GitHub Pages
 
+# 只在推 v* tag 发版时部署，日常提交不触发；也可在 Actions 页签手动触发
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 # 必要权限：使用 GitHub Pages 部署
