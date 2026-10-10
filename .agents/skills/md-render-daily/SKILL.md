@@ -1,6 +1,6 @@
 ---
 name: md-render-daily
-description: 在本项目改「今日速记 / Daily」时的规范——一天一篇 BlockNote 大纲（幕布式），块级纯函数在 apps/editor/shared/daily/（dailyBlocks.js、dailyMarkdown.js），工作区纯函数在 renderer/src/utils/dailyWorkspace.js，文件格式在 shared/migration/dailyFormat.js，UI 在 components/DailyNotebook.jsx + components/daily/。核心约定：切日期是纯视图；结转只在进入真实今天时跑且幂等；磁盘是干净大纲 Markdown + 数据块兜底。涉及"今日速记""daily""大纲""切日期数据丢了/被重置""未完成任务带到今天""carryOver""速记贴图""read_daily / add_daily_entry / complete_daily_task""Daily/日期.md 格式"时触发。略主动。
+description: 在本项目改「今日速记 / Daily」时的规范——一天一篇 BlockNote 大纲（幕布式），块级纯函数在 apps/editor/shared/daily/（dailyBlocks.js、dailyMarkdown.js），工作区纯函数在 renderer/src/utils/dailyWorkspace.js，文件格式在 shared/migration/dailyFormat.js，UI 在 components/DailyNotebook.jsx + components/daily/。核心约定：切日期是纯视图；结转只在进入真实今天时跑且幂等；磁盘是干净大纲 Markdown + 数据块兜底。涉及"大纲页面""思维导图""layout: outline""今日速记""daily""大纲""切日期数据丢了/被重置""未完成任务带到今天""carryOver""速记贴图""read_daily / add_daily_entry / complete_daily_task""Daily/日期.md 格式"时触发。略主动。
 ---
 
 # 今日速记（幕布式大纲）改动规范
@@ -66,6 +66,15 @@ date: 2026-10-09
 | `complete_daily_task` | 按文字勾选（先全等，再包含）；没找到返回「勾选失败：…」 |
 
 新增工具要同时改：`toolRegistry.js`（定义 + handler + label）、`createHost.js`、`shared/capabilities/riskLevels.js`、`shared/vaultAgentsMd.js`（给直接读文件的 agent 的映射表）、`server/mcp-bridge/README.md`。
+
+## 大纲页面 / 思维导图（和速记共用）
+
+- 大纲页 = 普通 `.md` + frontmatter `layout: outline`（`shared/outline/outlineTree.js` 的 `isOutlinePage`）；属性面板「页面」可切换（`shared/properties.js` 的 `layout` 定义）。新建入口：侧边栏「新建大纲」→ `MarkdownEditor.handleAddOutline`（先 `handleAddFile` 再写 frontmatter）。
+- 主编辑器里的状态在 `hooks/useOutlinePage.js`：视图按文件记、空文档首行变圆点、BlockNoteView 加 `outline-editor` 类复用速记的缩进样式。**切到导图时编辑器不卸载**，只用 `.editor-layout.is-mindmap` 藏起来。
+- 速记切到导图时编辑器会卸载（卸载前自动 flush），导图读 store 里的块。
+- 导图树：`blocksToMindTree(blocks, rootLabel)`——children 是子节点，标题按级别收下后面的平级块（速记分区就是平级的）；空行、分割线跳过。
+- 导图组件 `components/outline/MindMapView.jsx`（只读，平移 / 缩放 / 折叠），连线全是 CSS 伪元素；点节点 → `focusOutlineBlock` 回大纲定位。父级用页面 id / 日期当 key 重挂。
+- 测试：`tests-unit/outline-tree.test.js`。
 
 ## 验证
 
