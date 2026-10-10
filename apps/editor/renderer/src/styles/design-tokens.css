@@ -21,6 +21,8 @@
   --color-bg-surface: var(--color-surface-elevated);
   --color-bg-sidebar: var(--color-surface-elevated);
   --color-bg-active: rgba(79, 70, 229, 0.12);
+  --color-comment-highlight: rgba(250, 204, 21, 0.28);
+  --color-comment-highlight-active: rgba(250, 204, 21, 0.55);
   --color-bg-code: #0F172A;
   --color-bg-inline-code: #F1F5F9;
   --color-primary: var(--color-brand-primary);
@@ -114,6 +116,8 @@ body.theme-dark,
   --color-bg-surface: var(--color-surface-elevated);
   --color-bg-sidebar: var(--color-surface-elevated);
   --color-bg-active: rgba(79, 70, 229, 0.25);
+  --color-comment-highlight: rgba(250, 204, 21, 0.18);
+  --color-comment-highlight-active: rgba(250, 204, 21, 0.38);
   --color-bg-code: #0F172A;
   --color-bg-inline-code: #1E293B;
   --color-border: var(--color-border-subtle);
@@ -132,6 +136,8 @@ body.theme-dark,
     --color-bg-surface: var(--color-surface-elevated);
     --color-bg-sidebar: var(--color-surface-elevated);
     --color-bg-active: rgba(79, 70, 229, 0.25);
+    --color-comment-highlight: rgba(250, 204, 21, 0.18);
+    --color-comment-highlight-active: rgba(250, 204, 21, 0.38);
     --color-bg-code: #0F172A;
     --color-bg-inline-code: #1E293B;
     --color-border: var(--color-border-subtle);
@@ -150,6 +156,8 @@ body.theme-light {
   --color-bg-surface: var(--color-surface-elevated);
   --color-bg-sidebar: var(--color-surface-elevated);
   --color-bg-active: rgba(79, 70, 229, 0.12);
+  --color-comment-highlight: rgba(250, 204, 21, 0.28);
+  --color-comment-highlight-active: rgba(250, 204, 21, 0.55);
   --color-bg-code: #0F172A;
   --color-bg-inline-code: #F1F5F9;
   --color-border: var(--color-border-subtle);

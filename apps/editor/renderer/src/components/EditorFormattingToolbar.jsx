@@ -12,6 +12,7 @@ import {
   EditorInlineRewriteButtons,
   EditorInlineRewriteProvider,
 } from './EditorInlineRewrite.jsx';
+import EditorCommentButton from './EditorCommentButton.jsx';
 
 /** 与 BlockNote ColorStyleButton 工具栏色标尺寸对齐 */
 const COLOR_ICON_SIZE = 20;
@@ -145,7 +146,8 @@ function ColorStyleSplitButton({ kind }) {
 }
 
 function EditorFormattingToolbar() {
-  const items = [];
+  // 「评论」放最前面，与 Claude Cowork 的选区工具栏一致
+  const items = [<EditorCommentButton key="commentButton" />];
   for (const item of getFormattingToolbarItems()) {
     if (item.key === 'colorStyleButton') {
       items.push(
