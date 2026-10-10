@@ -168,7 +168,8 @@ AI 面板里的 slash 列表、欢迎页、「+」菜单、技能页、文档工
 - **加一个新 agent**：① `shared/localAgents.js` 加一条（bins、priority、supported、loginCheckArgs、modelPresets、installHint/loginHint）；② 在 `adapters/` 写 `buildArgs` + `createParser`（复用 `adapters/common.js`）并在 `adapters/index.js` 登记；③ 录一份 JSONL 样本放 `tests-unit/fixtures/local-agents/`，在 `local-agents.test.js` 的 `it.each` 里加上。
 - **坑**：
   - macOS 从 Finder 启动的 Electron 不继承 shell 的 PATH / 代理变量：检测和 spawn 都用 `getAgentEnv()`（login shell 环境），别直接用 `process.env`。
-  - Windows 上 npm / pnpm 装的 CLI 是 `.cmd` 启动脚本，Node 20+ 不经 shell 直接 spawn 会**同步**抛 `spawn EINVAL`（检测会被误判成未安装）。凡是起本地 agent 进程，都先过 `winCommand.js` 的 `resolveSpawnCommand`（解析出真正的 js / exe），别用 `shell: true`（参数里有换行和 JSON，cmd 转义不可靠）。
+  - Windows 上 npm / pnpm 装的 CLI 是 `.cmd` 启动脚本，Node 20+ 不经 shell 直接 spawn 会**同步**抛 `spawn EINVAL`（检测会被误判成未安装）。凡是起本地 agent 进程，都先过 `winCommand.js` 的 `resolveSpawnCommand`（解析出真正的 js / exe），别用 `shell: true`（参数里有换行和 JSON，cmd 转义不可靠）。认不出的启动脚本（如 Cursor 自带的）才退回 cmd.exe（cross-spawn 同款转义，带换行的参数传不了）。
+  - Windows 上 fnm 只把 `AppData\Local\fnm_multishells\<临时>` 加进终端 PATH，从开始菜单起的 app 看不到；兜底目录走 `fnm\aliases\default`（`shellEnv.js` 的 `WINDOWS_BIN_DIRS`）。用户报“检测不到”时先让对方跑 `where.exe codex claude cursor-agent` 看真实路径。
   - Cursor 新命令叫 `agent`，名字太通用：先找 `cursor-agent`，`agent` 要靠真实路径或日期格式版本号确认是 Cursor。
   - Stop 要连 agent 拉起的 shell 一起停：运行器用独立进程组 + 守护进程，别改成 `child.kill()`。
   - Codex 断线重连会发 `error` 事件但还在继续，不能当失败；Cursor 的 `result.result` 会把所有文字串起来，最终答复取最后一次工具调用之后的文字。

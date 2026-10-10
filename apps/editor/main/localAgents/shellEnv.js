@@ -34,6 +34,11 @@ export const WINDOWS_BIN_DIRS = Object.freeze([
   '~/.local/bin',
   '~/.bun/bin',
   '~/.cursor/bin',
+  // Cursor CLI 的 Windows 安装目录
+  '~/AppData/Local/cursor-agent',
+  // fnm 只把 fnm_multishells 下的临时目录加进终端 PATH，app 看不到；全局 npm 包在默认 Node 版本目录里
+  '~/AppData/Roaming/fnm/aliases/default',
+  '~/AppData/Local/fnm/aliases/default',
 ]);
 
 export const getCommonBinDirs = (platform = process.platform) => (

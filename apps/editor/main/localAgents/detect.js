@@ -49,11 +49,12 @@ const failedResult = (error) => ({ ok: false, code: error?.code ?? 1, timedOut: 
 export const runShortCommand = (command, args, { env, timeout = DETECT_TIMEOUT_MS } = {}) => new Promise((resolve) => {
   const target = resolveSpawnCommand(command, args);
   if (!target) {
-    resolve(failedResult(new Error(`无法解析启动脚本 ${command}`)));
+    resolve(failedResult(new Error(`无法启动 ${command}`)));
     return;
   }
   try {
     execFile(target.command, target.args, {
+      ...target.options,
       env: { ...env, NO_COLOR: '1' },
       timeout,
       killSignal: 'SIGKILL',
@@ -131,7 +132,7 @@ const locateBinary = async (agent, env, deps) => {
   const candidates = buildCandidatePaths(agent, { pathEnv: env.PATH, home: deps.home, platform: deps.platform });
   for (const { bin, file } of candidates) {
     if (!deps.isExecutable(file)) continue;
-    // 解析不了的 .cmd 启动脚本跑不起来，当作没找到
+    // 起不来的候选（resolveCommand 返回 null）当作没找到
     if (!deps.resolveCommand(file, [], { platform: deps.platform })) continue;
     const versionResult = await deps.run(file, ['--version'], { env });
     if (agent.ambiguousBins?.includes(bin) && !isCursorBinary({ realPath: deps.realPath(file), versionOutput: versionResult.output })) {
