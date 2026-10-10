@@ -4,7 +4,6 @@
  * 通用机制，无业务语义：
  * - 全选快捷键识别
  * - 块内联内容选区范围计算
- * - 「再按一次 Ctrl+A 提升为全选」的判定
  */
 
 import type { Node } from '@tiptap/pm/model';
@@ -117,22 +116,4 @@ export function selectAllEditorContent(editor: IKeyboardSelectionEditor): boolea
   });
   editor.focus();
   return true;
-}
-
-/**
- * 判断当前块选区是否应提升为「全选」。
- * 用于 Ctrl+A 两段式：首次选当前块，再按全选全文。
- */
-export function shouldPromoteBlockSelectionToFullSelection(
-  currentBlockId: string,
-  selectedBlockIds: readonly string[],
-  pendingBlockId: string | null,
-): boolean {
-  if (pendingBlockId !== currentBlockId) return false;
-  if (selectedBlockIds.length === 0) return true;
-  if (selectedBlockIds.length === 1) {
-    return selectedBlockIds[0] === currentBlockId;
-  }
-  // 首次 Ctrl+A 若选区计算越界，getSelection 可能误报多块；仍以 pending 为准允许全选
-  return selectedBlockIds.includes(currentBlockId);
 }

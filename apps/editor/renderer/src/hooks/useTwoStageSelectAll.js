@@ -3,7 +3,6 @@ import {
   isSelectAllShortcut,
   selectAllEditorContent,
   selectCurrentTextBlockContent,
-  shouldPromoteBlockSelectionToFullSelection,
 } from '@narrative/blocknote-core';
 import { onMenuSelectAll } from '../services/electronBridge.js';
 
@@ -15,10 +14,15 @@ const TEXT_EDITING_TARGET_SELECTOR = [
   '[contenteditable]:not([contenteditable="false"])',
 ].join(',');
 const EXTERNAL_EDITOR_TARGET_SELECTOR = '.excalidraw';
+const BLOCKNOTE_EDITOR_SELECTOR = '.bn-editor';
 
 const getTextEditingTarget = (target) => target?.closest?.(TEXT_EDITING_TARGET_SELECTOR) ?? null;
 const isTextEditingTarget = (target) => Boolean(getTextEditingTarget(target));
 const isExternalEditorTarget = (target) => Boolean(target?.closest?.(EXTERNAL_EDITOR_TARGET_SELECTOR));
+/** 焦点在另一个 BlockNote 编辑器里（如主编辑器与今日速记同时订阅菜单全选），交给那个编辑器自己处理。 */
+export const isOtherBlockNoteTarget = (target, editorDom) => (
+  Boolean(target?.closest?.(BLOCKNOTE_EDITOR_SELECTOR)) && !editorDom?.contains?.(target)
+);
 
 const selectTextEditingTargetContent = (target) => {
   const editingTarget = getTextEditingTarget(target);
@@ -62,9 +66,16 @@ const selectDocumentContent = () => {
 };
 
 const createSelectAllState = () => ({
-  pendingBlockId: null,
   fullSelectionActive: false,
 });
+
+/**
+ * Cmd/Ctrl+A 与文档编辑器一致：单按只选当前块，长按（系统按键重复）才升级为全文。
+ * 已是全文选区时保持全文，避免松手后再按一下又缩回当前块。
+ */
+export const shouldSelectFullDocument = ({ fullSelectionActive }, repeat) => (
+  fullSelectionActive || repeat
+);
 
 const createShortcutReleaseState = () => ({
   active: false,
@@ -93,47 +104,16 @@ export function useTwoStageSelectAll(editor) {
 
   const selectFullEditorContent = useCallback(() => {
     selectAllEditorContent(editor);
-    selectAllStateRef.current = {
-      pendingBlockId: null,
-      fullSelectionActive: true,
-    };
+    selectAllStateRef.current = { fullSelectionActive: true };
   }, [editor]);
 
-  const selectEditorContent = useCallback(() => {
-    const selectAllState = selectAllStateRef.current;
-
-    // 已提升为全文后继续保持，避免长按 repeat 在“当前行 / 全文”之间反复切换。
-    if (selectAllState.fullSelectionActive) {
+  const selectEditorContent = useCallback((repeat = false) => {
+    if (shouldSelectFullDocument(selectAllStateRef.current, repeat)) {
       selectFullEditorContent();
       return;
     }
-
-    const currentBlock = editor.getTextCursorPosition()?.block;
-    if (!currentBlock) {
-      selectFullEditorContent();
-      return;
-    }
-
-    const selectedBlockIds = editor.getSelection()?.blocks.map((block) => block.id) ?? [];
-    const shouldSelectFullDocument = shouldPromoteBlockSelectionToFullSelection(
-      currentBlock.id,
-      selectedBlockIds,
-      selectAllState.pendingBlockId,
-    );
-
-    if (shouldSelectFullDocument) {
-      selectFullEditorContent();
-      return;
-    }
-
-    if (!selectCurrentTextBlockContent(editor)) {
-      // 图片/文件等非文本块没有“当前行”，首次直接选中全文。
-      selectFullEditorContent();
-      return;
-    }
-
-    selectAllState.pendingBlockId = currentBlock.id;
-    selectAllState.fullSelectionActive = false;
+    // 图片/文件等非文本块没有“当前块”，直接选中全文。
+    if (!selectCurrentTextBlockContent(editor)) selectFullEditorContent();
   }, [editor, selectFullEditorContent]);
 
   const handleSelectAllKeyDownCapture = useCallback((event) => {
@@ -149,7 +129,7 @@ export function useTwoStageSelectAll(editor) {
     event.stopPropagation();
 
     startShortcutRelease(event);
-    selectEditorContent();
+    selectEditorContent(event.repeat);
   }, [editor, resetSelectAllState, selectEditorContent, startShortcutRelease]);
 
   const shouldSuppressSelectAllKeyUp = useCallback((event) => {
@@ -210,6 +190,11 @@ export function useTwoStageSelectAll(editor) {
     const editorDom = editor.domElement;
     const activeTarget = document.activeElement;
 
+    if (isOtherBlockNoteTarget(activeTarget, editorDom)) {
+      resetSelectAllState();
+      return;
+    }
+
     if (!editorDom?.isConnected) {
       if (isTextEditingTarget(activeTarget)) {
         selectTextEditingTargetContent(activeTarget);
@@ -236,14 +221,14 @@ export function useTwoStageSelectAll(editor) {
         repeat,
       });
       if (editorDom.contains(activeTarget)) {
-        selectEditorContent();
+        selectEditorContent(repeat);
       } else {
         selectFullEditorContent();
       }
       return;
     }
 
-    // 菜单中明确点“全选”遵循原生语义，不走两段式首次当前行。
+    // 菜单中明确点“全选”遵循原生语义，直接全文。
     selectFullEditorContent();
   }), [
     editor,
