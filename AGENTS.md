@@ -187,7 +187,8 @@ packages/
 │   └── src/
 │       ├── parser.js            # Markdown 解析器 → token 数组
 │       └── renderer.js          # token 数组 → HTML 字符串
-└── blocknote-core/              # BlockNote 底层机制包（@narrative/blocknote-core）
+├── blocknote-core/              # BlockNote 底层机制包（@narrative/blocknote-core）
+└── json-tool/                   # JSON 解析工具组件（@md-render/json-tool，editor 懒加载）
 server/
 ├── ai-proxy/                    # AI 请求代理
 └── mcp-bridge/                  # Agent 控制桥 MCP server
