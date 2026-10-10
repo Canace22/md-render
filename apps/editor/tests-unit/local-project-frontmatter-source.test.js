@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseFrontmatterDocument } from '../shared/frontmatterDocument.js';
+import { parseFrontmatterDocument } from '@shared/frontmatterDocument.js';
 import {
   readLocalProjectWorkspace,
   saveLocalProjectFile,

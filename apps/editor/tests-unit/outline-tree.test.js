@@ -4,8 +4,8 @@ import {
   countDescendants,
   isOutlinePage,
   withTitleHeading,
-} from '../shared/outline/outlineTree.js';
-import { createDailyTemplate } from '../shared/daily/dailyBlocks.js';
+} from '@shared/outline/outlineTree.js';
+import { createDailyTemplate } from '@shared/daily/dailyBlocks.js';
 
 const text = (value) => [{ type: 'text', text: value, styles: {} }];
 const block = (id, type, value, extra = {}) => ({

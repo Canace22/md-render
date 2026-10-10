@@ -27,7 +27,7 @@ importers:
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@md-render/json-tool':
         specifier: workspace:*
-        version: link:../json-tool
+        version: link:../../packages/json-tool
       '@md-render/markdown-core':
         specifier: workspace:*
         version: link:../../packages/markdown-core
@@ -123,21 +123,6 @@ importers:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.12)(@types/node@25.9.1)(sass@1.51.0)
 
-  apps/json-tool:
-    dependencies:
-      antd:
-        specifier: ^5.28.0
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      lucide-react:
-        specifier: ^0.577.0
-        version: 0.577.0(react@18.3.1)
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.2.0
-        version: 18.3.1(react@18.3.1)
-
   packages/blocknote-core:
     dependencies:
       '@blocknote/core':
@@ -168,6 +153,21 @@ importers:
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@25.9.1)(sass@1.51.0)
+
+  packages/json-tool:
+    dependencies:
+      antd:
+        specifier: ^5.28.0
+        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      lucide-react:
+        specifier: ^0.577.0
+        version: 0.577.0(react@18.3.1)
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/markdown-core: {}
 
@@ -1565,10 +1565,12 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}

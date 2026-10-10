@@ -7,9 +7,9 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
-import { DAILY_DIR_NAME, TODO_FILE_NAME, parseDailyFileName } from '../../shared/migration/dailyFormat.js';
-import { CARD_CANVAS_PATH, EXCALIDRAW_CANVAS_PATH } from '../../shared/migration/canvasFormat.js';
-import { EDITORIAL_MEMORY_PATH } from '../../shared/migration/memoryMerge.js';
+import { DAILY_DIR_NAME, TODO_FILE_NAME, parseDailyFileName } from '@shared/migration/dailyFormat.js';
+import { CARD_CANVAS_PATH, EXCALIDRAW_CANVAS_PATH } from '@shared/migration/canvasFormat.js';
+import { EDITORIAL_MEMORY_PATH } from '@shared/migration/memoryMerge.js';
 
 export const MIGRATION_DIR = '.agent/migration';
 export const VAULT_STATE_PATH = `${MIGRATION_DIR}/state.json`;

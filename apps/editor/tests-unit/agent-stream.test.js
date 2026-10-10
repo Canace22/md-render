@@ -10,7 +10,7 @@ import {
   createChatAccumulator,
   createSseParser,
   readChatStream,
-} from '../shared/sseChat.js';
+} from '@shared/sseChat.js';
 import {
   appendStreamDelta,
   buildErrorMessage,

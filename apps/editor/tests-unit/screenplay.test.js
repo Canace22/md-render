@@ -9,7 +9,7 @@ import {
   parseSceneHeading,
   parseScriptLine,
   suggestSpeakers,
-} from '../shared/script/screenplay.js';
+} from '@shared/script/screenplay.js';
 
 const text = (value) => [{ type: 'text', text: value, styles: {} }];
 const heading = (id, value) => ({ id, type: 'heading', props: { level: 2 }, content: text(value), children: [] });

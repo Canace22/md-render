@@ -1,7 +1,7 @@
 import { ChevronRight, Copy, Download, History } from 'lucide-react';
 import { getWorkspaceFileKind, SIDEBAR_FILE_KIND_DOCUMENT } from '../store/workspaceUtils.js';
 import { needsConversion } from '../utils/fileConverters.js';
-import { isOutlinePage } from '../../../shared/outline/outlineTree.js';
+import { isOutlinePage } from '@shared/outline/outlineTree.js';
 
 export const EXPORT_FORMATS = Object.freeze([
   { key: 'md', label: 'Markdown' },

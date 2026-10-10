@@ -1,16 +1,16 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { extractKnowledgeMetadataFromFrontmatter } from '../shared/frontmatter.js';
+import { extractKnowledgeMetadataFromFrontmatter } from '@shared/frontmatter.js';
 import {
   parseFrontmatterDocument,
   replaceMarkdownBody,
   updateFrontmatterInMarkdown,
-} from '../shared/frontmatterDocument.js';
+} from '@shared/frontmatterDocument.js';
 import {
   frontmatterToMetadata,
   metadataToFrontmatterPatch,
-} from '../shared/properties.js';
+} from '@shared/properties.js';
 import { syncObsidianPropertyTypes } from './obsidianTypes.js';
 import { isBrokenFrontmatter } from './migration/frontmatterIds.js';
 

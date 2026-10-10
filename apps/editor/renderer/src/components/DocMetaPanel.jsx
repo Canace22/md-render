@@ -7,7 +7,7 @@ import {
   groupProperties,
   listAddableProperties,
   resolveVisibleProperties,
-} from '../../../shared/properties.js';
+} from '@shared/properties.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 import {
   dbGetBacklinks,

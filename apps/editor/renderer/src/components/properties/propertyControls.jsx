@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Select } from 'antd';
 import { GitBranch, X } from 'lucide-react';
-import { normalizeDate, normalizeDateTime } from '../../../../shared/properties.js';
+import { normalizeDate, normalizeDateTime } from '@shared/properties.js';
 import { hasCoverImagePicker, selectCoverImage } from '../../services/electronBridge.js';
 import RelatedDocPicker from '../RelatedDocPicker.jsx';
 

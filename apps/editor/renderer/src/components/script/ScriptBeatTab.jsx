@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Tooltip } from 'antd';
 import { Link2, Unlink } from 'lucide-react';
-import { beatsOfScene, unplacedBeats } from '../../../../shared/script/scriptBeats.js';
+import { beatsOfScene, unplacedBeats } from '@shared/script/scriptBeats.js';
 import ScriptPanelSection from './ScriptPanelSection.jsx';
 
 const ICON_SIZE = 13;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { analyzeBeats } from '../../../shared/script/scriptBeats.js';
-import { sceneNumberAt } from '../../../shared/script/screenplay.js';
+import { analyzeBeats } from '@shared/script/scriptBeats.js';
+import { sceneNumberAt } from '@shared/script/screenplay.js';
 import { addBeat, toggleBeatScene } from '../utils/scriptEditing.js';
 
 const readCursorBlockId = (editor) => {

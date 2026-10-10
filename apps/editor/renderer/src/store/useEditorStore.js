@@ -4,7 +4,7 @@ import {
   metadataToFrontmatterPatch,
   normalizeDate,
   pickCustomProperties,
-} from '../../../shared/properties.js';
+} from '@shared/properties.js';
 import {
   createId,
   createDefaultWorkspace,
@@ -78,7 +78,7 @@ import { DEFAULT_TREE_SORT_MODE, normalizeTreeSortMode } from '../utils/treeSort
 import { createAgentSlice } from './slices/agentSlice.js';
 import { createProposalSlice } from './slices/proposalSlice.js';
 import { createVaultSlice } from './slices/vaultSlice.js';
-import { EDITOR_STATE_KEYS } from '../../../shared/stateKeys.js';
+import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';

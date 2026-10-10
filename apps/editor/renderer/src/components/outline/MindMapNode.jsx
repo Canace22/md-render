@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Check } from 'lucide-react';
-import { countDescendants } from '../../../../shared/outline/outlineTree.js';
+import { countDescendants } from '@shared/outline/outlineTree.js';
 import { splitWikilinks } from '../../utils/wikilinkText.js';
 
 /** 节点文字：[[双链]] 只显示文档名；给了 onOpenLink 时可点击打开文档 */

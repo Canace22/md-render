@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDITOR_STATE_KEYS } from '../shared/stateKeys.js';
+import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
 import {
   RENDERER_STATE_KEYS,
   useEditorStore,

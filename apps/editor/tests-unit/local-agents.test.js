@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../renderer/src/utils/agentDataBridge.js', () => ({ saveActivityEntry: vi.fn() }));
 
-import { LOCAL_AGENT_STATUS, getLocalAgent } from '../shared/localAgents.js';
+import { LOCAL_AGENT_STATUS, getLocalAgent } from '@shared/localAgents.js';
 import {
   buildCandidatePaths,
   detectAllLocalAgents,

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { planMigration } from '../main/migration/planMigration.js';
 import { executeMigration, rollbackMigration } from '../main/migration/executeMigration.js';
 import { isStepOnFiles, readDailyFiles, readMigrationState, readVaultText, writeVaultText } from '../main/migration/vaultFiles.js';
-import { parseDailyWorkspace } from '../shared/migration/dailyFormat.js';
+import { parseDailyWorkspace } from '@shared/migration/dailyFormat.js';
 import { normalizeDailyWorkspace } from '../renderer/src/utils/dailyWorkspace.js';
 
 const T = Date.UTC(2026, 9, 5, 1, 0, 0);

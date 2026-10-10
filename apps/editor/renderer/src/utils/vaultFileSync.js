@@ -3,8 +3,8 @@
  * 纯函数，方便单测；真正的读写在 hooks/useVaultStorage.js。
  */
 
-import { DAILY_DIR_NAME, TODO_FILE_NAME, serializeDailyEntry, serializeDailyWorkspace } from '../../../shared/migration/dailyFormat.js';
-import { serializeCanvasState } from '../../../shared/migration/canvasFormat.js';
+import { DAILY_DIR_NAME, TODO_FILE_NAME, serializeDailyEntry, serializeDailyWorkspace } from '@shared/migration/dailyFormat.js';
+import { serializeCanvasState } from '@shared/migration/canvasFormat.js';
 
 const DAILY_PATH_RE = /^Daily\/(\d{4}-\d{2}-\d{2})\.md$/;
 

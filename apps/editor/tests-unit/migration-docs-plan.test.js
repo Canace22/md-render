@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BUILTIN_DOCS_DIR, extractBase64Images, planBuiltinDocsMigration, rewriteWikilinks, sanitizeFileName } from '../shared/migration/docsPlan.js';
-import { parseFrontmatterDocument } from '../shared/frontmatterDocument.js';
+import { BUILTIN_DOCS_DIR, extractBase64Images, planBuiltinDocsMigration, rewriteWikilinks, sanitizeFileName } from '@shared/migration/docsPlan.js';
+import { parseFrontmatterDocument } from '@shared/frontmatterDocument.js';
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 

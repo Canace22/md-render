@@ -11,7 +11,7 @@ import {
   LOCAL_AGENT_STATUS,
   getLocalAgent,
   isRunnableAgent,
-} from '../../../../shared/localAgents.js';
+} from '@shared/localAgents.js';
 import { AI_PROVIDERS, DEFAULT_PROVIDER_ID } from './aiProviders.js';
 
 const ACTIVE_SOURCE_KEY = 'md-renderer-ai-source';

@@ -6,7 +6,7 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
-import { activityDateKey } from '../../shared/capabilities/activity.js';
+import { activityDateKey } from '@shared/capabilities/activity.js';
 
 export const AGENT_DATA_DIR_NAME = '.agent';
 const PROPOSALS_DIR = 'proposals';
