@@ -84,3 +84,45 @@ export const removeSession = (sessions, sessionId, activeId) => {
   const nextActiveId = activeId === sessionId ? filtered[0].id : activeId;
   return { sessions: filtered, nextActiveId };
 };
+
+/** 落盘最多保留的会话数（按最近在前），防止存储无限增长 */
+export const MAX_PERSISTED_SESSIONS = 30;
+
+/** 恢复时把「上次没跑完」的消息收口：打字光标去掉、运行中的工具标成中断；重试参数只在内存里有效 */
+const settleMessage = (msg) => {
+  const { retry, ...rest } = msg;
+  if (rest.role === 'assistant' && rest.typing) return { ...rest, typing: false, stopped: true };
+  if (rest.role === 'tool' && rest.status === 'running') return { ...rest, status: 'interrupted' };
+  return rest;
+};
+
+const isValidSession = (s) => s && typeof s.id === 'string' && Array.isArray(s.messages);
+
+const settleSession = (s) => ({
+  ...createSession(s.title || '新会话'),
+  ...s,
+  messages: s.messages.filter((m) => m && typeof m === 'object').map(settleMessage),
+  history: Array.isArray(s.history) ? s.history : [],
+});
+
+/** 会话 → 可持久化的快照 { activeId, sessions } */
+export const serializeAgentSessions = (sessions, activeId) => ({
+  activeId: activeId || '',
+  sessions: (Array.isArray(sessions) ? sessions : [])
+    .filter(isValidSession)
+    .slice(0, MAX_PERSISTED_SESSIONS)
+    .map(settleSession),
+});
+
+/** 快照 → { agentSessions, activeAgentSessionId }；数据损坏或为空时给一个新会话 */
+export const restoreAgentSessions = (snapshot) => {
+  const sessions = (Array.isArray(snapshot?.sessions) ? snapshot.sessions : [])
+    .filter(isValidSession)
+    .map(settleSession);
+  if (sessions.length === 0) {
+    const fresh = createSession();
+    return { agentSessions: [fresh], activeAgentSessionId: fresh.id };
+  }
+  const activeId = sessions.some((s) => s.id === snapshot.activeId) ? snapshot.activeId : sessions[0].id;
+  return { agentSessions: sessions, activeAgentSessionId: activeId };
+};

@@ -80,6 +80,7 @@ import { createProposalSlice } from './slices/proposalSlice.js';
 import { createVaultSlice } from './slices/vaultSlice.js';
 import { createCommentSlice } from './slices/commentSlice.js';
 import { normalizeCommentThreads } from '../utils/commentThreads.js';
+import { restoreAgentSessions, serializeAgentSessions } from '../core/agent/sessionUtils.js';
 import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
@@ -96,6 +97,7 @@ const SIDEBAR_FILE_KIND_STORAGE_KEY = 'md-renderer-sidebar-file-kind';
 const SIDEBAR_SORT_MODE_STORAGE_KEY = 'md-renderer-sidebar-sort-mode';
 const SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY = 'md-renderer-sidebar-expanded-folders';
 const COMMENT_THREADS_STORAGE_KEY = 'md-renderer-comment-threads';
+const AGENT_SESSIONS_STORAGE_KEY = 'md-renderer-agent-sessions';
 const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
@@ -195,6 +197,9 @@ const buildStateFromLocalStorage = () => {
   const commentThreads = normalizeCommentThreads(
     safeParseJSON(window.localStorage.getItem(COMMENT_THREADS_STORAGE_KEY), {}),
   );
+  const agentSessionsState = restoreAgentSessions(
+    safeParseJSON(window.localStorage.getItem(AGENT_SESSIONS_STORAGE_KEY), null),
+  );
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -214,6 +219,7 @@ const buildStateFromLocalStorage = () => {
       expandedFolderIds,
       sidebarSortMode,
       commentThreads,
+      ...agentSessionsState,
     },
     version: 0,
   };
@@ -255,6 +261,7 @@ const buildStateFromDb = (raw) => {
       ),
       sidebarSortMode: normalizeTreeSortMode(raw.sidebar_sort_mode),
       commentThreads: normalizeCommentThreads(safeParseJSON(raw.comment_threads_json, {})),
+      ...restoreAgentSessions(safeParseJSON(raw.agent_sessions_json, null)),
     },
     version: 0,
   };
@@ -291,6 +298,11 @@ const buildStateMap = (state) => {
   }
   if (state.commentThreads != null) {
     map.comment_threads_json = JSON.stringify(normalizeCommentThreads(state.commentThreads));
+  }
+  if (state.agentSessions != null) {
+    map.agent_sessions_json = JSON.stringify(
+      serializeAgentSessions(state.agentSessions, state.activeAgentSessionId),
+    );
   }
   return map;
 };
@@ -507,6 +519,12 @@ const editorStorage = {
           JSON.stringify(normalizeCommentThreads(state.commentThreads)),
         );
       }
+      if (state.agentSessions != null) {
+        window.localStorage.setItem(
+          AGENT_SESSIONS_STORAGE_KEY,
+          JSON.stringify(serializeAgentSessions(state.agentSessions, state.activeAgentSessionId)),
+        );
+      }
     } catch (e) {
       console.error('持久化失败:', e);
     }
@@ -531,6 +549,8 @@ const persistConfig = {
     expandedFolderIds: state.expandedFolderIds,
     sidebarSortMode: state.sidebarSortMode,
     commentThreads: state.commentThreads,
+    agentSessions: state.agentSessions,
+    activeAgentSessionId: state.activeAgentSessionId,
   }),
 };
 
