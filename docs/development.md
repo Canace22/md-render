@@ -123,7 +123,9 @@ pnpm release:tag                # 3. 创建 annotated tag 并推送
 
 ## 部署网页版到 GitHub Pages
 
-推送 `v*` tag 发版时会通过 `.github/workflows/deploy-pages.yml` 自动构建部署（日常推 `main` 不触发），也可以在 Actions 页签手动触发。
+每次推送 `main` 都会通过 `.github/workflows/deploy-pages.yml` 自动构建部署，也可以在 Actions 页签手动触发。
+
+不要改回 tag 触发：`github-pages` 环境默认只允许从默认分支部署，tag 触发时 build 能过、deploy 会被保护规则直接拒绝（job 失败且没有日志）。
 
 第一次启用需要在仓库 **Settings → Pages** 把 **Source** 设为 **GitHub Actions**。
 

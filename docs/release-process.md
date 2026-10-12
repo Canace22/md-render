@@ -60,7 +60,7 @@ bash scripts/release-tag.sh
 - 工作区尽量干净；有未提交改动时脚本会警告，tag 仍指向当前 HEAD。
 - 本地或远程已存在同名 tag 时会直接失败，避免覆盖。
 - `package.json` 版本不能低于或等于最新 tag，需先 bump 版本号。
-- **流水线只认 tag**：Release 和 Pages 只在推 `v*` tag 时触发，只 `git push` 分支什么都不会跑。没触发时先看远端有没有这个 tag：`git ls-remote --tags origin`。
+- **客户端发版只认 tag**：Release 只在推 `v*` tag 时触发，只 `git push` 分支不会出安装包。没触发时先看远端有没有这个 tag：`git ls-remote --tags origin`。网页版（Pages）不走 tag，每次推 `main` 自动部署。
 - 推送前如需扫敏感信息：
 
 ```bash
