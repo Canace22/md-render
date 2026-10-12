@@ -27,10 +27,17 @@ function renderCalendarHeader({ value, onChange }) {
   );
 }
 
+/** 日历格子：有记录的日子在数字下面打个小圆点 */
+function renderRecordDot(date, info, recordedDates) {
+  if (info.type !== 'date' || !recordedDates?.has(date.format('YYYY-MM-DD'))) return null;
+  return <span className="daily-outline-calendar-dot" aria-label="有记录" />;
+}
+
 /** 日期栏：前一天 / 后一天 / 今天 / 日历跳转 / 复制为 Markdown / 大纲⇄导图（幕布式）/ 笔记汇总开关 */
 function DailyToolbar({
   dateKey,
   isToday,
+  recordedDates,
   copied,
   onShift,
   onToday,
@@ -48,6 +55,7 @@ function DailyToolbar({
         fullscreen={false}
         locale={zhCN.Calendar}
         headerRender={renderCalendarHeader}
+        cellRender={(date, info) => renderRecordDot(date, info, recordedDates)}
         value={dayjs(dateKey)}
         onSelect={(date, info) => {
           if (info?.source && info.source !== 'date') return;
