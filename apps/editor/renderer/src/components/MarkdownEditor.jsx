@@ -405,6 +405,7 @@ function MarkdownEditor() {
     setSurface,
     setDailyCurrentDate,
     setDailyBlocks,
+    setDailyNoteOrganized,
     hydrateDailyWorkspaceFromDisk,
     setWorkspaceCanvas,
     setFileTags,
@@ -2718,6 +2719,7 @@ function MarkdownEditor() {
             dailyWorkspace={dailyWorkspace}
             onSetCurrentDate={setDailyCurrentDate}
             onSetBlocks={setDailyBlocks}
+            onSetNoteOrganized={setDailyNoteOrganized}
             localProjectSupported={localProjectSupported}
             assetRootPath={projectRootPath}
           />

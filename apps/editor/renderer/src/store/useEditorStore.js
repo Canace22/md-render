@@ -71,6 +71,7 @@ import {
   normalizeDailyWorkspace,
   setDailyCurrentDate as setDailyWorkspaceCurrentDate,
   setDailyEntryBlocks,
+  setDailyNoteOrganized,
   setDailyTaskDone,
 } from '../utils/dailyWorkspace.js';
 import { sanitizePublishingPlatforms } from '../utils/publishingPlatforms.js';
@@ -1049,6 +1050,14 @@ export const useEditorStore = create(
           persistDailyWorkspaceBackup(result.dailyWorkspace, get().projectRootPath);
         }
         return { found: result.found, text: result.text };
+      },
+      /** 笔记汇总面板：把某天的一条笔记标成已整理 / 取消（行尾 #已整理 标签） */
+      setDailyNoteOrganized: (dateKey, blockId, organized = true) => {
+        const result = setDailyNoteOrganized(get().dailyWorkspace, dateKey, blockId, organized);
+        if (!result.found) return false;
+        set({ dailyWorkspace: result.dailyWorkspace });
+        persistDailyWorkspaceBackup(result.dailyWorkspace, get().projectRootPath);
+        return true;
       },
       /** 迁移后：Daily 以内容库文件为准（保留当前查看的日期） */
       applyDailyWorkspaceFromFiles: (fileWorkspace) => {

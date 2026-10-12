@@ -1,6 +1,6 @@
 ---
 name: md-render-daily
-description: 在本项目改「今日速记 / Daily」时的规范——一天一篇 BlockNote 大纲（幕布式），块级纯函数在 apps/editor/shared/daily/（dailyBlocks.js、dailyMarkdown.js），工作区纯函数在 renderer/src/utils/dailyWorkspace.js，文件格式在 shared/migration/dailyFormat.js，UI 在 components/DailyNotebook.jsx + components/daily/。核心约定：切日期是纯视图；结转只在进入真实今天时跑且幂等；磁盘是干净大纲 Markdown + 数据块兜底。涉及"大纲页面""思维导图""layout: outline""今日速记""daily""大纲""切日期数据丢了/被重置""未完成任务带到今天""carryOver""速记贴图""read_daily / add_daily_entry / complete_daily_task""Daily/日期.md 格式"时触发。略主动。
+description: 在本项目改「今日速记 / Daily」时的规范——一天一篇 BlockNote 大纲（幕布式），块级纯函数在 apps/editor/shared/daily/（dailyBlocks.js、dailyMarkdown.js），工作区纯函数在 renderer/src/utils/dailyWorkspace.js，文件格式在 shared/migration/dailyFormat.js，UI 在 components/DailyNotebook.jsx + components/daily/（含右侧笔记汇总 DailyNotesPanel）。核心约定：切日期是纯视图；结转只在进入真实今天时跑且幂等；磁盘是干净大纲 Markdown + 数据块兜底。涉及"大纲页面""思维导图""layout: outline""今日速记""daily""大纲""切日期数据丢了/被重置""未完成任务带到今天""carryOver""速记贴图""read_daily / add_daily_entry / complete_daily_task""Daily/日期.md 格式""笔记汇总""按周归档""已整理"时触发。略主动。
 ---
 
 # 今日速记（幕布式大纲）改动规范
@@ -69,6 +69,14 @@ date: 2026-10-09
 AI 面板「📌 记下来」（`createHost.pinInspiration`）也写速记：`core/agent/inspirationNote.js` 把灵感拼成「- 灵感 · 会话名」+ 缩进正文 + 来源，追加到当天「💡 笔记」。正文里的 `#` 标题要去掉，否则会被解析成新分区。
 
 新增工具要同时改：`toolRegistry.js`（定义 + handler + label）、`createHost.js`、`shared/capabilities/riskLevels.js`、`shared/vaultAgentsMd.js`（给直接读文件的 agent 的映射表）、`server/mcp-bridge/README.md`。
+
+## 笔记汇总（右侧面板，按周归档）
+
+- `utils/dailyNotes.js`：`collectDailyNotes` 收集每天「💡 笔记」分区的**顶层**条目（`getSectionItems`），`groupNotesByWeek` 按周一开头分组，`filterNotes` 筛未整理 / 已整理。
+- **已整理 = 行尾 `#已整理` 标签**（`dailyBlocks.js` 的 `setBlockOrganized`），不加字段、不改文件格式；标签必须独立成词（前面是空白或行首）。展示时用 `stripOrganizedTag` 去掉。
+- 标记走 store `setDailyNoteOrganized(date, blockId, organized)` → `updateBlockById`；当天编辑器靠「storeBlocks 不是自己抛出的那份」整篇替换，不需要额外同步。
+- 点笔记跳转：`DailyNotebook` 的编辑器 key 是 `日期:focusNonce`，每次跳转 +1 让它重挂，同一天里也能重新定位光标。
+- 测试：`tests-unit/daily-notes.test.js`。
 
 ## 大纲页面 / 思维导图（和速记共用）
 

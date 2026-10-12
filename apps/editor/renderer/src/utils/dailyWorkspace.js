@@ -13,12 +13,16 @@ import {
   isDailyBlocksEmpty,
   legacyItemToBlock,
   legacyItemsToBlocks,
+  setBlockOrganized,
   setTaskChecked,
   toSectionItems,
+  updateBlockById,
 } from '@shared/daily/dailyBlocks.js';
 import { blocksToMarkdown, markdownToBlocks } from '@shared/daily/dailyMarkdown.js';
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAYS_PER_WEEK = 7;
+const SUNDAY = 0;
 
 const padNumber = (value) => String(value).padStart(2, '0');
 
@@ -42,6 +46,14 @@ export const shiftDateKey = (dateKey, offsetDays) => {
   date.setDate(date.getDate() + Number(offsetDays || 0));
   return formatDateKey(date);
 };
+
+/** 这一周的周一（周一开头，周日算上一周） */
+export const getWeekStartDateKey = (dateKey) => {
+  const weekday = toDateAtNoon(dateKey).getDay();
+  return shiftDateKey(dateKey, weekday === SUNDAY ? 1 - DAYS_PER_WEEK : 1 - weekday);
+};
+
+export const getWeekEndDateKey = (dateKey) => shiftDateKey(getWeekStartDateKey(dateKey), DAYS_PER_WEEK - 1);
 
 /** 10月9日，星期五 */
 export const formatDailyHeading = (dateKey) => toDateAtNoon(dateKey).toLocaleDateString('zh-CN', {
@@ -179,3 +191,12 @@ export const setDailyTaskDone = (dailyWorkspace, dateKey, text, done = true) => 
 
 /** 某天的大纲 Markdown（复制给 AI、Agent 读取用） */
 export const getDailyMarkdown = (dailyWorkspace, dateKey) => blocksToMarkdown(getDailyEntry(dailyWorkspace, dateKey).blocks);
+
+/** 把某天的一条笔记标成「已整理」/ 取消；返回 { dailyWorkspace, found } */
+export const setDailyNoteOrganized = (dailyWorkspace, dateKey, blockId, organized = true) => {
+  const key = normalizeDateKey(dateKey);
+  const normalized = normalizeDailyWorkspace(dailyWorkspace, key);
+  const result = updateBlockById(getDailyEntry(normalized, key).blocks, blockId, (item) => setBlockOrganized(item, organized));
+  if (!result.found) return { dailyWorkspace: normalized, found: false };
+  return { dailyWorkspace: withEntryBlocks(normalized, key, result.blocks), found: true };
+};
