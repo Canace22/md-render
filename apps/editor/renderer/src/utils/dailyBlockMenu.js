@@ -1,6 +1,6 @@
 /**
  * 今日速记「块菜单」（点每行左侧拖拽手柄弹出）用到的纯函数：
- * 改块类型、整行加粗/斜体等、切换待办、行首图标。不依赖 DOM / BlockNote，方便单测。
+ * 改块类型、整行加粗/斜体等、切换待办、行首图标，以及粘贴后把段落改回条目。不依赖 DOM / BlockNote，方便单测。
  */
 
 /** 顶部「H1 / H2 / H3 / 正文」四个按钮 */
@@ -19,6 +19,9 @@ export const BLOCK_ICONS = Object.freeze(['📌', '⭐', '🔥', '❗', '✅', '
 
 const TODO_TYPE = 'checkListItem';
 const PLAIN_ITEM_TYPE = 'bulletListItem';
+const PARAGRAPH_TYPE = 'paragraph';
+/** 大纲里的「正文」条目：圆点、待办、编号 */
+const LIST_ITEM_TYPES = new Set([PLAIN_ITEM_TYPE, TODO_TYPE, 'numberedListItem']);
 const ICON_SEPARATOR = ' ';
 
 /** 有行内文字的块（图片、分割线之类没有） */
@@ -28,11 +31,11 @@ export const isTodoBlock = (block) => block?.type === TODO_TYPE;
 
 const isHeading = (block) => block?.type === 'heading';
 
-/** 「正文」= 非标题（普通条目、待办、段落都算），不会把待办冲掉 */
+/** 「正文」= 条目（圆点、待办、编号），不会把待办冲掉；没圆点的段落不算，点「正文」能加回圆点 */
 export const isBlockTypeActive = (block, option) => (
   option.type === 'heading'
     ? isHeading(block) && block?.props?.level === option.level
-    : !isHeading(block)
+    : LIST_ITEM_TYPES.has(block?.type)
 );
 
 /** 点「H1/H2/H3/正文」时传给 editor.updateBlock 的内容；已经是这个类型返回 null */
@@ -95,4 +98,30 @@ export const setLeadingIcon = (content, icon) => {
   const rest = oldIcon ? first.text.slice(oldIcon.length + ICON_SEPARATOR.length) : first.text;
   const text = `${prefix}${rest}`;
   return text ? [{ ...first, text }, ...list.slice(1)] : list.slice(1);
+};
+
+/** 记下每个块（含子级）的类型，粘贴前后对比用 */
+export const collectBlockTypes = (blocks, types = new Map()) => {
+  for (const block of blocks ?? []) {
+    types.set(block.id, block.type);
+    collectBlockTypes(block.children, types);
+  }
+  return types;
+};
+
+/**
+ * 粘贴网页内容 / 多行文字会生成段落，或把空条目整个换成段落，圆点就没了。
+ * 找出粘贴后「新变成段落」的块：原来是条目的改回原类型，其余改成圆点。返回 [{ id, type }]。
+ */
+export const getPastedParagraphFixes = (typesBefore, blocks) => {
+  const fixes = [];
+  const walk = (list) => (list ?? []).forEach((block) => {
+    const before = typesBefore.get(block.id);
+    if (block.type === PARAGRAPH_TYPE && before !== PARAGRAPH_TYPE) {
+      fixes.push({ id: block.id, type: LIST_ITEM_TYPES.has(before) ? before : PLAIN_ITEM_TYPE });
+    }
+    walk(block.children);
+  });
+  walk(blocks);
+  return fixes;
 };
