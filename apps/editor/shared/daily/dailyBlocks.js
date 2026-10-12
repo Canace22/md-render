@@ -142,6 +142,56 @@ export const setTaskChecked = (blocks, text, checked = true) => {
   return { blocks, found: false };
 };
 
+/** 某个分区里的顶层条目（兼容「平铺在标题后」和「缩进到标题下」两种写法） */
+export const getSectionItems = (blocks, key) => {
+  const source = Array.isArray(blocks) ? blocks : [];
+  const range = findSectionRange(source, key);
+  if (!range) return [];
+  const heading = source[range.start];
+  return heading.children?.length ? heading.children : source.slice(range.start + 1, range.end);
+};
+
+/** 按 id 改一个块（任意层级）；返回 { blocks, found } */
+export const updateBlockById = (blocks, blockId, updater) => {
+  let found = false;
+  const walk = (list) => list.map((item) => {
+    if (found) return item;
+    if (item.id === blockId) {
+      found = true;
+      return updater(item);
+    }
+    return item.children?.length ? { ...item, children: walk(item.children) } : item;
+  });
+  const next = walk(Array.isArray(blocks) ? blocks : []);
+  return { blocks: found ? next : blocks, found };
+};
+
+/* ── 笔记「已整理」标记：行尾的 #已整理 标签（Obsidian / AI 都看得懂，不改文件格式） ── */
+
+export const ORGANIZED_TAG = '#已整理';
+const ORGANIZED_TAG_RE = new RegExp(`(^|\\s)${ORGANIZED_TAG}(?=\\s|$)`, 'g');
+
+export const isBlockOrganized = (target) => new RegExp(ORGANIZED_TAG_RE.source).test(blockPlainText(target));
+
+/** 去掉标签后的文字（汇总面板展示用） */
+export const stripOrganizedTag = (text) => String(text ?? '').replace(ORGANIZED_TAG_RE, '$1').replace(/\s+$/, '');
+
+const removeOrganizedTag = (content) => {
+  const nodes = content.map((node) => (node?.type === 'text' ? { ...node, text: node.text.replace(ORGANIZED_TAG_RE, '$1') } : node));
+  const last = nodes[nodes.length - 1];
+  if (last?.type === 'text') nodes[nodes.length - 1] = { ...last, text: last.text.replace(/\s+$/, '') };
+  return nodes.filter((node) => node?.type !== 'text' || node.text);
+};
+
+/** 给块加上 / 去掉「已整理」标签；没有行内文字的块（图片等）原样返回 */
+export const setBlockOrganized = (target, organized = true) => {
+  if (!Array.isArray(target?.content) || isBlockOrganized(target) === organized) return target;
+  if (!organized) return { ...target, content: removeOrganizedTag(target.content) };
+  const text = blockPlainText(target);
+  const tag = { type: 'text', text: text ? ` ${ORGANIZED_TAG}` : ORGANIZED_TAG, styles: {} };
+  return { ...target, content: [...target.content, tag] };
+};
+
 /** 外部写进来的大纲：任务分区里顶层的普通行转成待勾选任务 */
 export const toSectionItems = (blocks, key) => {
   if (key !== 'task') return blocks;
