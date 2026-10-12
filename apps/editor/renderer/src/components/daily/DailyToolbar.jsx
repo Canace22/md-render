@@ -4,7 +4,7 @@ import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
 // 仅注册中文语言包（不切全局 locale），供 Calendar 按 locale 渲染星期/月份
 import 'dayjs/locale/zh-cn';
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy, PanelRightOpen } from 'lucide-react';
 
 const ICON_SIZE = 15;
 const ICON_STROKE = 1.8;
@@ -27,8 +27,26 @@ function renderCalendarHeader({ value, onChange }) {
   );
 }
 
-/** 日期栏：前一天 / 后一天 / 今天 / 日历跳转 / 复制为 Markdown / 大纲⇄导图（幕布式） */
-function DailyToolbar({ dateKey, isToday, copied, onShift, onToday, onPick, onCopy, viewSwitch = null }) {
+/** 日历格子：有记录的日子在数字下面打个小圆点 */
+function renderRecordDot(date, info, recordedDates) {
+  if (info.type !== 'date' || !recordedDates?.has(date.format('YYYY-MM-DD'))) return null;
+  return <span className="daily-outline-calendar-dot" aria-label="有记录" />;
+}
+
+/** 日期栏：前一天 / 后一天 / 今天 / 日历跳转 / 复制为 Markdown / 大纲⇄导图（幕布式）/ 笔记汇总开关 */
+function DailyToolbar({
+  dateKey,
+  isToday,
+  recordedDates,
+  copied,
+  onShift,
+  onToday,
+  onPick,
+  onCopy,
+  notesOpen = false,
+  onToggleNotes,
+  viewSwitch = null,
+}) {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const calendar = (
@@ -37,6 +55,7 @@ function DailyToolbar({ dateKey, isToday, copied, onShift, onToday, onPick, onCo
         fullscreen={false}
         locale={zhCN.Calendar}
         headerRender={renderCalendarHeader}
+        cellRender={(date, info) => renderRecordDot(date, info, recordedDates)}
         value={dayjs(dateKey)}
         onSelect={(date, info) => {
           if (info?.source && info.source !== 'date') return;
@@ -71,6 +90,19 @@ function DailyToolbar({ dateKey, isToday, copied, onShift, onToday, onPick, onCo
         </Button>
       </Tooltip>
       {viewSwitch}
+      {onToggleNotes && !notesOpen ? (
+        <Tooltip title="按周汇总所有笔记，方便查看和整理">
+          <Button
+            type="text"
+            size="small"
+            className="daily-outline-btn-group"
+            icon={<PanelRightOpen size={ICON_SIZE} strokeWidth={ICON_STROKE} />}
+            onClick={onToggleNotes}
+          >
+            笔记汇总
+          </Button>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }

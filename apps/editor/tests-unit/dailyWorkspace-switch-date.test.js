@@ -5,6 +5,7 @@ import {
   getDailyBlocksForEditor,
   getDailyEntry,
   getDailyMarkdown,
+  getDailyRecordedDates,
   normalizeDailyWorkspace,
   setDailyCurrentDate,
   setDailyEntryBlocks,
@@ -122,5 +123,21 @@ describe('旧数据转换', () => {
     expect(getDailyMarkdown(ws, YESTERDAY)).toBe('## 📝 今日任务\n\n- [x] 旧任务\n- [ ] 旧待办\n\n## 📅 事件\n\n- 开会\n\n## 💡 笔记\n\n- 第一行\n  - 子项');
     expect(ws.todoPool).toBeUndefined();
     expect(getDailyEntry(ws, YESTERDAY).blocks[1].id).toBe('t1');
+  });
+});
+
+describe('getDailyRecordedDates（日历打点）', () => {
+  it('只返回有内容的日期', () => {
+    expect([...getDailyRecordedDates(base())].sort()).toEqual([YESTERDAY, TODAY]);
+  });
+
+  it('写回只剩模板的日子不算有记录', () => {
+    const ws = setDailyEntryBlocks(base(), TODAY, getDailyBlocksForEditor({ entries: {} }, TODAY));
+    expect(getDailyRecordedDates(ws).has(TODAY)).toBe(false);
+  });
+
+  it('空工作区 / 缺 entries 返回空集合', () => {
+    expect(getDailyRecordedDates(undefined).size).toBe(0);
+    expect(getDailyRecordedDates({ currentDate: TODAY }).size).toBe(0);
   });
 });
