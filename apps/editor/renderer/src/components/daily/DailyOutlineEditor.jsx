@@ -8,6 +8,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { isDailyBlocksEmpty } from '@shared/daily/dailyBlocks.js';
 import { useEditorStore } from '../../store/useEditorStore.js';
+import { collectBlockTypes, getPastedParagraphFixes } from '../../utils/dailyBlockMenu.js';
 import {
   classifyClipboardFiles,
   hasPendingImagePlaceholders,
@@ -48,10 +49,19 @@ const DICTIONARY = {
 /** 左侧手柄：保留「+」和拖拽，点手柄弹幕布式块菜单 */
 const DailySideMenu = (props) => <SideMenu {...props} dragHandleMenu={DailyBlockMenu} />;
 
+/** 粘贴文字后，把变成段落的块改回条目（大纲里每行都该有圆点） */
+const pasteAsOutlineItems = (editor, defaultPasteHandler) => {
+  const typesBefore = collectBlockTypes(editor.document);
+  const handled = defaultPasteHandler();
+  getPastedParagraphFixes(typesBefore, editor.document)
+    .forEach(({ id, type }) => editor.updateBlock(id, { type }));
+  return handled;
+};
+
 /** 截图 / 复制的图片：先占位，再存进内容库 assets/ 回填地址 */
 const createPasteHandler = (uploadFile) => ({ event, editor, defaultPasteHandler }) => {
   const { hasFiles, imageFiles, unsupportedFiles } = classifyClipboardFiles(event.clipboardData);
-  if (!hasFiles) return defaultPasteHandler();
+  if (!hasFiles) return pasteAsOutlineItems(editor, defaultPasteHandler);
   if (unsupportedFiles.length > 0 || imageFiles.length === 0) message.warning('速记里只支持粘贴图片');
   if (imageFiles.length > 0) void insertImagesFromFiles(editor, imageFiles, uploadFile, { fileId: DAILY_IMAGE_SOURCE_ID });
   return true;
