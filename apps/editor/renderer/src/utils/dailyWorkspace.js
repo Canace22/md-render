@@ -95,6 +95,13 @@ export const getDailyEntry = (dailyWorkspace, dateKey) => {
   return Array.isArray(entry?.blocks) ? entry : createEmptyDailyEntry(key);
 };
 
+/** 有记录（非空）的日期集合，日历上打点用 */
+export const getDailyRecordedDates = (dailyWorkspace) => new Set(
+  Object.entries(dailyWorkspace?.entries ?? {})
+    .filter(([, entry]) => Array.isArray(entry?.blocks) && !isDailyBlocksEmpty(entry.blocks))
+    .map(([dateKey]) => dateKey),
+);
+
 /** 编辑器初始内容：有内容用内容，没有给模板 */
 export const getDailyBlocksForEditor = (dailyWorkspace, dateKey) => {
   const { blocks } = getDailyEntry(dailyWorkspace, dateKey);

@@ -11,6 +11,7 @@ import {
   getDailyBlocksForEditor,
   getDailyEntry,
   getDailyMarkdown,
+  getDailyRecordedDates,
   getTodayDateKey,
   shiftDateKey,
 } from '../utils/dailyWorkspace.js';
@@ -39,6 +40,7 @@ function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localPro
   const [view, setView] = useState(OUTLINE_VIEW);
   const [focusBlockId, setFocusBlockId] = useState(null);
   const isMindMap = view === MINDMAP_VIEW;
+  const recordedDates = useMemo(() => getDailyRecordedDates(dailyWorkspace), [dailyWorkspace]);
   const editorBlocks = useMemo(() => getDailyBlocksForEditor(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
   const mindTree = useMemo(
     () => (isMindMap ? blocksToMindTree(editorBlocks, formatDailyHeading(currentDate)) : null),
@@ -73,6 +75,7 @@ function DailyNotebook({ dailyWorkspace, onSetCurrentDate, onSetBlocks, localPro
         <DailyToolbar
           dateKey={currentDate}
           isToday={currentDate === today}
+          recordedDates={recordedDates}
           copied={copiedId === currentDate}
           onShift={handleShift}
           onToday={handleToday}

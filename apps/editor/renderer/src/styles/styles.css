@@ -10509,6 +10509,23 @@ body.is-resizing-agent-panel {
   padding: 8px 0;
 }
 
+/* 有记录的日子：数字下方小圆点；选中格是主色底，圆点改白 */
+.daily-outline-calendar-dot {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.daily-outline-calendar .ant-picker-cell-selected .daily-outline-calendar-dot {
+  background: #fff;
+}
+
 /* 大纲正文用更深的文字色，不再偏灰（已勾选的待办仍按下面规则置灰） */
 .blocknote-editor.bn-container:is(.daily-outline-editor, .outline-editor) {
   --bn-colors-editor-text: #0f172a;
