@@ -77,6 +77,7 @@ AI 面板「📌 记下来」（`createHost.pinInspiration`）也写速记：`co
 - **已整理 = 行尾 `#已整理` 标签**（`dailyBlocks.js` 的 `setBlockOrganized`），不加字段、不改文件格式；标签必须独立成词（前面是空白或行首）。展示时用 `stripOrganizedTag` 去掉。
 - 标记走 store `setDailyNoteOrganized(date, blockId, organized)` → `updateBlockById`；当天编辑器靠「storeBlocks 不是自己抛出的那份」整篇替换，不需要额外同步。
 - 点笔记跳转：`DailyNotebook` 的编辑器 key 是 `日期:focusNonce`，每次跳转 +1 让它重挂，同一天里也能重新定位光标。
+- 面板收起/展开存在 store 的 `dailyNotesOpen`（持久化，SQLite 键 `daily_notes_open`），别放回组件 `useState`，否则切页面、重启就又展开了。
 - 测试：`tests-unit/daily-notes.test.js`。
 
 ## 大纲页面 / 思维导图（和速记共用）
