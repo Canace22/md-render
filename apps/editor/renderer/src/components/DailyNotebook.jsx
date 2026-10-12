@@ -50,7 +50,9 @@ function DailyNotebook({
   const [focusBlockId, setFocusBlockId] = useState(null);
   // 每次「跳到某一行」都让编辑器重挂一次，同一天里跳转也能重新定位光标
   const [focusNonce, setFocusNonce] = useState(0);
-  const [notesOpen, setNotesOpen] = useState(true);
+  // 收起/展开记在 store 里（持久化），切页面、重启后保持上次的状态
+  const notesOpen = useEditorStore((state) => state.dailyNotesOpen);
+  const setNotesOpen = useEditorStore((state) => state.setDailyNotesOpen);
   const isMindMap = view === MINDMAP_VIEW;
   const recordedDates = useMemo(() => getDailyRecordedDates(dailyWorkspace), [dailyWorkspace]);
   const editorBlocks = useMemo(() => getDailyBlocksForEditor(dailyWorkspace, currentDate), [currentDate, dailyWorkspace]);
@@ -86,8 +88,8 @@ function DailyNotebook({
     setView(OUTLINE_VIEW);
   }, [currentDate, onSetCurrentDate]);
 
-  const handleToggleNotes = useCallback(() => setNotesOpen((open) => !open), []);
-  const handleCloseNotes = useCallback(() => setNotesOpen(false), []);
+  const handleToggleNotes = useCallback(() => setNotesOpen(!notesOpen), [notesOpen, setNotesOpen]);
+  const handleCloseNotes = useCallback(() => setNotesOpen(false), [setNotesOpen]);
 
   const fallback = <DailyOutlineFallback markdown={getDailyMarkdown(dailyWorkspace, currentDate)} />;
 
