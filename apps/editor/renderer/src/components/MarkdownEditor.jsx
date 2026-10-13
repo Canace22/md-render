@@ -82,6 +82,7 @@ import {
 import { useTitleEditing } from '../hooks/useTitleEditing.js';
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions.js';
 import { useLocalProjectWatcher } from '../hooks/useLocalProjectWatcher.js';
+import { useMermaidPreview } from '../hooks/useMermaidPreview.js';
 import { handleLeadingEmptyBlockBackspace } from '../utils/leadingEmptyBlock.js';
 import { useTwoStageSelectAll } from '../hooks/useTwoStageSelectAll.js';
 import { useSkillRegistry } from '../hooks/useSkillRegistry.js';
@@ -1458,6 +1459,7 @@ function MarkdownEditor() {
     const tokens = parserRef.current.parse(resolvedMarkdown);
     return rendererRef.current.render(tokens);
   }, [resolvedMarkdown]);
+  useMermaidPreview(editorMode === 'preview', wechatSourceHtml);
 
   const resolvedTheme = theme === 'dark' ? 'dark' : 'light';
   const selectedContentSurface = selectedFolder ? 'folder' : selectedFile ? 'paper' : 'overview';
