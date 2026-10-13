@@ -1,0 +1,262 @@
+name: Tauri Preview Packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-universal:
+    name: Tauri macOS Universal 预览包
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Setup Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check macOS signing secrets
+        id: signing
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" && -n "$APPLE_SIGNING_IDENTITY" && -n "$APPLE_ID" && -n "$APPLE_PASSWORD" && -n "$APPLE_TEAM_ID" && -n "$KEYCHAIN_PASSWORD" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=tauri-preview-macos-signed-notarized" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=tauri-preview-macos-adhoc" >> "$GITHUB_OUTPUT"
+            echo "::warning::Apple signing/notarization secrets are incomplete; producing an ad-hoc signed preview package."
+          fi
+
+      - name: Import Apple Developer ID certificate
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          certificate_path="$RUNNER_TEMP/md-render-certificate.p12"
+          keychain_path="$RUNNER_TEMP/md-render-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A -out "$certificate_path"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+
+      - name: Build signed and notarized app + dmg
+        if: steps.signing.outputs.ready == 'true'
+        run: pnpm tauri:build:mac:universal
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build ad-hoc signed app + dmg
+        if: steps.signing.outputs.ready != 'true'
+        run: pnpm tauri:build:mac:universal
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+
+      - name: Notarize and staple macOS DMG
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
+          dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg_path"
+          xcrun notarytool submit "$dmg_path" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+
+      - name: Verify macOS packages
+        shell: bash
+        run: |
+          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
+          app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
+          dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$app_path"
+          test -n "$dmg_path"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          if [[ "${{ steps.signing.outputs.ready }}" == "true" ]]; then
+            spctl --assess --type execute --verbose=2 "$app_path"
+            xcrun stapler validate "$dmg_path"
+          fi
+
+      - name: Archive macOS app bundle
+        shell: bash
+        run: |
+          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
+          app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
+          archive_path="$bundle_root/macos/md-render-tauri-preview-universal.app.zip"
+          test -n "$app_path"
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$archive_path"
+          test -s "$archive_path"
+
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.signing.outputs.artifact_name }}
+          path: |
+            apps/editor/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip
+            apps/editor/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Delete temporary keychain
+        if: always() && steps.signing.outputs.ready == 'true'
+        shell: bash
+        run: security delete-keychain "$RUNNER_TEMP/md-render-signing.keychain-db" || true
+
+  windows-x64:
+    name: Tauri Windows x64 Inno 预览包
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --version=6.7.1 --no-progress -y
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri executable
+        run: pnpm tauri:build:win
+
+      - name: Check Windows signing secrets
+        id: signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ready = ![string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -and ![string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)
+          "ready=$($ready.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          if ($ready) {
+            "artifact_name=tauri-preview-windows-signed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            "artifact_name=tauri-preview-windows-unsigned" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "TAURI_INNO_OUTPUT_SUFFIX=-unsigned" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Warning "Windows signing secrets are missing; the preview installer can still trigger SmartScreen."
+          }
+
+      - name: Import Windows code-signing certificate
+        if: steps.signing.outputs.ready == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $encodedCertificatePath = Join-Path $env:RUNNER_TEMP 'md-render-certificate.txt'
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'md-render-certificate.pfx'
+          [IO.File]::WriteAllText($encodedCertificatePath, $env:WINDOWS_CERTIFICATE)
+          & certutil.exe -f -decode $encodedCertificatePath $certificatePath | Out-Host
+          $certutilExitCode = $LASTEXITCODE
+          if ($certutilExitCode -ne 0 -or !(Test-Path $certificatePath)) {
+            Remove-Item $certificatePath -ErrorAction SilentlyContinue
+            try {
+              $rawBase64 = (($env:WINDOWS_CERTIFICATE -split '\r?\n') |
+                Where-Object { $_ -notmatch '^-----' }) -join ''
+              [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String(($rawBase64 -replace '\s', '')))
+            } catch {
+              throw "Windows certificate decoding failed with certutil exit code $certutilExitCode and raw Base64 fallback: $($_.Exception.Message)"
+            }
+          }
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password |
+            Where-Object HasPrivateKey |
+            Select-Object -First 1
+          if (!$certificate) {
+            throw 'No private-key certificate was imported.'
+          }
+
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (!$signTool) {
+            throw 'signtool.exe was not found.'
+          }
+
+          "WINDOWS_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "WINDOWS_SIGNTOOL_PATH=$($signTool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $innoSignCommand = '$q' + $signTool.FullName + '$q sign /sha1 ' + $certificate.Thumbprint + ' /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f'
+          "WINDOWS_SIGNTOOL_COMMAND=$innoSignCommand" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build Inno Setup installer
+        run: pnpm tauri:inno:win
+
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem 'apps/editor/src-tauri/target/release/bundle/inno/*.exe'
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Inno installer, found $($installers.Count)."
+          }
+          if ('${{ steps.signing.outputs.ready }}' -eq 'true') {
+            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /v 'apps/editor/src-tauri/target/release/md-render-tauri-preview.exe'
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Windows application signature verification failed.'
+            }
+            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /v $installers[0].FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Windows installer signature verification failed.'
+            }
+          }
+          Get-Item $installers[0].FullName
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.signing.outputs.artifact_name }}
+          path: apps/editor/src-tauri/target/release/bundle/inno/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary signing certificate
+        if: always() && steps.signing.outputs.ready == 'true'
+        shell: pwsh
+        run: Remove-Item "Cert:\CurrentUser\My\$env:WINDOWS_CERT_THUMBPRINT" -ErrorAction SilentlyContinue
