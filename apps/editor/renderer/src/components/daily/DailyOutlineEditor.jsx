@@ -22,6 +22,7 @@ import DailyBlockMenu from './DailyBlockMenu.jsx';
 import DailySlashMenu from './DailySlashMenu.jsx';
 import { DAILY_IMAGE_SOURCE_ID } from './dailyBlockActions.js';
 import { focusOutlineBlock } from '../outline/focusOutlineBlock.js';
+import { registerTauriCloseDrain } from '../../services/desktopCloseBridge.js';
 
 /**
  * 今日速记的大纲编辑器（一天一篇 BlockNote 文档）。
@@ -114,6 +115,8 @@ function DailyOutlineEditor({ dateKey, initialBlocks, storeBlocks, uploadFile, o
   useEffect(() => () => {
     if (timerRef.current) flush();
   }, [flush]);
+
+  useEffect(() => registerTauriCloseDrain(flush), [flush]);
 
   // 从导图点回来：光标落到那一行并滚进视野（只在挂载时跑一次）
   useEffect(() => {

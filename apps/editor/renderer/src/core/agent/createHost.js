@@ -245,7 +245,7 @@ export function createHost({
       const aiConfiguration = getAiServerConfiguration();
       const runtimeSnapshot = hasDiagnosticsBridge()
         ? await getDiagnosticsSnapshot({ aiProxyBase: aiConfiguration.resolved })
-        : { ok: false, error: '当前不在 Electron 环境，无法读取本机运行快照。', aiProxy: { reachable: false } };
+        : { ok: false, error: '当前运行时不支持 Electron 本机诊断。' };
       const activeFile = activeFileOf(state);
       return buildAgentHealthSnapshot({
         runtimeSnapshot,
@@ -264,7 +264,9 @@ export function createHost({
         clearAiServerOverride,
         restoreAiServerOverride: saveAiServerBase,
         verify: async (nextBase) => {
-          if (!hasDiagnosticsBridge()) return { aiProxy: { reachable: false } };
+          if (!hasDiagnosticsBridge()) {
+            return { ok: false, error: '当前运行时不支持 Electron 本机诊断。' };
+          }
           return getDiagnosticsSnapshot({ aiProxyBase: nextBase });
         },
       });

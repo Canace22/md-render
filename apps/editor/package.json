@@ -23,7 +23,10 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:build:mac": "tauri build --bundles app,dmg"
+    "tauri:build:mac": "tauri build --bundles app,dmg",
+    "tauri:build:mac:universal": "tauri build --target universal-apple-darwin --bundles app,dmg",
+    "tauri:build:win": "tauri build --no-bundle",
+    "tauri:inno:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-tauri-inno.ps1"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.5",

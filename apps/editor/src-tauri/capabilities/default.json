@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Minimal capability for the MD Render Tauri preview window",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-destroy"
+  ]
 }

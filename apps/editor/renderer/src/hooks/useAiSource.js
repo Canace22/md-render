@@ -9,6 +9,7 @@ import {
   SOURCE_KINDS,
   consumeDefaultSourceNotice,
   getDetectedLocalAgents,
+  hasLocalAgentDetection,
   isLocalAgentSafeMode,
   loadLocalAgentModelOptions,
   loadLocalAgents,
@@ -22,6 +23,7 @@ import {
  * @param {{ providersReady?: boolean }} options  内置服务商列表加载完后重算默认来源
  */
 export function useAiSource({ providersReady = false } = {}) {
+  const supportsLocalAgents = hasLocalAgentDetection();
   const [detected, setDetected] = useState(getDetectedLocalAgents);
   const [detecting, setDetecting] = useState(false);
   const [sourceId, setSourceId] = useState(getActiveSourceId);
@@ -75,13 +77,17 @@ export function useAiSource({ providersReady = false } = {}) {
   }, []);
 
   // detected / providersReady 变化时列表要重算
-  const sources = useMemo(() => listAiSources(), [detected, providersReady]);
+  const sources = useMemo(
+    () => listAiSources().filter((source) => supportsLocalAgents || source.kind !== SOURCE_KINDS.LOCAL),
+    [detected, providersReady, supportsLocalAgents],
+  );
   const activeSource = useMemo(
     () => getActiveSource(sourceId),
     [sourceId, detected, modelVersion, safeMode],
   );
 
   return {
+    supportsLocalAgents,
     detected,
     detecting,
     sources,

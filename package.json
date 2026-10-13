@@ -18,6 +18,9 @@
     "tauri:dev": "pnpm --filter @md-render/editor tauri:dev",
     "tauri:build": "pnpm --filter @md-render/editor tauri:build",
     "tauri:build:mac": "pnpm --filter @md-render/editor tauri:build:mac",
+    "tauri:build:mac:universal": "pnpm --filter @md-render/editor tauri:build:mac:universal",
+    "tauri:build:win": "pnpm --filter @md-render/editor tauri:build:win",
+    "tauri:inno:win": "pnpm --filter @md-render/editor tauri:inno:win",
     "release:tag": "bash scripts/release-tag.sh"
   }
 }

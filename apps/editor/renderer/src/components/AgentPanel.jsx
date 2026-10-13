@@ -39,7 +39,11 @@ import {
   appendMemoryEntry,
   findEditorialMemoryFile,
 } from '../core/agent/editorialMemory.js';
-import { fetchServerTools, executeTool, TOOL_DEFINITIONS } from '../core/agent/toolRegistry.js';
+import {
+  DIAGNOSTIC_TOOL_NAMES,
+  fetchServerTools,
+  TOOL_DEFINITIONS,
+} from '../core/agent/toolRegistry.js';
 import { createHost } from '../core/agent/createHost.js';
 import { recordToolActivity } from '../core/agent/activityLog.js';
 import { getSurfaceLabel } from '../core/agent/surfaceLabels.js';
@@ -143,6 +147,29 @@ const flattenFiles = (node, acc = []) => {
   (node.children ?? []).forEach((child) => flattenFiles(child, acc));
   return acc;
 };
+
+const DIAGNOSTIC_TOOL_NAME_SET = new Set(DIAGNOSTIC_TOOL_NAMES);
+const NO_DIAGNOSTICS_SYSTEM_PROMPT = [
+  '当前运行时不提供 Electron 本机诊断与安全修复工具。',
+  '不要调用 inspect_app_health 或 apply_safe_repair；收集用户可见的错误后，必要时生成 incident_report。',
+  'AI 代理是否可达以实际请求结果为准，不要把「没有本机诊断桥」当成代理连接失败。',
+].join('\n');
+const getToolName = (definition) => definition?.function?.name ?? '';
+const requiresDiagnostics = (skill) => (
+  (skill?.tools ?? []).some((name) => DIAGNOSTIC_TOOL_NAME_SET.has(name))
+);
+const resolveRuntimeAllowedTools = ({ allowedTools, serverTools, supportsDiagnostics }) => {
+  if (supportsDiagnostics) return allowedTools;
+  const candidates = Array.isArray(allowedTools)
+    ? allowedTools
+    : [...TOOL_DEFINITIONS, ...serverTools].map(getToolName).filter(Boolean);
+  return candidates.filter((name) => !DIAGNOSTIC_TOOL_NAME_SET.has(name));
+};
+const resolveRuntimeSystemPrompt = (modePrompt, supportsDiagnostics) => (
+  supportsDiagnostics
+    ? modePrompt
+    : [modePrompt, NO_DIAGNOSTICS_SYSTEM_PROMPT].filter(Boolean).join('\n\n')
+);
 
 /** 是否可读的 Markdown 文件（.md 结尾且有文本内容） */
 const isMarkdownFile = (node) =>
@@ -354,7 +381,14 @@ export default function AgentPanel({ open = true, onClose }) {
     return list.slice(0, 20);
   }, [mdFiles, fileFilter]);
   // 产品 skill：内置 + 内容库（MdRender/.agents/skills），改文件后自动刷新
-  const { skills: registrySkills, warnings: skillWarnings, loaded: skillsLoaded } = useSkillRegistry();
+  const { skills: registeredSkills, warnings: skillWarnings, loaded: skillsLoaded } = useSkillRegistry();
+  const supportsDiagnostics = hasDiagnosticsBridge();
+  const registrySkills = useMemo(
+    () => (supportsDiagnostics
+      ? registeredSkills
+      : registeredSkills.filter((skill) => !requiresDiagnostics(skill))),
+    [registeredSkills, supportsDiagnostics],
+  );
   const agentSkillRequest = useEditorStore((s) => s.agentSkillRequest);
   const clearAgentSkillRequest = useEditorStore((s) => s.clearAgentSkillRequest);
   const skillItems = useMemo(() => registrySkills.map(toSkillItem), [registrySkills]);
@@ -787,6 +821,12 @@ export default function AgentPanel({ open = true, onClose }) {
     const source = getActiveSource();
     const isLocalRun = source.kind === 'local';
     const modeConfig = resolveAgentTurnMode({ mode, allowedTools, isSkillRun });
+    const runtimeSystemPrompt = resolveRuntimeSystemPrompt(modeConfig.systemPrompt, supportsDiagnostics);
+    const runtimeAllowedTools = resolveRuntimeAllowedTools({
+      allowedTools: modeConfig.allowedTools,
+      serverTools,
+      supportsDiagnostics,
+    });
     const localSession = isLocalRun
       ? resolveLocalAgentSession(activeSession, source.agentId, modeConfig.mode)
       : null;
@@ -872,12 +912,12 @@ export default function AgentPanel({ open = true, onClose }) {
         userInput: promptText,
         history: isLocalRun
           ? activeSession?.history ?? []
-          : appendModeSystemMessage(activeSession?.history ?? [], modeConfig.systemPrompt),
-        modeSystemPrompt: modeConfig.systemPrompt,
+          : appendModeSystemMessage(activeSession?.history ?? [], runtimeSystemPrompt),
+        modeSystemPrompt: runtimeSystemPrompt,
         host,
         signal: controller.signal,
         taskContext,
-        allowedTools: modeConfig.allowedTools,
+        allowedTools: runtimeAllowedTools,
         onEvent,
       };
       const result = isLocalRun
@@ -924,7 +964,7 @@ export default function AgentPanel({ open = true, onClose }) {
         if (abortRef.current === controller) abortRef.current = null;
       }
     }
-  }, [running, activeSessionId, activeSession, sessionMode, host, appendAgentMessage, updateAgentMessages, setAgentHistory, setAgentExternalSession, serverTools, buildTurnContext, workspace, selectedId]);
+  }, [running, activeSessionId, activeSession, sessionMode, host, appendAgentMessage, updateAgentMessages, setAgentHistory, setAgentExternalSession, serverTools, supportsDiagnostics, buildTurnContext, workspace, selectedId]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -1356,6 +1396,7 @@ export default function AgentPanel({ open = true, onClose }) {
             detected={aiSource.detected}
             detecting={aiSource.detecting}
             safeMode={aiSource.safeMode}
+            supportsLocalAgents={aiSource.supportsLocalAgents}
             onSelectSource={handleSourceChange}
             onSelectModel={aiSource.selectModel}
             onRedetect={aiSource.redetect}

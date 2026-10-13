@@ -495,11 +495,12 @@ export function remapDiskNodeAfterRename(node, oldRelativePath, newRelativePath,
       : node.relativePath;
 
   const nextName = node.relativePath === oldRelativePath ? newName : node.name;
+  const projectIdentity = node.projectIdentity ?? node.projectRootPath;
   const next = {
     ...node,
     name: nextName,
     relativePath: nextRelativePath,
-    id: `project:${node.projectRootPath}:${node.type}:${nextRelativePath}`,
+    id: `project:${projectIdentity}:${node.type}:${nextRelativePath}`,
   };
 
   if (node.type === 'folder' && Array.isArray(node.children)) {
@@ -509,6 +510,54 @@ export function remapDiskNodeAfterRename(node, oldRelativePath, newRelativePath,
   }
 
   return next;
+}
+
+/** 磁盘节点路径变化后，把按 fileId 分组的评论迁移到对应的新文件 ID。 */
+export function remapDiskCommentThreads({
+  previousWorkspace,
+  nextWorkspace,
+  projectRootPath,
+  oldRelativePath,
+  newRelativePath,
+  commentThreads = {},
+}) {
+  if (!commentThreads || typeof commentThreads !== 'object' || Array.isArray(commentThreads)) {
+    return commentThreads;
+  }
+
+  let changed = false;
+  const nextCommentThreads = {};
+  const remapPath = (relativePath) => {
+    if (relativePath === oldRelativePath) return newRelativePath;
+    if (relativePath?.startsWith(`${oldRelativePath}/`)) {
+      return `${newRelativePath}${relativePath.slice(oldRelativePath.length)}`;
+    }
+    return null;
+  };
+
+  Object.entries(commentThreads).forEach(([fileId, threads]) => {
+    const node = findNodeById(previousWorkspace, fileId);
+    const nextRelativePath = node?.type === 'file' && node.projectRootPath === projectRootPath
+      ? remapPath(node.relativePath)
+      : null;
+    const projectIdentity = node?.projectIdentity ?? node?.projectRootPath;
+    const candidateId = nextRelativePath && projectIdentity
+      ? `project:${projectIdentity}:file:${nextRelativePath}`
+      : null;
+    const nextFileId = candidateId && findNodeById(nextWorkspace, candidateId)?.type === 'file'
+      ? candidateId
+      : fileId;
+
+    if (nextFileId !== fileId) changed = true;
+    if (nextCommentThreads[nextFileId]) {
+      nextCommentThreads[nextFileId] = [...nextCommentThreads[nextFileId], ...threads];
+      changed = true;
+    } else {
+      nextCommentThreads[nextFileId] = threads;
+    }
+  });
+
+  return changed ? nextCommentThreads : commentThreads;
 }
 
 /**
