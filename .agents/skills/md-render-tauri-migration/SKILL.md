@@ -24,13 +24,30 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 一次只迁移一个能力。先在副本上验证读，再验证写、监听、取消和错误路径；通过后才替换对应 Electron 路径。
 8. 每个独立功能验证通过后立即提交。Electron 正式链路保持可构建、可启动，直到 Tauri 达到切换门槛。
 
-### 只读目录的迁移模式
+### 本地目录的授权与快照
 
 - 部分能力要单独声明，例如 `canOpen / canRead / canWrite / canUseDefaultWorkspace`；不要因为 Tauri 能读目录，就让原来的“本地项目完整可用”判断返回 true。
 - 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
-- 目录 token、扫描树和选中节点都属于当前会话，持久化 workspace 前必须剔除；移除挂载时立即 revoke token 并清掉子树标签，重启后要求用户重新授权。
+- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，持久化的是“最新内容 + 只读 + 待重授权”快照。
+- 重启后保留快照与历史 ID，但不使用其中的旧路径或 token 读写。重授权只有在扫描完整且目录结构高置信匹配时才复用旧 identity；否则作为新项目打开，旧快照保留。
+- 扫描结果必须单独返回 `complete/authoritative`，不能用 `skippedCount > 0` 代替。文件数/总体积/深度截断、I/O 或 UTF-8 读取失败时为不完整；隐藏、忽略和不支持类型只计跳过。不完整扫描禁止自动刷新、手动 `use-disk` 和重授权覆盖。
+- 移除挂载时先排空正文、图片、metadata 和 Rust mutation，成功后才 revoke token 并删节点；任一保存失败都保留挂载。
 - `readOnly` 从挂载根递归传给后代，并同时约束 UI、store action、AI/Agent 提案和元数据入口；不能只靠隐藏按钮。
 - 读取前再次校验文件类型、相对路径、符号链接、规范化后的目录边界和体积上限。保持 capability 最小化，目录选择器可由 Rust 直接调用，不必给 Renderer 通用 `dialog/fs` 权限。
+
+### SQLite 与旧数据导入
+
+- Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入，源库以 read-only/query-only 打开。
+- Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿单独拷贝的 `.db` 冒充完整备份。
+- 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
+- 先建 candidate DB，校验 schema 白名单、`quick_check`、记录数、workspace JSON 与文档 ID 精确集合，然后备份当前 Tauri DB 并原子切换。失败恢复旧库，同时清理 candidate/backup 的 WAL/SHM 边车文件。
+- 迁移标记不能代替数据验证；启动时同时检查 marker、workspace 和 documents，异常库进只读恢复而不自动覆写。
+
+### 关窗与单实例
+
+- 单实例插件必须最先注册；第二实例只聚焦已有窗口，不能再打开一套 SQLite/挂载会话。
+- Tauri `close-requested` 先 `preventDefault`。安全顺序是：界面 inert → 排空图片生命周期、Daily/画布 debounce、正文 timer/queue、metadata 和 Rust mutation → 冻结新的 store/Rust 写入 → 排空 SQLite → `destroy`。
+- 任一写入失败必须 latch，后续同一对象保存成功才清除；否则关窗、移除项目、手动同步和导入都要取消。
 
 ## 关键约束与易踩坑
 
@@ -40,8 +57,9 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - 不直接复制整个 WebView profile。只迁移明确列出的设置，并为每项提供默认值和失败回退。
 - 不把正式版用户数据目录改成预览目录，也不在预览阶段移动、清理或重建正式数据库。
 - Electron 与 Tauri 构建模式不能同时启用；专用端口必须避开现有服务占用。
-- macOS 安装包要区分当前架构与 universal；对外发布前补齐 Developer ID 签名、公证和更新渠道。
-- Windows 安装位置、WebView2 策略、签名和 Inno Setup 要单独验收，不能从 macOS 结果外推。
+- macOS 安装包要区分当前架构与 universal；对外发布前补齐 Developer ID 签名、显式提交 DMG 公证、staple/validate 和更新渠道。CI 上传 `.app` 前用保留包结构的 zip，不直接上传 bundle 目录。
+- Windows 安装位置、WebView2 策略、签名和 Inno Setup 要单独验收，不能从 macOS 结果外推。WebView2 bootstrapper 下载后先验 Microsoft 签名，安装失败或非零退出码必须阻止主应用安装。
+- `Program Files` 只是应用二进制位置；可变配置、缓存和 SQLite 仍遵循系统用户数据目录。Inno 不能代替代码签名，也不能保证没有 UAC/SmartScreen 提示。
 
 ## 验证
 
@@ -53,10 +71,10 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 4. Rust command 返回真实运行时、平台和应用版本。
 5. Electron 与 Tauri 环境变量同时存在时立即失败。
 6. Tauri 预览使用独立 bundle identifier 和数据目录。
-7. 预览空工作区不会修改 Electron 数据库、WAL 或工作区文件。
-8. 未迁移能力明确不可用，不出现“按钮可点但静默失败”。
-9. Tauri 产物能启动，且包内不携带 Node runtime。
-10. Electron 正式构建仍通过，打包产物不混入 Tauri 构建目录。
+7. 预览空工作区不会修改 Electron 数据库、WAL 或工作区文件；导入前后源库 hash 一致。
+8. 正文、metadata、图片、Daily 或画布 debounce 期间关窗，必须先落盘；注入失败时窗口保留。
+9. 扫描不完整、重授权选错目录或移除前保存失败时，旧快照、文档 ID 和版本历史仍保留。
+10. Tauri 产物能启动且单实例生效，包内不携带 Node runtime；Electron 正式构建仍通过。
 
 执行过构建或测试后，检查并清理 `vite.config.*.timestamp-*.mjs`、`vitest.config.*.timestamp-*.mjs` 等临时产物；`src-tauri/target/` 和生成 schema 保持忽略。
 

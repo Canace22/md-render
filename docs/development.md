@@ -17,7 +17,10 @@
 | 打包发版 | `pnpm electron:build` | 打正式安装包（Mac 上默认 Mac 版） |
 | | `pnpm electron:build:win` | 打 Windows 安装包 |
 | | `pnpm electron:pack` | 只生成可运行的 app 目录，不做安装包，用来快速验证打包 |
-| | `pnpm tauri:build:mac` | 打 Tauri macOS 预览版 `.app` 和 `.dmg` |
+| | `pnpm tauri:build:mac` | 打当前 Mac 架构的 Tauri `.app` 和 `.dmg` |
+| | `pnpm tauri:build:mac:universal` | 打 Apple Silicon + Intel 通用 `.app` 和 `.dmg` |
+| | `pnpm tauri:build:win` | 在 Windows 上构建 Tauri x64 可执行文件，暂不打安装包 |
+| | `pnpm tauri:inno:win` | 在 Windows 上用 Inno Setup 把已构建的 exe 制成安装程序 |
 | | `pnpm release:tag` | 升版本、打 tag 并推送，先加 `-- --dry-run` 预览 |
 | 很少用 | `pnpm build` / `pnpm preview` | 只构建 / 预览网页版，桌面版打包会自动构建 |
 
@@ -39,7 +42,7 @@ pnpm --filter @md-render/editor electron:rebuild
 
 ### Tauri 预览壳
 
-Tauri 迁移仍处在双壳阶段。开发机先按 [Tauri 官方前置要求](https://v2.tauri.app/start/prerequisites/) 安装当前 stable Rust，然后运行：
+Tauri 迁移仍处在双壳阶段：Electron 是正式版，Tauri 是与它隔离的预览版。开发机先按 [Tauri 官方前置要求](https://v2.tauri.app/start/prerequisites/) 安装当前 stable Rust，然后运行：
 
 ```bash
 pnpm tauri:dev
@@ -48,7 +51,26 @@ pnpm tauri:build:mac
 
 Rust、Node.js 和 pnpm 只用于开发与构建；编译后的 Tauri 应用不要求用户安装这些工具。预览版使用独立应用名、bundle identifier 和数据目录，不会覆盖 Electron 正式版。
 
-当前预览壳已经能加载真实 Renderer，并通过 `runtime_info` command 与 Rust 通信。设置页可以手动选择目录，以只读方式浏览其中的 `.md`、`.markdown` 和 `.txt` 文件；应用不会自动查找正式版目录，也不提供保存、改名或删除。SQLite/FTS、AI/Agent、MCP、PDF、更新和完整文件工作流仍只在 Electron 正式版可用，不能把 Tauri 预览版当成正式版使用。迁移边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
+当前代码已经接入以下能力：
+
+- 在设置页手动以只读或读写方式选择本地目录。会话 token 不持久化，只保存去路径、去 token 的最新只读快照；重启后需重新授权才能继续写盘。
+- 读写 Markdown、新建、改名、删除、显示于系统文件管理器，以及将图片保存到工作区 `assets/`。
+- 在 Tauri 私有数据目录中使用 SQLite/FTS，并从设置页显式导入 Electron 旧数据库。
+- 通过 Rust 连接已配置的 `ai-proxy`，以及用原生保存对话框导出 MD、HTML 和 DOCX。
+- 受控打开 `http` / `https` 外链。
+
+Tauri 不会像 `pnpm electron:dev` 一样自动启动本地 AI 代理。需测试 AI 时，先启动代理：
+
+```bash
+cd server/ai-proxy
+node server.js
+```
+
+然后在应用的 AI 设置中填写 `http://127.0.0.1:8788`。生产环境应使用已加固的 HTTPS 代理。
+
+从 Electron 带入数据时，**先完全退出 Electron**，再在 Tauri 设置页选择 `knowledge.db` 原文件，或退出后制作的完整副本。不要在 Electron 运行时只复制 `.db`，最新数据可能还在 WAL 中。导入会只读校验源库、备份 Tauri 现有库，源文件保持不变。
+
+PDF、自动更新、本机 Agent 和本机 MCP 尚未迁移。Tauri 的 PDF 入口会隐藏，不要用 Electron 功能可用来推断 Tauri 已等价。完整边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
 
 ## 构建
 
@@ -57,9 +79,20 @@ pnpm build                # 网页版 → apps/editor/dist/
 pnpm electron:build       # 桌面版安装包（Mac 上默认 Mac 版）→ apps/editor/release/
 pnpm electron:build:win   # Windows 安装包
 pnpm electron:pack        # 只生成可运行的 app 目录，不做安装包
-pnpm tauri:build:mac      # Tauri macOS 预览版（当前机器架构）→ apps/editor/src-tauri/target/release/bundle/
+pnpm tauri:build:mac              # Tauri macOS 当前架构 .app + .dmg
+pnpm tauri:build:mac:universal    # Tauri macOS Universal .app + .dmg
+pnpm tauri:build:win              # Tauri Windows x64 exe，在 Windows 上运行
+pnpm tauri:inno:win               # 用 Inno Setup 包装上一步的 exe
 pnpm preview              # 本地预览网页版构建（默认 http://localhost:4173）
 ```
+
+### Tauri 打包说明
+
+macOS 手动 CI 构建 Universal `.app` 和 `.dmg`。只有在 Developer ID、Apple 账号和 Team ID 等 secrets 齐全时，工作流才会执行正式签名、公证和 stapling；否则上传名称明确标注的 ad-hoc 预览产物。
+
+Windows 先构建 Tauri exe，再用 Inno Setup 6 生成现代化安装程序。应用程序默认进入 `Program Files`，安装包会运行 Microsoft WebView2 Evergreen Bootstrapper。配置 PFX secrets 时会签名 exe 和卸载器；未配置时产物名会标记 `unsigned`，仍可能触发 SmartScreen。
+
+这套 Tauri 工作流只支持手动触发，不会取代现有 Electron tag 发版。包体大小、启动速度和内存占用必须以实际产物与同条件测量为准。
 
 ## 测试
 
@@ -105,10 +138,10 @@ md-render/
 | 状态 | Zustand（persist） |
 | Markdown 核心 | 自研 parser / renderer（`packages/markdown-core`） |
 | 代码高亮 | Shiki |
-| 图表 | Mermaid（CDN 加载） |
+| 图表 | Mermaid（随应用打包，按需加载） |
 | 富文本 | BlockNote |
 | AI | Agent 引擎 + 工具注册表（`apps/editor/renderer/src/core/agent/`） |
-| 存储 | localStorage（网页版）· SQLite + FTS5（桌面版） |
+| 存储 | localStorage（网页版）· SQLite + FTS5（Electron 与 Tauri 各自独立） |
 
 ## Markdown 支持范围
 
@@ -137,6 +170,8 @@ pnpm release:tag                # 3. 创建 annotated tag 并推送
 ```
 
 推送 tag 后 CI 会构建 `.dmg` 并发布到 GitHub Releases。完整检查清单见 [release-process.md](./release-process.md)。
+
+Tauri 预览包使用 `.github/workflows/tauri-preview.yml` 手动构建，不跟随 tag 发布，也不覆盖 Electron Release。
 
 ## 部署网页版到 GitHub Pages
 
