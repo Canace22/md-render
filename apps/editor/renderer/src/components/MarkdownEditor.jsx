@@ -155,12 +155,14 @@ import {
   deleteLocalProjectEntryOnDisk,
   ensureMdRenderWorkspace,
   fetchBookmarkPageSnapshot,
+  getLocalProjectCapabilities,
   isLocalProjectSupported,
   isDesktopProjectSupported,
   openLocalProject,
   readLocalProjectDisk,
   readLocalProjectFileContent,
   revealLocalProjectEntry,
+  revokeLocalProjectAccess,
   renameLocalProjectEntryOnDisk,
   saveLocalProjectFile,
   saveLocalProjectMetadata,
@@ -586,6 +588,7 @@ function MarkdownEditor() {
           draftStatus: resolvedStatus ?? file.draftStatus,
           targetPlatforms: file.targetPlatforms ?? [],
           wordCount: getParsedWordCount(file.content),
+          readOnly: Boolean(file.readOnly),
         };
       });
   }, [allFiles]);
@@ -656,6 +659,10 @@ function MarkdownEditor() {
   const parserRef = useRef(new MarkdownParser());
   const rendererRef = useRef(new MarkdownRenderer());
   const localProjectSupported = isLocalProjectSupported();
+  const localProjectCapabilities = getLocalProjectCapabilities();
+  const canOpenLocalProject = localProjectCapabilities.canOpen;
+  const canReadLocalProject = localProjectCapabilities.canRead;
+  const canUseDefaultWorkspace = localProjectCapabilities.canUseDefaultWorkspace;
 
   const enqueueProjectFileSave = useCallback((fileId, saveTask) => {
     const previousSave = projectSaveQueuesRef.current.get(fileId) ?? Promise.resolve();
@@ -830,6 +837,7 @@ function MarkdownEditor() {
     const state = useEditorStore.getState();
     const node = findNodeById(state.workspace, targetId);
     if (!node) return false;
+    if (node.readOnly) return false;
     const normalizedName = node.type === 'file'
       ? ensureRenameFileName(trimmed, node.name)
       : trimmed;
@@ -949,6 +957,7 @@ function MarkdownEditor() {
     }
     const node = findNodeById(workspace, targetId);
     if (!node) return;
+    if (node.readOnly) return;
     const isFolder = node.type === 'folder';
     const confirmed = window.confirm(
       `确定删除${isFolder ? '文件夹及其全部内容' : '文件'}「${node.name}」吗？`,
@@ -1015,6 +1024,7 @@ function MarkdownEditor() {
     const from = findNodeById(state.workspace, fromId);
     const to = findNodeById(state.workspace, toId);
     if (!from || !to || fromId === toId) return;
+    if (from.readOnly || to.readOnly) return;
 
     // 拖到文件上：同级排序（磁盘节点顺序由磁盘决定，不支持排序）
     if (to.type !== 'folder') {
@@ -2012,7 +2022,7 @@ function MarkdownEditor() {
   }, [selectNode]);
 
   const handleBoardMoveStatus = useCallback((item, nextStatus) => {
-    if (!item?.id) return;
+    if (!item?.id || item.readOnly) return;
     useEditorStore.getState().setFileKnowledgeMeta(item.id, { draftStatus: nextStatus });
   }, []);
 
@@ -2028,7 +2038,7 @@ function MarkdownEditor() {
   }, [selectNode]);
 
   const handleOpenLocalProject = useCallback(async () => {
-    if (!localProjectSupported) {
+    if (!canOpenLocalProject) {
       message.error('打开本地项目仅支持桌面版应用。');
       return;
     }
@@ -2043,17 +2053,31 @@ function MarkdownEditor() {
       if (validProjects.length === 0) return;
       closeLoading = message.loading('正在打开本地项目…', 0);
       validProjects.forEach((project) => {
-        openLocalProjectWorkspace(project.workspace, project.projectRootPath);
+        openLocalProjectWorkspace(project.workspace, project.projectRootPath, {
+          projectMountId: project.mountId,
+          readOnly: project.access === 'read-only',
+          access: project.access,
+        });
       });
       setContentResetKey((k) => k + 1);
-      message.success(`已打开 ${validProjects.length} 个本地项目`);
+      const readOnlyCount = validProjects.filter((project) => project.access === 'read-only').length;
+      const skippedCount = validProjects.reduce(
+        (total, project) => total + (Number(project.skippedCount) || 0),
+        0,
+      );
+      const skippedText = skippedCount > 0 ? `，跳过 ${skippedCount} 个不支持或受限条目` : '';
+      message.success(
+        readOnlyCount === validProjects.length
+          ? `已只读打开 ${validProjects.length} 个本地项目${skippedText}`
+          : `已打开 ${validProjects.length} 个本地项目${skippedText}`,
+      );
     } catch (error) {
       console.error('打开本地项目失败:', error);
       message.error(error?.message || '打开本地项目失败');
     } finally {
       closeLoading?.();
     }
-  }, [localProjectSupported, openLocalProjectWorkspace]);
+  }, [canOpenLocalProject, openLocalProjectWorkspace]);
 
   const handleManualSyncLocalProject = useCallback(async (projectRootPath = manualSyncProjectRootPath) => {
     if (!localProjectSupported || !projectRootPath) return;
@@ -2102,11 +2126,18 @@ function MarkdownEditor() {
     workspace,
   ]);
 
-  const handleRemoveLocalProject = useCallback((nodeId) => {
+  const handleRemoveLocalProject = useCallback(async (nodeId) => {
     const node = findNodeById(workspace, nodeId);
     if (!node?.localProjectRoot) return;
     const confirmed = window.confirm(`确定移除项目「${node.name}」吗？本地文件不会被删除。`);
     if (!confirmed) return;
+    try {
+      await revokeLocalProjectAccess(node.projectMountId);
+    } catch (error) {
+      console.error('撤销本地项目访问失败:', error);
+      message.error(error?.message || '移除项目失败');
+      return;
+    }
     for (const [fileId, timerId] of projectSaveTimersRef.current.entries()) {
       if (fileId.startsWith(`${node.id}:`)) {
         window.clearTimeout(timerId);
@@ -2344,7 +2375,7 @@ function MarkdownEditor() {
   }, [diskSaveCancelSeq, diskSaveCancelFileIds, setDiskSavePending]);
 
   useEffect(() => {
-    if (!localProjectSupported) return undefined;
+    if (!canUseDefaultWorkspace) return undefined;
     let cancelled = false;
 
     (async () => {
@@ -2361,11 +2392,11 @@ function MarkdownEditor() {
     return () => {
       cancelled = true;
     };
-  }, [localProjectSupported]);
+  }, [canUseDefaultWorkspace]);
 
   // 非 MD 文件：加载原始内容用于预览（不自动转为 Markdown）
   useEffect(() => {
-    if (!localProjectSupported || !selectedNeedsConversion) {
+    if (!canReadLocalProject || !selectedNeedsConversion) {
       setPreviewData({ rawContent: '', fileUrl: '', previewHtml: '', excelSheets: null });
       return undefined;
     }
@@ -2431,7 +2462,7 @@ function MarkdownEditor() {
     })();
 
     return () => { cancelled = true; };
-  }, [localProjectSupported, selectedFile?.id, selectedNeedsConversion]);
+  }, [canReadLocalProject, selectedFile?.id, selectedNeedsConversion]);
 
   // 「转为 Markdown 编辑」：将预览内容转换后作为新 md 文件
   const handleConvertPreviewToMarkdown = useCallback(async () => {
@@ -2696,7 +2727,8 @@ function MarkdownEditor() {
             onClose={leaveSettings}
             toMarkdown={blockNoteContentToMarkdown}
             local={{
-              localProjectSupported,
+              canOpen: canOpenLocalProject,
+              canWrite: localProjectCapabilities.canWrite,
               canSyncFromDisk: canSyncWorkspaceFromDisk,
               syncLoading: manualSyncLoading,
               onOpenLocalProject: handleOpenLocalProject,
@@ -2845,7 +2877,8 @@ function MarkdownEditor() {
                     onFrontmatterPropertyChange={setFileFrontmatterProperty}
                     onOpenFile={selectNode}
                     onOpenVersionHistory={handleOpenVersionHistory}
-                    titleEditable={!selectedInLocalProject || localProjectSupported}
+                    readOnly={selectedReadOnly}
+                    titleEditable={!selectedReadOnly && (!selectedInLocalProject || localProjectSupported)}
                     {...titleEditing}
                   />
                   {editorMode === 'preview' ? (

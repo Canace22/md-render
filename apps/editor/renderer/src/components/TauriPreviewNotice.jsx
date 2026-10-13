@@ -7,7 +7,7 @@ export default function TauriPreviewNotice() {
       type="warning"
       showIcon
       message="Tauri 预览版 · 数据隔离"
-      description="这里不会读取或覆盖正式版资料；请在 MD Render 正式版查看原数据。"
+      description="不会自动读取或覆盖正式版资料；需要查看文件时，请在设置中手动以只读方式打开目录。"
     />
   );
 }

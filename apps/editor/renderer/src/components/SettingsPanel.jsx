@@ -165,12 +165,13 @@ export default function SettingsPanel({
         </div>
       </div>
 
-      {local?.localProjectSupported && (
+      {local?.canOpen && (
         <div className="settings-group">
           <div className="settings-group-title">本地项目目录</div>
           <div className="settings-platform-hint">
-            把本地文件夹作为工作区，编辑直接落盘；也可从磁盘把外部改动同步回编辑器。
-            版本管理交给该目录自己的 Git 仓库。
+            {local.canWrite
+              ? '把本地文件夹作为工作区，编辑直接落盘；也可从磁盘把外部改动同步回编辑器。版本管理交给该目录自己的 Git 仓库。'
+              : 'Tauri 预览版只读打开你手动选择的文件夹，不会保存、改名或删除其中的文件。'}
           </div>
           <div className="settings-action-list">
             <button
@@ -181,21 +182,23 @@ export default function SettingsPanel({
               title="打开本地项目文件夹"
             >
               <Upload size={16} strokeWidth={1.6} />
-              <span>打开本地项目文件夹</span>
+              <span>{local.canWrite ? '打开本地项目文件夹' : '只读打开本地文件夹'}</span>
             </button>
-            <button
-              type="button"
-              className="settings-action-btn"
-              data-testid="sync-from-disk"
-              onClick={() => local.onSyncFromDisk?.()}
-              disabled={!local.canSyncFromDisk || local.syncLoading}
-              title={local.canSyncFromDisk ? '把当前工作区从磁盘同步最新内容' : '工作区里还没有本地项目'}
-            >
-              {local.syncLoading
-                ? <Loader2 className="settings-btn-spinner" size={16} />
-                : <Cloud size={16} strokeWidth={1.6} />}
-              <span>从磁盘同步</span>
-            </button>
+            {local.canWrite && (
+              <button
+                type="button"
+                className="settings-action-btn"
+                data-testid="sync-from-disk"
+                onClick={() => local.onSyncFromDisk?.()}
+                disabled={!local.canSyncFromDisk || local.syncLoading}
+                title={local.canSyncFromDisk ? '把当前工作区从磁盘同步最新内容' : '工作区里还没有本地项目'}
+              >
+                {local.syncLoading
+                  ? <Loader2 className="settings-btn-spinner" size={16} />
+                  : <Cloud size={16} strokeWidth={1.6} />}
+                <span>从磁盘同步</span>
+              </button>
+            )}
           </div>
         </div>
       )}

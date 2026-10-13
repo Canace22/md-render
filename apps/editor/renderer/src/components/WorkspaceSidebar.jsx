@@ -204,15 +204,20 @@ const TreeNode = ({
   const isActive = node.id === selectedId;
   const isRoot = node.id === 'root';
   const isLocalProjectRoot = Boolean(node.localProjectRoot);
+  const canMutateNode = allowStructureActions && !node.readOnly;
   const channelLabel = getFolderChannelLabel(node);
-  const showCreateActions = allowStructureActions && isFolder;
-  const showNodeActions = allowStructureActions && !isRoot && !isLocalProjectRoot;
+  const showCreateActions = canMutateNode && isFolder;
+  const showNodeActions = canMutateNode && !isRoot && !isLocalProjectRoot;
   // 置顶对挂载的本地项目根也开放（它们不能移动/重命名，但可以排到最前）
   const showPinAction = allowStructureActions && !isRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
-  const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
-  const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
-  const absolutePath = buildLocalEntryPath(node);
+  const showManualSyncProject = Boolean(
+    !node.readOnly && isFolder && node.projectRootPath && onManualSyncLocalProject,
+  );
+  const showRevealInFileManager = Boolean(
+    !node.readOnly && node.projectRootPath && onRevealLocalProjectEntry,
+  );
+  const absolutePath = node.readOnly ? '' : buildLocalEntryPath(node);
   const showCopyPath = Boolean(absolutePath);
   const showLocationActions = showRevealInFileManager || showCopyPath;
   const showDocActions = Boolean(docActions && isEditableDocNode(node));
@@ -307,9 +312,9 @@ const TreeNode = ({
   };
 
   // 拖拽源：普通节点和磁盘文件/文件夹都可拖，项目挂载根和工作区根不可拖
-  const canDrag = allowStructureActions && !isRoot && !isLocalProjectRoot;
+  const canDrag = canMutateNode && !isRoot && !isLocalProjectRoot;
   // 放置目标：文件夹（含项目根）可接收「移入」，文件可接收「同级排序」；是否合法由 onMoveNode 判定
-  const canDrop = allowStructureActions && (isFolder || !isRoot);
+  const canDrop = canMutateNode && (isFolder || !isRoot);
   const sharedProps = {
     ...(canDrag ? { draggable: true, onDragStart: handleDragStart } : {}),
     ...(canDrop ? {
@@ -698,6 +703,8 @@ const WorkspaceSidebar = ({
   }, [closeContextMenu, contextMenu]);
 
   const handleCreateFromSidebar = useCallback(async (kind, contextNodeId) => {
+    const targetNode = findNodeById(workspace, contextNodeId ?? selectedId);
+    if (targetNode?.readOnly) return;
     const creators = { folder: onAddFolder, outline: onAddOutline, script: onAddScript, file: onAddFile };
     const create = creators[kind] ?? onAddFile;
     const result = await create?.(contextNodeId);
@@ -705,7 +712,7 @@ const WorkspaceSidebar = ({
       handleStartRename(result.nodeId, result.name);
       closeContextMenu();
     }
-  }, [closeContextMenu, onAddFile, onAddFolder, onAddOutline, onAddScript, workspace]);
+  }, [closeContextMenu, onAddFile, onAddFolder, onAddOutline, onAddScript, selectedId, workspace]);
 
   const handleTreeBackgroundContextMenu = useCallback((event) => {
     if (event.target.closest('.tree-node-row') || event.target.closest('.tree-node-context-menu')) {
@@ -744,6 +751,8 @@ const WorkspaceSidebar = ({
       }
       return;
     }
+
+    if (selectedNode.readOnly) return;
 
     if (event.key === 'F2') {
       event.preventDefault();
@@ -1069,7 +1078,7 @@ const WorkspaceSidebar = ({
                 </svg>
               </button>
               <TreeSortMenu value={sidebarSortMode} onChange={setSidebarSortMode} />
-              {allowStructureActions && (
+              {allowStructureActions && !selectedNode?.readOnly && (
                 <button
                   type="button"
                   className="sidebar-add-icon"
@@ -1080,7 +1089,7 @@ const WorkspaceSidebar = ({
                   <File size={18} strokeWidth={1.5} />
                 </button>
               )}
-              {allowStructureActions && (
+              {allowStructureActions && !selectedNode?.readOnly && (
                 <button
                   type="button"
                   className="sidebar-add-icon"
@@ -1091,7 +1100,7 @@ const WorkspaceSidebar = ({
                   <ListTree size={18} strokeWidth={1.5} />
                 </button>
               )}
-              {allowStructureActions && (
+              {allowStructureActions && !selectedNode?.readOnly && (
                 <button
                   type="button"
                   className="sidebar-add-icon"

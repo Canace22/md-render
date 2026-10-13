@@ -559,38 +559,63 @@ const editorStorage = {
   removeItem: () => {},
 };
 
+const stripSessionReadOnlyMounts = (workspace) => {
+  if (!workspace || !Array.isArray(workspace.children)) return workspace;
+  const children = workspace.children.filter((node) => !(node.localProjectRoot && node.readOnly));
+  return children.length === workspace.children.length ? workspace : { ...workspace, children };
+};
+
+const collectNodeIds = (node, ids = new Set()) => {
+  if (!node) return ids;
+  ids.add(node.id);
+  (node.children ?? []).forEach((child) => collectNodeIds(child, ids));
+  return ids;
+};
+
+const buildPersistedWorkspaceState = (state) => {
+  const workspace = stripSessionReadOnlyMounts(state.workspace);
+  const selectedId = findNodeById(workspace, state.selectedId)
+    ? state.selectedId
+    : (findFirstFileId(workspace) ?? workspace?.id ?? DEFAULT_FILE_ID);
+  const expandedFolderIds = normalizeExpandedFolderIds(state.expandedFolderIds)
+    .filter((folderId) => Boolean(findNodeById(workspace, folderId)));
+  return { workspace, selectedId, expandedFolderIds };
+};
+
 const persistConfig = {
   name: 'md-renderer-editor',
   storage: editorStorage,
-  partialize: (state) => ({
-    workspace: state.workspace,
-    selectedId: state.selectedId,
-    theme: state.theme,
-    copyStyle: state.copyStyle,
-    storageMode: state.storageMode,
-    projectRootPath: state.projectRootPath,
-    surface: state.surface,
-    publishingPlatforms: state.publishingPlatforms,
-    dailyWorkspace: state.dailyWorkspace,
-    sidebarFileKind: state.sidebarFileKind,
-    expandedFolderIds: state.expandedFolderIds,
-    sidebarSortMode: state.sidebarSortMode,
-    headingNumbering: state.headingNumbering,
-    commentThreads: state.commentThreads,
-    agentSessions: state.agentSessions,
-    activeAgentSessionId: state.activeAgentSessionId,
-  }),
+  partialize: (state) => {
+    const persistedWorkspaceState = buildPersistedWorkspaceState(state);
+    return {
+      ...persistedWorkspaceState,
+      theme: state.theme,
+      copyStyle: state.copyStyle,
+      storageMode: state.storageMode,
+      projectRootPath: state.projectRootPath,
+      surface: state.surface,
+      publishingPlatforms: state.publishingPlatforms,
+      dailyWorkspace: state.dailyWorkspace,
+      sidebarFileKind: state.sidebarFileKind,
+      sidebarSortMode: state.sidebarSortMode,
+      headingNumbering: state.headingNumbering,
+      commentThreads: state.commentThreads,
+      agentSessions: state.agentSessions,
+      activeAgentSessionId: state.activeAgentSessionId,
+    };
+  },
 };
 
 const persistWorkspace = (workspace) => {
   if (typeof window === 'undefined') return;
+  const persistedWorkspace = stripSessionReadOnlyMounts(workspace);
   if (hasElectronDb()) {
-    const workspaceJson = JSON.stringify(workspace);
+    const workspaceJson = JSON.stringify(persistedWorkspace);
     scheduleElectronStateSave({ workspace_json: workspaceJson }, workspaceJson);
     return;
   }
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedWorkspace));
   } catch (err) {
     console.error('保存工作区失败:', err);
   }
@@ -800,6 +825,7 @@ const buildLocalProjectMetadataPayload = (node) => {
 };
 
 const saveLocalProjectMetadataAndWait = async (node, customOverride = null) => {
+  if (node?.readOnly) return null;
   const payload = buildLocalProjectMetadataPayload(node);
   if (!payload) return null;
   if (customOverride) {
@@ -858,12 +884,21 @@ const createLocalProjectNodeId = (projectRootPath, suffix = '') => {
   return `project:${projectRootPath}${suffix}`;
 };
 
-const markLocalProjectNode = (node, projectRootPath, isRoot = false) => {
+const markLocalProjectNode = (node, projectRootPath, isRoot = false, mountOptions = {}) => {
   if (!node) return null;
   const relativePath = isRoot ? '' : (node.relativePath ?? '');
   const suffix = isRoot ? '' : `:${node.type}:${relativePath || node.name}`;
+  const projectMountId = mountOptions.projectMountId ?? node.projectMountId ?? '';
+  const readOnly = Boolean(mountOptions.readOnly || node.readOnly);
+  const access = mountOptions.access ?? node.access ?? '';
   const children = Array.isArray(node.children)
-    ? node.children.map((child) => markLocalProjectNode(child, projectRootPath, false)).filter(Boolean)
+    ? node.children
+      .map((child) => markLocalProjectNode(child, projectRootPath, false, {
+        projectMountId,
+        readOnly,
+        access,
+      }))
+      .filter(Boolean)
     : undefined;
 
   return {
@@ -871,6 +906,9 @@ const markLocalProjectNode = (node, projectRootPath, isRoot = false) => {
     id: createLocalProjectNodeId(projectRootPath, suffix),
     projectRootPath,
     localProjectRoot: isRoot,
+    ...(projectMountId ? { projectMountId } : {}),
+    ...(readOnly ? { readOnly: true } : {}),
+    ...(access ? { access } : {}),
     ...(children ? { children } : {}),
   };
 };
@@ -1210,6 +1248,7 @@ export const useEditorStore = create(
       updateFileContentById: (fileId, nextMarkdown) => {
         if (!fileId) return;
         const { workspace, selectedId } = get();
+        if (findNodeById(workspace, fileId)?.readOnly) return false;
         const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           const patch = {
@@ -1225,10 +1264,11 @@ export const useEditorStore = create(
         const nextState = { workspace: updated };
         if (fileId === selectedId) nextState.markdown = nextMarkdown;
         set(nextState);
+        return true;
       },
 
       updateSelectedFileContent: (nextMarkdown) => {
-        get().updateFileContentById(get().selectedId, nextMarkdown);
+        return get().updateFileContentById(get().selectedId, nextMarkdown);
       },
 
       /**
@@ -1239,10 +1279,11 @@ export const useEditorStore = create(
        */
       applyContentFromOutside: (fileId, content) => {
         if (!fileId) return;
-        get().updateFileContentById(fileId, content);
+        if (!get().updateFileContentById(fileId, content)) return false;
         set((state) => ({
           externalContentRequests: [...state.externalContentRequests, { fileId, content }],
         }));
+        return true;
       },
 
       /** MarkdownEditor 取走待处理的请求（取完即清空） */
@@ -1315,26 +1356,6 @@ export const useEditorStore = create(
         return { ok: true, fileId, created: !existing };
       },
 
-      /** 按 id 更新某文件正文（不切换选中）；若正是当前选中文档则同步 markdown */
-      updateFileContentById: (fileId, nextContent) => {
-        const { workspace, selectedId } = get();
-        const updated = updateNodeById(workspace, fileId, (node) => {
-          if (node.type !== 'file') return node;
-          const patch = {
-            ...node,
-            content: nextContent,
-            updatedAt: Date.now(),
-          };
-          if (node.projectRootPath && node.diskContentSnapshot === undefined) {
-            patch.diskContentSnapshot = node.content ?? '';
-          }
-          return patch;
-        });
-        set(fileId === selectedId
-          ? { workspace: updated, markdown: nextContent }
-          : { workspace: updated });
-      },
-
       /**
        * 保存成功后，把"刚写下去的磁盘正文"记为该文件的新基线（diskContentSnapshot）。
        * 供文件监听回灌时识别自写 echo：磁盘内容 == 基线 → 忽略，不重载编辑器。
@@ -1344,7 +1365,7 @@ export const useEditorStore = create(
         if (!fileId) return;
         const { workspace } = get();
         const node = findNodeById(workspace, fileId);
-        if (!node || node.type !== 'file') return;
+        if (!node || node.type !== 'file' || node.readOnly) return;
         const nextSnapshot = diskMarkdown ?? '';
         if ((node.diskContentSnapshot ?? '') === nextSnapshot) return;
         const updated = updateNodeById(workspace, fileId, (current) => ({
@@ -1357,6 +1378,7 @@ export const useEditorStore = create(
       /** 设置某文件的标签（去重、去空、去首尾空格） */
       setFileTags: (fileId, tags) => {
         const { workspace } = get();
+        if (findNodeById(workspace, fileId)?.readOnly) return false;
         const cleaned = Array.from(
           new Set((tags ?? []).map((t) => String(t).trim()).filter(Boolean)),
         );
@@ -1368,10 +1390,12 @@ export const useEditorStore = create(
         persistWorkspace(updated);
         set({ workspace: updated });
         persistLocalProjectMetadata(nextNode);
+        return true;
       },
 
       setFileKnowledgeMeta: (fileId, patch) => {
         const { workspace } = get();
+        if (findNodeById(workspace, fileId)?.readOnly) return false;
         const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           const nextPatch = {};
@@ -1431,6 +1455,7 @@ export const useEditorStore = create(
         persistWorkspace(updated);
         set({ workspace: updated });
         persistLocalProjectMetadata(nextNode);
+        return true;
       },
 
       /**
@@ -1440,6 +1465,7 @@ export const useEditorStore = create(
       setFileFrontmatterProperty: (fileId, key, value) => {
         const propertyKey = String(key ?? '').trim();
         if (!propertyKey) return;
+        if (findNodeById(get().workspace, fileId)?.readOnly) return false;
 
         const isEmpty = value === '' || value == null
           || (Array.isArray(value) && value.length === 0);
@@ -1457,6 +1483,7 @@ export const useEditorStore = create(
         set({ workspace: updated });
         // 删除时要显式传空值，main 才知道去掉这一行
         persistLocalProjectMetadata(nextNode, { [propertyKey]: isEmpty ? '' : value });
+        return true;
       },
 
       setWorkspace: (workspace) => set({ workspace }),
@@ -1509,9 +1536,9 @@ export const useEditorStore = create(
         set({ localProjectConflict: null });
       },
 
-      openLocalProjectWorkspace: (workspace, projectRootPath) => {
+      openLocalProjectWorkspace: (workspace, projectRootPath, mountOptions = {}) => {
         const rootPath = projectRootPath ?? '';
-        const projectNode = markLocalProjectNode(workspace, rootPath, true);
+        const projectNode = markLocalProjectNode(workspace, rootPath, true, mountOptions);
         if (!projectNode) return;
 
         const current = get();
@@ -1763,7 +1790,7 @@ export const useEditorStore = create(
         };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
-        if (targetFolder?.projectRootPath) return false;
+        if (targetFolder?.readOnly || targetFolder?.projectRootPath) return false;
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFile, true);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: fileId, markdown: '', surface: 'paper' });
@@ -1791,6 +1818,9 @@ export const useEditorStore = create(
 
         if (!targetFolder || targetFolder.type !== 'folder') {
           return { ok: false, error: '无法定位目标文件夹。' };
+        }
+        if (targetFolder.readOnly) {
+          return { ok: false, error: '只读项目不能新建文件。' };
         }
 
         if (targetFolder.projectRootPath) {
@@ -1881,7 +1911,7 @@ export const useEditorStore = create(
         };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
-        if (targetFolder?.projectRootPath) return false;
+        if (targetFolder?.readOnly || targetFolder?.projectRootPath) return false;
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFolder, true);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: folderId, surface: 'folder' });
@@ -1890,16 +1920,22 @@ export const useEditorStore = create(
 
       moveNode: (fromId, toId) => {
         const { workspace } = get();
+        const fromNode = findNodeById(workspace, fromId);
+        const toNode = findNodeById(workspace, toId);
+        if (fromNode?.readOnly || toNode?.readOnly) return false;
         const nextWorkspace = moveNodeInParent(workspace, fromId, toId);
-        if (nextWorkspace === workspace) return;
+        if (nextWorkspace === workspace) return false;
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace });
+        return true;
       },
 
       /** 把节点移进另一个文件夹（跨目录移动，不改选中）；成功返回 true */
       moveNodeToFolderById: (nodeId, targetFolderId) => {
         const { workspace } = get();
         const node = findNodeById(workspace, nodeId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+        if (node?.readOnly || targetFolder?.readOnly) return false;
         if (node?.projectRootPath && node?.relativePath) return false; // 磁盘挂载节点不做纯内存移动
         const nextWorkspace = moveNodeToFolder(workspace, nodeId, targetFolderId);
         if (nextWorkspace === workspace) return false;
@@ -1915,6 +1951,8 @@ export const useEditorStore = create(
       moveDiskBackedNodeToFolder: (nodeId, targetFolderId, { relativePath: newRelativePath } = {}) => {
         const { workspace, selectedId, openTabs } = get();
         const node = findNodeById(workspace, nodeId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+        if (node?.readOnly || targetFolder?.readOnly) return false;
         if (!node?.projectRootPath || !node.relativePath || !newRelativePath) return false;
 
         const nextWorkspace = moveDiskNodeToFolder(workspace, nodeId, targetFolderId, newRelativePath);
@@ -1948,6 +1986,7 @@ export const useEditorStore = create(
         if (!trimmed) return false;
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
+        if (node.readOnly) return false;
         if (node.projectRootPath && node.relativePath) return false;
         const nextName = buildUniqueRenameName(workspace, trimmed, targetId);
         const updated = updateNodeById(workspace, targetId, (current) => ({
@@ -1967,7 +2006,7 @@ export const useEditorStore = create(
       replaceDiskBackedNode: (targetId, { name, relativePath: newRelativePath, updatedAt }) => {
         const { workspace, selectedId, openTabs } = get();
         const node = findNodeById(workspace, targetId);
-        if (!node?.projectRootPath || !node.relativePath) return false;
+        if (!node?.projectRootPath || !node.relativePath || node.readOnly) return false;
 
         const oldRelativePath = node.relativePath;
         const updated = updateNodeById(workspace, targetId, (current) => (
@@ -2028,17 +2067,19 @@ export const useEditorStore = create(
       },
 
       deleteNode: (nodeId) => {
-        const { workspace, selectedId } = get();
+        const { workspace, selectedId, openTabs, expandedFolderIds } = get();
         const targetId = nodeId ?? selectedId;
         if (targetId === 'root') return false;
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
+        if (node.readOnly && !node.localProjectRoot) return false;
         if (node.projectRootPath && node.relativePath) return false;
 
         const result = removeNodeById(workspace, targetId);
         if (!result.removed) return false;
 
         const nextWorkspace = result.node;
+        const removedNodeIds = collectNodeIds(node);
         const nextFileId = findFirstFileId(nextWorkspace);
         const nextNode = findNodeById(nextWorkspace, nextFileId ?? nextWorkspace.id);
         persistWorkspace(nextWorkspace);
@@ -2047,6 +2088,8 @@ export const useEditorStore = create(
           selectedId: nextFileId ?? nextWorkspace.id,
           markdown: nextNode?.type === 'file' ? (nextNode.content ?? '') : '',
           surface: nextNode?.type === 'folder' ? 'folder' : 'paper',
+          openTabs: openTabs.filter((tab) => !removedNodeIds.has(tab.id)),
+          expandedFolderIds: expandedFolderIds.filter((id) => !removedNodeIds.has(id)),
         });
         return true;
       },
@@ -2056,7 +2099,7 @@ export const useEditorStore = create(
         const targetId = nodeId ?? selectedId;
         if (targetId === 'root') return false;
         const node = findNodeById(workspace, targetId);
-        if (!node?.projectRootPath || !node.relativePath) return false;
+        if (!node?.projectRootPath || !node.relativePath || node.readOnly) return false;
 
         const result = removeNodeById(workspace, targetId);
         if (!result.removed) return false;
@@ -2126,6 +2169,7 @@ export const useEditorStore = create(
         if (!node || !parentFolderId) return false;
 
         const { workspace } = get();
+        if (findNodeById(workspace, parentFolderId)?.readOnly) return false;
         const nextWorkspace = addChildNode(workspace, parentFolderId, node, true);
         persistWorkspace(nextWorkspace);
         set({

@@ -48,7 +48,7 @@ pnpm tauri:build:mac
 
 Rust、Node.js 和 pnpm 只用于开发与构建；编译后的 Tauri 应用不要求用户安装这些工具。预览版使用独立应用名、bundle identifier 和数据目录，不会覆盖 Electron 正式版。
 
-当前预览壳已经能加载真实 Renderer，并通过 `runtime_info` command 与 Rust 通信；文件系统、SQLite/FTS、AI/Agent、MCP、PDF 和更新目前只在 Electron 正式版可用，Tauri 预览版尚未实现这些能力。不能把 Tauri 预览版当成正式版使用。迁移边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
+当前预览壳已经能加载真实 Renderer，并通过 `runtime_info` command 与 Rust 通信。设置页可以手动选择目录，以只读方式浏览其中的 `.md`、`.markdown` 和 `.txt` 文件；应用不会自动查找正式版目录，也不提供保存、改名或删除。SQLite/FTS、AI/Agent、MCP、PDF、更新和完整文件工作流仍只在 Electron 正式版可用，不能把 Tauri 预览版当成正式版使用。迁移边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
 
 ## 构建
 

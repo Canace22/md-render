@@ -1476,7 +1476,7 @@ export default function AgentPanel({ open = true, onClose }) {
               document={activeFile}
               contextPacket={lastContextPacket}
               onRecall={handleRecall}
-              onInsertReference={handleInsertReference}
+              onInsertReference={activeFile?.readOnly ? null : handleInsertReference}
             />
           </div>
         )}

@@ -24,6 +24,14 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 一次只迁移一个能力。先在副本上验证读，再验证写、监听、取消和错误路径；通过后才替换对应 Electron 路径。
 8. 每个独立功能验证通过后立即提交。Electron 正式链路保持可构建、可启动，直到 Tauri 达到切换门槛。
 
+### 只读目录的迁移模式
+
+- 部分能力要单独声明，例如 `canOpen / canRead / canWrite / canUseDefaultWorkspace`；不要因为 Tauri 能读目录，就让原来的“本地项目完整可用”判断返回 true。
+- 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
+- 目录 token、扫描树和选中节点都属于当前会话，持久化 workspace 前必须剔除；移除挂载时立即 revoke token 并清掉子树标签，重启后要求用户重新授权。
+- `readOnly` 从挂载根递归传给后代，并同时约束 UI、store action、AI/Agent 提案和元数据入口；不能只靠隐藏按钮。
+- 读取前再次校验文件类型、相对路径、符号链接、规范化后的目录边界和体积上限。保持 capability 最小化，目录选择器可由 Rust 直接调用，不必给 Renderer 通用 `dialog/fs` 权限。
+
 ## 关键约束与易踩坑
 
 - 最终用户不需要 Node、pnpm 或 Rust；这些只属于开发和构建环境。

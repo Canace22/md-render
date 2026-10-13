@@ -1,4 +1,5 @@
 import * as webFs from './webFsBridge.js';
+import * as tauriLocalProject from './tauriLocalProjectBridge.js';
 
 const LEGACY_PROJECT_PICK_CHANNEL = 'project:pick-folder';
 const LEGACY_PROJECT_READ_CHANNEL = 'project:read-file';
@@ -63,11 +64,39 @@ const normalizeLegacyNode = async (node, rootPath) => {
 
 // Web 端（非 Electron）用 File System Access API 兜底；payload 归 webfs 时路由过去
 const shouldUseWebFs = (projectRootPath) => {
-  return !hasDirectBridge() && webFs.isWebFsSupported() && webFs.isWebFsRootPath(projectRootPath);
+  return !hasDirectBridge()
+    && !tauriLocalProject.isTauriRuntime()
+    && webFs.isWebFsSupported()
+    && webFs.isWebFsRootPath(projectRootPath);
 };
 
 export function isLocalProjectSupported() {
+  if (tauriLocalProject.isTauriRuntime()) return false;
   return hasDirectBridge() || hasLegacyBridge() || webFs.isWebFsSupported();
+}
+
+export function getLocalProjectCapabilities() {
+  if (tauriLocalProject.isTauriRuntime()) {
+    return {
+      canOpen: true,
+      canRead: true,
+      canWrite: false,
+      canUseDefaultWorkspace: false,
+    };
+  }
+
+  const supported = isLocalProjectSupported();
+  return {
+    canOpen: supported,
+    canRead: supported,
+    canWrite: supported,
+    canUseDefaultWorkspace: hasMdRenderWorkspaceBridge(),
+  };
+}
+
+export async function revokeLocalProjectAccess(projectMountId) {
+  if (!tauriLocalProject.isTauriRuntime()) return;
+  await tauriLocalProject.revokeReadOnlyProject(projectMountId);
 }
 
 /** 仅桌面版（Electron）为 true：MdRender 工作区、增量落盘同步等能力需要它 */
@@ -78,6 +107,10 @@ export function isDesktopProjectSupported() {
 export async function openLocalProject() {
   if (hasDirectBridge()) {
     return window.electronAPI.openLocalProject();
+  }
+
+  if (tauriLocalProject.isTauriRuntime()) {
+    return tauriLocalProject.openLocalProject();
   }
 
   if (!hasLegacyBridge()) {
@@ -221,6 +254,15 @@ export async function readLocalProjectFileContent(payload) {
       throw new Error(result.error || '读取本地文件失败');
     }
     return result;
+  }
+  if (tauriLocalProject.isTauriRuntime()) {
+    const mountId = payload?.projectMountId ?? payload?.mountId ?? payload?.projectRootPath;
+    if (tauriLocalProject.isTauriReadOnlyMountId(mountId)) {
+      return tauriLocalProject.readLocalProjectFileContent({
+        mountId,
+        relativePath: payload?.relativePath,
+      });
+    }
   }
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.readLocalProjectFileContent(payload);

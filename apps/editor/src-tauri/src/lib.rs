@@ -1,3 +1,10 @@
+mod local_project;
+
+use local_project::{
+    read_read_only_project_file, revoke_read_only_project, scan_read_only_project,
+    select_read_only_projects, ReadOnlyProjectRegistry,
+};
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeInfo {
@@ -28,7 +35,15 @@ fn runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![runtime_info])
+        .plugin(tauri_plugin_dialog::init())
+        .manage(ReadOnlyProjectRegistry::default())
+        .invoke_handler(tauri::generate_handler![
+            runtime_info,
+            select_read_only_projects,
+            scan_read_only_project,
+            read_read_only_project_file,
+            revoke_read_only_project,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running MD Render Tauri Preview");
 }
