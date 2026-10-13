@@ -17,6 +17,7 @@
 | `electronBridge.js` | `getPlatform()` 委托给新桥接层，其余 Electron API 不动 |
 | `vite.config.js` | Tauri 使用相对资源路径、独立 1420 开发端口，并忽略 `src-tauri` 监听 |
 | workspace scripts | 新增 `tauri:dev`、`tauri:build` 和 `tauri:build:mac` |
+| `TauriPreviewNotice.jsx` | 仅在 Tauri 中常驻显示“数据隔离”警告，明确原资料仍需在正式版查看 |
 | `md-render-tauri-migration` skill | 固化双壳隔离、数据安全、最小权限和分阶段验收流程 |
 
 预览版名为 `MD Render Tauri Preview`，窗口标题明确标注“隔离数据，非正式版”，bundle identifier 是 `com.mdrender.app.tauri-preview`，与 Electron 正式版隔离。没有给 Tauri 伪造 `window.electronAPI`，未实现的系统能力会保持未实现，不会误报可用。
@@ -29,7 +30,7 @@
 - `pnpm build` 通过；`html-to-docx` 的 Node 模块 externalized 和大 chunk 警告是现有构建警告。
 - `ELECTRON=true vite build` 通过，Renderer、main、preload 和数据库搜索 worker 均正常产出。
 - `pnpm tauri:dev` 成功打开 WKWebView；真实 IPC 输出为 `[desktop-runtime] tauri darwin 1.0.20`。
-- 发布版目视检查通过：`tauri://localhost` 正常显示创作首页，深浅色切换可交互。
+- 发布版目视检查通过：`tauri://localhost` 正常显示创作首页，深浅色切换可交互，“Tauri 预览版 · 数据隔离”警告可见。
 - `pnpm tauri:build:mac` 生成独立的 arm64 `.app`（19.46 MiB）和 `.dmg`（8.64 MiB，9,054,845 bytes）。
 - 应用包内只有原生可执行文件、Info.plist 和图标，没有 Node runtime 文件。
 
