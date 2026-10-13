@@ -19,7 +19,11 @@
     "electron:build": "node ./scripts/package-electron.mjs build",
     "electron:build:win": "node ./scripts/package-electron.mjs build --win",
     "electron:pack": "node ./scripts/package-electron.mjs pack",
-    "electron:rebuild": "npm_config_devdir=.cache/electron-gyp electron-rebuild -f -w better-sqlite3"
+    "electron:rebuild": "npm_config_devdir=.cache/electron-gyp electron-rebuild -f -w better-sqlite3",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:mac": "tauri build --bundles app,dmg"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.5",
@@ -30,6 +34,7 @@
     "@md-render/json-tool": "workspace:*",
     "@md-render/markdown-core": "workspace:*",
     "@narrative/blocknote-core": "workspace:*",
+    "@tauri-apps/api": "^2.12.3",
     "antd": "^5.28.0",
     "better-sqlite3": "^12.10.0",
     "d3-drag": "^3.0.0",
@@ -54,6 +59,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "@playwright/test": "^1.57.0",
+    "@tauri-apps/cli": "^2.12.2",
     "@vitejs/plugin-react": "^4.2.1",
     "cross-env": "^7.0.3",
     "electron": "^33.0.0",

@@ -1,8 +1,10 @@
+import { getDesktopPlatform } from './desktopBridge.js';
+
 export const getElectronAPI = () => (
   typeof window !== 'undefined' ? window.electronAPI : null
 );
 
-export const getPlatform = () => getElectronAPI()?.platform ?? '';
+export const getPlatform = () => getDesktopPlatform();
 
 export const hasDbBridge = () => typeof getElectronAPI()?.db === 'object';
 

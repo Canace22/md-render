@@ -8,7 +8,8 @@
 
 | 场景 | 命令 | 说明 |
 |---|---|---|
-| 日常开发 | `pnpm electron:dev` | 桌面版，最常用；本地 AI 代理没跑会自动拉起 |
+| 日常开发 | `pnpm electron:dev` | Electron 正式桌面版，最常用；本地 AI 代理没跑会自动拉起 |
+| | `pnpm tauri:dev` | Tauri 2 预览壳；当前只用于迁移开发，端口 1420 |
 | | `pnpm dev` | 只开网页版，没有文件系统能力，改纯 UI 时更轻 |
 | 测试 | `pnpm test:unit` | 单元测试跑一遍就退出 |
 | | `pnpm test` | 单元测试监听模式，改代码自动重跑 |
@@ -16,6 +17,7 @@
 | 打包发版 | `pnpm electron:build` | 打正式安装包（Mac 上默认 Mac 版） |
 | | `pnpm electron:build:win` | 打 Windows 安装包 |
 | | `pnpm electron:pack` | 只生成可运行的 app 目录，不做安装包，用来快速验证打包 |
+| | `pnpm tauri:build:mac` | 打 Tauri macOS 预览版 `.app` 和 `.dmg` |
 | | `pnpm release:tag` | 升版本、打 tag 并推送，先加 `-- --dry-run` 预览 |
 | 很少用 | `pnpm build` / `pnpm preview` | 只构建 / 预览网页版，桌面版打包会自动构建 |
 
@@ -35,6 +37,19 @@ pnpm --filter @md-render/editor electron:rebuild
 
 `pnpm electron:dev` 会自动检查并启动本地 `server/ai-proxy`（默认 `http://127.0.0.1:8788`，可用 `AI_PROXY_BASE` 指向远程代理）；网页版 `pnpm dev` 不会，需要手动启动。模型配置见 [README](../README.md#想用-ai-助手要先接一个模型) 和 [server/README.md](../server/README.md)。
 
+### Tauri 预览壳
+
+Tauri 迁移仍处在双壳阶段。开发机先按 [Tauri 官方前置要求](https://v2.tauri.app/start/prerequisites/) 安装当前 stable Rust，然后运行：
+
+```bash
+pnpm tauri:dev
+pnpm tauri:build:mac
+```
+
+Rust、Node.js 和 pnpm 只用于开发与构建；编译后的 Tauri 应用不要求用户安装这些工具。预览版使用独立应用名、bundle identifier 和数据目录，不会覆盖 Electron 正式版。
+
+当前预览壳已经能加载真实 Renderer，并通过 `runtime_info` command 与 Rust 通信；文件系统、SQLite/FTS、AI/Agent、MCP、PDF 和更新目前只在 Electron 正式版可用，Tauri 预览版尚未实现这些能力。不能把 Tauri 预览版当成正式版使用。迁移边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
+
 ## 构建
 
 ```bash
@@ -42,6 +57,7 @@ pnpm build                # 网页版 → apps/editor/dist/
 pnpm electron:build       # 桌面版安装包（Mac 上默认 Mac 版）→ apps/editor/release/
 pnpm electron:build:win   # Windows 安装包
 pnpm electron:pack        # 只生成可运行的 app 目录，不做安装包
+pnpm tauri:build:mac      # Tauri macOS 预览版（当前机器架构）→ apps/editor/src-tauri/target/release/bundle/
 pnpm preview              # 本地预览网页版构建（默认 http://localhost:4173）
 ```
 
@@ -64,6 +80,7 @@ md-render/
 │   ├── renderer/        # React 界面（Vite）
 │   ├── shared/          # 主进程与界面共用的工具
 │   ├── resources/       # 随 app 打包的资源（如内置 skill）
+│   ├── src-tauri/       # Tauri 2 预览壳（Rust command、权限和打包配置）
 │   ├── tests/           # Playwright E2E
 │   └── tests-unit/      # Vitest 单元测试
 ├── packages/
@@ -84,7 +101,7 @@ md-render/
 |------|------|
 | UI | React 18、Ant Design 5、lucide-react |
 | 构建 | Vite 5、pnpm workspace |
-| 桌面 | Electron 33、electron-builder |
+| 桌面 | Electron 33（正式版）· Tauri 2（迁移预览） |
 | 状态 | Zustand（persist） |
 | Markdown 核心 | 自研 parser / renderer（`packages/markdown-core`） |
 | 代码高亮 | Shiki |
@@ -141,3 +158,4 @@ CI 会把 Vite 的 `base` 自动设为 `/<仓库名>/`，本地开发仍是 `/`�
 | AI 助手验收清单 | [ai-assistant-quality-checklist.md](./ai-assistant-quality-checklist.md) |
 | 今日速记类别说明 | [daily-notebook-task-category.md](./daily-notebook-task-category.md) |
 | 知识库进度 / 路线 | [knowledge-base-progress.md](./knowledge-base-progress.md) · [knowledge-base-roadmap.md](./knowledge-base-roadmap.md) |
+| Tauri 2 迁移 | [tauri-migration-plan.md](./tauri-migration-plan.md) |

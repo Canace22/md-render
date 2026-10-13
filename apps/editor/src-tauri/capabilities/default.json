@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimal capability for the MD Render Tauri preview window",
+  "windows": ["main"],
+  "permissions": []
+}

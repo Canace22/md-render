@@ -1,0 +1,18 @@
+[package]
+name = "md-render-tauri-preview"
+# 应用版本由 tauri.conf.json 指向 apps/editor/package.json；这里仅是内部 Rust crate 版本。
+version = "0.1.0"
+description = "Tauri preview shell for MD Render"
+authors = ["canace22"]
+edition = "2021"
+
+[lib]
+name = "md_render_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
