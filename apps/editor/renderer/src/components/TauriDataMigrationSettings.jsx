@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DatabaseBackup, Loader2 } from 'lucide-react';
-import { message, Modal } from 'antd';
+import { message } from 'antd';
 import { getDesktopRuntimeKind } from '../services/desktopBridge.js';
 import { importLegacyDatabase } from '../services/databaseBridge.js';
 import { flushTauriCloseDrains } from '../services/desktopCloseBridge.js';
@@ -46,15 +46,12 @@ export default function TauriDataMigrationSettings() {
       }
       shouldRestorePending = false;
       keepBarrierUntilReload = true;
-      Modal.success({
-        title: 'Electron 数据导入完成',
-        content: `已用 Electron 数据替换当前 Tauri 数据，共 ${result.documents ?? 0} 篇文档和 ${result.versions ?? 0} 条历史版本。导入前的 Tauri 数据已备份到应用数据目录，文件名为 ${result.backupFileName || 'knowledge.before-import.<timestamp>.db'}。`,
-        okText: '重新加载',
-        closable: false,
-        keyboard: false,
-        maskClosable: false,
-        onOk: () => window.location.reload(),
-      });
+      window.alert(
+        'Electron 数据导入完成。\n\n'
+        + `已用 Electron 数据替换当前 Tauri 数据，共 ${result.documents ?? 0} 篇文档和 ${result.versions ?? 0} 条历史版本。\n\n`
+        + `导入前的 Tauri 数据已备份到应用数据目录，文件名为 ${result.backupFileName || 'knowledge.before-import.<timestamp>.db'}。`,
+      );
+      window.location.reload();
     } catch (error) {
       console.error('[tauri] 导入 Electron 数据失败:', error);
       message.error(error?.message || '数据导入失败');
