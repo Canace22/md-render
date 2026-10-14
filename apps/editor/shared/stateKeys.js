@@ -12,6 +12,7 @@ export const EDITOR_STATE_KEYS = Object.freeze([
   'sidebar_expanded_folders',
   'sidebar_sort_mode',
   'heading_numbering',
+  'daily_notes_open',
   'comment_threads_json',
   'agent_sessions_json',
 ]);

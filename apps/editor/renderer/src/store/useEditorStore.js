@@ -121,6 +121,7 @@ const SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY = 'md-renderer-sidebar-expanded-folde
 const COMMENT_THREADS_STORAGE_KEY = 'md-renderer-comment-threads';
 const AGENT_SESSIONS_STORAGE_KEY = 'md-renderer-agent-sessions';
 const HEADING_NUMBERING_STORAGE_KEY = 'md-renderer-heading-numbering';
+const DAILY_NOTES_OPEN_STORAGE_KEY = 'md-renderer-daily-notes-open';
 const DESKTOP_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
@@ -142,9 +143,11 @@ const remapLocalProjectRelationIds = (values, mountId, projectIdentity) => {
   ));
 };
 
-/** 标题自动编号开关：存储层统一用 'true' / 'false' 字符串 */
+/** 开关类字段：存储层统一用 'true' / 'false' 字符串 */
 const parseHeadingNumbering = (raw) => raw === 'true';
-const serializeHeadingNumbering = (value) => (value ? 'true' : 'false');
+const serializeBooleanFlag = (value) => (value ? 'true' : 'false');
+/** 速记「笔记汇总」面板默认展开：只有明确存过 'false' 才算收起 */
+const parseDailyNotesOpen = (raw) => raw !== 'false';
 
 /** 关闭 tab 后的空状态：停留在文档区，不选中任何文件 */
 const EMPTY_DOC_PATCH = {
@@ -282,6 +285,9 @@ const buildStateFromLocalStorage = () => {
   const headingNumbering = parseHeadingNumbering(
     window.localStorage.getItem(HEADING_NUMBERING_STORAGE_KEY),
   );
+  const dailyNotesOpen = parseDailyNotesOpen(
+    window.localStorage.getItem(DAILY_NOTES_OPEN_STORAGE_KEY),
+  );
   if (!knowledgeHomeMigrated) {
     window.localStorage.setItem(KNOWLEDGE_HOME_MIGRATION_KEY, 'done');
   }
@@ -301,6 +307,7 @@ const buildStateFromLocalStorage = () => {
       expandedFolderIds,
       sidebarSortMode,
       headingNumbering,
+      dailyNotesOpen,
       commentThreads,
       ...agentSessionsState,
     },
@@ -345,6 +352,7 @@ const buildStateFromDb = (raw) => {
       ),
       sidebarSortMode: normalizeTreeSortMode(raw.sidebar_sort_mode),
       headingNumbering: parseHeadingNumbering(raw.heading_numbering),
+      dailyNotesOpen: parseDailyNotesOpen(raw.daily_notes_open),
       commentThreads: normalizeCommentThreads(safeParseJSON(raw.comment_threads_json, {})),
       ...restoreAgentSessions(safeParseJSON(raw.agent_sessions_json, null)),
     },
@@ -382,7 +390,10 @@ const buildStateMap = (state) => {
     map.sidebar_sort_mode = normalizeTreeSortMode(state.sidebarSortMode);
   }
   if (state.headingNumbering != null) {
-    map.heading_numbering = serializeHeadingNumbering(state.headingNumbering);
+    map.heading_numbering = serializeBooleanFlag(state.headingNumbering);
+  }
+  if (state.dailyNotesOpen != null) {
+    map.daily_notes_open = serializeBooleanFlag(state.dailyNotesOpen);
   }
   if (state.commentThreads != null) {
     map.comment_threads_json = JSON.stringify(normalizeCommentThreads(state.commentThreads));
@@ -670,6 +681,7 @@ const editorStorage = {
           expandedFolderIds: [],
           sidebarSortMode: DEFAULT_TREE_SORT_MODE,
           headingNumbering: false,
+          dailyNotesOpen: true,
           commentThreads: {},
         },
         version: 0,
@@ -726,7 +738,13 @@ const editorStorage = {
         if (state.headingNumbering != null) {
           window.localStorage.setItem(
             HEADING_NUMBERING_STORAGE_KEY,
-            serializeHeadingNumbering(state.headingNumbering),
+            serializeBooleanFlag(state.headingNumbering),
+          );
+        }
+        if (state.dailyNotesOpen != null) {
+          window.localStorage.setItem(
+            DAILY_NOTES_OPEN_STORAGE_KEY,
+            serializeBooleanFlag(state.dailyNotesOpen),
           );
         }
         if (state.commentThreads != null) {
@@ -795,7 +813,13 @@ const editorStorage = {
       if (state.headingNumbering != null) {
         window.localStorage.setItem(
           HEADING_NUMBERING_STORAGE_KEY,
-          serializeHeadingNumbering(state.headingNumbering),
+          serializeBooleanFlag(state.headingNumbering),
+        );
+      }
+      if (state.dailyNotesOpen != null) {
+        window.localStorage.setItem(
+          DAILY_NOTES_OPEN_STORAGE_KEY,
+          serializeBooleanFlag(state.dailyNotesOpen),
         );
       }
       if (state.commentThreads != null) {
@@ -973,6 +997,7 @@ const persistConfig = {
       sidebarFileKind: state.sidebarFileKind,
       sidebarSortMode: state.sidebarSortMode,
       headingNumbering: state.headingNumbering,
+      dailyNotesOpen: state.dailyNotesOpen,
       commentThreads: state.commentThreads,
       agentSessions: state.agentSessions,
       activeAgentSessionId: state.activeAgentSessionId,
@@ -1396,6 +1421,8 @@ export const useEditorStore = create(
       sidebarSortMode: DEFAULT_TREE_SORT_MODE,
       /** 标题自动编号（只影响显示，不写进 Markdown） */
       headingNumbering: false,
+      /** 今日速记右侧「笔记汇总」是否展开（记住上次收起/展开） */
+      dailyNotesOpen: true,
       /** 正在等待 debounce 写入磁盘的文件 id */
       diskSavePendingFileIds: {},
       /** 磁盘外部变更触发编辑器重载（递增） */
@@ -1445,6 +1472,7 @@ export const useEditorStore = create(
 
       toggleTocCollapsed: () => set((s) => ({ tocCollapsed: !s.tocCollapsed })),
       toggleHeadingNumbering: () => set((s) => ({ headingNumbering: !s.headingNumbering })),
+      setDailyNotesOpen: (open) => set({ dailyNotesOpen: Boolean(open) }),
 
       setTheme: (theme) => set({ theme }),
       setCopyStyle: (copyStyle) => {
