@@ -443,12 +443,12 @@ pub fn db_is_migrated(state: State<'_, DatabaseState>) -> Result<bool, String> {
     let connection = open_read_connection(&state.path)?;
     let has_existing_state = connection
         .query_row(
-            "SELECT EXISTS(\
-               SELECT 1 FROM app_state WHERE key = ?1 AND value = ?2\
-             ) OR EXISTS(\
-               SELECT 1 FROM app_state WHERE key = 'workspace_json'\
-             ) OR EXISTS(\
-               SELECT 1 FROM documents LIMIT 1\
+            "SELECT EXISTS(
+               SELECT 1 FROM app_state WHERE key = ?1 AND value = ?2
+             ) OR EXISTS(
+               SELECT 1 FROM app_state WHERE key = 'workspace_json'
+             ) OR EXISTS(
+               SELECT 1 FROM documents LIMIT 1
              )",
             params![MIGRATION_STATE_KEY, MIGRATION_STATE_VALUE],
             |row| row.get::<_, bool>(0),
@@ -778,7 +778,7 @@ fn json_non_empty_array(node: &JsonMap<String, JsonValue>, key: &str) -> Option<
 fn sync_documents(transaction: &Transaction<'_>, documents: &[DocumentRow]) -> Result<(), String> {
     transaction
         .execute_batch(
-            "CREATE TEMP TABLE IF NOT EXISTS current_document_ids (id TEXT PRIMARY KEY);\
+            "CREATE TEMP TABLE IF NOT EXISTS current_document_ids (id TEXT PRIMARY KEY);
              DELETE FROM current_document_ids;",
         )
         .map_err(db_error)?;
@@ -815,13 +815,13 @@ fn sync_documents(transaction: &Transaction<'_>, documents: &[DocumentRow]) -> R
 
     transaction
         .execute_batch(
-            "DELETE FROM links\
-               WHERE NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = links.source_id)\
-                  OR NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = links.target_id);\
-             DELETE FROM versions\
-               WHERE NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = versions.document_id);\
-             DELETE FROM documents\
-               WHERE NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = documents.id);\
+            "DELETE FROM links
+               WHERE NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = links.source_id)
+                  OR NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = links.target_id);
+             DELETE FROM versions
+               WHERE NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = versions.document_id);
+             DELETE FROM documents
+               WHERE NOT EXISTS (SELECT 1 FROM current_document_ids d WHERE d.id = documents.id);
              DELETE FROM current_document_ids;",
         )
         .map_err(db_error)?;
@@ -895,7 +895,7 @@ fn save_versions(
         .map_err(db_error)?;
     let mut latest_statement = transaction
         .prepare(
-            "SELECT content, created_at FROM versions\
+            "SELECT content, created_at FROM versions
              WHERE document_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
         )
         .map_err(db_error)?;
@@ -975,12 +975,12 @@ pub fn db_search(state: State<'_, DatabaseState>, query: String) -> SearchRespon
         let connection = open_read_connection(&state.path)?;
         let mut statement = connection
             .prepare(
-                "SELECT d.id, d.name, d.type,\
-                        snippet(documents_fts, 1, '<mark>', '</mark>', '...', 32) AS excerpt\
-                 FROM documents_fts\
-                 JOIN documents d ON d.rowid = documents_fts.rowid\
-                 WHERE documents_fts MATCH ?1\
-                 ORDER BY rank\
+                "SELECT d.id, d.name, d.type,
+                        snippet(documents_fts, 1, '<mark>', '</mark>', '...', 32) AS excerpt
+                 FROM documents_fts
+                 JOIN documents d ON d.rowid = documents_fts.rowid
+                 WHERE documents_fts MATCH ?1
+                 ORDER BY rank
                  LIMIT ?2",
             )
             .map_err(db_error)?;
@@ -1036,8 +1036,8 @@ pub fn db_get_backlinks(
         let connection = open_read_connection(&state.path)?;
         let mut statement = connection
             .prepare(
-                "SELECT d.id, d.name, d.type\
-                 FROM links l JOIN documents d ON d.id = l.source_id\
+                "SELECT d.id, d.name, d.type
+                 FROM links l JOIN documents d ON d.id = l.source_id
                  WHERE l.target_id = ?1 ORDER BY d.name",
             )
             .map_err(db_error)?;
@@ -1080,8 +1080,8 @@ pub fn db_get_versions(
         let connection = open_read_connection(&state.path)?;
         let mut statement = connection
             .prepare(
-                "SELECT id, created_at, length(content) AS char_count\
-                 FROM versions WHERE document_id = ?1\
+                "SELECT id, created_at, length(content) AS char_count
+                 FROM versions WHERE document_id = ?1
                  ORDER BY created_at DESC, id DESC LIMIT ?2",
             )
             .map_err(db_error)?;
@@ -1169,7 +1169,7 @@ pub fn db_save_version_snapshot(
         let connection = open_write_connection(&state.path)?;
         let latest = connection
             .query_row(
-                "SELECT content FROM versions\
+                "SELECT content FROM versions
                  WHERE document_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
                 [doc_id.as_str()],
                 |row| row.get::<_, Option<String>>(0),
@@ -1210,7 +1210,7 @@ pub fn db_get_graph(state: State<'_, DatabaseState>) -> GraphResponse {
         let connection = open_read_connection(&state.path)?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, type, node_type, related_ids\
+                "SELECT id, name, type, node_type, related_ids
                  FROM documents WHERE type = 'file' LIMIT ?1",
             )
             .map_err(db_error)?;
@@ -1429,7 +1429,7 @@ fn import_legacy_database(
         copy_legacy_rows(&source, &transaction)?;
         transaction
             .execute(
-                "INSERT INTO app_state (key, value) VALUES (?1, ?2) \
+                "INSERT INTO app_state (key, value) VALUES (?1, ?2)
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 params![MIGRATION_STATE_KEY, MIGRATION_STATE_VALUE],
             )
@@ -1509,7 +1509,7 @@ fn validate_legacy_schema(connection: &Connection) -> Result<(), String> {
     let allowed: HashSet<&str> = ALLOWED_OBJECTS.iter().copied().collect();
     let mut statement = connection
         .prepare(
-            "SELECT type, name FROM sqlite_master\
+            "SELECT type, name FROM sqlite_master
              WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
         )
         .map_err(db_error)?;
@@ -1692,8 +1692,8 @@ fn copy_documents(source: &Connection, destination: &Transaction<'_>) -> Result<
         "NULL"
     };
     let sql = format!(
-        "SELECT id, parent_id, type, name, content, node_type, summary, aliases, tags,\
-                related_ids, created_at, updated_at, {disk_path}, {url}\
+        "SELECT id, parent_id, type, name, content, node_type, summary, aliases, tags,
+                related_ids, created_at, updated_at, {disk_path}, {url}
          FROM documents"
     );
     let mut source_statement = source.prepare(&sql).map_err(db_error)?;
@@ -1719,9 +1719,9 @@ fn copy_documents(source: &Connection, destination: &Transaction<'_>) -> Result<
         .map_err(db_error)?;
     let mut insert = destination
         .prepare(
-            "INSERT INTO documents (\
-               id, parent_id, type, name, content, node_type, summary, aliases, tags,\
-               related_ids, created_at, updated_at, disk_path, url\
+            "INSERT INTO documents (
+               id, parent_id, type, name, content, node_type, summary, aliases, tags,
+               related_ids, created_at, updated_at, disk_path, url
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         )
         .map_err(db_error)?;

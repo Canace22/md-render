@@ -63,6 +63,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 
 - 最终用户不需要 Node、pnpm 或 Rust；这些只属于开发和构建环境。
 - macOS 使用 WKWebView，Windows 使用 WebView2；Linux WebKitGTK 不是本阶段发布承诺。
+- Rust 多行 SQL 不要在相邻关键字之间用 `\` 续行；它会同时吃掉换行和下一行缩进，把 `versions` + `WHERE` 拼成 `versionsWHERE`。保留真实换行或显式空格，并在修复时扫描同文件的所有同类 SQL。
 - 不把“窗口打开”“前端 build 通过”当成数据迁移成功；必须观察真实 command、真实文件副本或真实数据库结果。
 - 不直接复制整个 WebView profile。只迁移明确列出的设置，并为每项提供默认值和失败回退。
 - 不因 identifier 名字含 `preview` 就迁移、清理或重建已经在用的数据目录。是否正式由产品身份、签名和发布链路决定，不由 identifier 文案决定。

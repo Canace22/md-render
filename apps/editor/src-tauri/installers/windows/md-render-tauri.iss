@@ -14,6 +14,10 @@
   #error WebView2BootstrapperPath must point to the Microsoft Evergreen Bootstrapper
 #endif
 
+#ifndef ChineseLanguageFile
+  #error ChineseLanguageFile must point to the Inno Setup Simplified Chinese translation
+#endif
+
 #ifndef OutputDir
   #define OutputDir "..\..\target\release\bundle\inno"
 #endif
@@ -56,7 +60,7 @@ SignedUninstaller=yes
 #endif
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "{#ChineseLanguageFile}"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
