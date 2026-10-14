@@ -1,7 +1,7 @@
 {
   "name": "md-render-workspace",
   "private": true,
-  "version": "1.0.20",
+  "version": "1.0.21",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "pnpm --filter @md-render/editor dev",
@@ -15,6 +15,12 @@
     "electron:build": "pnpm --filter @md-render/editor electron:build",
     "electron:build:win": "pnpm --filter @md-render/editor electron:build:win",
     "electron:pack": "pnpm --filter @md-render/editor electron:pack",
+    "tauri:dev": "pnpm --filter @md-render/editor tauri:dev",
+    "tauri:build": "pnpm --filter @md-render/editor tauri:build",
+    "tauri:build:mac": "pnpm --filter @md-render/editor tauri:build:mac",
+    "tauri:build:mac:universal": "pnpm --filter @md-render/editor tauri:build:mac:universal",
+    "tauri:build:win": "pnpm --filter @md-render/editor tauri:build:win",
+    "tauri:inno:win": "pnpm --filter @md-render/editor tauri:inno:win",
     "release:tag": "bash scripts/release-tag.sh"
   }
 }

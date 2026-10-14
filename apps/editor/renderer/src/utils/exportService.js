@@ -1,8 +1,14 @@
 /**
  * 文档导出服务
  * 封装 Markdown → HTML / PDF / DOCX 导出逻辑
- * 通过 IPC 调用主进程完成文件保存
+ * 桌面壳通过系统保存对话框落盘，Web 保留浏览器下载回退
  */
+
+import {
+  exportPdfFile,
+  saveExportFile,
+  shouldOfferPdfExport,
+} from '../services/desktopShellBridge.js';
 
 // ─── 常量 ────────────────────────────────────────────────────────────────────
 
@@ -11,7 +17,7 @@ const EXPORT_FORMATS = [
   { key: 'html', label: 'HTML (.html)', ext: 'html' },
   { key: 'pdf', label: 'PDF (.pdf)', ext: 'pdf' },
   { key: 'docx', label: 'Word (.docx)', ext: 'docx' },
-];
+].filter(({ key }) => key !== 'pdf' || shouldOfferPdfExport());
 
 export { EXPORT_FORMATS };
 
@@ -62,20 +68,12 @@ const escapeHtml = (str) =>
  */
 export async function exportToHtml(html, title, filename) {
   const fullHtml = wrapHtmlDocument(html, title);
-
-  // Electron 环境 → 使用 save dialog
-  if (window.electronAPI?.exportSaveFile) {
-    return window.electronAPI.exportSaveFile({
-      defaultName: `${filename}.html`,
-      filters: [{ name: 'HTML', extensions: ['html', 'htm'] }],
-      content: fullHtml,
-      encoding: 'utf8',
-    });
-  }
-
-  // 浏览器环境 → 下载
-  downloadBlob(fullHtml, `${filename}.html`, 'text/html;charset=utf-8');
-  return { canceled: false };
+  return saveExportFile({
+    defaultName: `${filename}.html`,
+    filters: [{ name: 'HTML', extensions: ['html', 'htm'] }],
+    content: fullHtml,
+    encoding: 'utf8',
+  });
 }
 
 // ─── 导出为 PDF ─────────────────────────────────────────────────────────────
@@ -85,13 +83,7 @@ export async function exportToHtml(html, title, filename) {
  */
 export async function exportToPdf(html, title, filename) {
   const fullHtml = wrapHtmlDocument(html, title);
-
-  if (!window.electronAPI?.exportToPdf) {
-    alert('PDF 导出仅在桌面版应用中可用');
-    return { canceled: true };
-  }
-
-  return window.electronAPI.exportToPdf({
+  return exportPdfFile({
     html: fullHtml,
     defaultName: `${filename}.pdf`,
   });
@@ -114,21 +106,14 @@ export async function exportToDocx(html, title, filename) {
       pageNumber: true,
     });
 
-    // Electron 环境 → 使用 save dialog
-    if (window.electronAPI?.exportSaveFile) {
-      const arrayBuffer = await docxBlob.arrayBuffer();
-      const base64 = arrayBufferToBase64(arrayBuffer);
-      return window.electronAPI.exportSaveFile({
-        defaultName: `${filename}.docx`,
-        filters: [{ name: 'Word', extensions: ['docx'] }],
-        content: base64,
-        encoding: 'base64',
-      });
-    }
-
-    // 浏览器环境 → 下载
-    downloadBlobObject(docxBlob, `${filename}.docx`);
-    return { canceled: false };
+    const arrayBuffer = await docxBlob.arrayBuffer();
+    const base64 = arrayBufferToBase64(arrayBuffer);
+    return saveExportFile({
+      defaultName: `${filename}.docx`,
+      filters: [{ name: 'Word', extensions: ['docx'] }],
+      content: base64,
+      encoding: 'base64',
+    });
   } catch (error) {
     console.error('DOCX 导出失败:', error);
     alert('DOCX 导出失败：' + (error?.message || '未知错误'));
@@ -139,8 +124,12 @@ export async function exportToDocx(html, title, filename) {
 // ─── 导出为 Markdown ────────────────────────────────────────────────────────
 
 export function exportToMd(markdownText, filename) {
-  downloadBlob(markdownText, `${filename}.md`, 'text/markdown;charset=utf-8');
-  return { canceled: false };
+  return saveExportFile({
+    defaultName: `${filename}.md`,
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    content: markdownText,
+    encoding: 'utf8',
+  });
 }
 
 // ─── 统一导出入口 ────────────────────────────────────────────────────────────
@@ -169,20 +158,6 @@ export async function exportDocument(format, { markdown, html, title, filename }
 }
 
 // ─── 内部工具 ────────────────────────────────────────────────────────────────
-
-function downloadBlob(text, filename, type) {
-  const blob = new Blob([text], { type });
-  downloadBlobObject(blob, filename);
-}
-
-function downloadBlobObject(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);

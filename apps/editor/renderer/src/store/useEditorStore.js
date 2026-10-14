@@ -34,8 +34,8 @@ import {
   diskNodeToBuiltin,
   syncProjectsChildrenFromDisk,
   replaceLocalProjectMount,
-  findLocalProjectRoot,
   remapDiskNodeAfterRename,
+  remapDiskCommentThreads,
   findNodeIdByRelativePath,
   normalizeNodeType,
   normalizeSidebarFileKind,
@@ -56,6 +56,14 @@ import {
 import { TEMPLATES } from '../utils/wechatTemplates.js';
 import { normalizeMarkdown } from '../utils/markdownUtils.js';
 import { getDiskFileContent } from '../utils/localProjectConflict.js';
+import {
+  assertNoLocalMediaCapabilityUrlsInBlockNote,
+  assertNoLocalMediaCapabilityUrlsInMarkdown,
+  assertNoLocalMediaCapabilityUrlsInObject,
+  assertNoTauriMountTokens,
+  rewriteBlockNoteImagesForDisk,
+  toDiskImageSrc,
+} from '../utils/localMediaMarkdown.js';
 import {
   createLocalProjectFileOnDisk,
   ensureMdRenderWorkspace,
@@ -83,8 +91,21 @@ import { createCommentSlice } from './slices/commentSlice.js';
 import { normalizeCommentThreads } from '../utils/commentThreads.js';
 import { restoreAgentSessions, serializeAgentSessions } from '../core/agent/sessionUtils.js';
 import { EDITOR_STATE_KEYS } from '@shared/stateKeys.js';
+import { getDesktopRuntimeKind } from '../services/desktopBridge.js';
+import {
+  databaseIsMigrated,
+  databaseLoad,
+  databaseMigrate,
+  databaseSave,
+  hasDatabaseBridge,
+} from '../services/databaseBridge.js';
+import { isDesktopMutationFrozen } from '../services/desktopMutationBarrier.js';
 
 const STORAGE_KEY = 'md-renderer-workspace';
+const TAURI_PROJECT_MOUNT_PREFIX = 'tauri-';
+const OPAQUE_LOCAL_PROJECT_IDENTITY_PREFIX = 'local-project:v1:';
+const LOCAL_PROJECT_REAUTHORIZATION_REQUIRED = 'reauthorization-required';
+const sessionLocalProjectSnapshots = new Map();
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
 const COPY_STYLE_STORAGE_KEY = 'md-renderer-copy-style';
@@ -100,9 +121,26 @@ const SIDEBAR_EXPANDED_FOLDERS_STORAGE_KEY = 'md-renderer-sidebar-expanded-folde
 const COMMENT_THREADS_STORAGE_KEY = 'md-renderer-comment-threads';
 const AGENT_SESSIONS_STORAGE_KEY = 'md-renderer-agent-sessions';
 const HEADING_NUMBERING_STORAGE_KEY = 'md-renderer-heading-numbering';
-const ELECTRON_DB_SAVE_DEBOUNCE_MS = 320;
+const DESKTOP_DB_SAVE_DEBOUNCE_MS = 320;
 const MARKDOWN_FILE_EXTENSION = '.md';
 export const RENDERER_STATE_KEYS = EDITOR_STATE_KEYS;
+
+const createLocalProjectNodeId = (projectIdentity, suffix = '') => {
+  return `project:${projectIdentity}${suffix}`;
+};
+
+const createOpaqueLocalProjectIdentity = () => {
+  const opaqueId = globalThis.crypto?.randomUUID?.() ?? createId('mount');
+  return `${OPAQUE_LOCAL_PROJECT_IDENTITY_PREFIX}${opaqueId}`;
+};
+
+const remapLocalProjectRelationIds = (values, mountId, projectIdentity) => {
+  const sourcePrefix = `project:${mountId}:file:`;
+  const targetPrefix = `project:${projectIdentity}:file:`;
+  return sanitizeStringList(values).map((value) => (
+    value.startsWith(sourcePrefix) ? `${targetPrefix}${value.slice(sourcePrefix.length)}` : value
+  ));
+};
 
 /** 标题自动编号开关：存储层统一用 'true' / 'false' 字符串 */
 const parseHeadingNumbering = (raw) => raw === 'true';
@@ -117,9 +155,43 @@ const EMPTY_DOC_PATCH = {
   surface: 'paper',
 };
 
-/** 检测是否在 Electron 环境中且 SQLite 数据库 IPC 可用 */
-const hasElectronDb = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.db === 'object';
+const markReadOnlyTree = (node, access) => ({
+  ...node,
+  readOnly: true,
+  access,
+  ...(Array.isArray(node.children)
+    ? { children: node.children.map((child) => markReadOnlyTree(child, access)) }
+    : {}),
+});
+
+const protectImportedLocalProjectMounts = (workspace) => {
+  if (
+    getDesktopRuntimeKind() !== 'tauri'
+    || !workspace
+    || !Array.isArray(workspace.children)
+  ) return workspace;
+
+  return {
+    ...workspace,
+    children: workspace.children.map((node) => {
+      if (!node.localProjectRoot) return node;
+      const mountId = String(node.projectMountId ?? node.projectRootPath ?? '');
+      if (
+        mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)
+        && sessionLocalProjectSnapshots.has(mountId)
+      ) return node;
+      return markReadOnlyTree(node, LOCAL_PROJECT_REAUTHORIZATION_REQUIRED);
+    }),
+  };
+};
+
+const markStateReadOnlyForRecovery = (persistedState) => ({
+  ...persistedState,
+  state: {
+    ...persistedState.state,
+    workspace: markReadOnlyTree(persistedState.state.workspace, 'database-recovery'),
+  },
+});
 
 const safeParseJSON = (value, fallback) => {
   if (!value) return fallback;
@@ -176,7 +248,8 @@ const buildStateFromLocalStorage = () => {
 
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-  const ws = ensureFileTimestamps(normalizedWorkspace);
+  const protectedWorkspace = protectImportedLocalProjectMounts(normalizedWorkspace);
+  const ws = ensureFileTimestamps(protectedWorkspace);
   if (ws !== parsedWorkspace) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
   }
@@ -240,7 +313,8 @@ const buildStateFromDb = (raw) => {
   const workspaceRaw = raw.workspace_json ?? null;
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-  const ws = ensureFileTimestamps(normalizedWorkspace);
+  const protectedWorkspace = protectImportedLocalProjectMounts(normalizedWorkspace);
+  const ws = ensureFileTimestamps(protectedWorkspace);
   const selId = raw.selected_id || DEFAULT_FILE_ID;
   const selectedNode = findNodeById(ws, selId);
   const markdown = selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';
@@ -321,60 +395,239 @@ const buildStateMap = (state) => {
   return map;
 };
 
-let electronSaveTimer = null;
-let pendingElectronStateMap = null;
-let pendingElectronWorkspaceJson = null;
+let desktopSaveTimer = null;
+let pendingDesktopSave = null;
+let activeDesktopSaveOperation = null;
+let desktopSaveError = null;
+let desktopPersistencePaused = false;
+let desktopRecoveryMode = false;
 
-const flushElectronStateSave = () => {
-  const stateMap = pendingElectronStateMap;
-  const workspaceJson = pendingElectronWorkspaceJson;
+const DESKTOP_PERSISTENCE_READY = Object.freeze({ status: 'ready', message: '' });
+let desktopPersistenceStatus = DESKTOP_PERSISTENCE_READY;
+const desktopPersistenceListeners = new Set();
 
-  pendingElectronStateMap = null;
-  pendingElectronWorkspaceJson = null;
+export const getDesktopPersistenceStatus = () => desktopPersistenceStatus;
 
-  if (!stateMap || !hasElectronDb()) return;
+export const subscribeDesktopPersistenceStatus = (listener) => {
+  desktopPersistenceListeners.add(listener);
+  return () => desktopPersistenceListeners.delete(listener);
+};
 
-  window.electronAPI.db.save(stateMap, workspaceJson).catch((e) => {
-    console.error('[store] SQLite 保存失败:', e);
+const publishDesktopPersistenceStatus = (nextStatus) => {
+  desktopPersistenceStatus = nextStatus;
+  desktopPersistenceListeners.forEach((listener) => listener());
+};
+
+const mergeDesktopSavePayloads = (older, newer) => {
+  if (!older) return newer;
+  if (!newer) return older;
+  return {
+    stateMap: {
+      ...older.stateMap,
+      ...newer.stateMap,
+    },
+    workspaceJson: typeof newer.workspaceJson === 'string'
+      ? newer.workspaceJson
+      : older.workspaceJson,
+  };
+};
+
+const clearDesktopSaveTimer = () => {
+  if (!desktopSaveTimer) return;
+  window.clearTimeout(desktopSaveTimer);
+  desktopSaveTimer = null;
+};
+
+const enterDesktopRecoveryMode = (message, error) => {
+  desktopRecoveryMode = true;
+  desktopPersistencePaused = true;
+  clearDesktopSaveTimer();
+  const detail = error?.message || String(error ?? '');
+  publishDesktopPersistenceStatus({
+    status: 'recovery',
+    message: detail ? `${message}：${detail}` : message,
   });
 };
 
-const scheduleElectronStateSave = (stateMap, workspaceJson) => {
-  if (!stateMap || typeof stateMap !== 'object' || !hasElectronDb()) return;
+const flushDesktopStateSave = ({ retry = false } = {}) => {
+  if (activeDesktopSaveOperation) return activeDesktopSaveOperation;
+  if (
+    desktopPersistencePaused
+    || desktopRecoveryMode
+    || !pendingDesktopSave
+    || !hasDatabaseBridge()
+    || (desktopSaveError && !retry)
+  ) return Promise.resolve(false);
 
-  pendingElectronStateMap = {
-    ...(pendingElectronStateMap ?? {}),
-    ...stateMap,
-  };
-  pendingElectronWorkspaceJson = workspaceJson;
-
-  if (electronSaveTimer) {
-    window.clearTimeout(electronSaveTimer);
+  if (retry) {
+    desktopSaveError = null;
+    publishDesktopPersistenceStatus({ status: 'retrying', message: '正在重试保存…' });
   }
 
-  electronSaveTimer = window.setTimeout(() => {
-    electronSaveTimer = null;
-    flushElectronStateSave();
-  }, ELECTRON_DB_SAVE_DEBOUNCE_MS);
+  activeDesktopSaveOperation = (async () => {
+    while (pendingDesktopSave && !desktopPersistencePaused && !desktopRecoveryMode) {
+      const payload = pendingDesktopSave;
+      pendingDesktopSave = null;
+      try {
+        await databaseSave(payload.stateMap, payload.workspaceJson);
+      } catch (error) {
+        pendingDesktopSave = mergeDesktopSavePayloads(payload, pendingDesktopSave);
+        desktopSaveError = error;
+        publishDesktopPersistenceStatus({
+          status: 'save-error',
+          message: error?.message || 'SQLite 数据库保存失败',
+        });
+        console.error('[store] SQLite 保存失败:', error);
+        return false;
+      }
+    }
+
+    if (!pendingDesktopSave && !desktopRecoveryMode) {
+      publishDesktopPersistenceStatus(DESKTOP_PERSISTENCE_READY);
+    }
+    return true;
+  })().finally(() => {
+    activeDesktopSaveOperation = null;
+  });
+
+  return activeDesktopSaveOperation;
 };
 
-/** 兼容现有 localStorage 多 key 的持久化存储，Electron 环境下切换到 SQLite */
+const scheduleDesktopStateSave = (stateMap, workspaceJson) => {
+  if (
+    !stateMap
+    || typeof stateMap !== 'object'
+    || !hasDatabaseBridge()
+  ) return;
+
+  pendingDesktopSave = mergeDesktopSavePayloads(pendingDesktopSave, {
+    stateMap,
+    workspaceJson,
+  });
+
+  if (
+    desktopPersistencePaused
+    || desktopRecoveryMode
+    || desktopSaveError
+    || activeDesktopSaveOperation
+  ) return;
+
+  clearDesktopSaveTimer();
+  desktopSaveTimer = window.setTimeout(() => {
+    desktopSaveTimer = null;
+    flushDesktopStateSave();
+  }, DESKTOP_DB_SAVE_DEBOUNCE_MS);
+};
+
+export const flushDesktopStatePersistence = async () => {
+  if (!hasDatabaseBridge()) return true;
+
+  clearDesktopSaveTimer();
+  if (activeDesktopSaveOperation) {
+    await activeDesktopSaveOperation;
+  }
+
+  if (desktopSaveError) throw desktopSaveError;
+  if (desktopPersistencePaused || desktopRecoveryMode) {
+    throw new Error('数据库写入已暂停，暂时不能安全退出。');
+  }
+  if (!pendingDesktopSave) return true;
+
+  while (pendingDesktopSave) {
+    const saved = await flushDesktopStateSave();
+    if (!saved || desktopSaveError) {
+      throw desktopSaveError || new Error('SQLite 数据库保存失败');
+    }
+  }
+  return true;
+};
+
+export const pauseDesktopStatePersistence = async () => {
+  desktopPersistencePaused = true;
+  clearDesktopSaveTimer();
+  if (activeDesktopSaveOperation) {
+    await activeDesktopSaveOperation;
+  }
+  if (desktopSaveError) {
+    desktopPersistencePaused = desktopRecoveryMode;
+    throw desktopSaveError;
+  }
+
+  while (pendingDesktopSave) {
+    const payload = pendingDesktopSave;
+    pendingDesktopSave = null;
+    try {
+      await databaseSave(payload.stateMap, payload.workspaceJson);
+    } catch (error) {
+      pendingDesktopSave = mergeDesktopSavePayloads(payload, pendingDesktopSave);
+      desktopSaveError = error;
+      publishDesktopPersistenceStatus({
+        status: 'save-error',
+        message: error?.message || 'SQLite 数据库保存失败',
+      });
+      desktopPersistencePaused = desktopRecoveryMode;
+      throw error;
+    }
+  }
+
+  return null;
+};
+
+export const resumeDesktopStatePersistence = (pending) => {
+  pendingDesktopSave = mergeDesktopSavePayloads(pending, pendingDesktopSave);
+  if (desktopRecoveryMode) return;
+  desktopPersistencePaused = false;
+  if (!pendingDesktopSave || desktopSaveError) return;
+  clearDesktopSaveTimer();
+  desktopSaveTimer = window.setTimeout(() => {
+    desktopSaveTimer = null;
+    flushDesktopStateSave();
+  }, DESKTOP_DB_SAVE_DEBOUNCE_MS);
+};
+
+export const retryDesktopStatePersistence = async () => {
+  if (desktopRecoveryMode) {
+    throw new Error('数据库处于只读恢复模式，请先重新加载或导入数据。');
+  }
+  if (desktopPersistencePaused) {
+    throw new Error('数据库写入已暂停。');
+  }
+  if (activeDesktopSaveOperation) {
+    await activeDesktopSaveOperation;
+  }
+  if (!pendingDesktopSave) {
+    desktopSaveError = null;
+    publishDesktopPersistenceStatus(DESKTOP_PERSISTENCE_READY);
+    return true;
+  }
+  const saved = await flushDesktopStateSave({ retry: true });
+  if (!saved) throw desktopSaveError || new Error('数据库保存失败');
+  return true;
+};
+
+/** 兼容现有 localStorage 多 key 的持久化存储，桌面端切换到各自的 SQLite */
 const editorStorage = {
   getItem: async () => {
     if (typeof window === 'undefined') return null;
 
-    if (hasElectronDb()) {
+    if (hasDatabaseBridge()) {
       try {
-        const migrated = await window.electronAPI.db.isMigrated();
+        const migrated = await databaseIsMigrated();
         if (!migrated) {
           // 首次启动：从 localStorage 迁移数据到 SQLite
           const localState = buildStateFromLocalStorage();
           const stateMap = buildStateMap(localState.state);
-          await window.electronAPI.db.migrate(stateMap);
+          try {
+            await databaseMigrate(stateMap);
+          } catch (error) {
+            enterDesktopRecoveryMode('首次数据迁移失败，已停止写入数据库', error);
+            console.error('[store] SQLite 首次迁移失败，进入只读恢复模式:', error);
+            return markStateReadOnlyForRecovery(localState);
+          }
           return localState;
         }
         // 已迁移：从 SQLite 加载
-        const res = await window.electronAPI.db.load();
+        const res = await databaseLoad();
         if (res.ok && res.state && res.state.workspace_json) {
           const localFallbackState = buildStateFromLocalStorage();
           const localFallbackMap = buildStateMap(localFallbackState.state);
@@ -383,11 +636,16 @@ const editorStorage = {
             ...res.state,
           });
         }
-        // SQLite 无数据时回退到 localStorage
-        return buildStateFromLocalStorage();
+        const reason = res?.ok === false
+          ? (res.error || '数据库返回加载失败')
+          : '已识别为现有数据库，但缺少 workspace_json';
+        enterDesktopRecoveryMode('无法安全加载已有数据库，已停止写入', new Error(reason));
+        console.error('[store] SQLite 数据不完整，进入只读恢复模式:', reason);
+        return markStateReadOnlyForRecovery(buildStateFromLocalStorage());
       } catch (e) {
-        console.error('[store] SQLite 加载失败，回退到 localStorage:', e);
-        return buildStateFromLocalStorage();
+        enterDesktopRecoveryMode('SQLite 加载失败，已停止写入数据库', e);
+        console.error('[store] SQLite 加载失败，进入只读恢复模式:', e);
+        return markStateReadOnlyForRecovery(buildStateFromLocalStorage());
       }
     }
 
@@ -422,11 +680,11 @@ const editorStorage = {
     if (typeof window === 'undefined') return;
     const state = value?.state ?? value;
 
-    if (hasElectronDb()) {
+    if (hasDatabaseBridge()) {
       try {
         const stateMap = buildStateMap(state);
         const workspaceJson = stateMap.workspace_json ?? null;
-        scheduleElectronStateSave(stateMap, workspaceJson);
+        scheduleDesktopStateSave(stateMap, workspaceJson);
       } catch (e) {
         console.error('[store] SQLite 保存异常:', e);
       }
@@ -559,41 +817,197 @@ const editorStorage = {
   removeItem: () => {},
 };
 
+const assertPersistentLocalProjectSnapshotSafe = (root) => {
+  assertNoLocalMediaCapabilityUrlsInObject(root);
+  const validateNode = (node) => {
+    assertNoTauriMountTokens([
+      node.id,
+      node.projectRootPath,
+      node.projectMountId,
+      node.projectIdentity,
+      node.relatedIds,
+      node.sourceMaterialIds,
+    ]);
+    if (typeof node.content === 'string') {
+      assertNoLocalMediaCapabilityUrlsInBlockNote(node.content);
+    }
+    if (typeof node.diskContentSnapshot === 'string') {
+      assertNoLocalMediaCapabilityUrlsInMarkdown(node.diskContentSnapshot);
+    }
+    if (typeof node.frontmatterSource === 'string') {
+      assertNoLocalMediaCapabilityUrlsInMarkdown(node.frontmatterSource);
+    }
+    if (Array.isArray(node.children)) node.children.forEach(validateNode);
+  };
+  validateNode(root);
+  return root;
+};
+
+const buildPersistentLocalProjectSnapshot = (liveRoot, snapshot) => {
+  const projectIdentity = liveRoot.projectIdentity ?? snapshot.projectRootPath;
+  if (!projectIdentity) return snapshot;
+
+  const buildNode = (liveNode, isRoot = false) => {
+    const relativePath = isRoot ? '' : (liveNode.relativePath ?? '');
+    const suffix = isRoot ? '' : `:${liveNode.type}:${relativePath || liveNode.name}`;
+    const persistentNode = {
+      ...liveNode,
+      id: createLocalProjectNodeId(projectIdentity, suffix),
+      projectRootPath: projectIdentity,
+      localProjectRoot: isRoot,
+      readOnly: true,
+      access: LOCAL_PROJECT_REAUTHORIZATION_REQUIRED,
+      relatedIds: remapLocalProjectRelationIds(
+        liveNode.relatedIds,
+        liveNode.projectMountId,
+        projectIdentity,
+      ),
+      sourceMaterialIds: remapLocalProjectRelationIds(
+        liveNode.sourceMaterialIds,
+        liveNode.projectMountId,
+        projectIdentity,
+      ),
+      ...(typeof liveNode.cover === 'string'
+        ? {
+            cover: toDiskImageSrc(
+              liveNode.cover,
+              liveNode.projectRootPath,
+              liveNode.relativePath,
+            ),
+          }
+        : {}),
+      ...(liveNode.frontmatter && typeof liveNode.frontmatter === 'object'
+        ? {
+            frontmatter: {
+              ...liveNode.frontmatter,
+              ...(typeof liveNode.frontmatter.cover === 'string'
+                ? {
+                    cover: toDiskImageSrc(
+                      liveNode.frontmatter.cover,
+                      liveNode.projectRootPath,
+                      liveNode.relativePath,
+                    ),
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(liveNode.type === 'file' && typeof liveNode.content === 'string'
+        ? {
+            content: rewriteBlockNoteImagesForDisk(liveNode.content, {
+              projectRootPath: liveNode.projectRootPath,
+              noteRelativePath: liveNode.relativePath,
+            }),
+          }
+        : {}),
+    };
+    delete persistentNode.projectIdentity;
+    delete persistentNode.projectMountId;
+    if (isRoot) {
+      const persistentMountId = String(snapshot.projectMountId ?? '');
+      if (persistentMountId && !persistentMountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)) {
+        persistentNode.projectMountId = snapshot.projectMountId;
+      }
+    }
+    if (Array.isArray(liveNode.children)) {
+      persistentNode.children = liveNode.children.map((child) => buildNode(child));
+    } else {
+      delete persistentNode.children;
+    }
+    return persistentNode;
+  };
+
+  return assertPersistentLocalProjectSnapshotSafe(buildNode(liveRoot, true));
+};
+
+const stripSessionLocalProjectMounts = (workspace) => {
+  if (!workspace || !Array.isArray(workspace.children)) return workspace;
+  const children = workspace.children.flatMap((node) => {
+    if (!node.localProjectRoot) return [node];
+    const mountId = String(node.projectMountId ?? '');
+    if (!mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)) return [node];
+    const snapshot = sessionLocalProjectSnapshots.get(mountId);
+    if (!snapshot) {
+      return [markReadOnlyTree(node, LOCAL_PROJECT_REAUTHORIZATION_REQUIRED)];
+    }
+    const nextSnapshot = buildPersistentLocalProjectSnapshot(node, snapshot);
+    sessionLocalProjectSnapshots.set(mountId, nextSnapshot);
+    return [nextSnapshot];
+  });
+  const unchanged = children.length === workspace.children.length
+    && children.every((node, index) => node === workspace.children[index]);
+  return unchanged ? workspace : { ...workspace, children };
+};
+
+const collectNodeIds = (node, ids = new Set()) => {
+  if (!node) return ids;
+  ids.add(node.id);
+  (node.children ?? []).forEach((child) => collectNodeIds(child, ids));
+  return ids;
+};
+
+const buildPersistedWorkspaceState = (state) => {
+  const workspace = stripSessionLocalProjectMounts(state.workspace);
+  const selectedId = findNodeById(workspace, state.selectedId)
+    ? state.selectedId
+    : (findFirstFileId(workspace) ?? workspace?.id ?? DEFAULT_FILE_ID);
+  const expandedFolderIds = normalizeExpandedFolderIds(state.expandedFolderIds)
+    .filter((folderId) => Boolean(findNodeById(workspace, folderId)));
+  return { workspace, selectedId, expandedFolderIds };
+};
+
 const persistConfig = {
   name: 'md-renderer-editor',
   storage: editorStorage,
-  partialize: (state) => ({
-    workspace: state.workspace,
-    selectedId: state.selectedId,
-    theme: state.theme,
-    copyStyle: state.copyStyle,
-    storageMode: state.storageMode,
-    projectRootPath: state.projectRootPath,
-    surface: state.surface,
-    publishingPlatforms: state.publishingPlatforms,
-    dailyWorkspace: state.dailyWorkspace,
-    sidebarFileKind: state.sidebarFileKind,
-    expandedFolderIds: state.expandedFolderIds,
-    sidebarSortMode: state.sidebarSortMode,
-    headingNumbering: state.headingNumbering,
-    commentThreads: state.commentThreads,
-    agentSessions: state.agentSessions,
-    activeAgentSessionId: state.activeAgentSessionId,
-  }),
+  partialize: (state) => {
+    const persistedWorkspaceState = buildPersistedWorkspaceState(state);
+    return {
+      ...persistedWorkspaceState,
+      theme: state.theme,
+      copyStyle: state.copyStyle,
+      storageMode: state.storageMode,
+      projectRootPath: state.projectRootPath,
+      surface: state.surface,
+      publishingPlatforms: state.publishingPlatforms,
+      dailyWorkspace: state.dailyWorkspace,
+      sidebarFileKind: state.sidebarFileKind,
+      sidebarSortMode: state.sidebarSortMode,
+      headingNumbering: state.headingNumbering,
+      commentThreads: state.commentThreads,
+      agentSessions: state.agentSessions,
+      activeAgentSessionId: state.activeAgentSessionId,
+    };
+  },
 };
 
 const persistWorkspace = (workspace) => {
   if (typeof window === 'undefined') return;
-  if (hasElectronDb()) {
-    const workspaceJson = JSON.stringify(workspace);
-    scheduleElectronStateSave({ workspace_json: workspaceJson }, workspaceJson);
+  if (isDesktopMutationFrozen()) return;
+  const persistedWorkspace = stripSessionLocalProjectMounts(workspace);
+  if (hasDatabaseBridge()) {
+    const workspaceJson = JSON.stringify(persistedWorkspace);
+    scheduleDesktopStateSave({ workspace_json: workspaceJson }, workspaceJson);
     return;
   }
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedWorkspace));
   } catch (err) {
     console.error('保存工作区失败:', err);
   }
+};
+
+const withDesktopMutationBarrier = (createState) => (set, get, api) => {
+  const guardedSet = (...args) => {
+    if (isDesktopMutationFrozen()) return undefined;
+    return set(...args);
+  };
+  const state = createState(guardedSet, get, api);
+  return Object.fromEntries(Object.entries(state).map(([key, value]) => [
+    key,
+    typeof value === 'function'
+      ? (...args) => (isDesktopMutationFrozen() ? false : value(...args))
+      : value,
+  ]));
 };
 
 const normalizeCanvasPosition = (value, fallback = 0) => {
@@ -800,6 +1214,7 @@ const buildLocalProjectMetadataPayload = (node) => {
 };
 
 const saveLocalProjectMetadataAndWait = async (node, customOverride = null) => {
+  if (node?.readOnly) return null;
   const payload = buildLocalProjectMetadataPayload(node);
   if (!payload) return null;
   if (customOverride) {
@@ -854,23 +1269,62 @@ const resolveVaultCreateTarget = (workspace, nodeId, docsOnFiles) => {
   return builtinFolder?.id ?? nodeId;
 };
 
-const createLocalProjectNodeId = (projectRootPath, suffix = '') => {
-  return `project:${projectRootPath}${suffix}`;
-};
-
-const markLocalProjectNode = (node, projectRootPath, isRoot = false) => {
+const markLocalProjectNode = (node, projectRootPath, isRoot = false, mountOptions = {}) => {
   if (!node) return null;
   const relativePath = isRoot ? '' : (node.relativePath ?? '');
   const suffix = isRoot ? '' : `:${node.type}:${relativePath || node.name}`;
+  const projectIdentity = mountOptions.projectIdentity ?? projectRootPath;
+  const projectMountId = mountOptions.projectMountId ?? node.projectMountId ?? '';
+  const readOnly = Boolean(mountOptions.readOnly || node.readOnly);
+  const access = mountOptions.access ?? node.access ?? '';
+  const projectRevision = mountOptions.projectRevision ?? node.projectRevision ?? '';
   const children = Array.isArray(node.children)
-    ? node.children.map((child) => markLocalProjectNode(child, projectRootPath, false)).filter(Boolean)
+    ? node.children
+      .map((child) => markLocalProjectNode(child, projectRootPath, false, {
+        projectIdentity,
+        projectMountId,
+        readOnly,
+        access,
+      }))
+      .filter(Boolean)
     : undefined;
 
   return {
     ...node,
-    id: createLocalProjectNodeId(projectRootPath, suffix),
+    id: createLocalProjectNodeId(projectIdentity, suffix),
     projectRootPath,
     localProjectRoot: isRoot,
+    relatedIds: remapLocalProjectRelationIds(node.relatedIds, projectMountId, projectIdentity),
+    sourceMaterialIds: remapLocalProjectRelationIds(
+      node.sourceMaterialIds,
+      projectMountId,
+      projectIdentity,
+    ),
+    ...(projectIdentity !== projectRootPath ? { projectIdentity } : {}),
+    ...(projectMountId ? { projectMountId } : {}),
+    ...(readOnly ? { readOnly: true } : {}),
+    ...(access ? { access } : {}),
+    ...(isRoot && projectRevision ? { projectRevision } : {}),
+    ...(children ? { children } : {}),
+  };
+};
+
+const inheritLocalProjectMount = (node, parentFolder) => {
+  if (!node || !parentFolder?.projectMountId) return node;
+  const projectIdentity = parentFolder.projectIdentity ?? parentFolder.projectRootPath;
+  const relativePath = node.relativePath ?? '';
+  const suffix = node.localProjectRoot ? '' : `:${node.type}:${relativePath || node.name}`;
+  const children = Array.isArray(node.children)
+    ? node.children.map((child) => inheritLocalProjectMount(child, parentFolder))
+    : undefined;
+  return {
+    ...node,
+    id: createLocalProjectNodeId(projectIdentity, suffix),
+    projectMountId: parentFolder.projectMountId,
+    projectRootPath: parentFolder.projectRootPath,
+    ...(projectIdentity !== parentFolder.projectRootPath ? { projectIdentity } : {}),
+    access: parentFolder.access,
+    readOnly: Boolean(parentFolder.readOnly),
     ...(children ? { children } : {}),
   };
 };
@@ -925,7 +1379,7 @@ const preserveConvertedPreviewContent = (node, currentWorkspace) => {
 
 export const useEditorStore = create(
   persist(
-    (set, get) => ({
+    withDesktopMutationBarrier((set, get) => ({
       workspace: createDefaultWorkspace(),
       selectedId: DEFAULT_FILE_ID,
       markdown: getDefaultMarkdown(),
@@ -1210,6 +1664,7 @@ export const useEditorStore = create(
       updateFileContentById: (fileId, nextMarkdown) => {
         if (!fileId) return;
         const { workspace, selectedId } = get();
+        if (findNodeById(workspace, fileId)?.readOnly) return false;
         const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           const patch = {
@@ -1225,10 +1680,11 @@ export const useEditorStore = create(
         const nextState = { workspace: updated };
         if (fileId === selectedId) nextState.markdown = nextMarkdown;
         set(nextState);
+        return true;
       },
 
       updateSelectedFileContent: (nextMarkdown) => {
-        get().updateFileContentById(get().selectedId, nextMarkdown);
+        return get().updateFileContentById(get().selectedId, nextMarkdown);
       },
 
       /**
@@ -1239,10 +1695,11 @@ export const useEditorStore = create(
        */
       applyContentFromOutside: (fileId, content) => {
         if (!fileId) return;
-        get().updateFileContentById(fileId, content);
+        if (!get().updateFileContentById(fileId, content)) return false;
         set((state) => ({
           externalContentRequests: [...state.externalContentRequests, { fileId, content }],
         }));
+        return true;
       },
 
       /** MarkdownEditor 取走待处理的请求（取完即清空） */
@@ -1315,26 +1772,6 @@ export const useEditorStore = create(
         return { ok: true, fileId, created: !existing };
       },
 
-      /** 按 id 更新某文件正文（不切换选中）；若正是当前选中文档则同步 markdown */
-      updateFileContentById: (fileId, nextContent) => {
-        const { workspace, selectedId } = get();
-        const updated = updateNodeById(workspace, fileId, (node) => {
-          if (node.type !== 'file') return node;
-          const patch = {
-            ...node,
-            content: nextContent,
-            updatedAt: Date.now(),
-          };
-          if (node.projectRootPath && node.diskContentSnapshot === undefined) {
-            patch.diskContentSnapshot = node.content ?? '';
-          }
-          return patch;
-        });
-        set(fileId === selectedId
-          ? { workspace: updated, markdown: nextContent }
-          : { workspace: updated });
-      },
-
       /**
        * 保存成功后，把"刚写下去的磁盘正文"记为该文件的新基线（diskContentSnapshot）。
        * 供文件监听回灌时识别自写 echo：磁盘内容 == 基线 → 忽略，不重载编辑器。
@@ -1344,7 +1781,7 @@ export const useEditorStore = create(
         if (!fileId) return;
         const { workspace } = get();
         const node = findNodeById(workspace, fileId);
-        if (!node || node.type !== 'file') return;
+        if (!node || node.type !== 'file' || node.readOnly) return;
         const nextSnapshot = diskMarkdown ?? '';
         if ((node.diskContentSnapshot ?? '') === nextSnapshot) return;
         const updated = updateNodeById(workspace, fileId, (current) => ({
@@ -1357,6 +1794,7 @@ export const useEditorStore = create(
       /** 设置某文件的标签（去重、去空、去首尾空格） */
       setFileTags: (fileId, tags) => {
         const { workspace } = get();
+        if (findNodeById(workspace, fileId)?.readOnly) return false;
         const cleaned = Array.from(
           new Set((tags ?? []).map((t) => String(t).trim()).filter(Boolean)),
         );
@@ -1368,10 +1806,12 @@ export const useEditorStore = create(
         persistWorkspace(updated);
         set({ workspace: updated });
         persistLocalProjectMetadata(nextNode);
+        return true;
       },
 
       setFileKnowledgeMeta: (fileId, patch) => {
         const { workspace } = get();
+        if (findNodeById(workspace, fileId)?.readOnly) return false;
         const updated = updateNodeById(workspace, fileId, (node) => {
           if (node.type !== 'file') return node;
           const nextPatch = {};
@@ -1431,6 +1871,7 @@ export const useEditorStore = create(
         persistWorkspace(updated);
         set({ workspace: updated });
         persistLocalProjectMetadata(nextNode);
+        return true;
       },
 
       /**
@@ -1440,6 +1881,7 @@ export const useEditorStore = create(
       setFileFrontmatterProperty: (fileId, key, value) => {
         const propertyKey = String(key ?? '').trim();
         if (!propertyKey) return;
+        if (findNodeById(get().workspace, fileId)?.readOnly) return false;
 
         const isEmpty = value === '' || value == null
           || (Array.isArray(value) && value.length === 0);
@@ -1457,6 +1899,7 @@ export const useEditorStore = create(
         set({ workspace: updated });
         // 删除时要显式传空值，main 才知道去掉这一行
         persistLocalProjectMetadata(nextNode, { [propertyKey]: isEmpty ? '' : value });
+        return true;
       },
 
       setWorkspace: (workspace) => set({ workspace }),
@@ -1509,14 +1952,31 @@ export const useEditorStore = create(
         set({ localProjectConflict: null });
       },
 
-      openLocalProjectWorkspace: (workspace, projectRootPath) => {
+      openLocalProjectWorkspace: (workspace, projectRootPath, mountOptions = {}) => {
         const rootPath = projectRootPath ?? '';
-        const projectNode = markLocalProjectNode(workspace, rootPath, true);
+        const requestedMountId = String(mountOptions.projectMountId ?? '');
+        const isTauriMount = requestedMountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX);
+        const projectIdentity = mountOptions.projectIdentity
+          ?? (isTauriMount ? createOpaqueLocalProjectIdentity() : rootPath);
+        const projectNode = markLocalProjectNode(workspace, rootPath, true, {
+          ...mountOptions,
+          projectIdentity,
+        });
         if (!projectNode) return;
+
+        const mountId = String(projectNode.projectMountId ?? '');
+        if (mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)) {
+          const snapshotSeed = mountOptions.persistenceSnapshot ?? { projectRootPath: projectIdentity };
+          const snapshot = buildPersistentLocalProjectSnapshot(projectNode, snapshotSeed);
+          sessionLocalProjectSnapshots.set(mountId, snapshot);
+        }
 
         const current = get();
         const baseWorkspace = ensureLocalWorkspaceRoot(current.workspace, current.projectRootPath);
-        const withoutDuplicate = removeLocalProjectByPath(baseWorkspace, rootPath);
+        const replacedWorkspace = mountOptions.replaceNodeId
+          ? removeNodeById(baseWorkspace, mountOptions.replaceNodeId).node
+          : baseWorkspace;
+        const withoutDuplicate = removeLocalProjectByPath(replacedWorkspace, rootPath);
         const nextWorkspace = keepPinnedFlags(
           addChildNode(withoutDuplicate, withoutDuplicate.id, projectNode, true),
           current.workspace,
@@ -1561,6 +2021,7 @@ export const useEditorStore = create(
         projectRootPath,
         workspace: diskTree,
         projectsChildren,
+        projectRevision,
         conflictResolution = 'auto',
         conflictFileIds = [],
       }) => {
@@ -1575,9 +2036,10 @@ export const useEditorStore = create(
           conflictResolution === 'keep-local' && conflictIdSet.has(fileId)
         );
 
-        const mountedRoot = findLocalProjectRoot(state.workspace);
-        const isTreeMount = mountedRoot?.localProjectRoot
-          && mountedRoot.projectRootPath === projectRootPath;
+        const mountedRoot = (state.workspace?.children ?? []).find((child) => (
+          child.localProjectRoot && child.projectRootPath === projectRootPath
+        ));
+        const isTreeMount = Boolean(mountedRoot);
         const diskPayload = { workspace: diskTree, projectsChildren };
 
         // 自写 echo 识别：磁盘正文 == 该文件上次保存记录的基线（diskContentSnapshot），
@@ -1622,8 +2084,20 @@ export const useEditorStore = create(
 
         let nextWorkspace = state.workspace;
         if (isTreeMount && diskTree) {
-          const markedRoot = markLocalProjectNode(preserveDirtyInTree(diskTree), projectRootPath, true);
-          const freshRoot = preserveConvertedPreviewContent(markedRoot, state.workspace);
+          const markedDiskTree = markLocalProjectNode(
+            diskTree,
+            projectRootPath,
+            true,
+            {
+              projectIdentity: mountedRoot.projectIdentity ?? projectRootPath,
+              projectMountId: mountedRoot.projectMountId,
+              readOnly: mountedRoot.readOnly,
+              access: mountedRoot.access,
+              projectRevision: projectRevision ?? mountedRoot.projectRevision,
+            },
+          );
+          const preservedRoot = preserveDirtyInTree(markedDiskTree);
+          const freshRoot = preserveConvertedPreviewContent(preservedRoot, state.workspace);
           if (freshRoot) {
             nextWorkspace = replaceLocalProjectMount(state.workspace, projectRootPath, freshRoot);
           }
@@ -1763,7 +2237,7 @@ export const useEditorStore = create(
         };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
-        if (targetFolder?.projectRootPath) return false;
+        if (targetFolder?.readOnly || targetFolder?.projectRootPath) return false;
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFile, true);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: fileId, markdown: '', surface: 'paper' });
@@ -1792,6 +2266,9 @@ export const useEditorStore = create(
         if (!targetFolder || targetFolder.type !== 'folder') {
           return { ok: false, error: '无法定位目标文件夹。' };
         }
+        if (targetFolder.readOnly) {
+          return { ok: false, error: '只读项目不能新建文件。' };
+        }
 
         if (targetFolder.projectRootPath) {
           const target = resolveLocalProjectCreateTarget(
@@ -1814,7 +2291,7 @@ export const useEditorStore = create(
               relativePath,
               content: normalizedContent,
             });
-            const node = {
+            const node = inheritLocalProjectMount({
               ...createLocalProjectFileNode(
                 target.projectRootPath,
                 result.relativePath,
@@ -1823,7 +2300,7 @@ export const useEditorStore = create(
               ),
               ...knowledgeFields,
               updatedAt: result.updatedAt ?? Date.now(),
-            };
+            }, target.parentFolder);
             const nextWorkspace = addChildNode(workspace, target.parentFolderId, node, true);
             persistWorkspace(nextWorkspace);
             set(!select ? { workspace: nextWorkspace } : {
@@ -1881,7 +2358,7 @@ export const useEditorStore = create(
         };
         const targetFolderId = resolveTargetFolderId(workspace, contextNodeId ?? selectedId);
         const targetFolder = findNodeById(workspace, targetFolderId);
-        if (targetFolder?.projectRootPath) return false;
+        if (targetFolder?.readOnly || targetFolder?.projectRootPath) return false;
         const nextWorkspace = addChildNode(workspace, targetFolderId, newFolder, true);
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace, selectedId: folderId, surface: 'folder' });
@@ -1890,16 +2367,22 @@ export const useEditorStore = create(
 
       moveNode: (fromId, toId) => {
         const { workspace } = get();
+        const fromNode = findNodeById(workspace, fromId);
+        const toNode = findNodeById(workspace, toId);
+        if (fromNode?.readOnly || toNode?.readOnly) return false;
         const nextWorkspace = moveNodeInParent(workspace, fromId, toId);
-        if (nextWorkspace === workspace) return;
+        if (nextWorkspace === workspace) return false;
         persistWorkspace(nextWorkspace);
         set({ workspace: nextWorkspace });
+        return true;
       },
 
       /** 把节点移进另一个文件夹（跨目录移动，不改选中）；成功返回 true */
       moveNodeToFolderById: (nodeId, targetFolderId) => {
         const { workspace } = get();
         const node = findNodeById(workspace, nodeId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+        if (node?.readOnly || targetFolder?.readOnly) return false;
         if (node?.projectRootPath && node?.relativePath) return false; // 磁盘挂载节点不做纯内存移动
         const nextWorkspace = moveNodeToFolder(workspace, nodeId, targetFolderId);
         if (nextWorkspace === workspace) return false;
@@ -1913,8 +2396,10 @@ export const useEditorStore = create(
        * 移入目标文件夹 + 重映射子树路径/id + 修正选中和打开的标签页。
        */
       moveDiskBackedNodeToFolder: (nodeId, targetFolderId, { relativePath: newRelativePath } = {}) => {
-        const { workspace, selectedId, openTabs } = get();
+        const { workspace, selectedId, openTabs, commentThreads } = get();
         const node = findNodeById(workspace, nodeId);
+        const targetFolder = findNodeById(workspace, targetFolderId);
+        if (node?.readOnly || targetFolder?.readOnly) return false;
         if (!node?.projectRootPath || !node.relativePath || !newRelativePath) return false;
 
         const nextWorkspace = moveDiskNodeToFolder(workspace, nodeId, targetFolderId, newRelativePath);
@@ -1929,8 +2414,16 @@ export const useEditorStore = create(
           selectedId,
           openTabs,
         });
+        const nextCommentThreads = remapDiskCommentThreads({
+          previousWorkspace: workspace,
+          nextWorkspace,
+          projectRootPath: node.projectRootPath,
+          oldRelativePath: node.relativePath,
+          newRelativePath,
+          commentThreads,
+        });
         persistWorkspace(nextWorkspace);
-        set({ workspace: nextWorkspace, ...refs });
+        set({ workspace: nextWorkspace, commentThreads: nextCommentThreads, ...refs });
         return true;
       },
 
@@ -1948,6 +2441,7 @@ export const useEditorStore = create(
         if (!trimmed) return false;
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
+        if (node.readOnly) return false;
         if (node.projectRootPath && node.relativePath) return false;
         const nextName = buildUniqueRenameName(workspace, trimmed, targetId);
         const updated = updateNodeById(workspace, targetId, (current) => ({
@@ -1965,16 +2459,17 @@ export const useEditorStore = create(
       },
 
       replaceDiskBackedNode: (targetId, { name, relativePath: newRelativePath, updatedAt }) => {
-        const { workspace, selectedId, openTabs } = get();
+        const { workspace, selectedId, openTabs, commentThreads } = get();
         const node = findNodeById(workspace, targetId);
-        if (!node?.projectRootPath || !node.relativePath) return false;
+        if (!node?.projectRootPath || !node.relativePath || node.readOnly) return false;
 
         const oldRelativePath = node.relativePath;
         const updated = updateNodeById(workspace, targetId, (current) => (
           remapDiskNodeAfterRename(current, oldRelativePath, newRelativePath, name)
         ));
 
-        const newRootId = `project:${node.projectRootPath}:${node.type}:${newRelativePath}`;
+        const projectIdentity = node.projectIdentity ?? node.projectRootPath;
+        const newRootId = `project:${projectIdentity}:${node.type}:${newRelativePath}`;
         let nextSelectedId = selectedId;
         if (selectedId === targetId) {
           nextSelectedId = newRootId;
@@ -2014,6 +2509,14 @@ export const useEditorStore = create(
           workspace: updated,
           selectedId: nextSelectedId,
           openTabs: nextOpenTabs,
+          commentThreads: remapDiskCommentThreads({
+            previousWorkspace: workspace,
+            nextWorkspace: updated,
+            projectRootPath: node.projectRootPath,
+            oldRelativePath,
+            newRelativePath,
+            commentThreads,
+          }),
         };
         if (updatedAt != null) {
           const renamedNode = findNodeById(updated, newRootId);
@@ -2028,17 +2531,23 @@ export const useEditorStore = create(
       },
 
       deleteNode: (nodeId) => {
-        const { workspace, selectedId } = get();
+        const { workspace, selectedId, openTabs, expandedFolderIds } = get();
         const targetId = nodeId ?? selectedId;
         if (targetId === 'root') return false;
         const node = findNodeById(workspace, targetId);
         if (!node) return false;
+        if (node.readOnly && !node.localProjectRoot) return false;
         if (node.projectRootPath && node.relativePath) return false;
 
         const result = removeNodeById(workspace, targetId);
         if (!result.removed) return false;
 
         const nextWorkspace = result.node;
+        const mountId = String(node.projectMountId ?? '');
+        if (node.localProjectRoot && mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)) {
+          sessionLocalProjectSnapshots.delete(mountId);
+        }
+        const removedNodeIds = collectNodeIds(node);
         const nextFileId = findFirstFileId(nextWorkspace);
         const nextNode = findNodeById(nextWorkspace, nextFileId ?? nextWorkspace.id);
         persistWorkspace(nextWorkspace);
@@ -2047,6 +2556,8 @@ export const useEditorStore = create(
           selectedId: nextFileId ?? nextWorkspace.id,
           markdown: nextNode?.type === 'file' ? (nextNode.content ?? '') : '',
           surface: nextNode?.type === 'folder' ? 'folder' : 'paper',
+          openTabs: openTabs.filter((tab) => !removedNodeIds.has(tab.id)),
+          expandedFolderIds: expandedFolderIds.filter((id) => !removedNodeIds.has(id)),
         });
         return true;
       },
@@ -2056,7 +2567,7 @@ export const useEditorStore = create(
         const targetId = nodeId ?? selectedId;
         if (targetId === 'root') return false;
         const node = findNodeById(workspace, targetId);
-        if (!node?.projectRootPath || !node.relativePath) return false;
+        if (!node?.projectRootPath || !node.relativePath || node.readOnly) return false;
 
         const result = removeNodeById(workspace, targetId);
         if (!result.removed) return false;
@@ -2126,17 +2637,20 @@ export const useEditorStore = create(
         if (!node || !parentFolderId) return false;
 
         const { workspace } = get();
-        const nextWorkspace = addChildNode(workspace, parentFolderId, node, true);
+        const parentFolder = findNodeById(workspace, parentFolderId);
+        if (parentFolder?.readOnly) return false;
+        const mountedNode = inheritLocalProjectMount(node, parentFolder);
+        const nextWorkspace = addChildNode(workspace, parentFolderId, mountedNode, true);
         persistWorkspace(nextWorkspace);
         set({
           workspace: nextWorkspace,
-          selectedId: node.id,
-          markdown: node.type === 'file' ? (node.content ?? '') : '',
-          surface: node.type === 'folder' ? 'folder' : 'paper',
+          selectedId: mountedNode.id,
+          markdown: mountedNode.type === 'file' ? (mountedNode.content ?? '') : '',
+          surface: mountedNode.type === 'folder' ? 'folder' : 'paper',
           activeBlockId: null,
           activeBlockDraft: '',
         });
-        return true;
+        return mountedNode.id;
       },
 
       startEditingBlock: (token) => {
@@ -2178,7 +2692,7 @@ export const useEditorStore = create(
         const firstFileId = findFirstFileId(workspace);
         if (firstFileId) set({ selectedId: firstFileId, surface: 'paper' });
       },
-    }),
+    })),
     persistConfig,
   ),
 );

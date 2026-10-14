@@ -4,7 +4,12 @@
  */
 
 import { hasAiBridge, readAiServerBase } from '../core/agent/aiClient.js';
-import { aiExecTool, pickFile, pickSavePath } from './electronBridge.js';
+import {
+  aiExecTool,
+  hasFilePickerBridge,
+  pickFile,
+  pickSavePath,
+} from './electronBridge.js';
 
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'mkv', 'avi', 'flv', 'webm', 'm4v'];
 
@@ -29,7 +34,7 @@ export const FILE_CONVERT_TOOLS = Object.freeze([
   },
 ]);
 
-export const isFileConvertSupported = () => hasAiBridge();
+export const isFileConvertSupported = () => hasAiBridge() && hasFilePickerBridge();
 
 /**
  * 选输入 → 选输出 → 执行。

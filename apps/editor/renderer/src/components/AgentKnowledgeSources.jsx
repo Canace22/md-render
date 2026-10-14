@@ -1,9 +1,18 @@
 import { useState } from 'react';
+import { message } from 'antd';
 import { ExternalLink, Plus, Trash2 } from 'lucide-react';
 import {
   canAddKnowledgeSource,
   createUserKnowledgeSource,
 } from '../core/agent/knowledgeSources.js';
+import { openExternalUrl } from '../services/desktopShellBridge.js';
+
+const handleExternalLink = (event, url) => {
+  event.preventDefault();
+  openExternalUrl(url).catch((error) => {
+    message.error(error?.message || '无法打开链接');
+  });
+};
 
 export default function AgentKnowledgeSources({ sources, onChange }) {
   const [name, setName] = useState('');
@@ -64,12 +73,22 @@ export default function AgentKnowledgeSources({ sources, onChange }) {
                 {source.builtIn ? <em>内置</em> : null}
               </span>
               <div className="agent-knowledge-settings__links">
-                <a href={source.url} target="_blank" rel="noreferrer">
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => handleExternalLink(event, source.url)}
+                >
                   网页
                   <ExternalLink size={11} />
                 </a>
                 {source.repositoryUrl ? (
-                  <a href={source.repositoryUrl} target="_blank" rel="noreferrer">
+                  <a
+                    href={source.repositoryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => handleExternalLink(event, source.repositoryUrl)}
+                  >
                     GitHub
                     <ExternalLink size={11} />
                   </a>

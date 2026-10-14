@@ -1,4 +1,5 @@
 import * as webFs from './webFsBridge.js';
+import * as tauriLocalProject from './tauriLocalProjectBridge.js';
 
 const LEGACY_PROJECT_PICK_CHANNEL = 'project:pick-folder';
 const LEGACY_PROJECT_READ_CHANNEL = 'project:read-file';
@@ -63,11 +64,54 @@ const normalizeLegacyNode = async (node, rootPath) => {
 
 // Web 端（非 Electron）用 File System Access API 兜底；payload 归 webfs 时路由过去
 const shouldUseWebFs = (projectRootPath) => {
-  return !hasDirectBridge() && webFs.isWebFsSupported() && webFs.isWebFsRootPath(projectRootPath);
+  return !hasDirectBridge()
+    && !tauriLocalProject.isTauriRuntime()
+    && webFs.isWebFsSupported()
+    && webFs.isWebFsRootPath(projectRootPath);
 };
 
 export function isLocalProjectSupported() {
+  if (tauriLocalProject.isTauriRuntime()) return false;
   return hasDirectBridge() || hasLegacyBridge() || webFs.isWebFsSupported();
+}
+
+export function isTauriLocalProjectMount(projectRootPath) {
+  return tauriLocalProject.isTauriLocalProjectMountId(projectRootPath);
+}
+
+export async function flushLocalProjectMutations() {
+  if (!tauriLocalProject.isTauriRuntime()) return;
+  await tauriLocalProject.flushTauriLocalProjectMutations();
+}
+
+export function getLocalProjectCapabilities() {
+  if (tauriLocalProject.isTauriRuntime()) {
+    return {
+      canOpen: true,
+      canOpenReadOnly: true,
+      canOpenReadWrite: true,
+      canRead: true,
+      canWrite: true,
+      canReveal: true,
+      canUseDefaultWorkspace: false,
+    };
+  }
+
+  const supported = isLocalProjectSupported();
+  return {
+    canOpen: supported,
+    canOpenReadOnly: false,
+    canOpenReadWrite: supported,
+    canRead: supported,
+    canWrite: supported,
+    canReveal: hasDirectBridge(),
+    canUseDefaultWorkspace: hasMdRenderWorkspaceBridge(),
+  };
+}
+
+export async function revokeLocalProjectAccess(projectMountId) {
+  if (!tauriLocalProject.isTauriRuntime()) return;
+  await tauriLocalProject.revokeLocalProject(projectMountId);
 }
 
 /** 仅桌面版（Electron）为 true：MdRender 工作区、增量落盘同步等能力需要它 */
@@ -75,9 +119,13 @@ export function isDesktopProjectSupported() {
   return hasDirectBridge() || hasLegacyBridge();
 }
 
-export async function openLocalProject() {
+export async function openLocalProject(options) {
   if (hasDirectBridge()) {
     return window.electronAPI.openLocalProject();
+  }
+
+  if (tauriLocalProject.isTauriRuntime()) {
+    return tauriLocalProject.openLocalProject(options);
   }
 
   if (!hasLegacyBridge()) {
@@ -106,6 +154,15 @@ export async function saveLocalProjectFile(payload) {
     return window.electronAPI.saveLocalProjectFile(payload);
   }
 
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.saveLocalProjectFile({
+      mountId: payload.projectRootPath,
+      relativePath: payload.relativePath,
+      content: payload.content,
+      expectedUpdatedAt: payload.expectedUpdatedAt,
+    });
+  }
+
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.saveLocalProjectFile(payload);
   }
@@ -125,7 +182,28 @@ export async function saveLocalProjectMetadata(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.saveLocalProjectMetadata === 'function') {
     return window.electronAPI.saveLocalProjectMetadata(payload);
   }
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.saveLocalProjectMetadata({
+      mountId: payload.projectRootPath,
+      relativePath: payload.relativePath,
+      metadata: payload.metadata,
+    });
+  }
   return null;
+}
+
+export async function saveLocalProjectBinaryAsset(payload) {
+  if (hasDirectBridge() && typeof window.electronAPI.saveBinaryAsset === 'function') {
+    return window.electronAPI.saveBinaryAsset(payload);
+  }
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.saveBinaryAsset({
+      mountId: payload.projectRootPath,
+      base64: payload.base64,
+      mimeSubtype: payload.mimeSubtype,
+    });
+  }
+  throw new Error('当前项目不支持保存本地素材');
 }
 
 export async function ensureMdRenderWorkspace() {
@@ -161,6 +239,13 @@ export async function createLocalProjectFileOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFile === 'function') {
     return window.electronAPI.createLocalProjectFile(payload);
   }
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.createLocalProjectFile({
+      mountId: payload.projectRootPath,
+      relativePath: payload.relativePath,
+      content: payload.content,
+    });
+  }
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.createLocalProjectFile(payload);
   }
@@ -170,6 +255,12 @@ export async function createLocalProjectFileOnDisk(payload) {
 export async function createLocalProjectFolderOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.createLocalProjectFolder === 'function') {
     return window.electronAPI.createLocalProjectFolder(payload);
+  }
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.createLocalProjectFolder({
+      mountId: payload.projectRootPath,
+      relativePath: payload.relativePath,
+    });
   }
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.createLocalProjectFolder(payload);
@@ -181,6 +272,13 @@ export async function renameLocalProjectEntryOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.renameLocalProjectEntry === 'function') {
     return window.electronAPI.renameLocalProjectEntry(payload);
   }
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.renameLocalProjectEntry({
+      mountId: payload.projectRootPath,
+      relativePath: payload.relativePath,
+      newRelativePath: payload.newRelativePath,
+    });
+  }
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.renameLocalProjectEntry(payload);
   }
@@ -190,6 +288,12 @@ export async function renameLocalProjectEntryOnDisk(payload) {
 export async function deleteLocalProjectEntryOnDisk(payload) {
   if (hasDirectBridge() && typeof window.electronAPI.deleteLocalProjectEntry === 'function') {
     return window.electronAPI.deleteLocalProjectEntry(payload);
+  }
+  if (tauriLocalProject.isTauriReadWriteMountId(payload?.projectRootPath)) {
+    return tauriLocalProject.deleteLocalProjectEntry({
+      mountId: payload.projectRootPath,
+      relativePath: payload.relativePath,
+    });
   }
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.deleteLocalProjectEntry(payload);
@@ -208,10 +312,27 @@ export async function readLocalProjectDisk(projectRootPath, mode) {
   if (hasDirectBridge() && typeof window.electronAPI.readLocalProjectDisk === 'function') {
     return window.electronAPI.readLocalProjectDisk({ projectRootPath, mode });
   }
+  if (tauriLocalProject.isTauriLocalProjectMountId(projectRootPath)) {
+    const project = await tauriLocalProject.scanLocalProject(projectRootPath);
+    return {
+      ok: true,
+      workspace: project?.workspace,
+      revision: project?.revision,
+      access: project?.access,
+      complete: project?.complete !== false,
+      skippedCount: project?.skippedCount ?? 0,
+      mountId: project?.mountId ?? projectRootPath,
+    };
+  }
   if (shouldUseWebFs(projectRootPath)) {
     return webFs.readLocalProjectDisk(projectRootPath);
   }
   return null;
+}
+
+export async function readLocalProjectRevision(projectRootPath) {
+  if (!tauriLocalProject.isTauriLocalProjectMountId(projectRootPath)) return null;
+  return tauriLocalProject.readLocalProjectRevision(projectRootPath);
 }
 
 export async function readLocalProjectFileContent(payload) {
@@ -221,6 +342,15 @@ export async function readLocalProjectFileContent(payload) {
       throw new Error(result.error || '读取本地文件失败');
     }
     return result;
+  }
+  if (tauriLocalProject.isTauriRuntime()) {
+    const mountId = payload?.projectMountId ?? payload?.mountId ?? payload?.projectRootPath;
+    if (tauriLocalProject.isTauriLocalProjectMountId(mountId)) {
+      return tauriLocalProject.readLocalProjectFileContent({
+        mountId,
+        relativePath: payload?.relativePath,
+      });
+    }
   }
   if (shouldUseWebFs(payload?.projectRootPath)) {
     return webFs.readLocalProjectFileContent(payload);
@@ -235,6 +365,13 @@ export async function revealLocalProjectEntry(payload) {
       throw new Error(result.error || '在文件管理器中查看失败');
     }
     return result;
+  }
+  const mountId = payload?.projectMountId ?? payload?.mountId ?? payload?.projectRootPath;
+  if (tauriLocalProject.isTauriLocalProjectMountId(mountId)) {
+    return tauriLocalProject.revealLocalProjectEntry({
+      mountId,
+      relativePath: payload?.relativePath ?? '',
+    });
   }
   throw new Error('仅桌面版应用支持在文件管理器中查看');
 }

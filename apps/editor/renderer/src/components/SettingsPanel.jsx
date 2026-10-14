@@ -5,6 +5,7 @@ import {
 import { TEMPLATES } from '../utils/wechatTemplates';
 import VaultStorageSettings from './VaultStorageSettings.jsx';
 import ExternalAgentSettings from './ExternalAgentSettings.jsx';
+import TauriDataMigrationSettings from './TauriDataMigrationSettings.jsx';
 import { isVaultSupported } from '../utils/vaultBridge.js';
 
 export default function SettingsPanel({
@@ -165,43 +166,65 @@ export default function SettingsPanel({
         </div>
       </div>
 
-      {local?.localProjectSupported && (
+      {local?.canOpen && (
         <div className="settings-group">
           <div className="settings-group-title">本地项目目录</div>
           <div className="settings-platform-hint">
-            把本地文件夹作为工作区，编辑直接落盘；也可从磁盘把外部改动同步回编辑器。
-            版本管理交给该目录自己的 Git 仓库。
+            {local.canOpenReadOnly && local.canOpenReadWrite
+              ? '可先只读查看；需要编辑、新建、改名或删除时，再显式选择“读写打开”。授权只对本次打开的目录生效。'
+              : local.canWrite
+                ? '把本地文件夹作为工作区，编辑直接落盘；也可从磁盘把外部改动同步回编辑器。版本管理交给该目录自己的 Git 仓库。'
+                : '只读打开你手动选择的文件夹，不会保存、改名或删除其中的文件。'}
           </div>
           <div className="settings-action-list">
-            <button
-              type="button"
-              className="settings-action-btn"
-              data-testid="open-local-project"
-              onClick={local.onOpenLocalProject}
-              title="打开本地项目文件夹"
-            >
-              <Upload size={16} strokeWidth={1.6} />
-              <span>打开本地项目文件夹</span>
-            </button>
-            <button
-              type="button"
-              className="settings-action-btn"
-              data-testid="sync-from-disk"
-              onClick={() => local.onSyncFromDisk?.()}
-              disabled={!local.canSyncFromDisk || local.syncLoading}
-              title={local.canSyncFromDisk ? '把当前工作区从磁盘同步最新内容' : '工作区里还没有本地项目'}
-            >
-              {local.syncLoading
-                ? <Loader2 className="settings-btn-spinner" size={16} />
-                : <Cloud size={16} strokeWidth={1.6} />}
-              <span>从磁盘同步</span>
-            </button>
+            {local.canOpenReadOnly && (
+              <button
+                type="button"
+                className="settings-action-btn"
+                data-testid="open-local-project"
+                onClick={local.onOpenLocalProjectReadOnly ?? local.onOpenLocalProject}
+                title="只读打开本地文件夹"
+              >
+                <Upload size={16} strokeWidth={1.6} />
+                <span>只读打开本地文件夹</span>
+              </button>
+            )}
+            {local.canOpenReadWrite && (
+              <button
+                type="button"
+                className="settings-action-btn"
+                data-testid={local.canOpenReadOnly
+                  ? 'open-local-project-read-write'
+                  : 'open-local-project'}
+                onClick={local.onOpenLocalProjectReadWrite ?? local.onOpenLocalProject}
+                title="读写打开本地项目文件夹"
+              >
+                <Upload size={16} strokeWidth={1.6} />
+                <span>{local.canOpenReadOnly ? '读写打开本地文件夹' : '打开本地项目文件夹'}</span>
+              </button>
+            )}
+            {local.canSyncFromDisk && (
+              <button
+                type="button"
+                className="settings-action-btn"
+                data-testid="sync-from-disk"
+                onClick={() => local.onSyncFromDisk?.()}
+                disabled={!local.canSyncFromDisk || local.syncLoading}
+                title={local.canSyncFromDisk ? '把当前工作区从磁盘同步最新内容' : '工作区里还没有本地项目'}
+              >
+                {local.syncLoading
+                  ? <Loader2 className="settings-btn-spinner" size={16} />
+                  : <Cloud size={16} strokeWidth={1.6} />}
+                <span>从磁盘同步</span>
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {isVaultSupported() && <VaultStorageSettings toMarkdown={toMarkdown} />}
       {isVaultSupported() && <ExternalAgentSettings />}
+      <TauriDataMigrationSettings />
 
       {backup && (
         <div className="settings-group">

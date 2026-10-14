@@ -1,0 +1,71 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MD Render",
+  "version": "../package.json",
+  "identifier": "com.mdrender.app.tauri-preview",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "MD Render",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "capabilities": ["default"],
+      "csp": {
+        "default-src": ["'self'"],
+        "connect-src": ["'self'", "ipc:", "http://ipc.localhost"],
+        "script-src": ["'self'", "'wasm-unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "font-src": ["'self'", "data:"],
+        "img-src": ["'self'", "data:", "blob:", "https:", "local-media:", "http://local-media.localhost"],
+        "media-src": ["'self'", "data:", "blob:", "https:", "local-media:", "http://local-media.localhost"],
+        "worker-src": ["'self'", "blob:"],
+        "frame-src": ["'self'", "blob:", "https:"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'none'"],
+        "frame-ancestors": ["'none'"]
+      },
+      "devCsp": {
+        "default-src": ["'self'", "http://127.0.0.1:1420"],
+        "connect-src": ["'self'", "ipc:", "http://ipc.localhost", "http://127.0.0.1:1420", "ws://127.0.0.1:1420", "ws://127.0.0.1:1421"],
+        "script-src": ["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'", "http://127.0.0.1:1420"],
+        "style-src": ["'self'", "'unsafe-inline'", "http://127.0.0.1:1420"],
+        "font-src": ["'self'", "data:", "http://127.0.0.1:1420"],
+        "img-src": ["'self'", "data:", "blob:", "https:", "local-media:", "http://local-media.localhost"],
+        "media-src": ["'self'", "data:", "blob:", "https:", "local-media:", "http://local-media.localhost"],
+        "worker-src": ["'self'", "blob:"],
+        "frame-src": ["'self'", "blob:", "https:"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'none'"],
+        "frame-ancestors": ["'none'"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "icon": [
+      "../assets/icon.png",
+      "../assets/icon.icns",
+      "../assets/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}

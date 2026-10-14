@@ -6,6 +6,8 @@
  * 纯函数、不 import store，ctx 由调用方注入，便于单测。
  */
 
+import { shouldOfferPdfExport } from '../../services/desktopShellBridge.js';
+
 /** 视图类命令：surface 字段供单测校验，不参与运行时逻辑 */
 const SURFACE_COMMANDS = [
   { id: 'surface.overview', surface: 'overview', title: '创作首页', keywords: ['overview', 'shouye', '总览', '首页'] },
@@ -25,7 +27,7 @@ const EXPORT_FORMATS = [
   { key: 'html', label: 'HTML', keywords: ['html', 'wangye'] },
   { key: 'pdf', label: 'PDF', keywords: ['pdf'] },
   { key: 'docx', label: 'Word', keywords: ['docx', 'word'] },
-];
+].filter(({ key }) => key !== 'pdf' || shouldOfferPdfExport());
 
 /** 视图切换统一走 openSurface，文档视图要按当前选中的是文件还是目录来解析 */
 const buildSurfaceCommand = (entry, ctx) => ({
@@ -130,13 +132,13 @@ export const createCommands = (ctx = {}) => [
     group: '其他',
     run: () => ctx.toggleSidebar?.(),
   },
-  {
+  ...(ctx.syncFromDisk ? [{
     id: 'app.sync-from-disk',
     title: '从磁盘同步本地项目',
     keywords: ['sync', 'tongbu', '同步', '磁盘', '本地'],
     group: '其他',
-    run: () => ctx.syncFromDisk?.(),
-  },
+    run: () => ctx.syncFromDisk(),
+  }] : []),
 ];
 
 /** 按标题 + 关键词做包含匹配；空查询返回原列表 */

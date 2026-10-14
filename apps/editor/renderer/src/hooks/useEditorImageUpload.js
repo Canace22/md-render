@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { message } from 'antd';
-import { saveBinaryAsset } from '../services/electronBridge.js';
-import { encodeLocalMediaPath } from '../utils/localMediaMarkdown.js';
+import {
+  isTauriLocalProjectMount,
+  saveLocalProjectBinaryAsset,
+} from '../utils/localProjectBridge.js';
+import { createLocalMediaUrl } from '../utils/localMediaMarkdown.js';
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -21,10 +24,29 @@ const PENDING_IMAGE_FALLBACK_URL = 'data:image/svg+xml,%3Csvg xmlns="http://www.
 let pendingImageFallbackId = 0;
 const pendingImageResolutions = new Map();
 const editorImageResolutions = new WeakMap();
+const pendingImageLifecycles = new Set();
 
 const getPendingImageKey = (fileId, blockId, pendingUrl) => (
   `${fileId || 'unknown'}:${blockId || pendingUrl}`
 );
+
+export const trackPendingImageLifecycle = (operation) => {
+  const trackedOperation = Promise.resolve(operation);
+  pendingImageLifecycles.add(trackedOperation);
+  trackedOperation.then(
+    () => pendingImageLifecycles.delete(trackedOperation),
+    () => pendingImageLifecycles.delete(trackedOperation),
+  );
+  return trackedOperation;
+};
+
+export const flushPendingImageLifecycles = async () => {
+  while (pendingImageLifecycles.size > 0) {
+    const results = await Promise.allSettled([...pendingImageLifecycles]);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed) throw failed.reason;
+  }
+};
 
 export const classifyClipboardFiles = (clipboardData) => {
   const items = clipboardData?.items;
@@ -182,7 +204,7 @@ export const pickImageFiles = () => new Promise((resolve) => {
   input.click();
 });
 
-export const insertImagesFromFiles = async (
+const insertImagesFromFilesInternal = async (
   editor,
   files,
   uploadFile,
@@ -242,6 +264,10 @@ export const insertImagesFromFiles = async (
   });
 };
 
+export const insertImagesFromFiles = (...args) => (
+  trackPendingImageLifecycle(insertImagesFromFilesInternal(...args))
+);
+
 export function useEditorImageUpload({ localProjectSupported, selectedProjectRootPath }) {
   const assetProjectRootRef = useRef('');
 
@@ -249,27 +275,33 @@ export function useEditorImageUpload({ localProjectSupported, selectedProjectRoo
     assetProjectRootRef.current = selectedProjectRootPath;
   }, [selectedProjectRootPath]);
 
-  const uploadFile = useCallback(async (file) => {
+  const uploadFile = useCallback((file) => {
     // 粘贴发生时就固定目标项目，避免 FileReader/IPC 等待期间切文档后存错目录。
     const projectRootPath = assetProjectRootRef.current;
-    const dataUrl = await fileToDataUrl(file);
-    if (!localProjectSupported || !projectRootPath) return dataUrl;
+    const upload = (async () => {
+      const dataUrl = await fileToDataUrl(file);
+      const canSaveToProject = localProjectSupported || isTauriLocalProjectMount(projectRootPath);
+      if (!canSaveToProject || !projectRootPath) return dataUrl;
 
-    try {
-      const { base64, mimeSubtype } = parseDataUrl(dataUrl);
-      const res = await saveBinaryAsset({
-        projectRootPath,
-        base64,
-        mimeSubtype,
-      });
-      if (!res?.relativePath) throw new Error('保存素材失败');
-      const absPath = `${projectRootPath}/${res.relativePath}`;
-      return `local-media://${encodeLocalMediaPath(absPath)}`;
-    } catch (error) {
-      console.error('[asset] 保存截图失败，降级为内嵌:', error);
-      message.warning('图片未能存入素材库，已内嵌到文档');
-      return dataUrl;
-    }
+      try {
+        const { base64, mimeSubtype } = parseDataUrl(dataUrl);
+        const res = await saveLocalProjectBinaryAsset({
+          projectRootPath,
+          base64,
+          mimeSubtype,
+        });
+        if (!res?.relativePath) throw new Error('保存素材失败');
+        const mediaUrl = createLocalMediaUrl(projectRootPath, res.relativePath);
+        if (!mediaUrl) throw new Error('生成素材地址失败');
+        return mediaUrl;
+      } catch (error) {
+        console.error('[asset] 保存截图失败，降级为内嵌:', error);
+        message.warning('图片未能存入素材库，已内嵌到文档');
+        return dataUrl;
+      }
+    })();
+
+    return trackPendingImageLifecycle(upload);
   }, [localProjectSupported]);
 
   return { uploadFile };

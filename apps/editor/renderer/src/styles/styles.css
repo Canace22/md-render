@@ -12230,3 +12230,12 @@ body.theme-dark .comment-thread,
 body.theme-dark .comment-item + .comment-item {
     border-color: rgba(148, 163, 184, 0.2);
 }
+
+.tauri-runtime-notice {
+    position: fixed;
+    top: var(--space-s);
+    right: var(--space-s);
+    z-index: 100;
+    width: min(440px, calc(100vw - 2 * var(--space-s)));
+    box-shadow: var(--shadow-medium);
+}

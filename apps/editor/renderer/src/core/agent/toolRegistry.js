@@ -41,6 +41,10 @@ const MAX_RECALL_RESULTS = 5; // 主动召回返回的相关旧文条数
 const MAX_RECALL_KEYWORDS = 6; // 用于召回搜索的关键词条数
 const MAX_RECENT_DOCS = 6;
 const MAX_DELETE_ITEMS = 10;
+export const DIAGNOSTIC_TOOL_NAMES = Object.freeze([
+  'inspect_app_health',
+  'apply_safe_repair',
+]);
 const OPENABLE_SURFACES = new Set([
   'overview',
   'paper',

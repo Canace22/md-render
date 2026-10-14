@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { message } from 'antd';
 import { getPlatform, getUpdaterBridge } from '../services/electronBridge.js';
+import { openExternalUrl } from '../services/desktopShellBridge.js';
 
 // mac 包未签名，Squirrel.Mac 会拒绝安装更新，只能引导用户去 Release 页手动下载
 const RELEASES_URL = 'https://github.com/Canace22/md-render/releases/latest';
@@ -48,7 +50,9 @@ export default function UpdateNotifier() {
   }, []);
 
   const handleOpenReleases = useCallback(() => {
-    window.open(RELEASES_URL, '_blank', 'noopener,noreferrer');
+    openExternalUrl(RELEASES_URL).catch((error) => {
+      message.error(error?.message || '无法打开下载页');
+    });
   }, []);
 
   const handleInstall = useCallback(() => {

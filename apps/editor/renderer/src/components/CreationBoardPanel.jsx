@@ -129,7 +129,7 @@ function CreationBoardPanel({
     return (statusOptions || []).map((option) => ({
       key: option.value,
       label: option.label,
-      disabled: normalizeToken(option.value) === current,
+      disabled: item.readOnly || normalizeToken(option.value) === current,
     }));
   };
 
@@ -195,7 +195,13 @@ function CreationBoardPanel({
                             onClick: ({ key }) => onMoveStatus?.(item, key, lane),
                           }}
                         >
-                          <Button type="text" className="creation-board-ghost-btn" icon={<MoreHorizontal size={16} strokeWidth={1.8} />} />
+                          <Button
+                            type="text"
+                            className="creation-board-ghost-btn"
+                            icon={<MoreHorizontal size={16} strokeWidth={1.8} />}
+                            disabled={item.readOnly}
+                            title={item.readOnly ? '只读项目不能修改状态' : '修改状态'}
+                          />
                         </Dropdown>
                       </div>
 

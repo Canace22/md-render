@@ -4,14 +4,23 @@
  * API Key 存在 ai-proxy server 的 .env 里。
  * Renderer 只传 providerId，永远不接触 key。
  *
- * 两条请求路径：
+ * 三条请求路径：
  * - Electron（默认）：IPC → 主进程 → ai-proxy server → LLM API
+ * - Tauri：command → Rust → 已配置的 ai-proxy server → LLM API
  * - Web 兜底：直接 fetch ai-proxy server 的 /api/chat
  */
 
 import { AI_PROVIDERS, DEFAULT_PROVIDER_ID, getProvider } from './aiProviders.js';
 import { readChatStream } from '@shared/sseChat.js';
 import { getLocalAgent, isRunnableAgent } from '@shared/localAgents.js';
+import {
+  isTauriAiBridgeAvailable,
+  onTauriAiChatStreamEvent,
+  tauriAiAbortChatStream,
+  tauriAiChat,
+  tauriAiChatStream,
+  tauriAiGetConfig,
+} from '../../services/tauriAiBridge.js';
 import {
   SOURCE_KINDS,
   buildAiSourceList,
@@ -52,11 +61,15 @@ const writeLocalStorage = (key, value) => {
   } catch { /* ignore */ }
 };
 
-/** 是否在 Electron 且主进程 AI 通道可用 */
-export const hasAiBridge = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.ai?.chat === 'function';
+const getElectronAiBridge = () => (
+  typeof window !== 'undefined' ? window.electronAPI?.ai : null
+);
 
-/** ai-proxy server 地址（Electron IPC 透传 + Web 兜底用） */
+/** 是否有 Electron 或 Tauri 桌面 AI 通道 */
+export const hasAiBridge = () =>
+  typeof getElectronAiBridge()?.chat === 'function' || isTauriAiBridgeAvailable();
+
+/** ai-proxy server 地址（桌面壳透传 + Web 兜底用） */
 export const resolveAiServerBase = () => {
   const runtime = normalizeBase(readLocalStorage(AI_SERVER_STORAGE_KEY));
   if (runtime) return runtime;
@@ -79,7 +92,9 @@ export const getAiServerConfiguration = () => {
     override,
     builtDefault,
     resolved: override || builtDefault,
-    source: override ? 'override' : (builtDefault ? 'build' : 'main-default'),
+    source: override
+      ? 'override'
+      : (builtDefault ? 'build' : (isTauriAiBridgeAvailable() ? 'unconfigured' : 'main-default')),
   };
 };
 
@@ -98,14 +113,17 @@ export const getActiveProviderId = () => {
 };
 
 /**
- * 从主进程获取服务端可用的 provider 列表。
+ * 从桌面宿主获取服务端可用的 provider 列表。
  */
 let _serverProvidersCache = null;
 export const fetchServerProviders = async () => {
   if (_serverProvidersCache) return _serverProvidersCache;
   if (!hasAiBridge()) return [];
   try {
-    const list = await window.electronAPI.ai.getConfig();
+    const electronAi = getElectronAiBridge();
+    const list = typeof electronAi?.getConfig === 'function'
+      ? await electronAi.getConfig()
+      : await tauriAiGetConfig({ aiProxyBase: resolveAiServerBase() });
     // 空列表通常意味着 ai-proxy 还没起来，不缓存，下次重试
     if (!Array.isArray(list) || list.length === 0) return [];
     _serverProvidersCache = list;
@@ -199,6 +217,7 @@ export const isAiConfigured = () => {
   const source = getActiveSource();
   if (source.kind === SOURCE_KINDS.LOCAL) return source.available;
   const { providerId } = source;
+  if (isTauriAiBridgeAvailable()) return Boolean(resolveAiServerBase());
   if (hasBuiltinKey(providerId)) return true;
   // 自定义 provider 或 Web 模式需要 server 地址
   return hasAiBridge() ? true : Boolean(resolveAiServerBase());
@@ -207,7 +226,7 @@ export const isAiConfigured = () => {
 /** 供面板列出服务商选项 */
 export const listProviders = () => AI_PROVIDERS;
 
-/** Electron 路径：走 IPC → 主进程 → ai-proxy server */
+/** 桌面路径：走 Electron IPC 或 Tauri command → ai-proxy server */
 const callViaBridge = async ({ messages, tools, config }) => {
   const aiProxyBase = resolveAiServerBase();
   const payload = {
@@ -218,34 +237,51 @@ const callViaBridge = async ({ messages, tools, config }) => {
   if (config.model) payload.model = config.model;
   if (aiProxyBase) payload.aiProxyBase = aiProxyBase;
 
-  const res = await window.electronAPI.ai.chat(payload);
+  const electronAi = getElectronAiBridge();
+  const res = typeof electronAi?.chat === 'function'
+    ? await electronAi.chat(payload)
+    : await tauriAiChat(payload);
   if (!res?.ok) throw new Error(res?.error || 'AI 请求失败');
   return res.message;
 };
 
-/** Electron 是否支持流式通道（旧 preload 没有时退回一次性请求） */
+/** 桌面壳是否支持流式通道（旧 Electron preload 没有时退回一次性请求） */
 export const hasAiStreamBridge = () =>
-  typeof window !== 'undefined' && typeof window.electronAPI?.ai?.chatStream === 'function';
+  typeof getElectronAiBridge()?.chatStream === 'function' || isTauriAiBridgeAvailable();
 
 let streamSeq = 0;
 const nextStreamRequestId = () => `chat-${Date.now()}-${(streamSeq += 1)}`;
 
-/** Electron 流式路径：invoke 等整轮结束，片段通过事件推过来；abort 时通知主进程掐断请求 */
+/** 桌面流式路径：invoke 等整轮结束，片段通过事件推过来；abort 时通知宿主掐断请求 */
 const callViaBridgeStream = async ({ messages, tools, config, signal, onDelta }) => {
-  const api = window.electronAPI.ai;
+  const electronAi = getElectronAiBridge();
   const requestId = nextStreamRequestId();
   const aiProxyBase = resolveAiServerBase();
   const payload = { requestId, providerId: config.providerId, messages, tools };
   if (config.model) payload.model = config.model;
   if (aiProxyBase) payload.aiProxyBase = aiProxyBase;
 
-  const unsubscribe = api.onChatStreamEvent?.((event) => {
+  const handleStreamEvent = (event) => {
     if (event?.requestId === requestId && event.text) onDelta(event.text);
-  });
-  const onAbort = () => { api.abortChatStream?.(requestId); };
+  };
+  const unsubscribe = typeof electronAi?.onChatStreamEvent === 'function'
+    ? electronAi.onChatStreamEvent(handleStreamEvent)
+    : await onTauriAiChatStreamEvent(handleStreamEvent);
+  const onAbort = () => {
+    const request = typeof electronAi?.abortChatStream === 'function'
+      ? electronAi.abortChatStream(requestId)
+      : tauriAiAbortChatStream(requestId);
+    request?.catch?.(() => {});
+  };
   signal?.addEventListener?.('abort', onAbort);
   try {
-    const res = await api.chatStream(payload);
+    if (signal?.aborted) {
+      onAbort();
+      throw new Error('已取消');
+    }
+    const res = typeof electronAi?.chatStream === 'function'
+      ? await electronAi.chatStream(payload)
+      : await tauriAiChatStream(payload);
     if (signal?.aborted || res?.cancelled) throw new Error('已取消');
     if (!res?.ok) throw new Error(res?.error || 'AI 请求失败');
     return res.message;
