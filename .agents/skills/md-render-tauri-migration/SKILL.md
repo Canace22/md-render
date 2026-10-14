@@ -5,7 +5,7 @@ description: 在 md-render 把 Electron 能力分阶段迁到 Tauri 2、维护�
 
 # md-render Tauri 迁移
 
-把 Tauri 当成新的系统壳，复用现有 Renderer，但逐项迁移系统能力。Electron 在验收完成前继续作为正式版，避免一次切换造成数据、功能或发布链路回归。
+把 Tauri 当成新的系统壳，复用现有 Renderer，但逐项迁移系统能力。Tauri 已是正式发布壳；Electron 只保留一个稳定发布周期的手动回退链路，避免切换初期的数据、功能或发布回归。
 
 ## 为什么这样做
 
@@ -18,11 +18,20 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 1. 定向搜索当前能力的完整调用链：React → store/service → `window.electronAPI` → preload → main service。
 2. 先写清参数、返回值、错误语义和数据位置，再决定 Rust command、Tauri plugin 或自定义协议的落点。
 3. 保持 `desktopBridge.js` 只做运行时识别和跨壳公共能力；不要伪造 `window.electronAPI`，也不要让未迁移能力误报可用。
-4. Tauri 使用独立应用名、bundle identifier、开发端口和数据目录。预览窗口必须明确标注“隔离数据，非正式版”。
+4. 预览初期使用独立应用名、bundle identifier、开发端口和数据目录，并明确标注“隔离数据，非正式版”。一旦 identifier 已承载用户数据，正式切换时必须冻结；显示名称和可执行文件可以改，不能只因 identifier 含 `preview` 字样就改掉数据身份。
 5. capability 从空权限开始，只增加当前功能必需项。页面仍有外部 CDN 时不要开放文件、进程或 shell 等高风险能力；先本地化资源并启用严格 CSP。
 6. 应用版本从 `apps/editor/package.json` 读取；Rust 运行时通过 `AppHandle.package_info()` 返回版本，不再另写一份用户可见版本。
 7. 一次只迁移一个能力。先在副本上验证读，再验证写、监听、取消和错误路径；通过后才替换对应 Electron 路径。
-8. 每个独立功能验证通过后立即提交。Electron 正式链路保持可构建、可启动，直到 Tauri 达到切换门槛。
+8. 每个独立功能验证通过后立即提交。正式 tag 只发布 Tauri；Electron 回退包保持可独立构建、可启动，但不挂到正式 Release，稳定一个发布周期后再决定是否删除。
+
+### 正式切换与发布门禁
+
+- 正式 Release 只由 `v*` tag 触发；tag、根目录版本和 editor 版本必须一致，发布 commit 必须属于 `origin/main`。
+- Apple Developer ID 签名 / 公证和 Windows Authenticode 缺一即失败。禁止把 ad-hoc 或 unsigned 包降级成正式产物。
+- Electron updater 不能跨壳完成首次升级。首次切换必须写清“手动安装 → 显式导入旧库 → 重新授权本地目录”，且源库保持不变。
+- 自定义 Inno 包没有天然接入 Tauri updater。未完成可信更新方案前，明确从 Releases 手动升级，不生成假的 updater 元数据。
+- Windows 正式链同时验证 app、installer、installed app 和 uninstaller 签名，并完成安装、启动、卸载冒烟检查。
+- Electron 回退工作流只能手动触发、短期保存 artifact，不能混入 Tauri 正式 Release。
 
 ### 本地目录的授权与快照
 
@@ -39,6 +48,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 
 - Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入，源库以 read-only/query-only 打开。
 - Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿单独拷贝的 `.db` 冒充完整备份。
+- Electron 导入是“备份当前 Tauri 库后整库替换”，不是合并。已有 Tauri 内容和 Electron 内容同时有价值时，先导出用户可读备份并明确提示；成功结果要展示 `knowledge.before-import.<timestamp>.db` 的实际文件名。
 - 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
 - 先建 candidate DB，校验 schema 白名单、`quick_check`、记录数、workspace JSON 与文档 ID 精确集合，然后备份当前 Tauri DB 并原子切换。失败恢复旧库，同时清理 candidate/backup 的 WAL/SHM 边车文件。
 - 迁移标记不能代替数据验证；启动时同时检查 marker、workspace 和 documents，异常库进只读恢复而不自动覆写。
@@ -55,9 +65,9 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - macOS 使用 WKWebView，Windows 使用 WebView2；Linux WebKitGTK 不是本阶段发布承诺。
 - 不把“窗口打开”“前端 build 通过”当成数据迁移成功；必须观察真实 command、真实文件副本或真实数据库结果。
 - 不直接复制整个 WebView profile。只迁移明确列出的设置，并为每项提供默认值和失败回退。
-- 不把正式版用户数据目录改成预览目录，也不在预览阶段移动、清理或重建正式数据库。
+- 不因 identifier 名字含 `preview` 就迁移、清理或重建已经在用的数据目录。是否正式由产品身份、签名和发布链路决定，不由 identifier 文案决定。
 - Electron 与 Tauri 构建模式不能同时启用；专用端口必须避开现有服务占用。
-- macOS 安装包要区分当前架构与 universal；对外发布前补齐 Developer ID 签名、显式提交 DMG 公证、staple/validate 和更新渠道。CI 上传 `.app` 前用保留包结构的 zip，不直接上传 bundle 目录。
+- macOS 安装包要区分当前架构与 universal；对外发布前补齐 Developer ID 签名、显式提交 DMG 公证和 staple/validate。更新策略必须明确，未接 updater 时写明从 Releases 手动更新。CI 上传 `.app` 前用保留包结构的 zip，不直接上传 bundle 目录。
 - Windows 安装位置、WebView2 策略、签名和 Inno Setup 要单独验收，不能从 macOS 结果外推。WebView2 bootstrapper 下载后先验 Microsoft 签名，安装失败或非零退出码必须阻止主应用安装。
 - `Program Files` 只是应用二进制位置；可变配置、缓存和 SQLite 仍遵循系统用户数据目录。Inno 不能代替代码签名，也不能保证没有 UAC/SmartScreen 提示。
 
@@ -70,18 +80,19 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 3. Tauri 模式识别为 `tauri`，平台名保持 `darwin / win32 / linux` 约定。
 4. Rust command 返回真实运行时、平台和应用版本。
 5. Electron 与 Tauri 环境变量同时存在时立即失败。
-6. Tauri 预览使用独立 bundle identifier 和数据目录。
+6. 正式 Tauri 沿用并冻结已经承载用户数据的 identifier，升级后原 Tauri 数据与 WebView profile 仍可见。
 7. 预览空工作区不会修改 Electron 数据库、WAL 或工作区文件；导入前后源库 hash 一致。
 8. 正文、metadata、图片、Daily 或画布 debounce 期间关窗，必须先落盘；注入失败时窗口保留。
 9. 扫描不完整、重授权选错目录或移除前保存失败时，旧快照、文档 ID 和版本历史仍保留。
-10. Tauri 产物能启动且单实例生效，包内不携带 Node runtime；Electron 正式构建仍通过。
+10. 正式 tag 只生成签名 / 公证后的 Tauri 包且发布门禁生效；Electron 只保留手动回退，当前 Inno 更新边界明确为手动。
 
 执行过构建或测试后，检查并清理 `vite.config.*.timestamp-*.mjs`、`vitest.config.*.timestamp-*.mjs` 等临时产物；`src-tauri/target/` 和生成 schema 保持忽略。
 
 ## 完成标准
 
 - 当前功能在真实 Tauri 窗口中有可复核证据。
-- 正式 Electron 数据未被移动、覆盖或重建。
+- Electron 旧数据未被移动、覆盖或重建，已有 Tauri 数据身份保持稳定。
 - 权限、数据隔离、签名和未迁移能力在文档中说清楚。
-- 相关 Tauri 构建通过，Electron 回归边界有验证记录。
+- 正式包签名 / 公证通过，tag / main / version 门禁生效；一次性手动迁移和当前手动更新边界已写入 Release 与文档。
+- 相关 Tauri 构建通过；Electron 回退可独立构建，但不参与正式 tag。
 - 总结明确区分已完成、尚未迁移和未经证明的性能结论。
