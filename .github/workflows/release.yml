@@ -91,7 +91,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Require macOS signing and notarization secrets
+      - name: Detect macOS signing and notarization secrets
+        id: signing
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -109,11 +110,16 @@ jobs:
             fi
           done
           if (( ${#missing[@]} > 0 )); then
-            echo "Missing required macOS release secrets: ${missing[*]}" >&2
-            exit 1
+            echo "::warning::Missing macOS signing secrets: ${missing[*]}. Publishing an unsigned package."
+            echo "MACOS_SIGNING_ENABLED=false" >> "$GITHUB_ENV"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "MACOS_SIGNING_ENABLED=true" >> "$GITHUB_ENV"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Import Apple Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -131,6 +137,7 @@ jobs:
           security list-keychain -d user -s "$keychain_path"
 
       - name: Build signed Tauri app and DMG
+        if: steps.signing.outputs.enabled == 'true'
         run: pnpm tauri:build:mac:universal
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -139,7 +146,15 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           VITE_AI_PROXY: ${{ vars.AI_PROXY_BASE }}
 
+      - name: Build unsigned Tauri app and DMG
+        if: steps.signing.outputs.enabled != 'true'
+        run: pnpm tauri:build:mac:universal
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+          VITE_AI_PROXY: ${{ vars.AI_PROXY_BASE }}
+
       - name: Notarize and staple macOS packages
+        if: steps.signing.outputs.enabled == 'true'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -159,7 +174,7 @@ jobs:
             --wait
           xcrun stapler staple "$dmg_path"
 
-      - name: Verify macOS packages
+      - name: Verify macOS package structure
         shell: bash
         run: |
           bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
@@ -168,13 +183,22 @@ jobs:
           app_binary="$app_path/Contents/MacOS/md-render"
           test -x "$app_binary"
           codesign --verify --deep --strict --verbose=2 "$app_path"
-          spctl --assess --type execute --verbose=4 "$app_path"
-          xcrun stapler validate "$app_path"
-          xcrun stapler validate "$dmg_path"
           hdiutil verify "$dmg_path"
           architectures="$(lipo -archs "$app_binary")"
           [[ "$architectures" == *arm64* ]]
           [[ "$architectures" == *x86_64* ]]
+
+      - name: Verify signed and notarized macOS packages
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
+          app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
+          dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+          xcrun stapler validate "$app_path"
+          xcrun stapler validate "$dmg_path"
 
       - name: Prepare macOS release assets
         shell: bash
@@ -185,11 +209,15 @@ jobs:
           app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
           dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
           release_dir="$bundle_root/release-assets"
+          suffix=""
+          if [[ "$MACOS_SIGNING_ENABLED" != "true" ]]; then
+            suffix="-unsigned"
+          fi
           mkdir -p "$release_dir"
-          cp "$dmg_path" "$release_dir/MD-Render-$APP_VERSION-macOS-universal.dmg"
+          cp "$dmg_path" "$release_dir/MD-Render-$APP_VERSION-macOS-universal$suffix.dmg"
           ditto -c -k --sequesterRsrc --keepParent \
             "$app_path" \
-            "$release_dir/MD-Render-$APP_VERSION-macOS-universal.app.zip"
+            "$release_dir/MD-Render-$APP_VERSION-macOS-universal$suffix.app.zip"
           (cd "$release_dir" && shasum -a 256 *.dmg *.zip > SHA256SUMS-macos.txt)
 
       - name: Upload macOS release assets
@@ -229,17 +257,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Require Windows signing secrets
+      - name: Detect Windows signing secrets
+        id: signing
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
-            throw 'WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD are required for a formal release.'
+            Write-Warning 'WINDOWS_CERTIFICATE or WINDOWS_CERTIFICATE_PASSWORD is missing. Publishing an unsigned package.'
+            "WINDOWS_SIGNING_ENABLED=false" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "TAURI_INNO_OUTPUT_SUFFIX=-unsigned" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            "WINDOWS_SIGNING_ENABLED=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "TAURI_INNO_OUTPUT_SUFFIX=" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
 
       - name: Import Windows code-signing certificate
+        if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -282,7 +319,7 @@ jobs:
         env:
           VITE_AI_PROXY: ${{ vars.AI_PROXY_BASE }}
 
-      - name: Build signed Inno Setup installer
+      - name: Build Inno Setup installer
         run: pnpm tauri:inno:win
 
       - name: Verify and install Windows package
@@ -294,13 +331,15 @@ jobs:
             throw "Expected exactly one Inno installer, found $($installers.Count)."
           }
 
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $appExe
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Windows application signature verification failed.'
-          }
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $installers[0].FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Windows installer signature verification failed.'
+          if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') {
+            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $appExe
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Windows application signature verification failed.'
+            }
+            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $installers[0].FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Windows installer signature verification failed.'
+            }
           }
 
           $installDir = Join-Path $env:RUNNER_TEMP 'md-render-install-check'
@@ -325,13 +364,15 @@ jobs:
           if (!$uninstaller) {
             throw "Windows uninstaller was not found under $installDir."
           }
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $installedApp
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Installed application signature verification failed.'
-          }
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $uninstaller.FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Windows uninstaller signature verification failed.'
+          if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') {
+            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $installedApp
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Installed application signature verification failed.'
+            }
+            & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $uninstaller.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Windows uninstaller signature verification failed.'
+            }
           }
 
           $appProcess = Start-Process -FilePath $installedApp -PassThru
@@ -360,8 +401,9 @@ jobs:
         run: |
           $installer = Get-ChildItem 'apps/editor/src-tauri/target/release/bundle/inno/*.exe' | Select-Object -First 1
           $releaseDir = 'apps/editor/src-tauri/target/release/bundle/release-assets'
+          $suffix = if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') { '' } else { '-unsigned' }
           New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-          $target = Join-Path $releaseDir "MD-Render-$env:APP_VERSION-windows-x64-setup.exe"
+          $target = Join-Path $releaseDir "MD-Render-$env:APP_VERSION-windows-x64$suffix-setup.exe"
           Copy-Item $installer.FullName $target
           $hash = Get-FileHash -Algorithm SHA256 $target
           "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($target))" |
@@ -408,9 +450,11 @@ jobs:
           body: |
             ## 下载
 
-            - **macOS**：下载 `MD-Render-*-macOS-universal.dmg`（Apple Silicon / Intel 通用）
-            - **Windows**：下载 `MD-Render-*-windows-x64-setup.exe`（Inno Setup）
+            - **macOS**：下载 `MD-Render-*-macOS-universal*.dmg`（Apple Silicon / Intel 通用）
+            - **Windows**：下载 `MD-Render-*-windows-x64*-setup.exe`（Inno Setup）
             - `SHA256SUMS-*` 可用于校验下载文件
+
+            文件名包含 `-unsigned` 表示该包没有受信任的开发者签名。macOS 可能需要在“系统设置 → 隐私与安全性”中确认打开，Windows 可能显示“未知发布者”或 SmartScreen 警告；请只从本仓库 Releases 下载并校验 SHA-256。
 
             ## 从 Electron 版升级
 
@@ -428,7 +472,7 @@ jobs:
 
             ## 当前边界
 
-            - 正式发布必须通过 macOS 签名/公证和 Windows Authenticode 校验；缺少凭证时工作流会直接失败。
+            - 签名凭证齐全时会执行 macOS 签名/公证和 Windows Authenticode 校验；缺少凭证时会发布明确标记的未签名包。
             - PDF 导出、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移到 Tauri。
             - 应用本身不需要 Node.js；AI 需要可达的 `ai-proxy`，若发布包未内置服务地址，请在 AI 设置中填写。
 

@@ -12,7 +12,7 @@
 - **旧用户需要手动迁移一次**：完全退出旧 Electron 版，安装 Tauri 新版，再到 **设置 → Electron 数据交接** 选择旧 `knowledge.db`。导入不是合并：它会先备份当前 Tauri 数据库，再用 Electron 数据替换；Electron 源库不会被删除或覆盖。如果两边都有新内容，先导出 Tauri JSON 备份并另存重要文稿。原本的本地工作区还要重新选择授权。
 - **自动更新暂时中断**：Electron updater 不能跨框架安装 Tauri，Tauri updater 也尚未接入。首次迁移和后续版本暂时都从 [Releases](https://github.com/Canace22/md-render/releases) 手动安装。
 - **首个 Tauri 正式版的边界**：PDF、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑还没迁移，对应入口会隐藏。Electron 仅保留手动回退包，不再进入正式 Release。
-- **安装与签名**：macOS 正式包要求 Developer ID 签名和 Apple 公证；Windows 应用、Inno 安装包和卸载器都要求 Authenticode 签名。Windows 新证书仍可能短期触发 SmartScreen，下载页会同时提供 SHA-256 校验文件。
+- **安装与签名**：有完整凭证时，macOS 包执行 Developer ID 签名和 Apple 公证，Windows 应用、Inno 安装包和卸载器执行 Authenticode 签名；没有凭证时仍发布文件名带 `-unsigned` 的包，macOS 包使用 ad-hoc 签名。这类包可能被 macOS 拦截或触发 Windows SmartScreen，下载页会同时提供 SHA-256 校验文件。
 
 ### 升级前必读：app 内的 Notion 同步和云端快照已移除
 
