@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import 'antd/dist/reset.css';
 import MarkdownEditor from './components/MarkdownEditor.jsx';
-import TauriPreviewNotice from './components/TauriPreviewNotice.jsx';
+import TauriRuntimeNotice from './components/TauriRuntimeNotice.jsx';
 import {
   getDesktopRuntimeInfo,
   getDesktopRuntimeKind,
@@ -18,7 +18,7 @@ if (desktopRuntimeKind === 'tauri') {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {desktopRuntimeKind === 'tauri' && <TauriPreviewNotice />}
+    {desktopRuntimeKind === 'tauri' && <TauriRuntimeNotice />}
     <MarkdownEditor />
   </React.StrictMode>
 );

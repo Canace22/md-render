@@ -1,8 +1,8 @@
 [package]
-name = "md-render-tauri-preview"
+name = "md-render"
 # 应用版本由 tauri.conf.json 指向 apps/editor/package.json；这里仅是内部 Rust crate 版本。
 version = "0.1.0"
-description = "Tauri preview shell for MD Render"
+description = "Tauri desktop app for MD Render"
 authors = ["canace22"]
 edition = "2021"
 

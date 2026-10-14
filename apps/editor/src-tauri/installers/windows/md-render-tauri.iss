@@ -1,13 +1,13 @@
-#define MyAppName "MD Render Tauri Preview"
+#define MyAppName "MD Render"
 #define MyAppPublisher "Canace"
-#define MyAppExeName "md-render-tauri-preview.exe"
+#define MyAppExeName "md-render.exe"
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
 
 #ifndef AppExePath
-  #define AppExePath "..\..\target\release\md-render-tauri-preview.exe"
+  #define AppExePath "..\..\target\release\md-render.exe"
 #endif
 
 #ifndef WebView2BootstrapperPath
@@ -31,13 +31,13 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL=https://github.com/Canace22/md-render
 AppSupportURL=https://github.com/Canace22/md-render/issues
 AppUpdatesURL=https://github.com/Canace22/md-render/releases
-DefaultDirName={autopf}\MD Render Tauri Preview
+DefaultDirName={autopf}\MD Render
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 AllowNoIcons=yes
 LicenseFile=..\..\..\..\..\LICENSE
 OutputDir={#OutputDir}
-OutputBaseFilename=MD-Render-Tauri-Preview-{#AppVersion}-x64{#OutputSuffix}-setup
+OutputBaseFilename=MD-Render-{#AppVersion}-x64{#OutputSuffix}-setup
 SetupIconFile=..\..\..\assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/max

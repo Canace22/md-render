@@ -129,5 +129,5 @@ pub fn run() {
             reveal_local_project_entry,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running MD Render Tauri Preview");
+        .expect("error while running MD Render");
 }

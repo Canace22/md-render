@@ -12231,7 +12231,7 @@ body.theme-dark .comment-item + .comment-item {
     border-color: rgba(148, 163, 184, 0.2);
 }
 
-.tauri-preview-notice {
+.tauri-runtime-notice {
     position: fixed;
     top: var(--space-s);
     right: var(--space-s);

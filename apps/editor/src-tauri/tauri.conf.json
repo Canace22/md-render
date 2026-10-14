@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MD Render Tauri Preview",
+  "productName": "MD Render",
   "version": "../package.json",
   "identifier": "com.mdrender.app.tauri-preview",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "MD Render Tauri Preview（隔离数据，非正式版）",
+        "title": "MD Render",
         "width": 1200,
         "height": 800,
         "minWidth": 960,

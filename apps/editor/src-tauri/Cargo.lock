@@ -2096,7 +2096,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "md-render-tauri-preview"
+name = "md-render"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",

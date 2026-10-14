@@ -6,13 +6,18 @@ import {
   subscribeDesktopPersistenceStatus,
 } from '../store/useEditorStore.js';
 
-export default function TauriPreviewNotice() {
+const MIGRATION_NOTICE_STORAGE_KEY = 'md-renderer-tauri-electron-migration-notice-dismissed';
+
+export default function TauriRuntimeNotice() {
   const persistence = useSyncExternalStore(
     subscribeDesktopPersistenceStatus,
     getDesktopPersistenceStatus,
     getDesktopPersistenceStatus,
   );
   const [retrying, setRetrying] = useState(false);
+  const [showMigrationNotice, setShowMigrationNotice] = useState(
+    () => window.localStorage.getItem(MIGRATION_NOTICE_STORAGE_KEY) !== 'true',
+  );
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -26,10 +31,15 @@ export default function TauriPreviewNotice() {
     }
   };
 
+  const handleDismissMigrationNotice = () => {
+    window.localStorage.setItem(MIGRATION_NOTICE_STORAGE_KEY, 'true');
+    setShowMigrationNotice(false);
+  };
+
   if (persistence.status === 'recovery') {
     return (
       <Alert
-        className="tauri-preview-notice"
+        className="tauri-runtime-notice"
         type="error"
         showIcon
         message="数据库已进入只读恢复模式"
@@ -46,7 +56,7 @@ export default function TauriPreviewNotice() {
   if (persistence.status === 'save-error' || persistence.status === 'retrying') {
     return (
       <Alert
-        className="tauri-preview-notice"
+        className="tauri-runtime-notice"
         type="error"
         showIcon
         message="当前更改尚未保存"
@@ -65,13 +75,17 @@ export default function TauriPreviewNotice() {
     );
   }
 
+  if (!showMigrationNotice) return null;
+
   return (
     <Alert
-      className="tauri-preview-notice"
-      type="warning"
+      className="tauri-runtime-notice"
+      type="info"
       showIcon
-      message="Tauri 预览版 · 数据隔离"
-      description="不会自动读取或覆盖正式版资料；请在设置中手动选择只读或读写打开目录，读写授权只对本次会话有效。"
+      closable
+      onClose={handleDismissMigrationNotice}
+      message="从 Electron 版升级？旧资料仍保留在原位置"
+      description="请先完全退出 Electron 旧版，再到「设置 → 数据存储 → Electron 数据交接」导入 knowledge.db；旧数据库不会被修改或删除。"
     />
   );
 }

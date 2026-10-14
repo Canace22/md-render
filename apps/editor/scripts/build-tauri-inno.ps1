@@ -52,7 +52,7 @@ function Resolve-WebView2Bootstrapper([string]$RequestedPath) {
 }
 
 if (!$AppExePath) {
-  $AppExePath = Join-Path $TauriDir 'target\release\md-render-tauri-preview.exe'
+  $AppExePath = Join-Path $TauriDir 'target\release\md-render.exe'
 }
 if (!$OutputDir) {
   $OutputDir = Join-Path $TauriDir 'target\release\bundle\inno'

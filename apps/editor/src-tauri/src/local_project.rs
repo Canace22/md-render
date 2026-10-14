@@ -755,7 +755,7 @@ fn is_path_within_root(root: &Path, target: &Path) -> bool {
 
 fn ensure_not_protected(path: &Path) -> Result<(), String> {
     if is_protected_electron_path(path) {
-        return Err("为保护正式版数据，Tauri 预览不能访问该目录".to_string());
+        return Err("为保护旧版 Electron 数据，请通过设置里的「Electron 数据交接」导入，不要把该目录直接当作项目打开。".to_string());
     }
     Ok(())
 }
