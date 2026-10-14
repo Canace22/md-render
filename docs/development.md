@@ -4,23 +4,22 @@
 
 ## 命令速查
 
-日常只需要记两个：开发用 `pnpm electron:dev`，测试用 `pnpm test:unit`。其余命令偶尔才用。
+日常只需要记两个：桌面开发用 `pnpm tauri:dev`，测试用 `pnpm test:unit`。其余命令偶尔才用。
 
 | 场景 | 命令 | 说明 |
 |---|---|---|
-| 日常开发 | `pnpm electron:dev` | Electron 正式桌面版，最常用；本地 AI 代理没跑会自动拉起 |
-| | `pnpm tauri:dev` | Tauri 2 预览壳；当前只用于迁移开发，端口 1420 |
+| 日常开发 | `pnpm tauri:dev` | Tauri 2 正式桌面壳，端口 1420 |
+| | `pnpm electron:dev` | 旧 Electron 回退壳；本地 AI 代理没跑会自动拉起 |
 | | `pnpm dev` | 只开网页版，没有文件系统能力，改纯 UI 时更轻 |
 | 测试 | `pnpm test:unit` | 单元测试跑一遍就退出 |
 | | `pnpm test` | 单元测试监听模式，改代码自动重跑 |
 | | `pnpm test:e2e` / `test:e2e:ui` | 端到端测试 / 带图形界面调试 |
-| 打包发版 | `pnpm electron:build` | 打正式安装包（Mac 上默认 Mac 版） |
-| | `pnpm electron:build:win` | 打 Windows 安装包 |
-| | `pnpm electron:pack` | 只生成可运行的 app 目录，不做安装包，用来快速验证打包 |
-| | `pnpm tauri:build:mac` | 打当前 Mac 架构的 Tauri `.app` 和 `.dmg` |
+| 打包发版 | `pnpm tauri:build:mac` | 打当前 Mac 架构的 Tauri `.app` 和 `.dmg` |
 | | `pnpm tauri:build:mac:universal` | 打 Apple Silicon + Intel 通用 `.app` 和 `.dmg` |
 | | `pnpm tauri:build:win` | 在 Windows 上构建 Tauri x64 可执行文件，暂不打安装包 |
 | | `pnpm tauri:inno:win` | 在 Windows 上用 Inno Setup 把已构建的 exe 制成安装程序 |
+| Electron 回退 | `pnpm electron:build` / `electron:build:win` | 只生成旧壳回退包，不进入正式 Release |
+| | `pnpm electron:pack` | 只生成旧壳可运行目录，不做安装包 |
 | | `pnpm release:tag` | 升版本、打 tag 并推送，先加 `-- --dry-run` 预览 |
 | 很少用 | `pnpm build` / `pnpm preview` | 只构建 / 预览网页版，桌面版打包会自动构建 |
 
@@ -29,27 +28,28 @@
 ```bash
 pnpm install
 pnpm dev            # 网页版，打开 http://localhost:3000
-pnpm electron:dev   # 桌面版（Electron）
+pnpm tauri:dev      # 正式桌面壳（Tauri 2）
+pnpm electron:dev   # 旧 Electron 回退壳
 ```
 
-依赖变更后，桌面版用到的原生模块（`better-sqlite3`）可能需要重新编译，否则启动会报错：
+只有维护 Electron 回退壳时才会用到 `better-sqlite3` 原生模块。依赖变更后如旧壳启动报错，可重新编译：
 
 ```bash
 pnpm --filter @md-render/editor electron:rebuild
 ```
 
-`pnpm electron:dev` 会自动检查并启动本地 `server/ai-proxy`（默认 `http://127.0.0.1:8788`，可用 `AI_PROXY_BASE` 指向远程代理）；网页版 `pnpm dev` 不会，需要手动启动。模型配置见 [README](../README.md#想用-ai-助手要先接一个模型) 和 [server/README.md](../server/README.md)。
+`pnpm electron:dev` 会自动检查并启动本地 `server/ai-proxy`；`pnpm tauri:dev` 和网页版不会，需要手动启动或配置远程代理。模型配置见 [README](../README.md#让-ai-助手用起来) 和 [server/README.md](../server/README.md)。
 
-### Tauri 预览壳
+### Tauri 正式桌面壳
 
-Tauri 迁移仍处在双壳阶段：Electron 是正式版，Tauri 是与它隔离的预览版。开发机先按 [Tauri 官方前置要求](https://v2.tauri.app/start/prerequisites/) 安装当前 stable Rust，然后运行：
+正式桌面发布已经切到 Tauri 2；Electron 只保留一个稳定发布周期的手动回退链路。开发机先按 [Tauri 官方前置要求](https://v2.tauri.app/start/prerequisites/) 安装当前 stable Rust，然后运行：
 
 ```bash
 pnpm tauri:dev
 pnpm tauri:build:mac
 ```
 
-Rust、Node.js 和 pnpm 只用于开发与构建；编译后的 Tauri 应用不要求用户安装这些工具。预览版使用独立应用名、bundle identifier 和数据目录，不会覆盖 Electron 正式版。
+Rust、Node.js 和 pnpm 只用于开发与构建；编译后的 Tauri 应用不要求用户安装这些工具。内部 bundle identifier 继续使用 `com.mdrender.app.tauri-preview`，这是已经承载 Tauri 数据和 WebView profile 的稳定身份；产品名和可执行文件已改成 `MD Render`，但 identifier 不再因包含 `preview` 字样而改名，避免用户数据目录再次变化。
 
 当前代码已经接入以下能力：
 
@@ -68,31 +68,31 @@ node server.js
 
 然后在应用的 AI 设置中填写 `http://127.0.0.1:8788`。生产环境应使用已加固的 HTTPS 代理。
 
-从 Electron 带入数据时，**先完全退出 Electron**，再在 Tauri 设置页选择 `knowledge.db` 原文件，或退出后制作的完整副本。不要在 Electron 运行时只复制 `.db`，最新数据可能还在 WAL 中。导入会只读校验源库、备份 Tauri 现有库，源文件保持不变。
+从 Electron 带入数据时，**先完全退出 Electron**，再从 **设置 → Electron 数据交接** 选择 `knowledge.db` 原文件，或退出后制作的完整副本。不要在 Electron 运行时只复制 `.db`，最新数据可能还在 WAL 中。导入不是合并：它会只读校验源库，把现有 Tauri 库备份为 `knowledge.before-import.<timestamp>.db`，再用 Electron 数据替换。两边都有新内容时先导出 Tauri JSON 备份并另存重要文稿。
 
-PDF、自动更新、本机 Agent 和本机 MCP 尚未迁移。Tauri 的 PDF 入口会隐藏，不要用 Electron 功能可用来推断 Tauri 已等价。完整边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
+PDF、自动更新、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移。对应入口会隐藏，不要用 Electron 回退壳功能可用来推断 Tauri 已等价。完整边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
 
 ## 构建
 
 ```bash
 pnpm build                # 网页版 → apps/editor/dist/
-pnpm electron:build       # 桌面版安装包（Mac 上默认 Mac 版）→ apps/editor/release/
-pnpm electron:build:win   # Windows 安装包
-pnpm electron:pack        # 只生成可运行的 app 目录，不做安装包
 pnpm tauri:build:mac              # Tauri macOS 当前架构 .app + .dmg
 pnpm tauri:build:mac:universal    # Tauri macOS Universal .app + .dmg
 pnpm tauri:build:win              # Tauri Windows x64 exe，在 Windows 上运行
 pnpm tauri:inno:win               # 用 Inno Setup 包装上一步的 exe
+pnpm electron:build               # Electron macOS 回退包 → apps/editor/release/
+pnpm electron:build:win           # Electron Windows 回退包
+pnpm electron:pack                # Electron 可运行目录，不做安装包
 pnpm preview              # 本地预览网页版构建（默认 http://localhost:4173）
 ```
 
 ### Tauri 打包说明
 
-macOS 手动 CI 构建 Universal `.app` 和 `.dmg`。只有在 Developer ID、Apple 账号和 Team ID 等 secrets 齐全时，工作流才会执行正式签名、公证和 stapling；否则上传名称明确标注的 ad-hoc 预览产物。
+正式发布由 `.github/workflows/release.yml` 在 `v*` tag 推送后触发，只接受版本号一致且位于 `origin/main` 历史上的提交。macOS 构建 Universal `.app` 和 `.dmg`；Developer ID、Apple 账号或 Team ID 等 secrets 缺一时工作流直接失败，不发布 ad-hoc 包。
 
-Windows 先构建 Tauri exe，再用 Inno Setup 6 生成现代化安装程序。应用程序默认进入 `Program Files`，安装包会运行 Microsoft WebView2 Evergreen Bootstrapper。配置 PFX secrets 时会签名 exe 和卸载器；未配置时产物名会标记 `unsigned`，仍可能触发 SmartScreen。
+Windows 先构建 Tauri exe，再用 Inno Setup 6 生成现代化安装程序。应用程序默认进入 `Program Files`，安装包会运行 Microsoft WebView2 Evergreen Bootstrapper。PFX secrets 是正式发布的必需项；CI 会验证应用、安装包和卸载器签名，并执行安装、启动和卸载冒烟检查。签名不能保证 SmartScreen 永不提示，新证书仍需要积累信誉。
 
-这套 Tauri 工作流只支持手动触发，不会取代现有 Electron tag 发版。包体大小、启动速度和内存占用必须以实际产物与同条件测量为准。
+Electron 回退包只能通过 `.github/workflows/ci.yml` 手动构建，不会挂到正式 Release。旧 Electron updater 无法跨框架完成首次升级，当前自定义 Inno 包也未接入 Tauri updater；用户暂时从 Releases 手动安装更新。包体大小、启动速度和内存占用以实际产物与同条件测量为准。
 
 ## 测试
 
@@ -109,11 +109,11 @@ pnpm test:e2e:ui   # 交互式 Playwright UI
 ```
 md-render/
 ├── apps/editor/
-│   ├── main/            # Electron 主进程（IPC、SQLite、文件系统）
+│   ├── main/            # Electron 回退壳主进程（IPC、SQLite、文件系统）
 │   ├── renderer/        # React 界面（Vite）
 │   ├── shared/          # 主进程与界面共用的工具
 │   ├── resources/       # 随 app 打包的资源（如内置 skill）
-│   ├── src-tauri/       # Tauri 2 预览壳（Rust command、权限和打包配置）
+│   ├── src-tauri/       # Tauri 2 正式桌面壳（Rust command、权限和打包配置）
 │   ├── tests/           # Playwright E2E
 │   └── tests-unit/      # Vitest 单元测试
 ├── packages/
@@ -121,7 +121,7 @@ md-render/
 │   └── blocknote-core/  # 富文本编辑器底层封装
 ├── server/
 │   ├── ai-proxy/        # AI 中转服务（保存模型 Key、解决跨域）
-│   └── mcp-bridge/      # 让外部 MCP 客户端操作桌面版
+│   └── mcp-bridge/      # Electron 回退壳的外部 MCP 桥
 ├── scripts/             # 启动、发版辅助脚本
 └── docs/                # 产品与架构文档
 ```
@@ -134,14 +134,14 @@ md-render/
 |------|------|
 | UI | React 18、Ant Design 5、lucide-react |
 | 构建 | Vite 5、pnpm workspace |
-| 桌面 | Electron 33（正式版）· Tauri 2（迁移预览） |
+| 桌面 | Tauri 2（正式发布）· Electron 33（手动回退） |
 | 状态 | Zustand（persist） |
 | Markdown 核心 | 自研 parser / renderer（`packages/markdown-core`） |
 | 代码高亮 | Shiki |
 | 图表 | Mermaid（随应用打包，按需加载） |
 | 富文本 | BlockNote |
 | AI | Agent 引擎 + 工具注册表（`apps/editor/renderer/src/core/agent/`） |
-| 存储 | localStorage（网页版）· SQLite + FTS5（Electron 与 Tauri 各自独立） |
+| 存储 | localStorage（网页版）· SQLite + FTS5（Tauri 正式库与 Electron 旧库隔离） |
 
 ## Markdown 支持范围
 
@@ -169,9 +169,7 @@ pnpm release:tag -- --dry-run   # 2. 预览 tag
 pnpm release:tag                # 3. 创建 annotated tag 并推送
 ```
 
-推送 tag 后 CI 会构建 `.dmg` 并发布到 GitHub Releases。完整检查清单见 [release-process.md](./release-process.md)。
-
-Tauri 预览包使用 `.github/workflows/tauri-preview.yml` 手动构建，不跟随 tag 发布，也不覆盖 Electron Release。
+推送 tag 后 CI 会构建、签名并校验 Tauri 的 macOS Universal `.dmg` 和 Windows x64 Inno 安装包，再发布到 GitHub Releases。缺少任一平台正式签名凭证时不会发布。完整检查清单见 [release-process.md](./release-process.md)。
 
 ## 部署网页版到 GitHub Pages
 
@@ -187,7 +185,7 @@ CI 会把 Vite 的 `base` 自动设为 `/<仓库名>/`，本地开发仍是 `/`�
 
 | 主题 | 文档 |
 |------|------|
-| 每个界面能干什么 | [产品功能说明.md](./产品功能说明.md) |
+| 产品主路径与边界 | [PRODUCT.md](../PRODUCT.md) |
 | 内容创作路线图 | [content-creation-roadmap.md](./content-creation-roadmap.md) |
 | 编辑器设计取向 | [editor-philosophy.md](./editor-philosophy.md) |
 | AI 助手验收清单 | [ai-assistant-quality-checklist.md](./ai-assistant-quality-checklist.md) |

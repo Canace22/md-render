@@ -6,7 +6,7 @@ import {
   subscribeDesktopPersistenceStatus,
 } from '../store/useEditorStore.js';
 
-const MIGRATION_NOTICE_STORAGE_KEY = 'md-renderer-tauri-electron-migration-notice-dismissed';
+const MIGRATION_NOTICE_STORAGE_KEY = 'md-renderer-tauri-electron-migration-notice-dismissed-v2';
 
 export default function TauriRuntimeNotice() {
   const persistence = useSyncExternalStore(
@@ -85,7 +85,7 @@ export default function TauriRuntimeNotice() {
       closable
       onClose={handleDismissMigrationNotice}
       message="从 Electron 版升级？旧资料仍保留在原位置"
-      description="请先完全退出 Electron 旧版，再到「设置 → 数据存储 → Electron 数据交接」导入 knowledge.db；旧数据库不会被修改或删除。"
+      description="请先完全退出 Electron 旧版，再到「设置 → Electron 数据交接」导入 knowledge.db。导入会备份并替换当前 Tauri 数据库，不会合并两边内容；Electron 源数据库不会被修改。"
     />
   );
 }

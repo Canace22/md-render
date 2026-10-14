@@ -4,7 +4,7 @@
 
 **一个本地优先的个人工作台：用「今日速记」随手记录、管理每天的工作，用文档写文章、剧本、笔记或任何长文，AI 助手随时帮你改。**
 
-- **桌面版（macOS）**：[下载安装包](https://github.com/Canace22/md-render/releases/latest)，推荐长期使用。
+- **桌面版（macOS / Windows）**：[下载安装包](https://github.com/Canace22/md-render/releases/latest)，推荐长期使用。桌面壳使用 Tauri 2 和系统 WebView，应用本身不要求安装 Node.js。
 - **网页版**：[直接打开](https://canace22.github.io/md-render/)，不用安装，适合先试试。
 
 内容存在你自己电脑上，可以直接存成普通的 `.md` 文件，换别的编辑器也能打开。
@@ -25,22 +25,33 @@
 
 **AI 助手：常驻右侧**
 
-润色、扩写、起标题、改写成不同平台的版本；输入 `/编辑部审稿` 让 9 个编辑角色一起审稿。AI 改正文前会先标出改了哪几行，你确认后才写进去。每个能力都是一个技能文件，可以自己加。
+润色、扩写、起标题、改写成不同平台的版本；输入 `/编辑部审稿` 让 9 个编辑角色一起审稿。AI 改正文前会先标出改了哪几行，你确认后才写进去。内置能力用 skill 组织；首个 Tauri 正式版暂不能新建或编辑自定义 skill。
 
 **发布：写完直接用**
 
-一键排版复制到微信公众号（多种模板），也能导出 MD / HTML / PDF / DOCX。写公众号的话，还有选题看板、素材收件箱、发布排期和发布前检查清单。
+一键排版复制到微信公众号（多种模板），也能导出 MD / HTML / DOCX。写公众号的话，还有选题看板、素材收件箱、发布排期和发布前检查清单。
 
 ## 开始使用
 
 ### 桌面版
 
-1. 到 [Releases](https://github.com/Canace22/md-render/releases/latest) 下载 `.dmg` 安装，Intel 和 Apple 芯片都能用。
-2. 第一次打开如果提示 **「应用程序已损坏，无法打开」**：这是因为安装包没有做苹果签名，文件本身没问题。到 **系统设置 → 隐私与安全性** 点「仍要打开」，或在终端执行：
+1. 到 [Releases](https://github.com/Canace22/md-render/releases/latest) 下载对应安装包：macOS 选 `MD-Render-*-macOS-universal.dmg`，Windows 选 `MD-Render-*-windows-x64-setup.exe`。
+2. macOS 包同时支持 Intel 和 Apple 芯片；Windows 安装程序默认装到 `Program Files`，安装时会请求系统管理员确认。
+3. 正式包会经过 macOS 签名 / 公证或 Windows Authenticode 签名。Windows 仍可能因为新证书信誉弹出 SmartScreen 提示，请只从本仓库 Releases 下载，并用同页的 `SHA256SUMS` 校验文件。若 macOS 仍拒绝打开，不要用 `xattr` 绕过，先重新下载并到仓库反馈。
 
-   ```bash
-   xattr -dr com.apple.quarantine "/Applications/MD Render.app"
-   ```
+**从旧 Electron 版升级时，需要手动交接一次数据：**
+
+1. 完全退出旧版 MD Render。
+2. 安装并打开新版。用过 Tauri 预览版的话，原 Tauri 数据会自动沿用，不需要导入。
+3. 需要恢复 Electron 旧数据时，到 **设置 → Electron 数据交接** 选择旧版 `knowledge.db`。导入不是合并：它会先自动备份当前 Tauri 数据库，再用 Electron 数据替换；Electron 源库不会被修改或删除。
+4. 如果两边都有新内容，先在 **设置 → 备份（JSON）** 导出 Tauri 内容并另存重要文稿，不要直接导入。
+5. 原来的本地工作区需要重新选择授权，之后才能继续写入。
+
+旧库通常在 macOS 的 `~/Library/Application Support/md-render/knowledge.db`，或 Windows 的 `%APPDATA%\md-render\knowledge.db`。如果找不到，再检查同级的 `@md-render/editor` 和 `MD Render` 目录。迁移确认完成前不要删除旧库。
+
+导入前的 Tauri 库会备份到 macOS 的 `~/Library/Application Support/com.mdrender.app.tauri-preview/`，或 Windows 的 `%APPDATA%\com.mdrender.app.tauri-preview\`；完成提示会显示具体文件名。
+
+旧 Electron 自动更新不能跨框架安装 Tauri 版；当前 Tauri 版也还没有内置自动更新，后续版本暂时都从 Releases 手动下载安装。
 
 安装包会比 main 分支稍旧，个别新功能可能还没打进去，差别见 [CHANGELOG](./CHANGELOG.md) 的「未发布」部分。
 
@@ -57,23 +68,15 @@
 | 内容存在哪 | 本机，可选存成本地 `.md` 文件 | 当前浏览器 |
 | 全文搜索 | 搜正文 | 只做关键词匹配 |
 | 文档历史版本 | 自动保留最近 7 天 | 不支持 |
-| 让 Claude Desktop / Cursor 等直接操作 app | 支持 | 不支持 |
-| 其他功能 | 一样 | 一样 |
+| 打开本地工作区 | 支持；重启后需重新授权写入 | 不支持 |
+| 本机 Agent / MCP | 首个 Tauri 正式版暂不支持 | 不支持 |
+| PDF 导出 | 首个 Tauri 正式版暂不支持 | 以页面实际入口为准 |
 
 ## 让 AI 助手用起来
 
-AI 助手有两种接法，二选一：
+当前 Tauri 桌面版通过 `ai-proxy` 连接模型。应用本身没有 Node.js 运行时，也不依赖用户预装 Node；如果发布包已经配置公共 HTTPS 代理，直接在应用里选模型即可。
 
-**方式一：电脑上装了 Codex / Claude Code / Cursor（推荐，桌面版）**
-
-什么都不用配。打开 AI 助手会自动检测并选中一个（优先 Codex），用的是你自己的登录、配置、skills 和 MCP，**不用填 API Key**。没装或没登录的话，设置页会告诉你怎么装，装好后点「重新检测」。
-
-- agent 默认可以直接改当前项目里的文件、跑命令，每一步都会显示在面板里，点「停止」会连它启动的命令一起停掉。
-- 想更稳妥，在 **AI 助手 → 设置 → 安全模式** 打开，就只允许改文件。
-
-**方式二：没有本机 agent，接一个模型 API**
-
-需要先跑一个小的中转服务（`server/ai-proxy`），API Key 填在这个服务里。内置支持 MiniMax、DeepSeek，其他 OpenAI 兼容接口在设置里选「自定义」。本机启动（需要 Node.js）：
+想自己托管代理，可以部署 `server/ai-proxy`，也可以在本机启动。只有“本机自己跑代理”这条路需要 Node.js：
 
 ```bash
 git clone https://github.com/Canace22/md-render.git && cd md-render
@@ -81,18 +84,18 @@ cp server/ai-proxy/.env.example server/ai-proxy/.env   # 在 .env 里填上你�
 node server/ai-proxy/server.js                         # 默认监听 http://localhost:8788
 ```
 
-桌面版默认就连 `http://localhost:8788`，服务启动后直接能用。如果你把服务部署在别的机器上（部署方法见 [server/README.md](./server/README.md)），在 AI 助手面板右上角的 **设置 → AI 代理地址** 里填上地址。
+服务启动后，在 AI 助手面板右上角的 **设置 → AI 代理地址** 填 `http://127.0.0.1:8788`。部署到别的机器时请使用 HTTPS，方法见 [server/README.md](./server/README.md)。本机 Codex / Claude Code Agent 和 MCP 尚未迁入首个 Tauri 正式版。
 
 ## 能做什么
 
 - **今日速记**：一天一篇大纲（像幕布），任务、事件、笔记可嵌套、可贴图；没做完的任务自动带到第二天，内容能直接交给其他 AI。
 - **写作**：Markdown 编辑与实时预览，代码高亮、Mermaid 图、表格、目录、浅色 / 深色主题。
-- **AI 助手**：常驻右侧，可以改写、扩写、润色、起标题，生成公众号 / 小红书 / 知乎版本；输入 `/编辑部审稿` 会让 9 个编辑角色一起审你的稿子。AI 改正文时会先进收件箱标出改了哪几行，你确认后才会写进文档。每个功能都是一个技能文件，自己加一个不用改代码（见 [产品功能说明](./docs/产品功能说明.md)）。
+- **AI 助手**：常驻右侧，可以改写、扩写、润色、起标题，生成公众号 / 小红书 / 知乎版本；输入 `/编辑部审稿` 会让 9 个编辑角色一起审你的稿子。AI 改正文时会先进收件箱标出改了哪几行，你确认后才会写进文档。内置能力由 skill 组织，自定义 skill 的新建和编辑尚未迁入 Tauri。
 - **选题到发布**：选题看板、素材收件箱、灵感画布、发布排期和发布前检查清单。
 - **知识库**：`[[文档名]]` 双向链接、反向链接、关系图谱、全文搜索。
-- **发布**：一键复制成公众号排版（多种模板可选），也能导出 MD / HTML / PDF / DOCX。
+- **发布**：一键复制成公众号排版（多种模板可选），也能导出 MD / HTML / DOCX。
 
-每个界面的详细说明见 [产品功能说明](./docs/产品功能说明.md)。
+产品主路径和边界见 [产品意图](./PRODUCT.md)。
 
 ## 常用操作
 
@@ -109,21 +112,21 @@ node server/ai-proxy/server.js                         # 默认监听 http://loc
 
 app 不做多设备同步。历史版本可以按 `Cmd/Ctrl + K` →「查看文档版本历史」对比和恢复；更长期的版本管理，在这个文件夹里用 Git 即可。
 
-### 让外部 AI 直接用你的内容（桌面版）
+### 把内容交给外部 AI（桌面版）
 
-- **打开内容库**：用 Claude Code 等打开 `~/Documents/MdRender`，里面有 app 维护的 `AGENTS.md` 和技能，不开 app 也能用同一套技能。
-- **MCP**：Claude Desktop、Cursor 等可以通过 MCP 操作开着的 app，改正文和删除需要你在 app 里确认。配置见 [server/mcp-bridge/README.md](./server/mcp-bridge/README.md)，也可以在 **设置 → 外部 agent 接入** 一键复制。
+当前 Tauri 正式版还不能让 Claude Desktop、Cursor 等通过 MCP 直接操作开着的 app，也还没有“数据文件化”入口。如果文档已经放在你选择的本地工作区，可以让 Codex、Claude Code 等直接打开那个目录；数据库内的其他内容请先保留在 app 中。
 
-### 把数据都变成文件（桌面版）
+### 当前桌面版边界
 
-**设置 → 数据存储** 可以把编辑部记忆、Daily、白板等迁成 `~/Documents/MdRender` 下的 Markdown / JSON Canvas 文件，Obsidian 能直接打开。迁移前会先预演并给你看报告，还会完整备份数据库，随时能切回去。
+首个 Tauri 正式版暂不提供 PDF 导出、本机 Agent、本机 MCP、数据文件化、自定义 skill 编辑和自动更新。旧 Electron 回退壳仍保留这些代码，但不属于正式 Release。
 
 ## 参与开发
 
 ```bash
 pnpm install
 pnpm dev            # 网页版，打开 http://localhost:3000
-pnpm electron:dev   # 桌面版
+pnpm tauri:dev      # 正式桌面壳
+pnpm electron:dev   # 旧 Electron 回退壳
 ```
 
 项目从一个自己实现的 Markdown 解析器起步（`packages/markdown-core`），所以叫 MD Render。构建、测试、项目结构、发版和部署见 [开发指南](./docs/development.md)；版本变化见 [CHANGELOG](./CHANGELOG.md)，后续计划见 [路线图](./docs/content-creation-roadmap.md)。

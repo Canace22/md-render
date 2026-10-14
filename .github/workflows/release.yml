@@ -417,16 +417,19 @@ jobs:
             这是桌面壳切换到 Tauri 2 后的正式包，需要手动安装一次：
 
             1. 先完全退出 Electron 旧版。
-            2. 安装并打开新版。
-            3. 在「设置 → 数据存储 → Electron 数据交接」中选择旧 `knowledge.db`。导入只读取源库，不会删除或覆盖旧数据。
-            4. 原来的本地工作区需要重新选择授权。
+            2. 安装并打开新版。用过 Tauri 预览版的话，原 Tauri 数据会自动沿用，不需要导入。
+            3. 需要恢复 Electron 旧数据时，在「设置 → Electron 数据交接」中选择旧 `knowledge.db`。导入不是合并：它会先备份当前 Tauri 数据库，再用 Electron 数据替换；Electron 源库不会被修改。
+            4. 如果两边都有新内容，先导出 Tauri JSON 备份并另存重要文稿，不要直接导入。
+            5. 原来的本地工作区需要重新选择授权。
+
+            旧库通常在 macOS 的 `~/Library/Application Support/md-render/knowledge.db`，或 Windows 的 `%APPDATA%\md-render\knowledge.db`。如果找不到，再检查同级的 `@md-render/editor` 和 `MD Render` 目录。迁移确认前不要删除旧库。
 
             旧 Electron 自动更新无法跨框架直接安装这个版本；Tauri 内置更新也尚未接入，暂时请从 Releases 手动升级。
 
             ## 当前边界
 
             - 正式发布必须通过 macOS 签名/公证和 Windows Authenticode 校验；缺少凭证时工作流会直接失败。
-            - PDF 导出、本机 Agent 和本机 MCP 尚未迁移到 Tauri。
-            - AI 需要可达的 `ai-proxy`；若发布包未内置服务地址，请在 AI 设置中填写。
+            - PDF 导出、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移到 Tauri。
+            - 应用本身不需要 Node.js；AI 需要可达的 `ai-proxy`，若发布包未内置服务地址，请在 AI 设置中填写。
 
             网页版仍通过 GitHub Pages 独立发布。

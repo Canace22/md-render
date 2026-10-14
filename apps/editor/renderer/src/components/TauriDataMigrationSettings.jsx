@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DatabaseBackup, Loader2 } from 'lucide-react';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { getDesktopRuntimeKind } from '../services/desktopBridge.js';
 import { importLegacyDatabase } from '../services/databaseBridge.js';
 import { flushTauriCloseDrains } from '../services/desktopCloseBridge.js';
@@ -21,8 +21,8 @@ export default function TauriDataMigrationSettings() {
 
   const handleImport = async () => {
     const confirmed = window.confirm(
-      '导入会先备份 Tauri 当前数据，再把你选中的 Electron 数据库复制到 Tauri 私有目录。\n\n'
-      + '不会修改源数据库。请先完全退出 Electron 正式版，再选择 knowledge.db 原文件，或退出后复制出的完整副本。不要在 Electron 运行时只复制单个 .db 文件，否则可能缺少 WAL 中尚未合并的最新内容。\n\n是否继续？',
+      '导入不是合并：会先备份当前 Tauri 数据库，再用你选中的 Electron 数据替换当前 Tauri 数据。\n\n'
+      + '如果你已经在 Tauri 预览版里写了新内容，请先另行备份。Electron 源数据库不会被修改。请完全退出 Electron 旧版后，再选择 knowledge.db 原文件或完整副本；不要在 Electron 运行时只复制单个 .db 文件，否则可能缺少 WAL 中尚未合并的最新内容。\n\n是否继续？',
     );
     if (!confirmed) return;
 
@@ -45,11 +45,16 @@ export default function TauriDataMigrationSettings() {
         throw new Error(result?.error || '数据导入失败');
       }
       shouldRestorePending = false;
-      message.success(
-        `已导入 ${result.documents ?? 0} 篇文档和 ${result.versions ?? 0} 条历史版本，正在重新加载。`,
-      );
       keepBarrierUntilReload = true;
-      window.setTimeout(() => window.location.reload(), 300);
+      Modal.success({
+        title: 'Electron 数据导入完成',
+        content: `已用 Electron 数据替换当前 Tauri 数据，共 ${result.documents ?? 0} 篇文档和 ${result.versions ?? 0} 条历史版本。导入前的 Tauri 数据已备份到应用数据目录，文件名为 ${result.backupFileName || 'knowledge.before-import.<timestamp>.db'}。`,
+        okText: '重新加载',
+        closable: false,
+        keyboard: false,
+        maskClosable: false,
+        onOk: () => window.location.reload(),
+      });
     } catch (error) {
       console.error('[tauri] 导入 Electron 数据失败:', error);
       message.error(error?.message || '数据导入失败');
@@ -68,7 +73,7 @@ export default function TauriDataMigrationSettings() {
     <div className="settings-group">
       <div className="settings-group-title">Electron 数据交接</div>
       <div className="settings-platform-hint">
-        完全退出 Electron 后，选择旧版 knowledge.db 原文件或完整副本。Tauri 会导入文档、双链和版本历史，源文件保持不变。
+        导入会备份并替换当前 Tauri 数据库，不会合并两边内容。完全退出 Electron 后再选择旧版 knowledge.db；源文件保持不变。
       </div>
       <div className="settings-action-list">
         <button

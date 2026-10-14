@@ -2,23 +2,23 @@
 
 ## 当前结论
 
-Tauri 2 方案可行，但现在仍是与 Electron 并行的预览版，不会替换正式发布链路。它复用现有 React/Vite 界面，系统能力改由 Rust command 提供，macOS 使用 WKWebView，Windows 使用 WebView2。
+正式桌面发布已经从 Electron 切到 Tauri 2。它复用现有 React/Vite 界面，系统能力改由 Rust command 提供，macOS 使用 WKWebView，Windows 使用 WebView2。Electron 只保留一个稳定发布周期的手动回退包，不再进入 `v*` tag 的 GitHub Release。
 
-当前分支已接入可控本地目录、Tauri 私有 SQLite/FTS、显式旧库导入、远程 AI 代理、本地媒体、原生保存导出和外链打开。PDF、自动更新、本机 Agent 和本机 MCP 还没有迁移。在双端实机、签名和数据回归验收完成前，Electron 继续是正式版。
+当前代码已接入可控本地目录、Tauri 私有 SQLite/FTS、显式旧库导入、远程 AI 代理、本地媒体、原生保存导出和外链打开。首个正式版明确不包含 PDF、自动更新、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑；这些入口会隐藏，不伪装成可用。
 
 最终用户不需要安装 Node.js、pnpm 或 Rust。Node.js 和 Rust 只用于开发与构建。但 AI 功能仍需要一个可达的 `ai-proxy`：Tauri 客户端不会自动启动本地 Node 服务。
 
-## 为什么保留双壳
+## 稳定身份与 Electron 回退
 
 Electron 与 Tauri 的 WebView profile、应用标识和数据目录彼此独立。Tauri 首次打开时看不到 Electron 里的工作区，是数据隔离的结果，不是原数据被删除。
 
-双壳期间遵守三条原则：
+正式切换后仍遵守三条原则：
 
 - Electron 与 Tauri 不同时写同一个数据库。
-- Tauri 不自动猜测或读取 Electron 的正式数据目录。
+- Tauri 不自动猜测或读取 Electron 的旧数据目录，只走用户主动发起的交接。
 - 未迁移能力在 Tauri 中隐藏或明确报错，不伪装成已可用。
 
-Tauri 预览版的 bundle identifier 是 `com.mdrender.app.tauri-preview`，窗口和页面都明确标注“隔离数据，非正式版”。
+内部 bundle identifier 永久保留为 `com.mdrender.app.tauri-preview`。这个值已经承载 Tauri 的 SQLite、WebView profile 和单实例身份；为去掉 `preview` 字样而改名会再次切换数据目录，让已有 Tauri 用户看起来“数据又没了”。正式身份由产品名、可执行文件、签名和发布链路决定，不由 identifier 文案决定。
 
 ## 当前能力
 
@@ -30,13 +30,15 @@ Tauri 预览版的 bundle identifier 是 `com.mdrender.app.tauri-preview`，窗�
 | 外部变更检测 | 已接入 | 先轮询轻量 revision，变化后才重新扫描 |
 | 本地媒体 | 已接入 | 图片写入工作区 `assets/`，Markdown 保留相对路径，预览通过受控 `local-media` 协议 |
 | SQLite / FTS5 | 已在 Rust 侧接入 | 使用 Tauri 自己的 `knowledge.db`，不与 Electron 共用 |
-| Electron 旧库导入 | 已接入显式导入 | 必须先退出 Electron；源库只读；导入前后校验并保留备份 |
+| Electron 旧库导入 | 已接入显式导入 | 必须先退出 Electron；源库只读；替换而非合并；切换前备份当前 Tauri 库 |
 | AI API | 已接入 Tauri 请求通道 | 需用户配置可达 `ai-proxy`；生产建议 HTTPS |
 | MD / HTML / DOCX 导出 | 已接入原生保存对话框 | Rust 原子写入；需真实产物交互验收 |
 | 外部链接 | 已接入系统打开 | 只允许 `http` / `https` |
 | PDF 导出 | 未迁移 | Tauri 中不展示 PDF 导出入口 |
 | 自动更新 | 未迁移 | Electron updater 不在 Tauri 中误报可用 |
 | 本机 Agent / MCP | 未迁移 | 不会调用系统 Node 或 Electron `run-as-node` |
+| 数据文件化 / 外部 Agent 设置 | 未迁移 | 依赖 Electron vault bridge，Tauri 中隐藏 |
+| 自定义 skill 新建 / 编辑 | 未迁移 | 内置 skill 可运行，文件编辑依赖 Electron vault bridge |
 
 ## 本地目录的授权模型
 
@@ -58,15 +60,19 @@ Tauri 预览版的 bundle identifier 是 `com.mdrender.app.tauri-preview`，窗�
 
 Tauri 在自己的系统应用数据目录中管理 `knowledge.db`。这个数据库用来保存应用状态、文档索引、双链和版本历史；用户主动选择的 Markdown 工作区仍在原位，不会被搬进应用私有目录。
 
-需要带入 Electron 旧数据时，在 Tauri 设置页手动选择 `knowledge.db`。导入流程是：
+Electron 旧库通常位于 macOS 的 `~/Library/Application Support/md-render/knowledge.db`，或 Windows 的 `%APPDATA%\md-render\knowledge.db`。找不到时，再检查同级的 `@md-render/editor` 和 `MD Render` 目录。已有 Tauri 预览数据会继续跟随冻结的 `com.mdrender.app.tauri-preview` identifier 自动沿用，不需要导入；“继承 Tauri 预览数据”和“导入 Electron 旧库”是两条不同路径。
+
+当前 Tauri 库和导入前备份位于 macOS 的 `~/Library/Application Support/com.mdrender.app.tauri-preview/`，或 Windows 的 `%APPDATA%\com.mdrender.app.tauri-preview\`。成功弹窗会显示本次 `knowledge.before-import.<timestamp>.db` 的实际文件名。
+
+需要带入 Electron 旧数据时，在 **设置 → Electron 数据交接** 手动选择 `knowledge.db`。**导入不是合并**：它会用 Electron 数据替换当前 Tauri 数据；两边都有新内容时，先导出 Tauri JSON 备份并另存重要文稿。导入流程是：
 
 1. 先锁住交互，排空文件、图片、metadata 与 SQLite 保存，再冻结新的状态和 Rust 写入。
 2. 以只读方式打开源库，校验 schema 白名单和 `PRAGMA quick_check`。
 3. 把业务表复制到新候选库，重建 FTS，比对记录数、工作区 JSON 与文档 ID。
-4. 备份 Tauri 当前库，再切换候选库；新库无法重新打开时恢复原库。
+4. 把 Tauri 当前库备份为 `knowledge.before-import.<timestamp>.db`，再切换候选库；新库无法重新打开时恢复原库。
 5. 源库保持不变；成功后保持冻结直到重载，失败才恢复当前会话。
 
-**导入前必须完全退出 Electron。** Electron 运行时，最新写入可能还在 `knowledge.db-wal` 中。此时只复制一个 `.db` 文件可能丢失最新内容。安全做法是退出 Electron 后直接选原库，或在退出后复制出完整副本再选择。
+**导入前必须完全退出 Electron。** Electron 运行时，最新写入可能还在 `knowledge.db-wal` 中。此时只复制一个 `.db` 文件可能丢失最新内容。安全做法是退出 Electron 后直接选原库，或在退出后复制出完整副本再选择。导入成功后仍需重新授权本地目录；完成数据、搜索和历史回归前不要删除旧库。
 
 ## AI 与 Node.js 边界
 
@@ -75,7 +81,7 @@ Tauri 客户端的 AI 请求、流式事件、取消、知识库搜索和附件�
 - 本地开发可以手动启动仓库里的 Node `ai-proxy`。
 - 发给普通用户时，应配置稳定的 HTTPS 代理服务。
 - Tauri 不会检测或启动用户机器上的 `node` 命令。
-- 本机 Codex / Claude 等 Agent、HTTP MCP 与 stdio MCP 仍只在 Electron 正式版可用。
+- 本机 Codex / Claude 等 Agent、HTTP MCP 与 stdio MCP 只保留在 Electron 回退壳，不属于正式 Release。
 
 ## 安装与发布
 
@@ -85,35 +91,34 @@ Tauri 客户端的 AI 请求、流式事件、取消、知识库搜索和附件�
 - 应用程序默认安装到 `Program Files`，不把可执行文件安装到 AppData。
 - 用户内容留在用户选择的目录。配置、缓存和 Tauri 私有 SQLite 仍遵守 Windows 的用户数据目录约定；不能把这些可变数据写进 `Program Files`，也不承诺“完全不用 AppData”。
 - 安装包携带并调用 Microsoft WebView2 Evergreen Bootstrapper，构建脚本会验证其 Microsoft 数字签名。
-- CI 在配置 PFX 时签名应用与卸载器；没有证书时产物会明确标记为 unsigned。
+- 正式 CI 强制要求 PFX，签名应用、安装包和卸载器；缺少证书时直接失败，不生成正式 unsigned 包。
 
-Inno Setup 不能代替代码签名。是否出现 SmartScreen 提示还取决于可信证书和发布信誉，不能从 macOS 构建结果推断。当前 Windows 工作流和安装脚本仍需 Windows 实机或 CI 完整验收。
+Inno Setup 不能代替代码签名。是否出现 SmartScreen 提示还取决于可信证书和发布信誉，不能承诺绝不弹窗。CI 会完成静默安装、启动、签名复核和卸载；旧 Electron NSIS 与新 Inno 的并存、快捷方式和卸载顺序仍需 Windows 实机回归。
 
 ### macOS
 
 - 本地可构建当前架构的 `.app` 和 `.dmg`。
-- 手动 CI 工作流构建 `universal-apple-darwin` 产物，同时包含 Apple Silicon 和 Intel 架构。
-- 签名、Apple 公证与 stapling 依赖 Developer ID 和 Apple 账号 secrets；缺少 secrets 时只生成 ad-hoc 预览产物，不应当成已通过 Gatekeeper 发布验收。
+- 正式 tag 工作流构建 `universal-apple-darwin` 产物，同时包含 Apple Silicon 和 Intel 架构。
+- Developer ID 签名、Apple 公证与 stapling 都是正式发布门槛；缺少任一 secret 时直接失败，不生成正式 ad-hoc 包。
 
 Windows 和 macOS 的包体、启动时间与空闲内存都以同一台机器、同一份数据下的实际测量为准，不预设数字。
 
 ## 验证边界
 
-“代码已接入”、“构建通过”和“真实交互通过”是三个不同结论。当前分支只能按已有证据声明状态：
+“代码已接入”、“构建通过”和“正式签名发布通过”是三个不同结论。当前分支只能按已有证据声明状态：
 
-- Rust 格式检查、锁定依赖编译、Electron 兼容构建和 macOS 当前架构 Tauri 发布构建已通过。
-- 本地 ad-hoc 签名结构校验通过；它没有 Apple 公证，Gatekeeper 拒绝属于预期结果，不能当作正式发行包。
-- 当前 macOS 产物能启动且单实例生效，主程序只链接系统框架，没有捆绑 Node/Electron 运行时。
-- 当前开发机处于锁屏状态，本轮新增的读写、媒体、数据导入、AI 和原生导出没有完成可见 UI 人工验收。
-- macOS 成功不代表 Windows WebView2、UAC、Inno、输入法或 SmartScreen 已验证。
-- 没有真实证书和发布账号，不宣称签名、公证或无警告安装已通过。
-- 数据导入先用合成旧库或完整副本测试，不拿正在使用的 Electron 正式库做破坏性验证。
+- Rust 编译检查、Renderer 构建和 macOS 当前架构 Tauri 发布构建已通过。
+- 本地生成的 `MD Render.app` 约 24.91 MiB，DMG 约 10.54 MiB；这只是本机当前版本样本，不是跨平台体积承诺。
+- 本地 ad-hoc `codesign` 结构校验和 DMG 完整性校验通过；主程序没有链接 Node / Electron 运行时。
+- 正式 Developer ID 公证和 Windows Authenticode 只能在配置真实凭证的 tag CI 中确认，本地结果不能代替。
+- macOS 成功不代表 Windows WebView2、UAC、Inno、输入法、SmartScreen 或 Electron 共存升级已经实机验证。
+- 数据导入先用合成旧库或完整副本测试，不拿正在使用的 Electron 旧库做破坏性验证。
 
-## 切换成正式版前还需要什么
+## 正式切换后的待办
 
-1. 在真实 Tauri 窗口中验收本地目录读写、外部变更冲突、媒体和导出。
-2. 用合成旧库完成导入、重启持久化、搜索、双链和版本历史回归。
-3. 用可控 `ai-proxy` 验收普通对话、流式输出、取消和失败路径。
-4. 迁移 PDF、updater、本机 Agent 和 MCP，或在产品上明确它们不属于首个 Tauri 正式版。
-5. 在 macOS 和 Windows 实机完成中文输入、编辑、签名安装、卸载、升级与回滚验收。
-6. 至少保留一个稳定发布周期的 Electron 回滚包，再决定是否删除 Electron 专用代码。
+1. 在 macOS 和 Windows 正式签名 CI 中完成首个 tag 发布，并保存签名、公证、安装和卸载证据。
+2. 在 Windows 实机验证与旧 Electron NSIS 共存、快捷方式、中文输入和两边卸载顺序。
+3. 继续回归旧库导入、重启持久化、搜索、双链、版本历史和工作区重新授权。
+4. 单独规划 Tauri updater；当前自定义 Inno 包继续从 Releases 手动更新，不冒充已支持自动升级。
+5. 逐项迁移 PDF、本机 Agent、MCP、数据文件化和自定义 skill 编辑，再恢复对应入口。
+6. 至少保留一个稳定发布周期的 Electron 回退包，确认迁移无阻断后再决定是否删除 Electron 专用代码。
