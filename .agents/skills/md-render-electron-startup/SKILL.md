@@ -23,7 +23,13 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
 
 ## 打包 / CI 发版（`package-electron.mjs`、`ci.yml`、`release.yml`）
 
-Release 只在推 `v*` tag 时跑；Pages 每次推 `main` 自动部署（别改回 tag 触发，`github-pages` 环境保护规则只放行默认分支，deploy 会无日志失败）；`ci.yml` 有 macOS 和 Windows 两个打包任务，但只能手动触发（push/PR 不跑），改打包链路先在 Actions 页签手动跑一次 CI 确认两项全绿再打 tag。CI 日志过期会返回 410，排查要趁早。
+Tauri Release 只在推 `v*` tag 时跑；Pages 每次推 `main` 自动部署（别改回 tag 触发，`github-pages` 环境保护规则只放行默认分支，deploy 会无日志失败）。`.github/workflows/ci.yml` 是手动触发的旧 Electron 回退包，不能代替 Tauri Release 验收。GitHub 重跑旧 tag 会继续使用该 tag 中的 workflow；改了 `release.yml` 后要新建 tag 才能验证新逻辑。CI 日志过期会返回 410，排查要趁早。
+
+正式签名是可选增强，不是发布前置条件：
+
+- macOS 只有在 Developer ID / 公证 secrets 全部齐全时才导入证书并执行公证、stapling 和 Gatekeeper 校验；否则给 Tauri 传 `APPLE_SIGNING_IDENTITY=-` 做 ad-hoc 签名。两条路径都要校验 app 签名结构、DMG 完整性和 Universal 双架构。
+- Windows 打包脚本已支持可选 `WINDOWS_SIGNTOOL_COMMAND`；PFX secrets 不齐时不导入证书、不做 Authenticode 校验，但仍要完成安装、启动和卸载冒烟检查。
+- 没有受信任开发者签名的产物文件名必须带 `-unsigned`，Release 说明必须明示 macOS 系统确认和 Windows SmartScreen 风险。
 
 **推了却没触发流水线**：先 `git ls-remote --tags origin` 看远端有没有这个 `v*` tag——多半是 tag 根本没推上去，只推了分支（分支 push 不触发任何流水线）。`release:tag` 现在默认自动提交 bump，并用 `git push --atomic origin <分支> <tag>` 一起推、推完核对远端 tag；改这个脚本不要退回「bump 后不提交就退出」的旧行为。
 
