@@ -9,6 +9,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# npm can launch Windows PowerShell from pwsh with incompatible PowerShell 7 module paths.
+if ($PSVersionTable.PSEdition -eq 'Desktop' -and $env:PSModulePath) {
+  $modulePathSeparator = [System.IO.Path]::PathSeparator
+  $env:PSModulePath = (($env:PSModulePath -split [regex]::Escape($modulePathSeparator)) |
+    Where-Object { $_ -and $_ -notmatch '[\\/]PowerShell(?:[\\/]|$)' }) -join $modulePathSeparator
+}
+
 $WebView2BootstrapperUrl = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703'
 $EditorDir = Split-Path -Parent $PSScriptRoot
 $TauriDir = Join-Path $EditorDir 'src-tauri'
