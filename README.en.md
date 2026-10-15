@@ -35,9 +35,9 @@ Copy to WeChat Official Account formatting in one click (several templates), or 
 
 ### Desktop app
 
-1. Download the right package from [Releases](https://github.com/Canace22/md-render/releases/latest): `MD-Render-*-macOS-universal*.dmg` for macOS or `MD-Render-*-windows-x64*-setup.exe` for Windows.
+1. Download the right package from [Releases](https://github.com/Canace22/md-render/releases/latest): `MD-Render-*.dmg` for macOS or `MD-Render-Setup-*.exe` for Windows.
 2. The macOS package supports both Intel and Apple Silicon. The Windows installer uses `Program Files` and will ask for administrator approval.
-3. A filename containing `-unsigned` means the package has no trusted developer signature. On macOS, you may need to allow it under **System Settings → Privacy & Security**; Windows may show an unknown-publisher or SmartScreen warning. Download only from this repository and verify the matching `SHA256SUMS` file.
+3. If the current package does not have a trusted developer signature, macOS may require approval under **System Settings → Privacy & Security**, while Windows may show an unknown-publisher or SmartScreen warning. Download only from this repository and verify the matching `SHA256SUMS` file.
 
 **Upgrading from the old Electron app requires one manual data handoff:**
 

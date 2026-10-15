@@ -91,7 +91,7 @@ Tauri 客户端的 AI 请求、流式事件、取消、知识库搜索和附件�
 - 应用程序默认安装到 `Program Files`，不把可执行文件安装到 AppData。
 - 用户内容留在用户选择的目录。配置、缓存和 Tauri 私有 SQLite 仍遵守 Windows 的用户数据目录约定；不能把这些可变数据写进 `Program Files`，也不承诺“完全不用 AppData”。
 - 安装包携带并调用 Microsoft WebView2 Evergreen Bootstrapper，构建脚本会验证其 Microsoft 数字签名。
-- CI 在 PFX secrets 齐全时签名应用、安装包和卸载器；缺少证书时生成文件名带 `-unsigned` 的未签名包。
+- CI 在 PFX secrets 齐全时签名应用、安装包和卸载器；缺少证书时仍生成未签名包，并在 Release 安装说明中提示 SmartScreen 风险。
 
 Inno Setup 不能代替代码签名。是否出现 SmartScreen 提示还取决于签名状态、可信证书和发布信誉，不能承诺绝不弹窗。CI 会完成静默安装、启动和卸载，有签名时再复核签名；旧 Electron NSIS 与新 Inno 的并存、快捷方式和卸载顺序仍需 Windows 实机回归。
 
@@ -99,7 +99,7 @@ Inno Setup 不能代替代码签名。是否出现 SmartScreen 提示还取决�
 
 - 本地可构建当前架构的 `.app` 和 `.dmg`。
 - 正式 tag 工作流构建 `universal-apple-darwin` 产物，同时包含 Apple Silicon 和 Intel 架构。
-- Developer ID secrets 齐全时执行正式签名、Apple 公证与 stapling；缺少任一 secret 时使用 ad-hoc 签名，并生成文件名带 `-unsigned` 的包。
+- Developer ID secrets 齐全时执行正式签名、Apple 公证与 stapling；缺少任一 secret 时使用 ad-hoc 签名，并在 Release 安装说明中提示 Gatekeeper 风险。
 
 Windows 和 macOS 的包体、启动时间与空闲内存都以同一台机器、同一份数据下的实际测量为准，不预设数字。
 

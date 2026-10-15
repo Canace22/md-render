@@ -209,15 +209,11 @@ jobs:
           app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
           dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
           release_dir="$bundle_root/release-assets"
-          suffix=""
-          if [[ "$MACOS_SIGNING_ENABLED" != "true" ]]; then
-            suffix="-unsigned"
-          fi
           mkdir -p "$release_dir"
-          cp "$dmg_path" "$release_dir/MD-Render-$APP_VERSION-macOS-universal$suffix.dmg"
+          cp "$dmg_path" "$release_dir/MD-Render-$APP_VERSION.dmg"
           ditto -c -k --sequesterRsrc --keepParent \
             "$app_path" \
-            "$release_dir/MD-Render-$APP_VERSION-macOS-universal$suffix.app.zip"
+            "$release_dir/MD-Render-$APP_VERSION.app.zip"
           (cd "$release_dir" && shasum -a 256 *.dmg *.zip > SHA256SUMS-macos.txt)
 
       - name: Upload macOS release assets
@@ -267,11 +263,9 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
             Write-Warning 'WINDOWS_CERTIFICATE or WINDOWS_CERTIFICATE_PASSWORD is missing. Publishing an unsigned package.'
             "WINDOWS_SIGNING_ENABLED=false" | Out-File -FilePath $env:GITHUB_ENV -Append
-            "TAURI_INNO_OUTPUT_SUFFIX=-unsigned" | Out-File -FilePath $env:GITHUB_ENV -Append
             "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           } else {
             "WINDOWS_SIGNING_ENABLED=true" | Out-File -FilePath $env:GITHUB_ENV -Append
-            "TAURI_INNO_OUTPUT_SUFFIX=" | Out-File -FilePath $env:GITHUB_ENV -Append
             "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
 
@@ -401,9 +395,8 @@ jobs:
         run: |
           $installer = Get-ChildItem 'apps/editor/src-tauri/target/release/bundle/inno/*.exe' | Select-Object -First 1
           $releaseDir = 'apps/editor/src-tauri/target/release/bundle/release-assets'
-          $suffix = if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') { '' } else { '-unsigned' }
           New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-          $target = Join-Path $releaseDir "MD-Render-$env:APP_VERSION-windows-x64$suffix-setup.exe"
+          $target = Join-Path $releaseDir "MD-Render-Setup-$env:APP_VERSION.exe"
           Copy-Item $installer.FullName $target
           $hash = Get-FileHash -Algorithm SHA256 $target
           "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($target))" |
@@ -447,33 +440,26 @@ jobs:
         with:
           files: release-assets/*
           generate_release_notes: true
+          # 固定说明只改必要的安装信息；每版变更由 GitHub 追加到 What's Changed。
           body: |
             ## 下载
 
-            - **macOS**：下载 `MD-Render-*-macOS-universal*.dmg`（Apple Silicon / Intel 通用）
-            - **Windows**：下载 `MD-Render-*-windows-x64*-setup.exe`（Inno Setup）
-            - `SHA256SUMS-*` 可用于校验下载文件
+            - **macOS**：下载 `.dmg` 文件（Universal，支持 Intel 与 Apple Silicon）
+            - **Windows**：下载 `.exe` 安装包（x64）
 
-            文件名包含 `-unsigned` 表示该包没有受信任的开发者签名。macOS 可能需要在“系统设置 → 隐私与安全性”中确认打开，Windows 可能显示“未知发布者”或 SmartScreen 警告；请只从本仓库 Releases 下载并校验 SHA-256。
+            ## macOS 安装说明
 
-            ## 从 Electron 版升级
+            CI 构建未做 Apple 代码签名。若系统提示「应用程序已损坏，无法打开」：
 
-            这是桌面壳切换到 Tauri 2 后的正式包，需要手动安装一次：
+            1. 打开 **系统设置 → 隐私与安全性**，点击「仍要打开」；或
+            2. 在终端执行（路径按实际安装位置调整）：
 
-            1. 先完全退出 Electron 旧版。
-            2. 安装并打开新版。用过 Tauri 预览版的话，原 Tauri 数据会自动沿用，不需要导入。
-            3. 需要恢复 Electron 旧数据时，在「设置 → Electron 数据交接」中选择旧 `knowledge.db`。导入不是合并：它会先备份当前 Tauri 数据库，再用 Electron 数据替换；Electron 源库不会被修改。
-            4. 如果两边都有新内容，先导出 Tauri JSON 备份并另存重要文稿，不要直接导入。
-            5. 原来的本地工作区需要重新选择授权。
+            ```bash
+            xattr -dr com.apple.quarantine "/Applications/MD Render.app"
+            ```
 
-            旧库通常在 macOS 的 `~/Library/Application Support/md-render/knowledge.db`，或 Windows 的 `%APPDATA%\md-render\knowledge.db`。如果找不到，再检查同级的 `@md-render/editor` 和 `MD Render` 目录。迁移确认前不要删除旧库。
+            ## Windows 安装说明
 
-            旧 Electron 自动更新无法跨框架直接安装这个版本；Tauri 内置更新也尚未接入，暂时请从 Releases 手动升级。
+            安装包未做代码签名。若 Windows Defender SmartScreen 弹出警告，点击「更多信息 → 仍要运行」即可。
 
-            ## 当前边界
-
-            - 签名凭证齐全时会执行 macOS 签名/公证和 Windows Authenticode 校验；缺少凭证时会发布明确标记的未签名包。
-            - PDF 导出、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移到 Tauri。
-            - 应用本身不需要 Node.js；AI 需要可达的 `ai-proxy`，若发布包未内置服务地址，请在 AI 设置中填写。
-
-            网页版仍通过 GitHub Pages 独立发布。
+            网页版见仓库 **Deployments → github-pages** 或 README 中的 Pages 链接。

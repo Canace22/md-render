@@ -27,10 +27,11 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 ### 正式切换与发布门禁
 
 - 正式 Release 只由 `v*` tag 触发；tag、根目录版本和 editor 版本必须一致，发布 commit 必须属于 `origin/main`。
-- Apple Developer ID 签名 / 公证和 Windows Authenticode 缺一即失败。禁止把 ad-hoc 或 unsigned 包降级成正式产物。
+- Apple Developer ID / 公证凭证和 Windows Authenticode 凭证齐全时执行正式签名校验；缺少凭证时仍可发布，但文件名保持简洁稳定，Release 固定说明 Gatekeeper / SmartScreen 风险，不把签名状态塞进文件名。
+- Release 正文固定保留下载、macOS 安装、Windows 安装和网页版入口，版本差异只由 GitHub 自动追加到 `What's Changed`，不要每版重写整篇说明。
 - Electron updater 不能跨壳完成首次升级。首次切换必须写清“手动安装 → 显式导入旧库 → 重新授权本地目录”，且源库保持不变。
 - 自定义 Inno 包没有天然接入 Tauri updater。未完成可信更新方案前，明确从 Releases 手动升级，不生成假的 updater 元数据。
-- Windows 正式链同时验证 app、installer、installed app 和 uninstaller 签名，并完成安装、启动、卸载冒烟检查。
+- Windows 有凭证时同时验证 app、installer、installed app 和 uninstaller 签名；有无凭证都要完成安装、启动、卸载冒烟检查。
 - Electron 回退工作流只能手动触发、短期保存 artifact，不能混入 Tauri 正式 Release。
 
 ### 本地目录的授权与快照
@@ -46,11 +47,13 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 
 ### SQLite 与旧数据导入
 
-- Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入，源库以 read-only/query-only 打开。
-- Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿单独拷贝的 `.db` 冒充完整备份。
+- Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入；源库拒绝非空 WAL / journal 后用 immutable + read-only/query-only 打开，导入前后复核主文件未变化。
+- Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿带非空边车日志的单独 `.db` 冒充完整备份。零字节 WAL 或孤立 SHM 可能来自正常退出，不要仅凭文件存在就误拒。
 - Electron 导入是“备份当前 Tauri 库后整库替换”，不是合并。已有 Tauri 内容和 Electron 内容同时有价值时，先导出用户可读备份并明确提示；成功结果要展示 `knowledge.before-import.<timestamp>.db` 的实际文件名。
 - 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
-- 先建 candidate DB，校验 schema 白名单、`quick_check`、记录数、workspace JSON 与文档 ID 精确集合，然后备份当前 Tauri DB 并原子切换。失败恢复旧库，同时清理 candidate/backup 的 WAL/SHM 边车文件。
+- 旧 Electron `documents` 是工作区的派生索引，历史库可能残留孤儿行。源库只要求 workspace ID 全部能在 documents 找到；复制时按 workspace ID 过滤 documents、双端有效的 links 和对应 versions。candidate DB 仍要求 workspace JSON 与文档 ID 精确一致。
+- 先建 candidate DB，校验 schema 白名单、`quick_check`、过滤后的记录数和 FTS，再备份当前 Tauri DB 并原子切换。切换前失败要清理 candidate 和未使用的 backup；切换失败优先保留可恢复备份。
+- Tauri 自有 WAL 库缺少 `-wal/-shm` 时，纯 `READ_ONLY` 可能无法打开。自有库用 `READ_WRITE`（不带 `CREATE`）打开后立即设 `query_only=ON`；不要把这种放宽用于外部旧库。
 - 迁移标记不能代替数据验证；启动时同时检查 marker、workspace 和 documents，异常库进只读恢复而不自动覆写。
 
 ### 关窗与单实例
@@ -85,7 +88,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 预览空工作区不会修改 Electron 数据库、WAL 或工作区文件；导入前后源库 hash 一致。
 8. 正文、metadata、图片、Daily 或画布 debounce 期间关窗，必须先落盘；注入失败时窗口保留。
 9. 扫描不完整、重授权选错目录或移除前保存失败时，旧快照、文档 ID 和版本历史仍保留。
-10. 正式 tag 只生成签名 / 公证后的 Tauri 包且发布门禁生效；Electron 只保留手动回退，当前 Inno 更新边界明确为手动。
+10. 正式 tag 只生成 Tauri 包且发布门禁生效；有凭证时签名 / 公证校验，没凭证时固定提示系统风险；Electron 只保留手动回退，当前 Inno 更新边界明确为手动。
 
 执行过构建或测试后，检查并清理 `vite.config.*.timestamp-*.mjs`、`vitest.config.*.timestamp-*.mjs` 等临时产物；`src-tauri/target/` 和生成 schema 保持忽略。
 
@@ -94,6 +97,6 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - 当前功能在真实 Tauri 窗口中有可复核证据。
 - Electron 旧数据未被移动、覆盖或重建，已有 Tauri 数据身份保持稳定。
 - 权限、数据隔离、签名和未迁移能力在文档中说清楚。
-- 正式包签名 / 公证通过，tag / main / version 门禁生效；一次性手动迁移和当前手动更新边界已写入 Release 与文档。
+- 有凭证时正式包签名 / 公证通过，没凭证时风险说明保留；tag / main / version 门禁生效，一次性手动迁移和当前手动更新边界已写入文档。
 - 相关 Tauri 构建通过；Electron 回退可独立构建，但不参与正式 tag。
 - 总结明确区分已完成、尚未迁移和未经证明的性能结论。

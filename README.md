@@ -35,9 +35,9 @@
 
 ### 桌面版
 
-1. 到 [Releases](https://github.com/Canace22/md-render/releases/latest) 下载对应安装包：macOS 选 `MD-Render-*-macOS-universal*.dmg`，Windows 选 `MD-Render-*-windows-x64*-setup.exe`。
+1. 到 [Releases](https://github.com/Canace22/md-render/releases/latest) 下载对应安装包：macOS 选 `MD-Render-*.dmg`，Windows 选 `MD-Render-Setup-*.exe`。
 2. macOS 包同时支持 Intel 和 Apple 芯片；Windows 安装程序默认装到 `Program Files`，安装时会请求系统管理员确认。
-3. 文件名包含 `-unsigned` 的包没有受信任的开发者签名：macOS 可能需要在 **系统设置 → 隐私与安全性** 中确认打开，Windows 可能显示“未知发布者”或 SmartScreen 警告。请只从本仓库 Releases 下载，并用同页的 `SHA256SUMS` 校验文件。
+3. 若当前包没有受信任的开发者签名，macOS 可能需要在 **系统设置 → 隐私与安全性** 中确认打开，Windows 可能显示“未知发布者”或 SmartScreen 警告。请只从本仓库 Releases 下载，并用同页的 `SHA256SUMS` 校验文件。
 
 **从旧 Electron 版升级时，需要手动交接一次数据：**
 
