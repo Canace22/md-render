@@ -314,6 +314,12 @@ struct DatabaseCounts {
     versions: i64,
 }
 
+#[derive(PartialEq, Eq)]
+struct FileFingerprint {
+    length: u64,
+    modified: Option<SystemTime>,
+}
+
 impl DatabaseState {
     pub fn initialize(app: &AppHandle) -> Result<Self, String> {
         let app_data_dir = app
@@ -368,12 +374,31 @@ fn open_write_connection(path: &Path) -> Result<Connection, String> {
 fn open_read_connection(path: &Path) -> Result<Connection, String> {
     let connection = Connection::open_with_flags(
         path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(db_error)?;
     connection
         .busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))
         .map_err(db_error)?;
+    // WAL 数据库在边车文件不存在时需要创建 -wal / -shm 才能读取。
+    // 连接本身仍设为 query_only，业务 SQL 不会改动数据。
+    connection
+        .pragma_update(None, "query_only", true)
+        .map_err(db_error)?;
+    Ok(connection)
+}
+
+fn open_legacy_read_connection(path: &Path) -> Result<Connection, String> {
+    let mut url =
+        tauri::Url::from_file_path(path).map_err(|_| "无法生成旧数据库的只读路径。".to_string())?;
+    url.query_pairs_mut().append_pair("immutable", "1");
+    let connection = Connection::open_with_flags(
+        url.as_str(),
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(db_error)?;
     connection
         .pragma_update(None, "query_only", true)
         .map_err(db_error)?;
@@ -478,10 +503,7 @@ pub fn db_load(state: State<'_, DatabaseState>) -> LoadResponse {
                 values.insert(key, value);
             }
         }
-        let workspace_json = values
-            .get("workspace_json")
-            .ok_or_else(|| "数据库缺少 workspace_json，已停止加载。".to_string())?;
-        validate_workspace_matches_documents(&connection, workspace_json, "数据库")?;
+        validate_workspace_matches_documents(&connection, "数据库")?;
         Ok(values)
     })();
 
@@ -1326,7 +1348,7 @@ pub async fn db_import_legacy_database(
     let selected = app
         .dialog()
         .file()
-        .set_title("选择 Electron 的 knowledge.db 副本")
+        .set_title("完全退出 Electron 后选择 knowledge.db")
         .add_filter("SQLite 数据库", &["db", "sqlite", "sqlite3"])
         .blocking_pick_file();
     let Some(selected) = selected else {
@@ -1393,15 +1415,16 @@ fn import_legacy_database(
     if !source_path.is_file() {
         return Err("选中的路径不是可读的 SQLite 文件。".to_string());
     }
-
-    let source = open_read_connection(&source_path)?;
+    ensure_legacy_source_is_closed(&source_path)?;
+    let source_fingerprint = file_fingerprint(&source_path)?;
+    let source = open_legacy_read_connection(&source_path)?;
     validate_legacy_schema(&source)?;
     let source_quick_check = quick_check(&source)?;
     if source_quick_check != "ok" {
         return Err(format!("旧数据库完整性检查失败：{source_quick_check}"));
     }
     source.execute_batch("BEGIN").map_err(db_error)?;
-    let source_counts = database_counts(&source)?;
+    let workspace_ids = validate_legacy_workspace(&source)?;
     let source_has_migration_marker = source
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM app_state WHERE key = ?1)",
@@ -1409,10 +1432,6 @@ fn import_legacy_database(
             |row| row.get::<_, bool>(0),
         )
         .map_err(db_error)?;
-    let expected_counts = DatabaseCounts {
-        app_state: source_counts.app_state + i64::from(!source_has_migration_marker),
-        ..source_counts
-    };
 
     let timestamp = now_millis();
     let parent = destination_path
@@ -1421,12 +1440,11 @@ fn import_legacy_database(
     let candidate_path = parent.join(format!("knowledge.import.{timestamp}.tmp.db"));
     let backup_path = parent.join(format!("knowledge.before-import.{timestamp}.db"));
     remove_sqlite_files(&candidate_path)?;
-
     let import_result = (|| -> Result<DatabaseCounts, String> {
         initialize_schema(&candidate_path)?;
         let mut candidate = open_write_connection(&candidate_path)?;
         let transaction = candidate.transaction().map_err(db_error)?;
-        copy_legacy_rows(&source, &transaction)?;
+        let mut expected_counts = copy_legacy_rows(&source, &transaction, &workspace_ids)?;
         transaction
             .execute(
                 "INSERT INTO app_state (key, value) VALUES (?1, ?2)
@@ -1434,6 +1452,9 @@ fn import_legacy_database(
                 params![MIGRATION_STATE_KEY, MIGRATION_STATE_VALUE],
             )
             .map_err(db_error)?;
+        if !source_has_migration_marker {
+            expected_counts.app_state += 1;
+        }
         transaction.commit().map_err(db_error)?;
         validate_imported_workspace(&candidate)?;
         install_update_trigger(&candidate)?;
@@ -1449,7 +1470,7 @@ fn import_legacy_database(
 
         let imported_counts = database_counts(&candidate)?;
         if imported_counts != expected_counts {
-            return Err("导入后的表记录数与旧库不一致，已取消切换。".to_string());
+            return Err("导入后的表记录数与旧库有效数据不一致，已取消切换。".to_string());
         }
         let fts_count: i64 = candidate
             .query_row("SELECT count(*) FROM documents_fts", [], |row| row.get(0))
@@ -1473,13 +1494,27 @@ fn import_legacy_database(
             return Err(error);
         }
     };
+    if let Err(error) = ensure_legacy_source_unchanged(&source_path, &source_fingerprint) {
+        remove_sqlite_files(&candidate_path).ok();
+        return Err(error);
+    }
 
-    checkpoint_database(destination_path)?;
-    fs::copy(destination_path, &backup_path)
-        .map_err(|error| format!("无法备份当前 Tauri 数据库：{error}"))?;
-    remove_sqlite_sidecars(destination_path)?;
-    remove_sqlite_sidecars(&candidate_path)?;
-    replace_database_file(&candidate_path, destination_path)?;
+    let prepare_switch_result = (|| -> Result<(), String> {
+        checkpoint_database(destination_path)?;
+        fs::copy(destination_path, &backup_path)
+            .map_err(|error| format!("无法备份当前 Tauri 数据库：{error}"))?;
+        remove_sqlite_sidecars(destination_path)?;
+        remove_sqlite_sidecars(&candidate_path)
+    })();
+    if let Err(error) = prepare_switch_result {
+        remove_sqlite_files(&candidate_path).ok();
+        remove_sqlite_files(&backup_path).ok();
+        return Err(error);
+    }
+    if let Err(error) = replace_database_file(&candidate_path, destination_path) {
+        remove_sqlite_files(&candidate_path).ok();
+        return Err(error);
+    }
 
     let backup_file_name = backup_path
         .file_name()
@@ -1597,6 +1632,25 @@ fn database_counts(connection: &Connection) -> Result<DatabaseCounts, String> {
 }
 
 fn validate_imported_workspace(connection: &Connection) -> Result<(), String> {
+    validate_workspace_matches_documents(connection, "旧数据库")
+}
+
+fn validate_legacy_workspace(connection: &Connection) -> Result<HashSet<String>, String> {
+    let workspace_ids = read_workspace_ids(connection, "旧数据库")?;
+    let document_ids = read_document_ids(connection)?;
+    let missing_count = workspace_ids.difference(&document_ids).count();
+    if missing_count > 0 {
+        return Err(format!(
+            "旧数据库的工作区有 {missing_count} 个节点缺少文档索引，已取消导入。"
+        ));
+    }
+    Ok(workspace_ids)
+}
+
+fn read_workspace_ids(
+    connection: &Connection,
+    source_label: &str,
+) -> Result<HashSet<String>, String> {
     let workspace_json = connection
         .query_row(
             "SELECT value FROM app_state WHERE key = 'workspace_json'",
@@ -1605,28 +1659,19 @@ fn validate_imported_workspace(connection: &Connection) -> Result<(), String> {
         )
         .optional()
         .map_err(db_error)?
-        .ok_or_else(|| "旧数据库缺少 workspace_json，已取消导入。".to_string())?;
-    validate_workspace_matches_documents(connection, &workspace_json, "旧数据库")
+        .ok_or_else(|| format!("{source_label}缺少 workspace_json，已停止加载。"))?;
+    let workspace: JsonValue = serde_json::from_str(&workspace_json)
+        .map_err(|error| format!("{source_label}的 workspace_json 无法解析：{error}"))?;
+    validate_workspace_structure(&workspace)
+        .map_err(|error| format!("{source_label}的 workspace_json 未通过安全校验：{error}"))
 }
 
 fn validate_workspace_matches_documents(
     connection: &Connection,
-    workspace_json: &str,
     source_label: &str,
 ) -> Result<(), String> {
-    let workspace: JsonValue = serde_json::from_str(workspace_json)
-        .map_err(|error| format!("{source_label}的 workspace_json 无法解析：{error}"))?;
-    let workspace_ids = validate_workspace_structure(&workspace)
-        .map_err(|error| format!("{source_label}的 workspace_json 未通过安全校验：{error}"))?;
-
-    let mut statement = connection
-        .prepare("SELECT id FROM documents")
-        .map_err(db_error)?;
-    let rows = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(db_error)?;
-    let document_ids = rows.collect::<Result<HashSet<_>, _>>().map_err(db_error)?;
-
+    let workspace_ids = read_workspace_ids(connection, source_label)?;
+    let document_ids = read_document_ids(connection)?;
     if workspace_ids != document_ids {
         return Err(format!(
             "{source_label}的工作区节点与文档索引不一致（工作区 {} 项，文档表 {} 项），已停止加载。",
@@ -1635,6 +1680,16 @@ fn validate_workspace_matches_documents(
         ));
     }
     Ok(())
+}
+
+fn read_document_ids(connection: &Connection) -> Result<HashSet<String>, String> {
+    let mut statement = connection
+        .prepare("SELECT id FROM documents")
+        .map_err(db_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(db_error)?;
+    rows.collect::<Result<HashSet<_>, _>>().map_err(db_error)
 }
 
 fn table_count(connection: &Connection, table: &str) -> Result<i64, String> {
@@ -1653,14 +1708,20 @@ fn optional_table_count(connection: &Connection, table: &str) -> Result<i64, Str
     }
 }
 
-fn copy_legacy_rows(source: &Connection, destination: &Transaction<'_>) -> Result<(), String> {
-    copy_app_state(source, destination)?;
-    copy_documents(source, destination)?;
-    copy_links(source, destination)?;
-    copy_versions(source, destination)
+fn copy_legacy_rows(
+    source: &Connection,
+    destination: &Transaction<'_>,
+    workspace_ids: &HashSet<String>,
+) -> Result<DatabaseCounts, String> {
+    Ok(DatabaseCounts {
+        app_state: copy_app_state(source, destination)?,
+        documents: copy_documents(source, destination, workspace_ids)?,
+        links: copy_links(source, destination, workspace_ids)?,
+        versions: copy_versions(source, destination, workspace_ids)?,
+    })
 }
 
-fn copy_app_state(source: &Connection, destination: &Transaction<'_>) -> Result<(), String> {
+fn copy_app_state(source: &Connection, destination: &Transaction<'_>) -> Result<i64, String> {
     let mut source_statement = source
         .prepare("SELECT key, value FROM app_state")
         .map_err(db_error)?;
@@ -1672,14 +1733,20 @@ fn copy_app_state(source: &Connection, destination: &Transaction<'_>) -> Result<
     let mut insert = destination
         .prepare("INSERT INTO app_state (key, value) VALUES (?1, ?2)")
         .map_err(db_error)?;
+    let mut count = 0;
     for row in rows {
         let (key, value) = row.map_err(db_error)?;
         insert.execute(params![key, value]).map_err(db_error)?;
+        count += 1;
     }
-    Ok(())
+    Ok(count)
 }
 
-fn copy_documents(source: &Connection, destination: &Transaction<'_>) -> Result<(), String> {
+fn copy_documents(
+    source: &Connection,
+    destination: &Transaction<'_>,
+    workspace_ids: &HashSet<String>,
+) -> Result<i64, String> {
     let columns = table_columns(source, "documents")?;
     let disk_path = if columns.contains("disk_path") {
         "disk_path"
@@ -1725,21 +1792,30 @@ fn copy_documents(source: &Connection, destination: &Transaction<'_>) -> Result<
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         )
         .map_err(db_error)?;
+    let mut count = 0;
     for row in rows {
         let row = row.map_err(db_error)?;
+        if !workspace_ids.contains(&row.0) {
+            continue;
+        }
         insert
             .execute(params![
                 row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
                 row.11, row.12, row.13,
             ])
             .map_err(db_error)?;
+        count += 1;
     }
-    Ok(())
+    Ok(count)
 }
 
-fn copy_links(source: &Connection, destination: &Transaction<'_>) -> Result<(), String> {
+fn copy_links(
+    source: &Connection,
+    destination: &Transaction<'_>,
+    workspace_ids: &HashSet<String>,
+) -> Result<i64, String> {
     if table_columns(source, "links")?.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     let mut source_statement = source
         .prepare("SELECT source_id, target_id, context FROM links")
@@ -1756,18 +1832,27 @@ fn copy_links(source: &Connection, destination: &Transaction<'_>) -> Result<(), 
     let mut insert = destination
         .prepare("INSERT INTO links (source_id, target_id, context) VALUES (?1, ?2, ?3)")
         .map_err(db_error)?;
+    let mut count = 0;
     for row in rows {
         let (source_id, target_id, context) = row.map_err(db_error)?;
+        if !workspace_ids.contains(&source_id) || !workspace_ids.contains(&target_id) {
+            continue;
+        }
         insert
             .execute(params![source_id, target_id, context])
             .map_err(db_error)?;
+        count += 1;
     }
-    Ok(())
+    Ok(count)
 }
 
-fn copy_versions(source: &Connection, destination: &Transaction<'_>) -> Result<(), String> {
+fn copy_versions(
+    source: &Connection,
+    destination: &Transaction<'_>,
+    workspace_ids: &HashSet<String>,
+) -> Result<i64, String> {
     if table_columns(source, "versions")?.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     let mut source_statement = source
         .prepare("SELECT id, document_id, content, created_at FROM versions ORDER BY id")
@@ -1787,13 +1872,18 @@ fn copy_versions(source: &Connection, destination: &Transaction<'_>) -> Result<(
             "INSERT INTO versions (id, document_id, content, created_at) VALUES (?1, ?2, ?3, ?4)",
         )
         .map_err(db_error)?;
+    let mut count = 0;
     for row in rows {
         let (id, document_id, content, created_at) = row.map_err(db_error)?;
+        if !workspace_ids.contains(&document_id) {
+            continue;
+        }
         insert
             .execute(params![id, document_id, content, created_at])
             .map_err(db_error)?;
+        count += 1;
     }
-    Ok(())
+    Ok(count)
 }
 
 fn quick_check(connection: &Connection) -> Result<String, String> {
@@ -1885,23 +1975,54 @@ fn validate_database_for_use(path: &Path) -> Result<(), String> {
     if result != "ok" {
         return Err(format!("数据库完整性检查失败：{result}"));
     }
-    let workspace_json = connection
-        .query_row(
-            "SELECT value FROM app_state WHERE key = 'workspace_json'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(db_error)?
-        .ok_or_else(|| "数据库缺少 workspace_json。".to_string())?;
-    validate_workspace_matches_documents(&connection, &workspace_json, "数据库")?;
+    validate_workspace_matches_documents(&connection, "数据库")?;
+    Ok(())
+}
+
+fn file_fingerprint(path: &Path) -> Result<FileFingerprint, String> {
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("无法读取旧数据库文件信息：{error}"))?;
+    Ok(FileFingerprint {
+        length: metadata.len(),
+        modified: metadata.modified().ok(),
+    })
+}
+
+fn sqlite_companion_path(path: &Path, suffix: &str) -> PathBuf {
+    PathBuf::from(format!("{}{suffix}", path.to_string_lossy()))
+}
+
+fn ensure_legacy_source_is_closed(path: &Path) -> Result<(), String> {
+    for (suffix, label) in [("-wal", "WAL"), ("-journal", "journal")] {
+        let companion = sqlite_companion_path(path, suffix);
+        let length = match companion.metadata() {
+            Ok(metadata) => metadata.len(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+            Err(error) => {
+                return Err(format!("无法检查旧数据库的 {label} 日志：{error}"));
+            }
+        };
+        if length > 0 {
+            return Err(format!(
+                "旧数据库仍有未合并的 {label} 日志。请完全退出 Electron 旧版后重试，不要只复制单个 knowledge.db。"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn ensure_legacy_source_unchanged(path: &Path, expected: &FileFingerprint) -> Result<(), String> {
+    ensure_legacy_source_is_closed(path)?;
+    if &file_fingerprint(path)? != expected {
+        return Err("导入期间旧数据库发生了变化。请完全退出 Electron 旧版后重试。".to_string());
+    }
     Ok(())
 }
 
 fn remove_sqlite_sidecars(path: &Path) -> Result<(), String> {
     for candidate in [
-        PathBuf::from(format!("{}-wal", path.to_string_lossy())),
-        PathBuf::from(format!("{}-shm", path.to_string_lossy())),
+        sqlite_companion_path(path, "-wal"),
+        sqlite_companion_path(path, "-shm"),
     ] {
         if candidate.exists() {
             fs::remove_file(&candidate)
