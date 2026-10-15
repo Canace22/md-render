@@ -6,7 +6,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
+use rusqlite::{
+    params,
+    types::{Type, ValueRef},
+    Connection, OpenFlags, OptionalExtension, Transaction,
+};
 use serde::Serialize;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use tauri::{AppHandle, Manager, State};
@@ -784,7 +788,38 @@ fn json_integer(node: &JsonMap<String, JsonValue>, key: &str) -> Option<i64> {
         value
             .as_i64()
             .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
+            .or_else(|| value.as_f64().and_then(integer_from_f64))
     })
+}
+
+fn integer_from_f64(value: f64) -> Option<i64> {
+    if value.is_finite() && value >= i64::MIN as f64 && value < i64::MAX as f64 {
+        Some(value.trunc() as i64)
+    } else {
+        None
+    }
+}
+
+fn legacy_optional_integer(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<Option<i64>> {
+    match row.get_ref(index)? {
+        ValueRef::Null => Ok(None),
+        ValueRef::Integer(value) => Ok(Some(value)),
+        ValueRef::Real(value) => integer_from_f64(value).map(Some).ok_or_else(|| {
+            rusqlite::Error::FromSqlConversionFailure(
+                index,
+                Type::Real,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "时间字段超出整数范围",
+                )),
+            )
+        }),
+        value => Err(rusqlite::Error::InvalidColumnType(
+            index,
+            row.as_ref().column_name(index).unwrap_or("").to_string(),
+            value.data_type(),
+        )),
+    }
 }
 
 fn json_non_empty_array(node: &JsonMap<String, JsonValue>, key: &str) -> Option<String> {
@@ -1777,8 +1812,8 @@ fn copy_documents(
                 row.get::<_, Option<String>>(7)?,
                 row.get::<_, Option<String>>(8)?,
                 row.get::<_, Option<String>>(9)?,
-                row.get::<_, Option<i64>>(10)?,
-                row.get::<_, Option<i64>>(11)?,
+                legacy_optional_integer(row, 10)?,
+                legacy_optional_integer(row, 11)?,
                 row.get::<_, Option<String>>(12)?,
                 row.get::<_, Option<String>>(13)?,
             ))
@@ -1863,7 +1898,7 @@ fn copy_versions(
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, Option<String>>(2)?,
-                row.get::<_, Option<i64>>(3)?,
+                legacy_optional_integer(row, 3)?,
             ))
         })
         .map_err(db_error)?;
@@ -2037,4 +2072,112 @@ fn remove_sqlite_files(path: &Path) -> Result<(), String> {
         fs::remove_file(path).map_err(|error| format!("无法清理数据库临时文件：{error}"))?;
     }
     remove_sqlite_sidecars(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    #[test]
+    fn imports_real_legacy_timestamps_as_integer_milliseconds() {
+        const LEGACY_TIMESTAMP: f64 = 1_780_557_027_766.75;
+        const EXPECTED_TIMESTAMP: i64 = 1_780_557_027_766;
+
+        let temp_dir = tempdir().unwrap();
+        let source_path = temp_dir.path().join("electron.db");
+        let destination_path = temp_dir.path().join("tauri.db");
+
+        {
+            let source = Connection::open(&source_path).unwrap();
+            source.execute_batch(SCHEMA).unwrap();
+            let workspace = json!({
+                "id": "root",
+                "children": [{
+                    "id": "legacy-doc",
+                    "type": "file",
+                    "name": "旧稿",
+                    "createdAt": LEGACY_TIMESTAMP,
+                    "updatedAt": LEGACY_TIMESTAMP
+                }]
+            });
+            source
+                .execute(
+                    "INSERT INTO app_state (key, value) VALUES ('workspace_json', ?1)",
+                    [workspace.to_string()],
+                )
+                .unwrap();
+            source
+                .execute(
+                    "INSERT INTO documents (
+                       id, type, name, node_type, created_at, updated_at
+                     ) VALUES (?1, 'file', ?2, 'document', ?3, ?3)",
+                    params!["legacy-doc", "旧稿", LEGACY_TIMESTAMP],
+                )
+                .unwrap();
+            source
+                .execute(
+                    "INSERT INTO versions (document_id, content, created_at)
+                     VALUES (?1, ?2, ?3)",
+                    params!["legacy-doc", "旧版本", LEGACY_TIMESTAMP],
+                )
+                .unwrap();
+
+            let storage_types: (String, String, String) = source
+                .query_row(
+                    "SELECT typeof(documents.created_at), typeof(documents.updated_at),
+                            (SELECT typeof(created_at) FROM versions LIMIT 1)
+                     FROM documents WHERE id = 'legacy-doc'",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .unwrap();
+            assert_eq!(storage_types, ("real".into(), "real".into(), "real".into()));
+        }
+
+        initialize_schema(&destination_path).unwrap();
+        let (counts, _) = import_legacy_database(&source_path, &destination_path).unwrap();
+        assert_eq!(counts.documents, 1);
+        assert_eq!(counts.versions, 1);
+
+        let imported = Connection::open(&destination_path).unwrap();
+        let document_timestamps: (i64, i64, String, String) = imported
+            .query_row(
+                "SELECT created_at, updated_at, typeof(created_at), typeof(updated_at)
+                 FROM documents WHERE id = 'legacy-doc'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            document_timestamps,
+            (
+                EXPECTED_TIMESTAMP,
+                EXPECTED_TIMESTAMP,
+                "integer".into(),
+                "integer".into()
+            )
+        );
+        let version_timestamp: (i64, String) = imported
+            .query_row(
+                "SELECT created_at, typeof(created_at) FROM versions LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(version_timestamp, (EXPECTED_TIMESTAMP, "integer".into()));
+
+        let workspace_json: String = imported
+            .query_row(
+                "SELECT value FROM app_state WHERE key = 'workspace_json'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let workspace: JsonValue = serde_json::from_str(&workspace_json).unwrap();
+        let documents = flatten_workspace(&workspace).unwrap();
+        assert_eq!(documents[0].created_at, Some(EXPECTED_TIMESTAMP));
+        assert_eq!(documents[0].updated_at, Some(EXPECTED_TIMESTAMP));
+    }
 }

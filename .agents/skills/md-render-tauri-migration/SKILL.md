@@ -52,6 +52,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - Electron 导入是“备份当前 Tauri 库后整库替换”，不是合并。已有 Tauri 内容和 Electron 内容同时有价值时，先导出用户可读备份并明确提示；成功结果要展示 `knowledge.before-import.<timestamp>.db` 的实际文件名。
 - 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
 - 旧 Electron `documents` 是工作区的派生索引，历史库可能残留孤儿行。源库只要求 workspace ID 全部能在 documents 找到；复制时按 workspace ID 过滤 documents、双端有效的 links 和对应 versions。candidate DB 仍要求 workspace JSON 与文档 ID 精确一致。
+- SQLite 的列声明不是运行时强类型：Electron 把 JS `mtimeMs` 写进 `INTEGER` 列时，小数毫秒会实际存成 `REAL`。迁移前用 `typeof()` 检查真实存储类型；时间戳只兼容 `NULL`、`INTEGER` 和有限且范围合法的 `REAL`（截成整数毫秒），文本、二进制和越界值继续报错。`workspace_json` 中的 `createdAt` / `updatedAt` 使用同一规则，避免导入后再次保存时变成 `NULL`。
 - 先建 candidate DB，校验 schema 白名单、`quick_check`、过滤后的记录数和 FTS，再备份当前 Tauri DB 并原子切换。切换前失败要清理 candidate 和未使用的 backup；切换失败优先保留可恢复备份。
 - Tauri 自有 WAL 库缺少 `-wal/-shm` 时，纯 `READ_ONLY` 可能无法打开。自有库用 `READ_WRITE`（不带 `CREATE`）打开后立即设 `query_only=ON`；不要把这种放宽用于外部旧库。
 - 迁移标记不能代替数据验证；启动时同时检查 marker、workspace 和 documents，异常库进只读恢复而不自动覆写。
