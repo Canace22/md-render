@@ -114,6 +114,16 @@ export async function revokeLocalProjectAccess(projectMountId) {
   await tauriLocalProject.revokeLocalProject(projectMountId);
 }
 
+export async function rememberLocalProjectAuthorization(projectMountId, projectIdentity) {
+  if (!tauriLocalProject.isTauriRuntime()) return;
+  await tauriLocalProject.rememberLocalProjectAuthorization(projectMountId, projectIdentity);
+}
+
+export async function restoreLocalProjectAuthorizations(projectIdentities) {
+  if (!tauriLocalProject.isTauriRuntime()) return { canceled: true, projects: [] };
+  return tauriLocalProject.restoreLocalProjectAuthorizations(projectIdentities);
+}
+
 /** 仅桌面版（Electron）为 true：MdRender 工作区、增量落盘同步等能力需要它 */
 export function isDesktopProjectSupported() {
   return hasDirectBridge() || hasLegacyBridge();

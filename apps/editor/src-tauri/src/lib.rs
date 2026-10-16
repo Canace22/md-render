@@ -23,8 +23,9 @@ use local_agent::{
 use local_project::{
     create_local_project_file, create_local_project_folder, delete_local_project_entry,
     get_local_project_revision, local_media_protocol_response, read_local_project_file,
-    read_read_only_project_file, rename_local_project_entry, reveal_local_project_entry,
-    revoke_local_project, revoke_read_only_project, save_binary_asset, save_local_project_file,
+    read_read_only_project_file, remember_local_project_authorization, rename_local_project_entry,
+    restore_local_project_authorizations, reveal_local_project_entry, revoke_local_project,
+    revoke_read_only_project, save_binary_asset, save_local_project_file,
     save_local_project_metadata, scan_local_project, scan_read_only_project,
     select_read_only_projects, select_read_write_projects, LocalProjectRegistry,
 };
@@ -126,6 +127,8 @@ pub fn run() {
             db_import_legacy_database,
             select_read_only_projects,
             select_read_write_projects,
+            remember_local_project_authorization,
+            restore_local_project_authorizations,
             scan_read_only_project,
             scan_local_project,
             get_local_project_revision,

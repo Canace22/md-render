@@ -224,6 +224,25 @@ export async function openLocalProject({
   };
 }
 
+export async function rememberLocalProjectAuthorization(mountId, projectIdentity) {
+  assertTauriMountId(mountId);
+  return invokeTauri('remember_local_project_authorization', { mountId, projectIdentity });
+}
+
+export async function restoreLocalProjectAuthorizations(projectIdentities) {
+  const identities = [...new Set(
+    (projectIdentities ?? []).map((identity) => String(identity ?? '').trim()).filter(Boolean),
+  )];
+  if (identities.length === 0) return { canceled: true, projects: [] };
+  const result = await invokeTauri('restore_local_project_authorizations', {
+    projectIdentities: identities,
+  });
+  return {
+    ...result,
+    projects: (result?.projects ?? []).map(normalizeProject),
+  };
+}
+
 export async function scanLocalProject(mountId) {
   assertTauriMountId(mountId);
   return normalizeProject(await invokeTauri('scan_local_project', { mountId }));

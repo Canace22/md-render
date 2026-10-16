@@ -105,6 +105,7 @@ const STORAGE_KEY = 'md-renderer-workspace';
 const TAURI_PROJECT_MOUNT_PREFIX = 'tauri-';
 const OPAQUE_LOCAL_PROJECT_IDENTITY_PREFIX = 'local-project:v1:';
 const LOCAL_PROJECT_REAUTHORIZATION_REQUIRED = 'reauthorization-required';
+const TAURI_DIRECTORY_SNAPSHOT_SOURCE = 'tauri-directory';
 const sessionLocalProjectSnapshots = new Map();
 const SELECTED_ID_STORAGE_KEY = 'md-renderer-selected-id';
 const THEME_STORAGE_KEY = 'md-renderer-theme';
@@ -168,6 +169,7 @@ const markReadOnlyTree = (node, access) => ({
 });
 
 const LOCAL_PROJECT_SNAPSHOT_FIELDS = new Set([
+  'access',
   'diskContentSnapshot',
   'localProjectRoot',
   'projectIdentity',
@@ -176,6 +178,7 @@ const LOCAL_PROJECT_SNAPSHOT_FIELDS = new Set([
   'projectRootPath',
   'readOnly',
   'sharedAssetsMountId',
+  'localProjectSource',
 ]);
 
 const parseProjectBackedNodeId = (nodeId) => {
@@ -223,13 +226,21 @@ const restoreLocalProjectSnapshot = (node, legacyProjectRootPath) => {
     || (String(node.id ?? '').startsWith(`project:${legacyProjectRootPath}:`)
       ? legacyProjectRootPath
       : '');
-  const editableSnapshot = makeLocalProjectSnapshotEditable(node, Boolean(projectRootPath));
-  if (!projectRootPath) return editableSnapshot;
+  const isExplicitLocalProject = Boolean(node.localProjectRoot)
+    && node.localProjectSource === TAURI_DIRECTORY_SNAPSHOT_SOURCE;
+  const editableSnapshot = makeLocalProjectSnapshotEditable(
+    node,
+    isExplicitLocalProject && Boolean(projectRootPath),
+  );
+  if (!projectRootPath || !isExplicitLocalProject) return editableSnapshot;
   return {
     ...editableSnapshot,
     projectRootPath,
     access: LOCAL_PROJECT_REAUTHORIZATION_REQUIRED,
-    ...(node.localProjectRoot ? { localProjectRoot: true } : {}),
+    localProjectRoot: true,
+    ...(node.localProjectSource
+      ? { localProjectSource: node.localProjectSource }
+      : {}),
   };
 };
 
@@ -495,6 +506,7 @@ let activeDesktopSaveOperation = null;
 let desktopSaveError = null;
 let desktopPersistencePaused = false;
 let desktopRecoveryMode = false;
+let desktopStoreHydrated = false;
 
 const DESKTOP_PERSISTENCE_READY = Object.freeze({ status: 'ready', message: '' });
 let desktopPersistenceStatus = DESKTOP_PERSISTENCE_READY;
@@ -592,6 +604,7 @@ const scheduleDesktopStateSave = (stateMap, workspaceJson) => {
     !stateMap
     || typeof stateMap !== 'object'
     || !hasDatabaseBridge()
+    || !desktopStoreHydrated
   ) return;
 
   pendingDesktopSave = mergeDesktopSavePayloads(pendingDesktopSave, {
@@ -776,6 +789,7 @@ const editorStorage = {
     const state = value?.state ?? value;
 
     if (hasDatabaseBridge()) {
+      if (!desktopStoreHydrated) return;
       try {
         const stateMap = buildStateMap(state);
         const workspaceJson = stateMap.workspace_json ?? null;
@@ -963,6 +977,7 @@ const buildPersistentLocalProjectSnapshot = (liveRoot, snapshot) => {
       id: createLocalProjectNodeId(projectIdentity, suffix),
       projectRootPath: projectIdentity,
       localProjectRoot: isRoot,
+      ...(isRoot ? { localProjectSource: TAURI_DIRECTORY_SNAPSHOT_SOURCE } : {}),
       readOnly: true,
       access: LOCAL_PROJECT_REAUTHORIZATION_REQUIRED,
       relatedIds: remapLocalProjectRelationIds(
@@ -1076,6 +1091,9 @@ const buildPersistedWorkspaceState = (state) => {
 const persistConfig = {
   name: 'md-renderer-editor',
   storage: editorStorage,
+  onRehydrateStorage: () => () => {
+    desktopStoreHydrated = true;
+  },
   partialize: (state) => {
     const persistedWorkspaceState = buildPersistedWorkspaceState(state);
     return {
@@ -2119,12 +2137,16 @@ export const useEditorStore = create(
           current.workspace,
         );
         const initialId = findFirstFileId(projectNode) ?? projectNode.id;
-        const node = findNodeById(nextWorkspace, initialId);
+        const selectedId = mountOptions.preserveSelection
+          && findNodeById(nextWorkspace, current.selectedId)
+          ? current.selectedId
+          : initialId;
+        const node = findNodeById(nextWorkspace, selectedId);
 
         persistWorkspace(nextWorkspace);
         set({
           workspace: nextWorkspace,
-          selectedId: initialId,
+          selectedId,
           markdown: node?.type === 'file' ? (node.content ?? '') : '',
           storageMode: 'local',
           projectRootPath: '',
@@ -2132,6 +2154,7 @@ export const useEditorStore = create(
           activeBlockId: null,
           activeBlockDraft: '',
         });
+        return { projectIdentity, projectNodeId: projectNode.id };
       },
 
       /** 静默初始化 MdRender/Projects：侧边栏只展示 Projects 下已有内容 */
