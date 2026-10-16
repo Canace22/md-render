@@ -37,7 +37,7 @@
    - **macOS**：选 `MD-Render-*.dmg`（同时支持 Intel 和 Apple 芯片）
    - **Windows**：选 `MD-Render-Setup-*.exe`
 2. **首次打开提示**：若当前安装包未附带开发者签名，macOS 请到 **系统设置 → 隐私与安全性** 点击「仍要打开」；Windows 若弹出 SmartScreen 提示，点「更多信息 → 仍要运行」（可用下载页同目录的 `SHA256SUMS` 校验文件完整性）。
-3. **版本更新**：当前暂不支持应用内自动更新，后续新版本请从 Releases 下载安装。
+3. **版本更新**：应用发现新版本时会在顶部提示；点击提示后到 Releases 下载安装，当前还不会在应用内自动安装。
 
 <details>
 <summary><b>从旧版（Electron）升级？点此查看数据迁移步骤</b></summary>

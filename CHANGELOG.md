@@ -10,8 +10,8 @@
 
 - **正式安装包已经从 Electron 切到 Tauri 2**：macOS 使用系统 WKWebView，Windows 使用 WebView2 和 Inno Setup；应用本身不带 Node.js，也不要求用户安装 Node。AI 仍需可达的 `ai-proxy`，只有自己在本机托管代理时才需要 Node。
 - **旧用户需要手动迁移一次**：完全退出旧 Electron 版，安装 Tauri 新版，再到 **设置 → Electron 数据交接** 选择旧 `knowledge.db`。导入不是合并：它会先备份当前 Tauri 数据库，再用 Electron 数据替换；Electron 源库不会被删除或覆盖。如果两边都有新内容，先导出 Tauri JSON 备份并另存重要文稿。原本的本地工作区还要重新选择授权。
-- **自动更新暂时中断**：Electron updater 不能跨框架安装 Tauri，Tauri updater 也尚未接入。首次迁移和后续版本暂时都从 [Releases](https://github.com/Canace22/md-render/releases) 手动安装。
-- **首个 Tauri 正式版的边界**：PDF、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑还没迁移，对应入口会隐藏。Electron 仅保留手动回退包，不再进入正式 Release。
+- **新版本会恢复提示**：Tauri 正式包会检查 GitHub 最新正式版，有更新时在顶部提示并打开对应 [Release](https://github.com/Canace22/md-render/releases)。Electron updater 仍不能跨框架安装 Tauri，当前 Inno 安装包也不支持应用内自动安装，所以下载和安装仍需手动完成。
+- **Tauri 正式版的当前边界**：PDF、本机 MCP、“数据文件化”和自定义 skill 编辑还没迁移，对应入口会隐藏。Electron 仅保留手动回退包，不再进入正式 Release。
 - **安装与签名**：有完整凭证时，macOS 包执行 Developer ID 签名和 Apple 公证，Windows 应用、Inno 安装包和卸载器执行 Authenticode 签名；没有凭证时仍发布未签名包，macOS 包使用 ad-hoc 签名。这类包可能被 macOS 拦截或触发 Windows SmartScreen，下载页会同时提供 SHA-256 校验文件。
 
 ### 升级前必读：app 内的 Notion 同步和云端快照已移除

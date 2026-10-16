@@ -38,9 +38,17 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - Apple Developer ID / 公证凭证和 Windows Authenticode 凭证齐全时执行正式签名校验；缺少凭证时仍可发布，但文件名保持简洁稳定，Release 固定说明 Gatekeeper / SmartScreen 风险，不把签名状态塞进文件名。
 - Release 正文固定保留下载、macOS 安装、Windows 安装和网页版入口，版本差异只由 GitHub 自动追加到 `What's Changed`，不要每版重写整篇说明。
 - Electron updater 不能跨壳完成首次升级。首次切换必须写清“手动安装 → 显式导入旧库 → 重新授权本地目录”，且源库保持不变。
-- 自定义 Inno 包没有天然接入 Tauri updater。未完成可信更新方案前，明确从 Releases 手动升级，不生成假的 updater 元数据。
+- 自定义 Inno 包没有天然接入 Tauri updater。当发布仍允许无签名降级时，先实现可信的“新版本提示 + 跳转 Releases 手动安装”，不生成假的 updater 元数据，不把手动下载说成自动更新。
 - Windows 有凭证时同时验证 app、installer、installed app 和 uninstaller 签名；有无凭证都要完成安装、启动、卸载冒烟检查。
 - Electron 回退工作流只能手动触发、短期保存 artifact，不能混入 Tauri 正式 Release。
+
+### Tauri 更新提示
+
+- 沿用现有 Renderer 通知条，在独立 service 中选择 Electron preload 或 Tauri command；不伪造 `window.electronAPI`。
+- Tauri 由 Rust 请求 GitHub `releases/latest`，只读取最新正式 Release，使用 semver 比较当前包版本，不做字符串大小比较。
+- 只在生产包启用，启动后延迟检查，后台间隔要有上限；无更新和网络错误都保持界面安静。
+- 发现新版本时显示精确版本号，并打开 API 返回的该版 Release 页；外链仍走现有 `http/https` 白名单校验。
+- 要升级成真正的下载/安装，先单独设计 Tauri 更新签名密钥、可验证元数据和 Windows 安装器兼容方案；不要在提示功能里顺手塞一个不可验证的自动安装。
 
 ### 本地目录的授权与快照
 
@@ -99,7 +107,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 预览空工作区不会修改 Electron 数据库、WAL 或工作区文件；导入前后源库 hash 一致。
 8. 正文、metadata、图片、Daily 或画布 debounce 期间关窗，必须先落盘；注入失败时窗口保留。
 9. 扫描不完整、重授权选错目录或移除前保存失败时，旧快照、文档 ID 和版本历史仍保留。
-10. 正式 tag 只生成 Tauri 包且发布门禁生效；有凭证时签名 / 公证校验，没凭证时固定提示系统风险；Electron 只保留手动回退，当前 Inno 更新边界明确为手动。
+10. 正式 tag 只生成 Tauri 包且发布门禁生效；当 GitHub 出现更高正式版本时 Tauri 显示提示并打开该版 Release，当前 Inno 的下载安装边界仍明确为手动。
 
 执行过构建或测试后，检查并清理 `vite.config.*.timestamp-*.mjs`、`vitest.config.*.timestamp-*.mjs` 等临时产物；`src-tauri/target/` 和生成 schema 保持忽略。
 

@@ -70,7 +70,7 @@ node server.js
 
 从 Electron 带入数据时，**先完全退出 Electron**，再从 **设置 → Electron 数据交接** 选择 `knowledge.db` 原文件，或退出后制作的完整副本。不要在 Electron 运行时只复制 `.db`，最新数据可能还在 WAL 中。导入不是合并：它会只读校验源库，把现有 Tauri 库备份为 `knowledge.before-import.<timestamp>.db`，再用 Electron 数据替换。两边都有新内容时先导出 Tauri JSON 备份并另存重要文稿。
 
-PDF、自动更新、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移。对应入口会隐藏，不要用 Electron 回退壳功能可用来推断 Tauri 已等价。完整边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
+PDF、应用内自动安装、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移。Tauri 已能提示新版本并跳转 Release，本机 Agent 也已接入；不要用 Electron 回退壳其他功能可用来推断 Tauri 已等价。完整边界和验收门槛见 [tauri-migration-plan.md](./tauri-migration-plan.md)。
 
 ## 构建
 
@@ -92,7 +92,7 @@ pnpm preview              # 本地预览网页版构建（默认 http://localhos
 
 Windows 先构建 Tauri exe，再用 Inno Setup 6 生成现代化安装程序。应用程序默认进入 `Program Files`，安装包会运行 Microsoft WebView2 Evergreen Bootstrapper。PFX secrets 齐全时，CI 会签名并校验应用、安装包和卸载器；否则发布未签名包。两种路径都会执行安装、启动和卸载冒烟检查。
 
-Electron 回退包只能通过 `.github/workflows/ci.yml` 手动构建，不会挂到正式 Release。旧 Electron updater 无法跨框架完成首次升级，当前自定义 Inno 包也未接入 Tauri updater；用户暂时从 Releases 手动安装更新。包体大小、启动速度和内存占用以实际产物与同条件测量为准。
+Electron 回退包只能通过 `.github/workflows/ci.yml` 手动构建，不会挂到正式 Release。旧 Electron updater 无法跨框架完成首次升级，当前自定义 Inno 包也未接入 Tauri 自动安装；Tauri 只负责检查新版本并跳转到对应 Release，用户仍手动下载安装。包体大小、启动速度和内存占用以实际产物与同条件测量为准。
 
 ## 测试
 

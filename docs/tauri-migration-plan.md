@@ -4,7 +4,7 @@
 
 正式桌面发布已经从 Electron 切到 Tauri 2。它复用现有 React/Vite 界面，系统能力改由 Rust command 提供，macOS 使用 WKWebView，Windows 使用 WebView2。Electron 只保留一个稳定发布周期的手动回退包，不再进入 `v*` tag 的 GitHub Release。
 
-当前代码已接入可控本地目录、Tauri 私有 SQLite/FTS、显式旧库导入、远程 AI 代理、本地媒体、原生保存导出和外链打开。首个正式版明确不包含 PDF、自动更新、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑；这些入口会隐藏，不伪装成可用。
+当前代码已接入可控本地目录、Tauri 私有 SQLite/FTS、显式旧库导入、远程 AI 代理、本地媒体、原生保存导出、外链打开、本机 Agent 和新版本提示。PDF、应用内自动安装、本机 MCP、“数据文件化”和自定义 skill 编辑仍未迁移；这些入口会隐藏，不伪装成可用。
 
 最终用户不需要安装 Node.js、pnpm 或 Rust。Node.js 和 Rust 只用于开发与构建。但 AI 功能仍需要一个可达的 `ai-proxy`：Tauri 客户端不会自动启动本地 Node 服务。
 
@@ -35,8 +35,10 @@ Electron 与 Tauri 的 WebView profile、应用标识和数据目录彼此独立
 | MD / HTML / DOCX 导出 | 已接入原生保存对话框 | Rust 原子写入；需真实产物交互验收 |
 | 外部链接 | 已接入系统打开 | 只允许 `http` / `https` |
 | PDF 导出 | 未迁移 | Tauri 中不展示 PDF 导出入口 |
-| 自动更新 | 未迁移 | Electron updater 不在 Tauri 中误报可用 |
-| 本机 Agent / MCP | 未迁移 | 不会调用系统 Node 或 Electron `run-as-node` |
+| 新版本提示 | 已迁移 | 查询 GitHub 最新正式版，按 semver 比较，有更新时跳转该版 Release |
+| 自动下载 / 安装 | 未迁移 | 自定义 Inno 包仍需手动下载安装 |
+| 本机 Agent | 已迁移 | 支持检测、模型选择、运行、续接、事件和取消，工作目录不向 Renderer 暴露真实路径 |
+| 本机 MCP | 未迁移 | 不伪装继承 Electron 的 Node `mcp-bridge` |
 | 数据文件化 / 外部 Agent 设置 | 未迁移 | 依赖 Electron vault bridge，Tauri 中隐藏 |
 | 自定义 skill 新建 / 编辑 | 未迁移 | 内置 skill 可运行，文件编辑依赖 Electron vault bridge |
 
@@ -119,6 +121,6 @@ Windows 和 macOS 的包体、启动时间与空闲内存都以同一台机器�
 1. 在 macOS 和 Windows 正式签名 CI 中完成首个 tag 发布，并保存签名、公证、安装和卸载证据。
 2. 在 Windows 实机验证与旧 Electron NSIS 共存、快捷方式、中文输入和两边卸载顺序。
 3. 继续回归旧库导入、重启持久化、搜索、双链、版本历史和工作区重新授权。
-4. 单独规划 Tauri updater；当前自定义 Inno 包继续从 Releases 手动更新，不冒充已支持自动升级。
-5. 逐项迁移 PDF、本机 Agent、MCP、数据文件化和自定义 skill 编辑，再恢复对应入口。
+4. 若要从“新版本提示”升级为自动下载/安装，单独设计 Tauri 更新签名、元数据和 Windows 安装器兼容方案。
+5. 逐项迁移 PDF、MCP、数据文件化和自定义 skill 编辑，再恢复对应入口。
 6. 至少保留一个稳定发布周期的 Electron 回退包，确认迁移无阻断后再决定是否删除 Electron 专用代码。

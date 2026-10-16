@@ -3,6 +3,7 @@ mod database;
 mod desktop_shell;
 mod local_agent;
 mod local_project;
+mod update;
 
 use ai_proxy::{
     tauri_ai_abort_chat_stream, tauri_ai_chat, tauri_ai_chat_stream, tauri_ai_exec_tool,
@@ -28,6 +29,7 @@ use local_project::{
     select_read_only_projects, select_read_write_projects, LocalProjectRegistry,
 };
 use tauri::Manager;
+use update::check_for_update;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +96,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             runtime_info,
+            check_for_update,
             open_external_url,
             save_export_file,
             tauri_ai_get_config,

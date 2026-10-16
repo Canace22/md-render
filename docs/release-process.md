@@ -15,7 +15,7 @@ npm 命令：`pnpm release:tag`
 | 发布提交 | tag 指向的 commit 必须已经进入 `origin/main` |
 | macOS | `MD-Render-<version>.dmg`，同时支持 Apple Silicon 和 Intel |
 | Windows | `MD-Render-Setup-<version>.exe`，使用 Inno Setup 安装到 `Program Files` |
-| 更新方式 | 当前从 Releases 手动下载安装；尚未接入 Tauri updater |
+| 更新方式 | 应用内提示新版本并打开对应 Release；下载和安装仍手动完成 |
 
 ## 2. 仓库一次性配置
 
@@ -99,7 +99,7 @@ Release 固定保留“下载 / macOS 安装 / Windows 安装”三段和网页�
 
 Electron 旧库通常在 macOS 的 `~/Library/Application Support/md-render/knowledge.db` 或 Windows 的 `%APPDATA%\md-render\knowledge.db`；找不到时再检查同级 `@md-render/editor` 和 `MD Render` 目录。
 
-旧 Electron updater 无法跨框架完成首次安装。当前 Inno 安装包也没有接入 Tauri updater，所以后续版本暂时继续从 Releases 手动安装。PDF、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑等边界继续维护在 README 和 CHANGELOG，不每版复制到 Release 正文。
+旧 Electron updater 无法跨框架完成首次安装。Tauri 正式包会检查 GitHub 最新正式版并显示提示，但当前 Inno 安装包没有接入自动安装，所以用户仍从提示打开的 Release 页手动下载安装。PDF、本机 MCP、“数据文件化”和自定义 skill 编辑等边界继续维护在 README 和 CHANGELOG，不每版复制到 Release 正文。
 
 ## 7. Electron 回退
 

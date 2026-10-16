@@ -39,7 +39,7 @@ Copy to WeChat Official Account formatting in one click (multiple templates incl
    - **macOS**: `MD-Render-*.dmg` (Universal, supports both Intel and Apple Silicon)
    - **Windows**: `MD-Render-Setup-*.exe`
 2. **First launch notice**: If the package is unsigned, approve it on macOS under **System Settings → Privacy & Security**, or click **More info → Run anyway** on Windows SmartScreen (you can verify the download against `SHA256SUMS` on the release page).
-3. **Updates**: Automatic in-app updates are not enabled yet; install newer versions manually from Releases.
+3. **Updates**: The app shows a banner when a newer version is available. Open the linked Release to download and install it manually; automatic in-app installation is not enabled yet.
 
 <details>
 <summary><b>Upgrading from the legacy Electron app? Click for data migration steps</b></summary>
