@@ -954,9 +954,14 @@ const stripSessionLocalProjectMounts = (workspace) => {
     if (!snapshot) {
       return [markReadOnlyTree(node, LOCAL_PROJECT_REAUTHORIZATION_REQUIRED)];
     }
-    const nextSnapshot = buildPersistentLocalProjectSnapshot(node, snapshot);
-    sessionLocalProjectSnapshots.set(mountId, nextSnapshot);
-    return [nextSnapshot];
+    try {
+      const nextSnapshot = buildPersistentLocalProjectSnapshot(node, snapshot);
+      sessionLocalProjectSnapshots.set(mountId, nextSnapshot);
+      return [nextSnapshot];
+    } catch (error) {
+      console.warn('[local-project] 本地目录快照更新失败，保留授权前快照:', error);
+      return [snapshot];
+    }
   });
   const unchanged = children.length === workspace.children.length
     && children.every((node, index) => node === workspace.children[index]);
@@ -1995,12 +2000,21 @@ export const useEditorStore = create(
         const mountId = String(projectNode.projectMountId ?? '');
         if (mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)) {
           const snapshotSeed = mountOptions.persistenceSnapshot ?? { projectRootPath: projectIdentity };
-          const snapshot = buildPersistentLocalProjectSnapshot(projectNode, snapshotSeed);
+          let snapshot = snapshotSeed;
+          try {
+            snapshot = buildPersistentLocalProjectSnapshot(projectNode, snapshotSeed);
+          } catch (error) {
+            if (!mountOptions.persistenceSnapshot) throw error;
+            console.warn('[local-project] 旧项目包含无法持久化的媒体引用，保留导入快照:', error);
+          }
           sessionLocalProjectSnapshots.set(mountId, snapshot);
         }
 
         const current = get();
-        const baseWorkspace = ensureLocalWorkspaceRoot(current.workspace, current.projectRootPath);
+        const baseWorkspace = ensureLocalWorkspaceRoot(
+          current.workspace,
+          mountOptions.replaceNodeId ? '' : current.projectRootPath,
+        );
         const replacedWorkspace = mountOptions.replaceNodeId
           ? removeNodeById(baseWorkspace, mountOptions.replaceNodeId).node
           : baseWorkspace;

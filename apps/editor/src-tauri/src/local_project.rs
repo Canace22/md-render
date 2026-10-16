@@ -101,6 +101,7 @@ struct LocalProjectMount {
     display_name: String,
     window_label: String,
     access: ProjectAccess,
+    legacy_relative_path: Option<String>,
 }
 
 #[derive(Default)]
@@ -147,6 +148,8 @@ pub(crate) struct LocalProject {
     mount_id: String,
     project_root_path: String,
     display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    legacy_relative_path: Option<String>,
     access: &'static str,
     workspace: WorkspaceNode,
     skipped_count: usize,
@@ -789,6 +792,51 @@ fn can_reauthorize_legacy_project(path: &Path) -> bool {
         .any(|vault_root| is_legacy_vault_project_path(path, vault_root))
 }
 
+fn legacy_vault_root_for_selection(path: &Path) -> Option<&PathBuf> {
+    protected_vault_roots().iter().find(|vault_root| {
+        path == vault_root.as_path() || path == vault_root.join(VAULT_PROJECTS_DIR_NAME)
+    })
+}
+
+fn resolve_legacy_workspace_projects(
+    selected_root: &Path,
+    legacy_project_paths: &[String],
+) -> Result<Vec<(PathBuf, String, Option<String>)>, String> {
+    let Some(vault_root) = legacy_vault_root_for_selection(selected_root) else {
+        return Ok(Vec::new());
+    };
+    if legacy_project_paths.is_empty() {
+        return Err("没有找到需要重新授权的旧项目".to_string());
+    }
+
+    legacy_project_paths
+        .iter()
+        .map(|relative_path| {
+            let normalized = validate_relative_path(relative_path, false, false)?;
+            let mut components = normalized.components();
+            let is_projects_child = components
+                .next()
+                .is_some_and(|component| component.as_os_str() == VAULT_PROJECTS_DIR_NAME)
+                && components.next().is_some()
+                && components.next().is_none();
+            if !is_projects_child {
+                return Err("旧项目路径不在 Projects 目录下".to_string());
+            }
+
+            let project_root = fs::canonicalize(vault_root.join(&normalized))
+                .map_err(|_| format!("旧项目目录不存在：{relative_path}"))?;
+            if !project_root.is_dir() || !can_reauthorize_legacy_project(&project_root) {
+                return Err(format!("旧项目目录无法授权：{relative_path}"));
+            }
+            Ok((
+                project_root.clone(),
+                display_name_from_path(&project_root),
+                Some(relative_path.clone()),
+            ))
+        })
+        .collect()
+}
+
 fn is_path_within_root(root: &Path, target: &Path) -> bool {
     target.starts_with(root) && target != root
 }
@@ -1201,6 +1249,7 @@ fn register_mount(
     display_name: String,
     window_label: String,
     access: ProjectAccess,
+    legacy_relative_path: Option<String>,
 ) -> Result<String, String> {
     let mount_id = format!("{}{}", access.mount_id_prefix(), Uuid::new_v4());
     lock_mounts(registry)?.insert(
@@ -1210,6 +1259,7 @@ fn register_mount(
             display_name,
             window_label,
             access,
+            legacy_relative_path,
         },
     );
     Ok(mount_id)
@@ -1281,6 +1331,7 @@ fn build_project(mount_id: String, mount: &LocalProjectMount) -> LocalProject {
         project_root_path: mount_id.clone(),
         mount_id,
         display_name: mount.display_name.clone(),
+        legacy_relative_path: mount.legacy_relative_path.clone(),
         access: mount.access.label(),
         workspace,
         skipped_count,
@@ -1581,6 +1632,7 @@ async fn select_projects(
     registry: State<'_, LocalProjectRegistry>,
     access: ProjectAccess,
     allow_legacy_project_path: bool,
+    legacy_project_paths: Vec<String>,
 ) -> Result<SelectProjectsResult, String> {
     let title = if access.is_read_only() {
         "选择只读项目目录"
@@ -1589,11 +1641,13 @@ async fn select_projects(
     } else {
         "选择可读写项目目录（不会访问正式版数据）"
     };
-    let selected_paths = window
-        .dialog()
-        .file()
-        .set_title(title)
-        .blocking_pick_folders();
+    let mut dialog = window.dialog().file().set_title(title);
+    if allow_legacy_project_path {
+        if let Some(vault_root) = protected_vault_roots().iter().find(|path| path.is_dir()) {
+            dialog = dialog.set_directory(vault_root);
+        }
+    }
+    let selected_paths = dialog.blocking_pick_folders();
     let Some(selected_paths) = selected_paths else {
         return Ok(SelectProjectsResult {
             canceled: true,
@@ -1610,28 +1664,44 @@ async fn select_projects(
         if !root.is_dir() {
             return Err("所选路径不是目录".to_string());
         }
+        if allow_legacy_project_path && legacy_vault_root_for_selection(&root).is_some() {
+            let resolved = resolve_legacy_workspace_projects(&root, &legacy_project_paths)?;
+            selected_roots.extend(resolved);
+            continue;
+        }
         let is_legacy_project = can_reauthorize_legacy_project(&root);
         if overlaps_protected_electron_tree(&root)
             || (is_legacy_project && !allow_legacy_project_path)
         {
             return Err(
-                "为保护旧版数据，请选择独立目录；重新授权时可选择 Documents/MdRender/Projects 下的原项目目录"
+                "为保护旧版数据，请选择独立目录；重新授权时可选择 Documents/MdRender 工作空间或 Projects 下的具体项目"
                     .to_string(),
             );
         }
 
-        selected_roots.push((root.clone(), display_name_from_path(&root)));
+        let legacy_relative_path = legacy_project_paths.iter().find_map(|relative_path| {
+            protected_vault_roots().iter().find_map(|vault_root| {
+                let candidate = canonical_or_original(vault_root.join(relative_path));
+                (candidate == root).then(|| relative_path.clone())
+            })
+        });
+        selected_roots.push((
+            root.clone(),
+            display_name_from_path(&root),
+            legacy_relative_path,
+        ));
     }
 
     let mut projects = Vec::new();
     let mut registered_mount_ids = Vec::new();
-    for (root, display_name) in selected_roots {
+    for (root, display_name, legacy_relative_path) in selected_roots {
         let mount_id = match register_mount(
             registry.inner(),
             root,
             display_name,
             window.label().to_string(),
             access,
+            legacy_relative_path,
         ) {
             Ok(mount_id) => mount_id,
             Err(error) => {
@@ -1727,12 +1797,14 @@ pub(crate) async fn select_read_only_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
     allow_legacy_project_path: bool,
+    legacy_project_paths: Vec<String>,
 ) -> Result<SelectProjectsResult, String> {
     select_projects(
         window,
         registry,
         ProjectAccess::ReadOnly,
         allow_legacy_project_path,
+        legacy_project_paths,
     )
     .await
 }
@@ -1742,12 +1814,14 @@ pub(crate) async fn select_read_write_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
     allow_legacy_project_path: bool,
+    legacy_project_paths: Vec<String>,
 ) -> Result<SelectProjectsResult, String> {
     select_projects(
         window,
         registry,
         ProjectAccess::ReadWrite,
         allow_legacy_project_path,
+        legacy_project_paths,
     )
     .await
 }

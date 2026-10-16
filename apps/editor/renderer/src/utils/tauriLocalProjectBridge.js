@@ -212,10 +212,11 @@ const normalizeProject = (project) => {
 export async function openLocalProject({
   access = 'read-only',
   allowLegacyProjectPath = false,
+  legacyProjectPaths = [],
 } = {}) {
   const result = await invokeTauri(
     access === 'read-write' ? 'select_read_write_projects' : 'select_read_only_projects',
-    { allowLegacyProjectPath },
+    { allowLegacyProjectPath, legacyProjectPaths },
   );
   return {
     ...result,

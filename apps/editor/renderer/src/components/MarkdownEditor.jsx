@@ -246,6 +246,18 @@ const getReauthorizedProjectIdentity = (snapshot) => {
   return snapshot?.projectRootPath;
 };
 
+const getLegacyWorkspaceReauthorizationSnapshots = (workspace, targetSnapshot) => {
+  if (!targetSnapshot || !needsLocalProjectReauthorization(targetSnapshot)) return [];
+  const projectRootPath = targetSnapshot.projectRootPath;
+  const workspaceSnapshots = (workspace?.children ?? []).filter((node) => (
+    node?.type === 'folder'
+    && needsLocalProjectReauthorization(node)
+    && node.projectRootPath === projectRootPath
+    && String(node.relativePath ?? '').startsWith('Projects/')
+  ));
+  return workspaceSnapshots.length > 0 ? workspaceSnapshots : [targetSnapshot];
+};
+
 const CODE_BLOCK_LANGUAGES = {
   text: { name: 'Plain Text', aliases: ['txt', 'plaintext'] },
   javascript: { name: 'JavaScript', aliases: ['js'] },
@@ -2218,9 +2230,20 @@ function MarkdownEditor() {
     }
     let closeLoading = null;
     try {
+      const currentWorkspace = useEditorStore.getState().workspace;
+      const replacementSnapshot = replaceNodeId
+        ? findNodeById(currentWorkspace, replaceNodeId)
+        : null;
+      const replacementSnapshots = getLegacyWorkspaceReauthorizationSnapshots(
+        currentWorkspace,
+        replacementSnapshot,
+      );
       const result = await openLocalProject({
         access,
         allowLegacyProjectPath: Boolean(replaceNodeId),
+        legacyProjectPaths: replacementSnapshots
+          .map((snapshot) => snapshot.relativePath)
+          .filter(Boolean),
       });
       if (!result || result.canceled) return;
       const projects = Array.isArray(result.projects)
@@ -2229,11 +2252,11 @@ function MarkdownEditor() {
       const validProjects = projects.filter((project) => project?.workspace);
       if (validProjects.length === 0) return;
       closeLoading = message.loading('正在打开本地项目…', 0);
-      const replacementSnapshot = replaceNodeId
-        ? findNodeById(useEditorStore.getState().workspace, replaceNodeId)
-        : null;
-      const canReplaceSnapshot = needsLocalProjectReauthorization(replacementSnapshot);
-      if (canReplaceSnapshot && validProjects[0]?.complete === false) {
+      const replacementByRelativePath = new Map(
+        replacementSnapshots.map((snapshot) => [snapshot.relativePath, snapshot]),
+      );
+      const canReplaceSnapshot = replacementSnapshots.length > 0;
+      if (canReplaceSnapshot && validProjects.some((project) => project.complete === false)) {
         await Promise.all(validProjects.map(async (project) => {
           try {
             await revokeLocalProjectAccess(project.mountId);
@@ -2243,24 +2266,44 @@ function MarkdownEditor() {
         }));
         throw new Error('目录扫描不完整，旧快照已保留。请检查权限、超大文件或文件数量后重试。');
       }
-      const snapshotMatches = canReplaceSnapshot && matchesLocalProjectSnapshot(
-        replacementSnapshot,
-        validProjects[0]?.workspace,
-      );
-      validProjects.forEach((project, index) => {
-        const replacesSnapshot = snapshotMatches && index === 0;
-        openLocalProjectWorkspace(project.workspace, project.projectRootPath, {
-          projectMountId: project.mountId,
-          readOnly: project.access === 'read-only',
-          access: project.access,
-          projectRevision: project.revision,
-          ...(replacesSnapshot ? {
-            replaceNodeId,
-            persistenceSnapshot: replacementSnapshot,
-            projectIdentity: getReauthorizedProjectIdentity(replacementSnapshot),
-          } : {}),
-        });
+      const projectPlans = validProjects.map((project) => {
+        const snapshot = project.legacyRelativePath
+          ? replacementByRelativePath.get(project.legacyRelativePath)
+          : (validProjects.length === 1 ? replacementSnapshot : null);
+        return {
+          project,
+          snapshot,
+          replacesSnapshot: Boolean(
+            snapshot
+            && (project.legacyRelativePath || matchesLocalProjectSnapshot(snapshot, project.workspace)),
+          ),
+        };
       });
+      const mismatchedPlans = projectPlans.filter(({ snapshot, replacesSnapshot }) => (
+        snapshot && !replacesSnapshot
+      ));
+      await Promise.all(mismatchedPlans.map(async ({ project }) => {
+        try {
+          await revokeLocalProjectAccess(project.mountId);
+        } catch (error) {
+          console.warn('[local-project] 撤销不匹配的重授权会话失败:', error);
+        }
+      }));
+      projectPlans
+        .filter(({ snapshot, replacesSnapshot }) => !snapshot || replacesSnapshot)
+        .forEach(({ project, snapshot, replacesSnapshot }) => {
+          openLocalProjectWorkspace(project.workspace, project.projectRootPath, {
+            projectMountId: project.mountId,
+            readOnly: project.access === 'read-only',
+            access: project.access,
+            projectRevision: project.revision,
+            ...(replacesSnapshot ? {
+              replaceNodeId: snapshot.id,
+              persistenceSnapshot: snapshot,
+              projectIdentity: getReauthorizedProjectIdentity(snapshot),
+            } : {}),
+          });
+        });
       setContentResetKey((k) => k + 1);
       const readOnlyCount = validProjects.filter((project) => project.access === 'read-only').length;
       const skippedCount = validProjects.reduce(
@@ -2269,10 +2312,11 @@ function MarkdownEditor() {
       );
       const skippedText = skippedCount > 0 ? `，跳过 ${skippedCount} 个不支持或受限条目` : '';
       const incompleteCount = validProjects.filter((project) => project.complete === false).length;
-      if (canReplaceSnapshot && !snapshotMatches) {
-        message.warning('所选目录与旧快照不匹配，已作为新项目打开，旧快照保留不变。');
+      const replacedCount = projectPlans.filter((plan) => plan.replacesSnapshot).length;
+      if (mismatchedPlans.length > 0) {
+        message.warning(`${mismatchedPlans.length} 个目录与旧快照不匹配，已保留旧快照，未覆盖。`);
       } else if (replaceNodeId) {
-        message.success(`已重新授权 ${validProjects.length} 个本地目录${skippedText}`);
+        message.success(`已重新授权 ${replacedCount} 个本地目录${skippedText}`);
       } else if (incompleteCount > 0) {
         message.warning(`已打开目录，但 ${incompleteCount} 个目录扫描不完整，自动刷新不会覆盖当前快照${skippedText}`);
       } else {
