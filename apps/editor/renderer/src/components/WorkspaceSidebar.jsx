@@ -223,7 +223,7 @@ const TreeNode = ({
   const showPinAction = allowStructureActions && !isRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
   const showReauthorizeProject = Boolean(
-    isLocalProjectRoot && needsReauthorization && onReauthorizeLocalProject,
+    isFolder && needsReauthorization && onReauthorizeLocalProject,
   );
   const showManualSyncProject = Boolean(
     !needsReauthorization && isFolder && node.projectRootPath && onManualSyncLocalProject,

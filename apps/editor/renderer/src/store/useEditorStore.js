@@ -177,7 +177,7 @@ const protectImportedLocalProjectMounts = (workspace) => {
   return {
     ...workspace,
     children: workspace.children.map((node) => {
-      if (!node.localProjectRoot) return node;
+      if (!node.projectRootPath) return node;
       const mountId = String(node.projectMountId ?? node.projectRootPath ?? '');
       if (
         mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)

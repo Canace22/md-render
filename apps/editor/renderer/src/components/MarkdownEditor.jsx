@@ -207,10 +207,21 @@ const findLocalProjectRootByPath = (node, projectRootPath) => {
   return null;
 };
 
-const collectLocalProjectRelativePaths = (node, paths = new Set()) => {
+const collectLocalProjectRelativePaths = (
+  node,
+  paths = new Set(),
+  rootRelativePath = node?.relativePath ?? '',
+  isRoot = true,
+) => {
   if (!node) return paths;
-  if (node.relativePath) paths.add(`${node.type}:${node.relativePath}`);
-  node.children?.forEach?.((child) => collectLocalProjectRelativePaths(child, paths));
+  const relativePath = String(node.relativePath ?? '');
+  const normalizedPath = rootRelativePath && relativePath.startsWith(`${rootRelativePath}/`)
+    ? relativePath.slice(rootRelativePath.length + 1)
+    : relativePath;
+  if (!isRoot && normalizedPath) paths.add(`${node.type}:${normalizedPath}`);
+  node.children?.forEach?.((child) => (
+    collectLocalProjectRelativePaths(child, paths, rootRelativePath, false)
+  ));
   return paths;
 };
 
@@ -226,6 +237,13 @@ const matchesLocalProjectSnapshot = (snapshot, selectedWorkspace) => {
   return commonCount >= 3
     && commonCount / snapshotPaths.size >= 0.75
     && commonCount / selectedPaths.size >= 0.5;
+};
+
+const getReauthorizedProjectIdentity = (snapshot) => {
+  if (snapshot?.localProjectRoot) return snapshot.projectRootPath;
+  const nodeId = String(snapshot?.id ?? '');
+  if (nodeId) return nodeId.replace(/^project:/, '');
+  return snapshot?.projectRootPath;
 };
 
 const CODE_BLOCK_LANGUAGES = {
@@ -2236,7 +2254,7 @@ function MarkdownEditor() {
           ...(replacesSnapshot ? {
             replaceNodeId,
             persistenceSnapshot: replacementSnapshot,
-            projectIdentity: replacementSnapshot.projectRootPath,
+            projectIdentity: getReauthorizedProjectIdentity(replacementSnapshot),
           } : {}),
         });
       });
@@ -2271,7 +2289,7 @@ function MarkdownEditor() {
 
   const handleReauthorizeLocalProject = useCallback(async (nodeId, access = 'read-write') => {
     const node = findNodeById(workspace, nodeId);
-    if (!node?.localProjectRoot || !needsLocalProjectReauthorization(node)) return;
+    if (node?.type !== 'folder' || !needsLocalProjectReauthorization(node)) return;
     await handleOpenLocalProject(access, nodeId);
   }, [handleOpenLocalProject, workspace]);
 
@@ -2999,6 +3017,8 @@ function MarkdownEditor() {
             folder={selectedFolder}
             children={folderChildren}
             onSelectItem={selectNode}
+            needsReauthorization={selectedNeedsLocalProjectReauthorization}
+            onReauthorize={() => handleReauthorizeLocalProject(selectedFolder.id, 'read-write')}
             showSyncButton={canManualSyncLocalProject}
             syncLoading={manualSyncLoading}
             onSyncFromDisk={handleManualSyncLocalProject}
