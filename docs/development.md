@@ -38,7 +38,7 @@ pnpm electron:dev   # 旧 Electron 回退壳
 pnpm --filter @md-render/editor electron:rebuild
 ```
 
-`pnpm electron:dev` 会自动检查并启动本地 `server/ai-proxy`；`pnpm tauri:dev` 和网页版不会，需要手动启动或配置远程代理。模型配置见 [README](../README.md#让-ai-助手用起来) 和 [server/README.md](../server/README.md)。
+`pnpm electron:dev` 会自动检查并启动本地 `server/ai-proxy`；`pnpm tauri:dev` 和网页版不会，需要手动启动或配置远程代理。模型配置见 [README](../README.md#配置-ai-助手) 和 [server/README.md](../server/README.md)。
 
 ### Tauri 正式桌面壳
 
