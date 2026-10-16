@@ -24,6 +24,14 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 一次只迁移一个能力。先在副本上验证读，再验证写、监听、取消和错误路径；通过后才替换对应 Electron 路径。
 8. 每个独立功能验证通过后立即提交。正式 tag 只发布 Tauri；Electron 回退包保持可独立构建、可启动，但不挂到正式 Release，稳定一个发布周期后再决定是否删除。
 
+### 本机 Agent 迁移
+
+- 本机 Agent 是一组能力，不是一个下拉项：同时检查 `detect / models / run / cancel / event` 是否有 Tauri 通道。只改 `hasLocalAgentDetection` 会把不能运行的来源伪装成可用。
+- Renderer 通过独立 service 在 Electron preload 和 Tauri command 之间选路；不伪造 `window.electronAPI`，不把 Rust 进程管理写进组件。
+- Tauri 运行 Agent 时，前端只传当前窗口的 mount id，Rust 从 `LocalProjectRegistry` 解析真实目录；禁止因为 Agent 需要 cwd 就把绝对路径重新暴露给 Renderer。
+- CLI 检测与运行都要合并 login shell 环境和常见安装目录；macOS 从 Finder 启动时不能依赖父进程 PATH。
+- 不要默认 Tauri 已继承 Electron 的 MCP 注入。Electron 用自身 Node 运行 `mcp-bridge`；Tauri 没有 Node 时必须另行迁移，迁移前要在结果里明确说明降级，不能宣称 md-render 内部工具可用。
+
 ### 正式切换与发布门禁
 
 - 正式 Release 只由 `v*` tag 触发；tag、根目录版本和 editor 版本必须一致，发布 commit 必须属于 `origin/main`。

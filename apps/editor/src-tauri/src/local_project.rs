@@ -107,6 +107,14 @@ pub(crate) struct LocalProjectRegistry {
     mounts: Mutex<HashMap<String, LocalProjectMount>>,
 }
 
+pub(crate) fn resolve_agent_work_dir(
+    registry: &LocalProjectRegistry,
+    mount_id: &str,
+    window_label: &str,
+) -> Result<PathBuf, String> {
+    resolve_mount(registry, mount_id, window_label).map(|mount| mount.root)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceNode {

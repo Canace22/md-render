@@ -1,6 +1,7 @@
 mod ai_proxy;
 mod database;
 mod desktop_shell;
+mod local_agent;
 mod local_project;
 
 use ai_proxy::{
@@ -14,6 +15,10 @@ use database::{
     db_save_version_snapshot, db_search, DatabaseState,
 };
 use desktop_shell::{open_external_url, save_export_file};
+use local_agent::{
+    tauri_local_agent_cancel, tauri_local_agent_detect, tauri_local_agent_models,
+    tauri_local_agent_run, LocalAgentState,
+};
 use local_project::{
     create_local_project_file, create_local_project_folder, delete_local_project_entry,
     get_local_project_revision, local_media_protocol_response, read_local_project_file,
@@ -64,6 +69,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AiProxyState::default())
+        .manage(LocalAgentState::default())
         .manage(LocalProjectRegistry::default())
         .register_asynchronous_uri_scheme_protocol("local-media", |context, request, responder| {
             let app_handle = context.app_handle().clone();
@@ -99,6 +105,10 @@ pub fn run() {
             tauri_ai_search_knowledge,
             tauri_ai_read_url,
             tauri_ai_extract_attachment_text,
+            tauri_local_agent_detect,
+            tauri_local_agent_models,
+            tauri_local_agent_run,
+            tauri_local_agent_cancel,
             db_is_migrated,
             db_load,
             db_migrate,
