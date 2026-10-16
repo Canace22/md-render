@@ -26,6 +26,7 @@ const READ_WRITE_ACCESS: &str = "read-write";
 const ASSETS_DIRECTORY_NAME: &str = "assets";
 const LOCAL_PROJECT_META_DIR_NAME: &str = ".md-render";
 const LOCAL_PROJECT_META_SIDECAR_SUFFIX: &str = ".md-render-meta.json";
+const VAULT_PROJECTS_DIR_NAME: &str = "Projects";
 const MAX_DIRECTORY_DEPTH: usize = 16;
 const MAX_RELATIVE_PATH_BYTES: usize = 4_096;
 const MAX_PATH_SEGMENT_BYTES: usize = 255;
@@ -705,7 +706,7 @@ fn push_electron_user_data_roots(roots: &mut Vec<PathBuf>, base: &Path) {
     }
 }
 
-fn protected_electron_roots() -> &'static [PathBuf] {
+fn protected_electron_data_roots() -> &'static [PathBuf] {
     static ROOTS: OnceLock<Vec<PathBuf>> = OnceLock::new();
     ROOTS.get_or_init(|| {
         let mut roots = Vec::new();
@@ -714,16 +715,26 @@ fn protected_electron_roots() -> &'static [PathBuf] {
                 &mut roots,
                 &home.join("Library").join("Application Support"),
             );
-            push_protected_root(&mut roots, home.join("Documents").join("MdRender"));
             push_electron_user_data_roots(&mut roots, &home.join(".config"));
-        }
-        if let Some(profile) = env::var_os("USERPROFILE").map(PathBuf::from) {
-            push_protected_root(&mut roots, profile.join("Documents").join("MdRender"));
         }
         for variable in ["APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME"] {
             if let Some(base) = env::var_os(variable).map(PathBuf::from) {
                 push_electron_user_data_roots(&mut roots, &base);
             }
+        }
+        roots
+    })
+}
+
+fn protected_vault_roots() -> &'static [PathBuf] {
+    static ROOTS: OnceLock<Vec<PathBuf>> = OnceLock::new();
+    ROOTS.get_or_init(|| {
+        let mut roots = Vec::new();
+        if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+            push_protected_root(&mut roots, home.join("Documents").join("MdRender"));
+        }
+        if let Some(profile) = env::var_os("USERPROFILE").map(PathBuf::from) {
+            push_protected_root(&mut roots, profile.join("Documents").join("MdRender"));
         }
         roots
     })
@@ -746,15 +757,36 @@ fn is_same_or_within(path: &Path, parent: &Path) -> bool {
 }
 
 fn is_protected_electron_path(path: &Path) -> bool {
-    protected_electron_roots()
+    protected_electron_data_roots()
         .iter()
         .any(|protected_root| is_same_or_within(path, protected_root))
+        || protected_vault_roots().iter().any(|vault_root| {
+            is_same_or_within(path, vault_root) && !is_legacy_vault_project_path(path, vault_root)
+        })
 }
 
 fn overlaps_protected_electron_tree(path: &Path) -> bool {
-    protected_electron_roots().iter().any(|protected_root| {
-        is_same_or_within(path, protected_root) || is_same_or_within(protected_root, path)
-    })
+    protected_electron_data_roots()
+        .iter()
+        .any(|protected_root| {
+            is_same_or_within(path, protected_root) || is_same_or_within(protected_root, path)
+        })
+        || protected_vault_roots().iter().any(|vault_root| {
+            is_same_or_within(vault_root, path)
+                || (is_same_or_within(path, vault_root)
+                    && !is_legacy_vault_project_path(path, vault_root))
+        })
+}
+
+fn is_legacy_vault_project_path(path: &Path, vault_root: &Path) -> bool {
+    let projects_root = vault_root.join(VAULT_PROJECTS_DIR_NAME);
+    path != projects_root && is_same_or_within(path, &projects_root)
+}
+
+fn can_reauthorize_legacy_project(path: &Path) -> bool {
+    protected_vault_roots()
+        .iter()
+        .any(|vault_root| is_legacy_vault_project_path(path, vault_root))
 }
 
 fn is_path_within_root(root: &Path, target: &Path) -> bool {
@@ -1548,9 +1580,12 @@ async fn select_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
     access: ProjectAccess,
+    allow_legacy_project_path: bool,
 ) -> Result<SelectProjectsResult, String> {
     let title = if access.is_read_only() {
         "选择只读项目目录"
+    } else if allow_legacy_project_path {
+        "选择原项目目录并恢复编辑"
     } else {
         "选择可读写项目目录（不会访问正式版数据）"
     };
@@ -1575,9 +1610,12 @@ async fn select_projects(
         if !root.is_dir() {
             return Err("所选路径不是目录".to_string());
         }
-        if overlaps_protected_electron_tree(&root) {
+        let is_legacy_project = can_reauthorize_legacy_project(&root);
+        if overlaps_protected_electron_tree(&root)
+            || (is_legacy_project && !allow_legacy_project_path)
+        {
             return Err(
-                "为保护正式版数据，请选择不包含 Electron 数据或 Documents/MdRender 的独立目录"
+                "为保护旧版数据，请选择独立目录；重新授权时可选择 Documents/MdRender/Projects 下的原项目目录"
                     .to_string(),
             );
         }
@@ -1688,16 +1726,30 @@ fn open_in_system_file_manager(target: &Path, is_directory: bool) -> Result<(), 
 pub(crate) async fn select_read_only_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
+    allow_legacy_project_path: bool,
 ) -> Result<SelectProjectsResult, String> {
-    select_projects(window, registry, ProjectAccess::ReadOnly).await
+    select_projects(
+        window,
+        registry,
+        ProjectAccess::ReadOnly,
+        allow_legacy_project_path,
+    )
+    .await
 }
 
 #[tauri::command]
 pub(crate) async fn select_read_write_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
+    allow_legacy_project_path: bool,
 ) -> Result<SelectProjectsResult, String> {
-    select_projects(window, registry, ProjectAccess::ReadWrite).await
+    select_projects(
+        window,
+        registry,
+        ProjectAccess::ReadWrite,
+        allow_legacy_project_path,
+    )
+    .await
 }
 
 #[tauri::command]

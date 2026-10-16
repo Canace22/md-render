@@ -2218,7 +2218,10 @@ function MarkdownEditor() {
     }
     let closeLoading = null;
     try {
-      const result = await openLocalProject({ access });
+      const result = await openLocalProject({
+        access,
+        allowLegacyProjectPath: Boolean(replaceNodeId),
+      });
       if (!result || result.canceled) return;
       const projects = Array.isArray(result.projects)
         ? result.projects
