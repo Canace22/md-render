@@ -53,12 +53,13 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 ### 本地目录的授权与快照
 
 - 部分能力要单独声明，例如 `canOpen / canRead / canWrite / canUseDefaultWorkspace`；不要因为 Tauri 能读目录，就让原来的“本地项目完整可用”判断返回 true。
-- Electron 默认工作区导入后，磁盘节点可能带 `projectRootPath`，却没有 `localProjectRoot`；旧版还可能把 `:folder:Projects/<目录>` 编进 `projectRootPath`。Tauri 加载这类已持久化、但没有当前会话 mount token 的顶层节点时，保留原 ID、内容和关联，递归去掉失效 token 和磁盘写入字段，恢复为应用内可编辑副本；同时保留相对路径和“重新授权”入口，否则正文能编辑，但本地图片会永久碎图。这个副本不回写 Electron 原目录；重新授权后才恢复磁盘同步和本地素材读取。
+- Electron 数据库中的节点可能带 `projectRootPath`，这只说明它曾有本地存档/同步位置，不代表数据库节点就是外部目录挂载。导入 Tauri 后保留原 ID、内容和关联，递归去掉旧的磁盘路径、只读和授权字段，继续作为 SQLite 可编辑数据；不显示“本地”，不要求重新授权。只有用户在 Tauri 里明确“打开本地目录”的项目才持久化 `tauri-directory` 来源标记，下次启动按本地挂载恢复。
 - 保护目录要区分“Electron 配置/数据库”和“用户内容项目”：普通打开始终拒绝 `Documents/MdRender` 和 Electron user-data；旧快照重授权可让用户一次选择 `Documents/MdRender`，但 Rust 必须只把请求中的 `Projects/<具体项目>` 展开成相互独立的 mount，不能把根目录、数据库、Daily、配置等一并暴露。放行后的扫描、新建、保存、改名和删除必须共用同一边界，否则会出现“能授权但不能编辑”。
 - Electron 默认工作区的笔记在 `Projects/<目录>`，粘贴图却可能统一存在库根 `assets/`。重授权把各个 `Projects/*` 独立挂载后，不要放宽项目根边界；另建绑定当前窗口的 `assets/` 只读媒体 mount，仅允许自定义媒体协议读图片/音视频。Renderer 打开时把 `../../assets/...` 改成该 mount 的短期 URL，保存时再还原原相对路径；这个素材 token 和项目 token 一样不得持久化。
 - 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
-- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，只持久化最新内容快照；下次加载时去掉挂载字段，不持久化或复用 token。
-- 重启后保留快照与历史 ID，但不使用其中的旧路径或 token 读写。当前会话新打开的真实目录仍使用 mount token 读写；会话结束后持久化的是可编辑快照，不伪装成还连着原目录。
+- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，只持久化最新内容快照；下次加载时去掉挂载字段，不持久化或复用 token。批量重新授权 `Projects/*` 时，每个项目必须使用各自稳定身份，不能共用父目录路径，否则会生成重复根 ID 并被数据库拒绝。
+- 用户已明确选过的目录可记住授权，但绝对路径和访问级别只写入 Rust 私有授权表，以稳定项目身份关联；Renderer 和工作区 SQLite 仍不得持有真实路径或会话 token。重启后 Rust 重新 canonicalize 目录、校验保护边界与访问级别，再签发新 token；Renderer 只在扫描完整且与快照匹配时替换快照，失败时继续保留数据库副本并显示重新授权入口。
+- Zustand 从 SQLite 异步水合完成前，禁止 `persist` 和任何启动 effect 把默认工作区写回数据库。真实启动验收必须在启动前后对比 `documents` 数量、顶层节点和 `quick_check`；只看窗口曾经显示正确内容，抓不住延迟发生的默认状态覆盖。
 - 旧 Markdown 可能残留 Electron 时代的绝对 `local-media://` 引用。它不能阻断当前会话挂载；若因此无法生成可持久化的新快照，就保留授权前的安全快照并让磁盘项目继续可编辑，不能把快照失败升级成授权失败。
 - 扫描结果必须单独返回 `complete/authoritative`，不能用 `skippedCount > 0` 代替。文件数/总体积/深度截断、I/O 或 UTF-8 读取失败时为不完整；隐藏、忽略和不支持类型只计跳过。不完整扫描禁止自动刷新、手动 `use-disk` 和重授权覆盖。
 - 移除挂载时先排空正文、图片、metadata 和 Rust mutation，成功后才 revoke token 并删节点；任一保存失败都保留挂载。
@@ -82,7 +83,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 ### 关窗与单实例
 
 - 单实例插件必须最先注册；第二实例只聚焦已有窗口，不能再打开一套 SQLite/挂载会话。
-- Tauri `close-requested` 先 `preventDefault`。安全顺序是：界面 inert → 排空图片生命周期、Daily/画布 debounce、正文 timer/queue、metadata 和 Rust mutation → 冻结新的 store/Rust 写入 → 排空 SQLite → `destroy`。
+- Tauri `close-requested` 先 `preventDefault`。安全顺序是：界面 inert → 排空图片生命周期、Daily/画布 debounce、正文 timer/queue、metadata 和 Rust mutation → 冻结新的 store/Rust 写入 → 排空 SQLite。最后动作要跟产品语义一致：红点关闭如果约定为最小化，就 `minimize` 后立即解除 barrier，继续允许编辑；只有明确退出才 `destroy`。
 - 任一写入失败必须 latch，后续同一对象保存成功才清除；否则关窗、移除项目、手动同步和导入都要取消。
 
 ## 关键约束与易踩坑
