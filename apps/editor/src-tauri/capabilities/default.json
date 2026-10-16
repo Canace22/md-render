@@ -6,6 +6,6 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "core:window:allow-destroy"
+    "core:window:allow-minimize"
   ]
 }

@@ -33,10 +33,9 @@ const ensureCloseListener = () => {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const appWindow = getCurrentWindow();
     let closeInProgress = false;
-    let destroying = false;
 
     await appWindow.onCloseRequested(async (event) => {
-      if (destroying || !activeCloseHandler) return;
+      if (!activeCloseHandler) return;
       event.preventDefault();
       if (closeInProgress) return;
 
@@ -48,12 +47,12 @@ const ensureCloseListener = () => {
         await handler.beforeClose({
           freezeMutations: () => freezeDesktopMutations(mutationBarrier),
         });
-        destroying = true;
-        await appWindow.destroy();
+        await appWindow.minimize();
+        endDesktopMutationBarrier(mutationBarrier);
+        closeInProgress = false;
       } catch (error) {
         endDesktopMutationBarrier(mutationBarrier);
         closeInProgress = false;
-        destroying = false;
         handler.onError?.(error);
       }
     });
