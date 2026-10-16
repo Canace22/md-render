@@ -11,7 +11,7 @@ use ai_proxy::{
     tauri_ai_search_knowledge, AiProxyState,
 };
 use database::{
-    db_get_backlinks, db_get_graph, db_get_version_content, db_get_versions,
+    db_get_backlinks, db_get_graph, db_get_version_content, db_get_versions, db_has_legacy_import,
     db_import_legacy_database, db_is_migrated, db_load, db_migrate, db_save,
     db_save_version_snapshot, db_search, DatabaseState,
 };
@@ -113,6 +113,7 @@ pub fn run() {
             tauri_local_agent_run,
             tauri_local_agent_cancel,
             db_is_migrated,
+            db_has_legacy_import,
             db_load,
             db_migrate,
             db_save,

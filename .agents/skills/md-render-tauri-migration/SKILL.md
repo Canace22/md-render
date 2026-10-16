@@ -70,9 +70,11 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿带非空边车日志的单独 `.db` 冒充完整备份。零字节 WAL 或孤立 SHM 可能来自正常退出，不要仅凭文件存在就误拒。
 - Electron 导入是“备份当前 Tauri 库后整库替换”，不是合并。已有 Tauri 内容和 Electron 内容同时有价值时，先导出用户可读备份并明确提示；成功结果要展示 `knowledge.before-import.<timestamp>.db` 的实际文件名。
 - 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
+- 导入成功要在 Tauri SQLite 里留下持久标记；旧版未留标记时，可用同目录的 `knowledge.before-import.*.db` 作一次性兼容识别。升级提示不能只看 WebView `localStorage`，已交接的用户不再反复提示或诱导覆盖当前 Tauri 数据。
 - 旧 Electron `documents` 是工作区的派生索引，历史库可能残留孤儿行。源库只要求 workspace ID 全部能在 documents 找到；复制时按 workspace ID 过滤 documents、双端有效的 links 和对应 versions。candidate DB 仍要求 workspace JSON 与文档 ID 精确一致。
 - SQLite 的列声明不是运行时强类型：Electron 把 JS `mtimeMs` 写进 `INTEGER` 列时，小数毫秒会实际存成 `REAL`。迁移前用 `typeof()` 检查真实存储类型；时间戳只兼容 `NULL`、`INTEGER` 和有限且范围合法的 `REAL`（截成整数毫秒），文本、二进制和越界值继续报错。`workspace_json` 中的 `createdAt` / `updatedAt` 使用同一规则，避免导入后再次保存时变成 `NULL`。
 - 先建 candidate DB，校验 schema 白名单、`quick_check`、过滤后的记录数和 FTS，再备份当前 Tauri DB 并原子切换。切换前失败要清理 candidate 和未使用的 backup；切换失败优先保留可恢复备份。
+- Electron `daily_workspace_json.currentDate` 只是旧端最后查看的日期，不能当成导入日或数据新旧标志。导入 reload 后等 Zustand/SQLite 水合完成，再走现有 `setDailyCurrentDate(今天)` 进入真实今天、按既定规则幂等结转，并确认 SQLite 落盘后才清除待处理标记。不要在 Rust 里重写一套 Daily 结转算法。
 - Tauri 自有 WAL 库缺少 `-wal/-shm` 时，纯 `READ_ONLY` 可能无法打开。自有库用 `READ_WRITE`（不带 `CREATE`）打开后立即设 `query_only=ON`；不要把这种放宽用于外部旧库。
 - 迁移标记不能代替数据验证；启动时同时检查 marker、workspace 和 documents，异常库进只读恢复而不自动覆写。
 

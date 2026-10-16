@@ -5,10 +5,15 @@ import {
   retryDesktopStatePersistence,
   subscribeDesktopPersistenceStatus,
 } from '../store/useEditorStore.js';
-
-const MIGRATION_NOTICE_STORAGE_KEY = 'md-renderer-tauri-electron-migration-notice-dismissed-v2';
+import {
+  LEGACY_IMPORT_NOTICE_STORAGE_KEY,
+  useCompleteImportedDailyDate,
+  useLegacyDatabaseImportStatus,
+} from '../hooks/useLegacyDatabaseImport.js';
 
 export default function TauriRuntimeNotice() {
+  const hasLegacyImport = useLegacyDatabaseImportStatus();
+  useCompleteImportedDailyDate();
   const persistence = useSyncExternalStore(
     subscribeDesktopPersistenceStatus,
     getDesktopPersistenceStatus,
@@ -16,7 +21,7 @@ export default function TauriRuntimeNotice() {
   );
   const [retrying, setRetrying] = useState(false);
   const [showMigrationNotice, setShowMigrationNotice] = useState(
-    () => window.localStorage.getItem(MIGRATION_NOTICE_STORAGE_KEY) !== 'true',
+    () => window.localStorage.getItem(LEGACY_IMPORT_NOTICE_STORAGE_KEY) !== 'true',
   );
 
   const handleRetry = async () => {
@@ -32,7 +37,7 @@ export default function TauriRuntimeNotice() {
   };
 
   const handleDismissMigrationNotice = () => {
-    window.localStorage.setItem(MIGRATION_NOTICE_STORAGE_KEY, 'true');
+    window.localStorage.setItem(LEGACY_IMPORT_NOTICE_STORAGE_KEY, 'true');
     setShowMigrationNotice(false);
   };
 
@@ -75,7 +80,7 @@ export default function TauriRuntimeNotice() {
     );
   }
 
-  if (!showMigrationNotice) return null;
+  if (hasLegacyImport !== false || !showMigrationNotice) return null;
 
   return (
     <Alert

@@ -19,6 +19,9 @@ use tauri_plugin_dialog::DialogExt;
 const DATABASE_FILE_NAME: &str = "knowledge.db";
 const MIGRATION_STATE_KEY: &str = "migrated_from_localstorage";
 const MIGRATION_STATE_VALUE: &str = "done";
+const LEGACY_IMPORT_STATE_KEY: &str = "electron_database_imported";
+const LEGACY_IMPORT_STATE_VALUE: &str = "done";
+const LEGACY_IMPORT_BACKUP_PREFIX: &str = "knowledge.before-import.";
 const BUSY_TIMEOUT_MS: u64 = 5_000;
 const MAX_WORKSPACE_DEPTH: usize = 128;
 const MAX_WORKSPACE_DOCUMENTS: usize = 50_000;
@@ -484,6 +487,40 @@ pub fn db_is_migrated(state: State<'_, DatabaseState>) -> Result<bool, String> {
         )
         .map_err(db_error)?;
     Ok(has_existing_state)
+}
+
+#[tauri::command]
+pub fn db_has_legacy_import(state: State<'_, DatabaseState>) -> Result<bool, String> {
+    let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
+    let connection = open_read_connection(&state.path)?;
+    let has_marker = connection
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM app_state WHERE key = ?1 AND value = ?2
+             )",
+            params![LEGACY_IMPORT_STATE_KEY, LEGACY_IMPORT_STATE_VALUE],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(db_error)?;
+    if has_marker {
+        return Ok(true);
+    }
+
+    let parent = state
+        .path
+        .parent()
+        .ok_or_else(|| "Tauri 数据库目录无效。".to_string())?;
+    let entries =
+        fs::read_dir(parent).map_err(|error| format!("无法读取 Tauri 数据库目录：{error}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("无法读取 Tauri 数据库备份：{error}"))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(LEGACY_IMPORT_BACKUP_PREFIX) && name.ends_with(".db") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[tauri::command]
@@ -1513,6 +1550,13 @@ fn import_legacy_database(
         if fts_count != imported_counts.documents {
             return Err("导入后的全文索引与文档数不一致，已取消切换。".to_string());
         }
+        candidate
+            .execute(
+                "INSERT INTO app_state (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![LEGACY_IMPORT_STATE_KEY, LEGACY_IMPORT_STATE_VALUE],
+            )
+            .map_err(db_error)?;
         let candidate_quick_check = quick_check(&candidate)?;
         if candidate_quick_check != "ok" {
             return Err(format!("导入库完整性检查失败：{candidate_quick_check}"));
