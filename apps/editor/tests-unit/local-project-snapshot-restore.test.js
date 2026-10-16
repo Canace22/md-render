@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { restoreImportedLocalProjectSnapshots } from '../renderer/src/store/useEditorStore.js';
+import {
+  collectRestorableLocalProjectSnapshots,
+  restoreImportedLocalProjectSnapshots,
+} from '../renderer/src/store/useEditorStore.js';
 
 const makeWorkspace = (children) => ({
   id: 'root',
@@ -37,6 +40,20 @@ const makeSnapshot = () => ({
 });
 
 describe('restoreImportedLocalProjectSnapshots', () => {
+  it('旧版剥离会话字段后，稳定项目 ID 仍会进入授权恢复候选', () => {
+    const strippedSnapshot = {
+      id: 'project:local-project:v1:remembered-project',
+      name: '笔记',
+      type: 'folder',
+      children: [],
+    };
+    const normalFolder = { id: 'folder-1', name: '普通目录', type: 'folder', children: [] };
+
+    expect(collectRestorableLocalProjectSnapshots(
+      makeWorkspace([normalFolder, strippedSnapshot]),
+    )).toEqual([strippedSnapshot]);
+  });
+
   it('非 Tauri 环境原样保留工作区', () => {
     const workspace = makeWorkspace([makeSnapshot()]);
     expect(restoreImportedLocalProjectSnapshots(workspace, { runtimeKind: 'electron' }))

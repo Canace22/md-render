@@ -124,7 +124,9 @@ import {
   getDocumentStatus,
 } from '../store/creationUtils.js';
 import {
+  collectRestorableLocalProjectSnapshots,
   flushDesktopStatePersistence,
+  getStoredLocalProjectIdentity,
   useEditorStore,
   useSelectedFile,
 } from '../store/useEditorStore.js';
@@ -259,19 +261,9 @@ const matchesLocalProjectSnapshot = (snapshot, selectedWorkspace) => {
 };
 
 const getReauthorizedProjectIdentity = (snapshot) => {
-  const nodeId = String(snapshot?.id ?? '');
-  const existingIdentity = nodeId.replace(/^project:/, '');
-  if (existingIdentity.startsWith(STABLE_LOCAL_PROJECT_IDENTITY_PREFIX)) return existingIdentity;
-  return `${STABLE_LOCAL_PROJECT_IDENTITY_PREFIX}${globalThis.crypto.randomUUID()}`;
+  return getStoredLocalProjectIdentity(snapshot)
+    || `${STABLE_LOCAL_PROJECT_IDENTITY_PREFIX}${globalThis.crypto.randomUUID()}`;
 };
-
-const collectRestorableLocalProjectSnapshots = (workspace) => (
-  (workspace?.children ?? []).filter((node) => (
-    node?.type === 'folder'
-    && node.localProjectRoot
-    && needsLocalProjectReauthorization(node)
-  ))
-);
 
 const getLegacyWorkspaceReauthorizationSnapshots = (workspace, targetSnapshot) => {
   if (!targetSnapshot || !needsLocalProjectReauthorization(targetSnapshot)) return [];
@@ -1333,6 +1325,7 @@ function MarkdownEditor() {
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const externalContentRequests = useEditorStore((state) => state.externalContentRequests);
   const applyContentFromOutside = useEditorStore((state) => state.applyContentFromOutside);
+  const selectedMediaContextKey = JSON.stringify(mediaContextFromFile(selectedFile));
   // agent 运行时（MCP 控制桥、提案收件箱）不依赖 AI 面板是否打开
   useAgentRuntime({ dialogs: AGENT_HOST_DIALOGS });
   // 数据层文件化：迁移后 Daily / 白板 / 编辑部记忆以内容库文件为准
@@ -1411,7 +1404,7 @@ function MarkdownEditor() {
     const parserEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
     const parsedBlocks = parserEditor.tryParseMarkdownToBlocks(sourceMarkdown);
     return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
-  }, [selectedId, contentResetKey, editorReloadToken]);
+  }, [selectedId, selectedMediaContextKey, contentResetKey, editorReloadToken]);
 
   const { uploadFile } = useEditorImageUpload({
     localProjectSupported,
@@ -1605,7 +1598,7 @@ function MarkdownEditor() {
         return useDefaultPaste();
       },
     },
-    [selectedId, contentResetKey, editorReloadToken],
+    [selectedId, selectedMediaContextKey, contentResetKey, editorReloadToken],
   );
   const outlinePage = useOutlinePage(editor, selectedFile);
   const scriptPage = useScriptPage(editor, selectedFile);

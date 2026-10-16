@@ -58,6 +58,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - Electron 默认工作区的笔记在 `Projects/<目录>`，粘贴图却可能统一存在库根 `assets/`。重授权把各个 `Projects/*` 独立挂载后，不要放宽项目根边界；另建绑定当前窗口的 `assets/` 只读媒体 mount，仅允许自定义媒体协议读图片/音视频。Renderer 打开时把 `../../assets/...` 改成该 mount 的短期 URL，保存时再还原原相对路径；这个素材 token 和项目 token 一样不得持久化。
 - 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
 - mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，只持久化最新内容快照；下次加载时去掉挂载字段，不持久化或复用 token。批量重新授权 `Projects/*` 时，每个项目必须使用各自稳定身份，不能共用父目录路径，否则会生成重复根 ID 并被数据库拒绝。
+- 兼容旧版快照时，不能只靠 `localProjectRoot` / `localProjectSource` 这些可能已被持久化逻辑剥离的会话字段。顶层节点的稳定 `project:local-project:v1:*` ID 也要进入恢复候选，再交给 Rust 私有授权表筛出真正可恢复的项目；不要仅凭 ID 就在 Renderer 里把所有节点当成已授权挂载。
 - 用户已明确选过的目录可记住授权，但绝对路径和访问级别只写入 Rust 私有授权表，以稳定项目身份关联；Renderer 和工作区 SQLite 仍不得持有真实路径或会话 token。重启后 Rust 重新 canonicalize 目录、校验保护边界与访问级别，再签发新 token；Renderer 只在扫描完整且与快照匹配时替换快照，失败时继续保留数据库副本并显示重新授权入口。
 - Zustand 从 SQLite 异步水合完成前，禁止 `persist` 和任何启动 effect 把默认工作区写回数据库。真实启动验收必须在启动前后对比 `documents` 数量、顶层节点和 `quick_check`；只看窗口曾经显示正确内容，抓不住延迟发生的默认状态覆盖。
 - 旧 Markdown 可能残留 Electron 时代的绝对 `local-media://` 引用。它不能阻断当前会话挂载；若因此无法生成可持久化的新快照，就保留授权前的安全快照并让磁盘项目继续可编辑，不能把快照失败升级成授权失败。

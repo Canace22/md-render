@@ -195,6 +195,22 @@ const parseProjectBackedNodeId = (nodeId) => {
   };
 };
 
+export const getStoredLocalProjectIdentity = (node) => {
+  const nodeId = String(node?.id ?? '');
+  const identity = nodeId.startsWith('project:') ? nodeId.slice('project:'.length) : '';
+  return identity.startsWith(OPAQUE_LOCAL_PROJECT_IDENTITY_PREFIX) ? identity : '';
+};
+
+export const collectRestorableLocalProjectSnapshots = (workspace) => (
+  (workspace?.children ?? []).filter((node) => (
+    node?.type === 'folder'
+    && (
+      (node.localProjectRoot && node.access === LOCAL_PROJECT_REAUTHORIZATION_REQUIRED)
+      || getStoredLocalProjectIdentity(node)
+    )
+  ))
+);
+
 const makeLocalProjectSnapshotEditable = (node, needsReauthorization = false) => {
   const idParts = parseProjectBackedNodeId(node.id);
   const editableNode = Object.fromEntries(
