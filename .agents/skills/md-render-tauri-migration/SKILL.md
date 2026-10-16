@@ -53,8 +53,9 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 ### 本地目录的授权与快照
 
 - 部分能力要单独声明，例如 `canOpen / canRead / canWrite / canUseDefaultWorkspace`；不要因为 Tauri 能读目录，就让原来的“本地项目完整可用”判断返回 true。
-- Electron 默认工作区导入后，磁盘节点可能带 `projectRootPath`，却没有 `localProjectRoot`；旧版还可能把 `:folder:Projects/<目录>` 编进 `projectRootPath`。Tauri 加载这类已持久化、但没有当前会话 mount token 的顶层节点时，保留原 ID、内容和关联，递归去掉磁盘挂载专用字段，直接恢复为应用内可编辑副本。这个副本不回写 Electron 原目录；要继续与磁盘同步，用户再手动打开该目录建立新会话挂载。
+- Electron 默认工作区导入后，磁盘节点可能带 `projectRootPath`，却没有 `localProjectRoot`；旧版还可能把 `:folder:Projects/<目录>` 编进 `projectRootPath`。Tauri 加载这类已持久化、但没有当前会话 mount token 的顶层节点时，保留原 ID、内容和关联，递归去掉失效 token 和磁盘写入字段，恢复为应用内可编辑副本；同时保留相对路径和“重新授权”入口，否则正文能编辑，但本地图片会永久碎图。这个副本不回写 Electron 原目录；重新授权后才恢复磁盘同步和本地素材读取。
 - 保护目录要区分“Electron 配置/数据库”和“用户内容项目”：普通打开始终拒绝 `Documents/MdRender` 和 Electron user-data；旧快照重授权可让用户一次选择 `Documents/MdRender`，但 Rust 必须只把请求中的 `Projects/<具体项目>` 展开成相互独立的 mount，不能把根目录、数据库、Daily、配置等一并暴露。放行后的扫描、新建、保存、改名和删除必须共用同一边界，否则会出现“能授权但不能编辑”。
+- Electron 默认工作区的笔记在 `Projects/<目录>`，粘贴图却可能统一存在库根 `assets/`。重授权把各个 `Projects/*` 独立挂载后，不要放宽项目根边界；另建绑定当前窗口的 `assets/` 只读媒体 mount，仅允许自定义媒体协议读图片/音视频。Renderer 打开时把 `../../assets/...` 改成该 mount 的短期 URL，保存时再还原原相对路径；这个素材 token 和项目 token 一样不得持久化。
 - 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
 - mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，只持久化最新内容快照；下次加载时去掉挂载字段，不持久化或复用 token。
 - 重启后保留快照与历史 ID，但不使用其中的旧路径或 token 读写。当前会话新打开的真实目录仍使用 mount token 读写；会话结束后持久化的是可编辑快照，不伪装成还连着原目录。

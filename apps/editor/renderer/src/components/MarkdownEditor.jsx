@@ -207,6 +207,22 @@ const findLocalProjectRootByPath = (node, projectRootPath) => {
   return null;
 };
 
+const findReauthorizationRootForNode = (node, targetId, currentRoot = null) => {
+  if (!node || !targetId) return null;
+  const nextRoot = node.type === 'folder'
+    && needsLocalProjectReauthorization(node)
+    && node.projectRootPath
+    ? node
+    : currentRoot;
+  if (node.id === targetId) return nextRoot;
+  if (!Array.isArray(node.children)) return null;
+  for (const child of node.children) {
+    const match = findReauthorizationRootForNode(child, targetId, nextRoot);
+    if (match) return match;
+  }
+  return null;
+};
+
 const collectLocalProjectRelativePaths = (
   node,
   paths = new Set(),
@@ -333,6 +349,7 @@ const BLOCKNOTE_OPTIONS = {
 const mediaContextFromFile = (file) => ({
   projectRootPath: file?.projectRootPath || '',
   noteRelativePath: file?.relativePath || '',
+  sharedAssetsMountId: file?.sharedAssetsMountId || '',
 });
 
 const contentToDiskMarkdown = (content, mediaContext) => {
@@ -546,6 +563,10 @@ function MarkdownEditor() {
   const selectedFile = useSelectedFile();
   const selectedReadOnly = Boolean(selectedFile?.readOnly);
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
+  const selectedReauthorizationRoot = useMemo(
+    () => findReauthorizationRootForNode(workspace, selectedId),
+    [workspace, selectedId],
+  );
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedNeedsLocalProjectReauthorization = needsLocalProjectReauthorization(selectedNode);
   // 标题下方元信息里的「所属目录」
@@ -2294,6 +2315,7 @@ function MarkdownEditor() {
         .forEach(({ project, snapshot, replacesSnapshot }) => {
           openLocalProjectWorkspace(project.workspace, project.projectRootPath, {
             projectMountId: project.mountId,
+            sharedAssetsMountId: project.sharedAssetsMountId,
             readOnly: project.access === 'read-only',
             access: project.access,
             projectRevision: project.revision,
@@ -3188,6 +3210,24 @@ function MarkdownEditor() {
                 <div className="paper-surface" data-testid="paper-surface">
                   <DiffOverlay />
                   <ExternalChangeBanner />
+                  {selectedNeedsLocalProjectReauthorization && selectedReauthorizationRoot && (
+                    <div className="external-change-banner" role="status">
+                      <span>
+                        这篇文档是本地目录快照。重新授权原目录后，图片等本地素材才能显示。
+                      </span>
+                      <span className="external-change-banner__actions">
+                        <button
+                          type="button"
+                          onClick={() => handleReauthorizeLocalProject(
+                            selectedReauthorizationRoot.id,
+                            'read-write',
+                          )}
+                        >
+                          重新授权目录
+                        </button>
+                      </span>
+                    </div>
+                  )}
                   {/* 标题下沉进纸面，与正文同列 */}
                   <DocHeader
                     selectedFile={selectedFile}

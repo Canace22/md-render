@@ -51,7 +51,7 @@ describe('restoreImportedLocalProjectSnapshots', () => {
     expect(result.children[0]).toBe(normalFolder);
   });
 
-  it('失效挂载递归变为可编辑副本', () => {
+  it('失效挂载恢复为可编辑副本，同时保留重新授权入口', () => {
     const result = restoreImportedLocalProjectSnapshots(
       makeWorkspace([makeSnapshot()]),
       { runtimeKind: 'tauri', activeMounts: new Map() },
@@ -59,8 +59,11 @@ describe('restoreImportedLocalProjectSnapshots', () => {
     const [folder] = result.children;
     const [file] = folder.children;
 
-    expect(folder).not.toHaveProperty('projectRootPath');
+    expect(folder.projectRootPath).toBe('legacy');
+    expect(folder.access).toBe('reauthorization-required');
     expect(folder).not.toHaveProperty('readOnly');
+    expect(file.access).toBe('reauthorization-required');
+    expect(file.relativePath).toBe('Projects/原稿/示例.md');
     expect(file).not.toHaveProperty('projectMountId');
     expect(file).not.toHaveProperty('diskContentSnapshot');
   });
@@ -77,6 +80,38 @@ describe('restoreImportedLocalProjectSnapshots', () => {
     expect(file.id).toBe(snapshot.children[0].id);
     expect(file.content).toBe('# 原文');
     expect(file.relatedIds).toEqual(['file-2']);
+  });
+
+  it('已被旧版清理的 Electron 快照可从节点 ID 恢复重新授权信息', () => {
+    const legacyRoot = '/Users/test/Documents/MdRender';
+    const strippedSnapshot = {
+      id: `project:${legacyRoot}:folder:Projects/笔记`,
+      name: '笔记',
+      type: 'folder',
+      children: [{
+        id: `project:${legacyRoot}:file:Projects/笔记/示例.md`,
+        name: '示例.md',
+        type: 'file',
+        content: '![x](../../assets/x.png)',
+      }],
+    };
+    const result = restoreImportedLocalProjectSnapshots(
+      makeWorkspace([strippedSnapshot]),
+      {
+        runtimeKind: 'tauri',
+        activeMounts: new Map(),
+        legacyProjectRootPath: legacyRoot,
+      },
+    );
+    const [folder] = result.children;
+    const [file] = folder.children;
+
+    expect(folder.projectRootPath).toBe(legacyRoot);
+    expect(folder.relativePath).toBe('Projects/笔记');
+    expect(folder.access).toBe('reauthorization-required');
+    expect(file.relativePath).toBe('Projects/笔记/示例.md');
+    expect(file.access).toBe('reauthorization-required');
+    expect(file).not.toHaveProperty('readOnly');
   });
 
   it('当前会话仍有效的挂载继续保持磁盘属性', () => {

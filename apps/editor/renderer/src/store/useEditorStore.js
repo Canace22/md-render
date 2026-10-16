@@ -168,7 +168,6 @@ const markReadOnlyTree = (node, access) => ({
 });
 
 const LOCAL_PROJECT_SNAPSHOT_FIELDS = new Set([
-  'access',
   'diskContentSnapshot',
   'localProjectRoot',
   'projectIdentity',
@@ -176,27 +175,71 @@ const LOCAL_PROJECT_SNAPSHOT_FIELDS = new Set([
   'projectRevision',
   'projectRootPath',
   'readOnly',
-  'relativePath',
+  'sharedAssetsMountId',
 ]);
 
-const makeLocalProjectSnapshotEditable = (node) => {
+const parseProjectBackedNodeId = (nodeId) => {
+  const text = String(nodeId ?? '');
+  if (!text.startsWith('project:')) return null;
+  const markers = [':folder:', ':file:'];
+  const marker = markers
+    .map((value) => ({ value, index: text.lastIndexOf(value) }))
+    .sort((left, right) => right.index - left.index)[0];
+  if (!marker || marker.index <= 'project:'.length) return null;
+  return {
+    projectIdentity: text.slice('project:'.length, marker.index),
+    relativePath: text.slice(marker.index + marker.value.length),
+  };
+};
+
+const makeLocalProjectSnapshotEditable = (node, needsReauthorization = false) => {
+  const idParts = parseProjectBackedNodeId(node.id);
   const editableNode = Object.fromEntries(
     Object.entries(node).filter(([key]) => !LOCAL_PROJECT_SNAPSHOT_FIELDS.has(key)),
   );
   return {
     ...editableNode,
+    ...(idParts?.relativePath && !editableNode.relativePath
+      ? { relativePath: idParts.relativePath }
+      : {}),
+    ...(needsReauthorization ? { access: LOCAL_PROJECT_REAUTHORIZATION_REQUIRED } : {}),
     ...(Array.isArray(node.children)
-      ? { children: node.children.map(makeLocalProjectSnapshotEditable) }
+      ? {
+          children: node.children.map((child) => (
+            makeLocalProjectSnapshotEditable(child, needsReauthorization)
+          )),
+        }
       : {}),
   };
 };
 
-// Tauri 的真实磁盘挂载只在当前会话有效；重启后保留内容并恢复为应用内可编辑副本。
+const restoreLocalProjectSnapshot = (node, legacyProjectRootPath) => {
+  const idParts = parseProjectBackedNodeId(node.id);
+  const persistedRootPath = String(node.projectRootPath ?? '');
+  const projectRootPath = idParts?.projectIdentity
+    || (persistedRootPath && !persistedRootPath.startsWith(TAURI_PROJECT_MOUNT_PREFIX)
+      ? persistedRootPath
+      : '')
+    || (String(node.id ?? '').startsWith(`project:${legacyProjectRootPath}:`)
+      ? legacyProjectRootPath
+      : '');
+  const editableSnapshot = makeLocalProjectSnapshotEditable(node, Boolean(projectRootPath));
+  if (!projectRootPath) return editableSnapshot;
+  return {
+    ...editableSnapshot,
+    projectRootPath,
+    access: LOCAL_PROJECT_REAUTHORIZATION_REQUIRED,
+    ...(node.localProjectRoot ? { localProjectRoot: true } : {}),
+  };
+};
+
+// Tauri 的真实磁盘挂载只在当前会话有效；重启后保留可编辑副本，并保留明确的重新授权入口。
 export const restoreImportedLocalProjectSnapshots = (
   workspace,
   {
     runtimeKind = getDesktopRuntimeKind(),
     activeMounts = sessionLocalProjectSnapshots,
+    legacyProjectRootPath = '',
   } = {},
 ) => {
   if (
@@ -208,13 +251,18 @@ export const restoreImportedLocalProjectSnapshots = (
   return {
     ...workspace,
     children: workspace.children.map((node) => {
-      if (!node.projectRootPath) return node;
+      const idParts = parseProjectBackedNodeId(node.id);
+      const isRecoverableLegacyNode = Boolean(
+        legacyProjectRootPath
+        && idParts?.projectIdentity === legacyProjectRootPath,
+      );
+      if (!node.projectRootPath && !isRecoverableLegacyNode) return node;
       const mountId = String(node.projectMountId ?? node.projectRootPath ?? '');
       if (
         mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)
         && activeMounts.has(mountId)
       ) return node;
-      return makeLocalProjectSnapshotEditable(node);
+      return restoreLocalProjectSnapshot(node, legacyProjectRootPath);
     }),
   };
 };
@@ -282,7 +330,9 @@ const buildStateFromLocalStorage = () => {
 
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-  const restoredWorkspace = restoreImportedLocalProjectSnapshots(normalizedWorkspace);
+  const restoredWorkspace = restoreImportedLocalProjectSnapshots(normalizedWorkspace, {
+    legacyProjectRootPath: projectRootPath,
+  });
   const ws = ensureFileTimestamps(restoredWorkspace);
   if (ws !== parsedWorkspace) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
@@ -351,7 +401,9 @@ const buildStateFromDb = (raw) => {
   const workspaceRaw = raw.workspace_json ?? null;
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-  const restoredWorkspace = restoreImportedLocalProjectSnapshots(normalizedWorkspace);
+  const restoredWorkspace = restoreImportedLocalProjectSnapshots(normalizedWorkspace, {
+    legacyProjectRootPath: raw.project_root_path ?? '',
+  });
   const ws = ensureFileTimestamps(restoredWorkspace);
   const selId = raw.selected_id || DEFAULT_FILE_ID;
   const selectedNode = findNodeById(ws, selId);
@@ -880,6 +932,7 @@ const assertPersistentLocalProjectSnapshotSafe = (root) => {
       node.projectRootPath,
       node.projectMountId,
       node.projectIdentity,
+      node.sharedAssetsMountId,
       node.relatedIds,
       node.sourceMaterialIds,
     ]);
@@ -928,6 +981,7 @@ const buildPersistentLocalProjectSnapshot = (liveRoot, snapshot) => {
               liveNode.cover,
               liveNode.projectRootPath,
               liveNode.relativePath,
+              liveNode.sharedAssetsMountId,
             ),
           }
         : {}),
@@ -941,6 +995,7 @@ const buildPersistentLocalProjectSnapshot = (liveRoot, snapshot) => {
                       liveNode.frontmatter.cover,
                       liveNode.projectRootPath,
                       liveNode.relativePath,
+                      liveNode.sharedAssetsMountId,
                     ),
                   }
                 : {}),
@@ -952,12 +1007,14 @@ const buildPersistentLocalProjectSnapshot = (liveRoot, snapshot) => {
             content: rewriteBlockNoteImagesForDisk(liveNode.content, {
               projectRootPath: liveNode.projectRootPath,
               noteRelativePath: liveNode.relativePath,
+              sharedAssetsMountId: liveNode.sharedAssetsMountId,
             }),
           }
         : {}),
     };
     delete persistentNode.projectIdentity;
     delete persistentNode.projectMountId;
+    delete persistentNode.sharedAssetsMountId;
     if (isRoot) {
       const persistentMountId = String(snapshot.projectMountId ?? '');
       if (persistentMountId && !persistentMountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)) {
@@ -1252,6 +1309,7 @@ const buildLocalProjectMetadataPayload = (node) => {
   return {
     projectRootPath: node.projectRootPath,
     relativePath: node.relativePath,
+    sharedAssetsMountId: node.sharedAssetsMountId,
     metadata: {
       ...pickFrontmatterBackedMetadataField(node, 'title', 'title'),
       ...pickFrontmatterBackedMetadataField(node, 'sourceAuthor', 'author'),
@@ -1336,6 +1394,7 @@ const markLocalProjectNode = (node, projectRootPath, isRoot = false, mountOption
   const suffix = isRoot ? '' : `:${node.type}:${relativePath || node.name}`;
   const projectIdentity = mountOptions.projectIdentity ?? projectRootPath;
   const projectMountId = mountOptions.projectMountId ?? node.projectMountId ?? '';
+  const sharedAssetsMountId = mountOptions.sharedAssetsMountId ?? node.sharedAssetsMountId ?? '';
   const readOnly = Boolean(mountOptions.readOnly || node.readOnly);
   const access = mountOptions.access ?? node.access ?? '';
   const projectRevision = mountOptions.projectRevision ?? node.projectRevision ?? '';
@@ -1344,6 +1403,7 @@ const markLocalProjectNode = (node, projectRootPath, isRoot = false, mountOption
       .map((child) => markLocalProjectNode(child, projectRootPath, false, {
         projectIdentity,
         projectMountId,
+        sharedAssetsMountId,
         readOnly,
         access,
       }))
@@ -1363,6 +1423,7 @@ const markLocalProjectNode = (node, projectRootPath, isRoot = false, mountOption
     ),
     ...(projectIdentity !== projectRootPath ? { projectIdentity } : {}),
     ...(projectMountId ? { projectMountId } : {}),
+    ...(sharedAssetsMountId ? { sharedAssetsMountId } : {}),
     ...(readOnly ? { readOnly: true } : {}),
     ...(access ? { access } : {}),
     ...(isRoot && projectRevision ? { projectRevision } : {}),
@@ -1383,6 +1444,9 @@ const inheritLocalProjectMount = (node, parentFolder) => {
     id: createLocalProjectNodeId(projectIdentity, suffix),
     projectMountId: parentFolder.projectMountId,
     projectRootPath: parentFolder.projectRootPath,
+    ...(parentFolder.sharedAssetsMountId
+      ? { sharedAssetsMountId: parentFolder.sharedAssetsMountId }
+      : {}),
     ...(projectIdentity !== parentFolder.projectRootPath ? { projectIdentity } : {}),
     access: parentFolder.access,
     readOnly: Boolean(parentFolder.readOnly),

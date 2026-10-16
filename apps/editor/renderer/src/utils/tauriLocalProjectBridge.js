@@ -274,7 +274,12 @@ export async function saveLocalProjectFile({ mountId, relativePath, content, exp
   }, `file:${mountId}:${relativePath}`);
 }
 
-export async function saveLocalProjectMetadata({ mountId, relativePath, metadata }) {
+export async function saveLocalProjectMetadata({
+  mountId,
+  relativePath,
+  sharedAssetsMountId,
+  metadata,
+}) {
   assertTauriReadWriteMountId(mountId);
   return queueMountMutation(mountId, async () => {
     const current = await readLocalProjectFileContent({ mountId, relativePath });
@@ -284,7 +289,12 @@ export async function saveLocalProjectMetadata({ mountId, relativePath, metadata
     const relation = createLocalProjectRelation(mountId);
     const patch = metadataToFrontmatterPatch(metadata, relation);
     if (typeof patch.cover === 'string') {
-      patch.cover = toDiskImageSrc(patch.cover, mountId, relativePath);
+      patch.cover = toDiskImageSrc(
+        patch.cover,
+        mountId,
+        relativePath,
+        sharedAssetsMountId,
+      );
     }
     const rawContent = updateFrontmatterInMarkdown(current.data, patch, {
       preserveEmptyKeys: metadata?.preserveEmptyFrontmatterKeys ?? [],

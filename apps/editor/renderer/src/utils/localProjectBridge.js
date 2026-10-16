@@ -186,6 +186,7 @@ export async function saveLocalProjectMetadata(payload) {
     return tauriLocalProject.saveLocalProjectMetadata({
       mountId: payload.projectRootPath,
       relativePath: payload.relativePath,
+      sharedAssetsMountId: payload.sharedAssetsMountId,
       metadata: payload.metadata,
     });
   }

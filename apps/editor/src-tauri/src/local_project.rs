@@ -102,6 +102,8 @@ struct LocalProjectMount {
     window_label: String,
     access: ProjectAccess,
     legacy_relative_path: Option<String>,
+    shared_assets_mount_id: Option<String>,
+    protected_media_only: bool,
 }
 
 #[derive(Default)]
@@ -150,6 +152,8 @@ pub(crate) struct LocalProject {
     display_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     legacy_relative_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shared_assets_mount_id: Option<String>,
     access: &'static str,
     workspace: WorkspaceNode,
     skipped_count: usize,
@@ -587,7 +591,7 @@ fn read_local_media_asset(
     mount_id: &str,
     relative_path: &str,
 ) -> Result<(Vec<u8>, &'static str), String> {
-    let mount = resolve_mount(registry, mount_id, window_label)?;
+    let mount = resolve_any_mount(registry, mount_id, window_label)?;
     let normalized = validate_relative_path(relative_path, false, false)?;
     let file_name = normalized
         .file_name()
@@ -596,7 +600,18 @@ fn read_local_media_asset(
     if !is_media_file(file_name) {
         return Err("unsupported local media type".to_string());
     }
-    let target = resolve_existing_target(&mount.root, relative_path, false)?;
+    let target = if mount.protected_media_only {
+        let normalized = validate_relative_path(relative_path, false, false)?;
+        reject_symbolic_link_components(&mount.root, &normalized)?;
+        let target = fs::canonicalize(mount.root.join(normalized))
+            .map_err(|_| "目标不存在或无法访问".to_string())?;
+        if !is_path_within_root(&mount.root, &target) {
+            return Err("目标不在共享素材目录内".to_string());
+        }
+        target
+    } else {
+        resolve_existing_target(&mount.root, relative_path, false)?
+    };
     let (bytes, _) = read_file_bytes(&target, MAX_PREVIEW_FILE_BYTES)?;
     Ok((bytes, media_mime_type(file_name)))
 }
@@ -1250,6 +1265,8 @@ fn register_mount(
     window_label: String,
     access: ProjectAccess,
     legacy_relative_path: Option<String>,
+    shared_assets_mount_id: Option<String>,
+    protected_media_only: bool,
 ) -> Result<String, String> {
     let mount_id = format!("{}{}", access.mount_id_prefix(), Uuid::new_v4());
     lock_mounts(registry)?.insert(
@@ -1260,6 +1277,8 @@ fn register_mount(
             window_label,
             access,
             legacy_relative_path,
+            shared_assets_mount_id,
+            protected_media_only,
         },
     );
     Ok(mount_id)
@@ -1278,7 +1297,7 @@ fn has_known_mount_prefix(mount_id: &str) -> bool {
         || mount_id.starts_with(READ_WRITE_MOUNT_ID_PREFIX)
 }
 
-fn resolve_mount(
+fn resolve_any_mount(
     registry: &LocalProjectRegistry,
     mount_id: &str,
     window_label: &str,
@@ -1296,6 +1315,18 @@ fn resolve_mount(
     }
     if !mount_id.starts_with(mount.access.mount_id_prefix()) {
         return Err("本地项目会话权限不匹配".to_string());
+    }
+    Ok(mount)
+}
+
+fn resolve_mount(
+    registry: &LocalProjectRegistry,
+    mount_id: &str,
+    window_label: &str,
+) -> Result<LocalProjectMount, String> {
+    let mount = resolve_any_mount(registry, mount_id, window_label)?;
+    if mount.protected_media_only {
+        return Err("该会话仅用于读取已授权的共享图片".to_string());
     }
     Ok(mount)
 }
@@ -1332,6 +1363,7 @@ fn build_project(mount_id: String, mount: &LocalProjectMount) -> LocalProject {
         mount_id,
         display_name: mount.display_name.clone(),
         legacy_relative_path: mount.legacy_relative_path.clone(),
+        shared_assets_mount_id: mount.shared_assets_mount_id.clone(),
         access: mount.access.label(),
         workspace,
         skipped_count,
@@ -1695,6 +1727,40 @@ async fn select_projects(
     let mut projects = Vec::new();
     let mut registered_mount_ids = Vec::new();
     for (root, display_name, legacy_relative_path) in selected_roots {
+        let shared_assets_mount_id = if let Some(relative_path) = &legacy_relative_path {
+            let assets_root = protected_vault_roots().iter().find_map(|vault_root| {
+                let project_root = canonical_or_original(vault_root.join(relative_path));
+                if project_root != root {
+                    return None;
+                }
+                let assets_root = canonical_or_original(vault_root.join(ASSETS_DIRECTORY_NAME));
+                assets_root.is_dir().then_some(assets_root)
+            });
+            if let Some(assets_root) = assets_root {
+                let mount_id = match register_mount(
+                    registry.inner(),
+                    assets_root,
+                    ASSETS_DIRECTORY_NAME.to_string(),
+                    window.label().to_string(),
+                    ProjectAccess::ReadOnly,
+                    None,
+                    None,
+                    true,
+                ) {
+                    Ok(mount_id) => mount_id,
+                    Err(error) => {
+                        remove_mounts(registry.inner(), &registered_mount_ids);
+                        return Err(error);
+                    }
+                };
+                registered_mount_ids.push(mount_id.clone());
+                Some(mount_id)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let mount_id = match register_mount(
             registry.inner(),
             root,
@@ -1702,6 +1768,8 @@ async fn select_projects(
             window.label().to_string(),
             access,
             legacy_relative_path,
+            shared_assets_mount_id,
+            false,
         ) {
             Ok(mount_id) => mount_id,
             Err(error) => {
@@ -1748,7 +1816,11 @@ fn revoke_project(
     if required_access.is_some_and(|access| mount.access != access) {
         return Err("本地项目会话权限不匹配".to_string());
     }
+    let shared_assets_mount_id = mount.shared_assets_mount_id.clone();
     mounts.remove(mount_id);
+    if let Some(shared_assets_mount_id) = shared_assets_mount_id {
+        mounts.remove(&shared_assets_mount_id);
+    }
     Ok(())
 }
 
