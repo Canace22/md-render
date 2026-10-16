@@ -167,9 +167,40 @@ const markReadOnlyTree = (node, access) => ({
     : {}),
 });
 
-const protectImportedLocalProjectMounts = (workspace) => {
+const LOCAL_PROJECT_SNAPSHOT_FIELDS = new Set([
+  'access',
+  'diskContentSnapshot',
+  'localProjectRoot',
+  'projectIdentity',
+  'projectMountId',
+  'projectRevision',
+  'projectRootPath',
+  'readOnly',
+  'relativePath',
+]);
+
+const makeLocalProjectSnapshotEditable = (node) => {
+  const editableNode = Object.fromEntries(
+    Object.entries(node).filter(([key]) => !LOCAL_PROJECT_SNAPSHOT_FIELDS.has(key)),
+  );
+  return {
+    ...editableNode,
+    ...(Array.isArray(node.children)
+      ? { children: node.children.map(makeLocalProjectSnapshotEditable) }
+      : {}),
+  };
+};
+
+// Tauri 的真实磁盘挂载只在当前会话有效；重启后保留内容并恢复为应用内可编辑副本。
+export const restoreImportedLocalProjectSnapshots = (
+  workspace,
+  {
+    runtimeKind = getDesktopRuntimeKind(),
+    activeMounts = sessionLocalProjectSnapshots,
+  } = {},
+) => {
   if (
-    getDesktopRuntimeKind() !== 'tauri'
+    runtimeKind !== 'tauri'
     || !workspace
     || !Array.isArray(workspace.children)
   ) return workspace;
@@ -181,9 +212,9 @@ const protectImportedLocalProjectMounts = (workspace) => {
       const mountId = String(node.projectMountId ?? node.projectRootPath ?? '');
       if (
         mountId.startsWith(TAURI_PROJECT_MOUNT_PREFIX)
-        && sessionLocalProjectSnapshots.has(mountId)
+        && activeMounts.has(mountId)
       ) return node;
-      return markReadOnlyTree(node, LOCAL_PROJECT_REAUTHORIZATION_REQUIRED);
+      return makeLocalProjectSnapshotEditable(node);
     }),
   };
 };
@@ -251,8 +282,8 @@ const buildStateFromLocalStorage = () => {
 
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-  const protectedWorkspace = protectImportedLocalProjectMounts(normalizedWorkspace);
-  const ws = ensureFileTimestamps(protectedWorkspace);
+  const restoredWorkspace = restoreImportedLocalProjectSnapshots(normalizedWorkspace);
+  const ws = ensureFileTimestamps(restoredWorkspace);
   if (ws !== parsedWorkspace) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ws));
   }
@@ -320,8 +351,8 @@ const buildStateFromDb = (raw) => {
   const workspaceRaw = raw.workspace_json ?? null;
   const parsedWorkspace = safeParseJSON(workspaceRaw, null);
   const normalizedWorkspace = ensureKnowledgeFields(parsedWorkspace ?? createDefaultWorkspace());
-  const protectedWorkspace = protectImportedLocalProjectMounts(normalizedWorkspace);
-  const ws = ensureFileTimestamps(protectedWorkspace);
+  const restoredWorkspace = restoreImportedLocalProjectSnapshots(normalizedWorkspace);
+  const ws = ensureFileTimestamps(restoredWorkspace);
   const selId = raw.selected_id || DEFAULT_FILE_ID;
   const selectedNode = findNodeById(ws, selId);
   const markdown = selectedNode?.type === 'file' ? (selectedNode.content ?? '') : '';

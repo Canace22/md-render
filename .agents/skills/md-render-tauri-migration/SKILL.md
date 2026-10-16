@@ -53,11 +53,11 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 ### 本地目录的授权与快照
 
 - 部分能力要单独声明，例如 `canOpen / canRead / canWrite / canUseDefaultWorkspace`；不要因为 Tauri 能读目录，就让原来的“本地项目完整可用”判断返回 true。
-- Electron 默认工作区导入后，磁盘节点可能带 `projectRootPath`，却没有 `localProjectRoot`。Tauri 加载持久化工作区时不能只保护显式挂载根；所有仍指向旧路径、又没有当前会话 mount token 的顶层磁盘节点都要先变成只读快照，并提供目录级重新授权入口。重新授权子目录时，匹配路径要先去掉旧的 `Projects/<目录>/` 前缀，再与所选目录内的相对路径比较；不同子目录还要使用不同的稳定 identity，不能共用旧默认工作区根路径。
+- Electron 默认工作区导入后，磁盘节点可能带 `projectRootPath`，却没有 `localProjectRoot`；旧版还可能把 `:folder:Projects/<目录>` 编进 `projectRootPath`。Tauri 加载这类已持久化、但没有当前会话 mount token 的顶层节点时，保留原 ID、内容和关联，递归去掉磁盘挂载专用字段，直接恢复为应用内可编辑副本。这个副本不回写 Electron 原目录；要继续与磁盘同步，用户再手动打开该目录建立新会话挂载。
 - 保护目录要区分“Electron 配置/数据库”和“用户内容项目”：普通打开始终拒绝 `Documents/MdRender` 和 Electron user-data；旧快照重授权可让用户一次选择 `Documents/MdRender`，但 Rust 必须只把请求中的 `Projects/<具体项目>` 展开成相互独立的 mount，不能把根目录、数据库、Daily、配置等一并暴露。放行后的扫描、新建、保存、改名和删除必须共用同一边界，否则会出现“能授权但不能编辑”。
 - 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
-- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，持久化的是“最新内容 + 只读 + 待重授权”快照。
-- 重启后保留快照与历史 ID，但不使用其中的旧路径或 token 读写。普通目录重授权只有在扫描完整且目录结构高置信匹配时才复用旧 identity；整库重授权已有受保护根目录和明确的 `Projects/<具体项目>` 映射时，以路径映射为准，不再用内容相似度误伤后来变更过的项目。
+- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，只持久化最新内容快照；下次加载时去掉挂载字段，不持久化或复用 token。
+- 重启后保留快照与历史 ID，但不使用其中的旧路径或 token 读写。当前会话新打开的真实目录仍使用 mount token 读写；会话结束后持久化的是可编辑快照，不伪装成还连着原目录。
 - 旧 Markdown 可能残留 Electron 时代的绝对 `local-media://` 引用。它不能阻断当前会话挂载；若因此无法生成可持久化的新快照，就保留授权前的安全快照并让磁盘项目继续可编辑，不能把快照失败升级成授权失败。
 - 扫描结果必须单独返回 `complete/authoritative`，不能用 `skippedCount > 0` 代替。文件数/总体积/深度截断、I/O 或 UTF-8 读取失败时为不完整；隐藏、忽略和不支持类型只计跳过。不完整扫描禁止自动刷新、手动 `use-disk` 和重授权覆盖。
 - 移除挂载时先排空正文、图片、metadata 和 Rust mutation，成功后才 revoke token 并删节点；任一保存失败都保留挂载。
