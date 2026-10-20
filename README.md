@@ -37,21 +37,7 @@
    - **macOS**：选 `MD-Render-*.dmg`（同时支持 Intel 和 Apple 芯片）
    - **Windows**：选 `MD-Render-Setup-*.exe`
 2. **首次打开提示**：若当前安装包未附带开发者签名，macOS 请到 **系统设置 → 隐私与安全性** 点击「仍要打开」；Windows 若弹出 SmartScreen 提示，点「更多信息 → 仍要运行」（可用下载页同目录的 `SHA256SUMS` 校验文件完整性）。
-3. **版本更新**：当前暂不支持应用内自动更新，后续新版本请从 Releases 下载安装。
-
-<details>
-<summary><b>从旧版（Electron）升级？点此查看数据迁移步骤</b></summary>
-
-桌面版已从 Electron 切换到 Tauri 2，旧版用户升级时需要手动交接一次数据（已用过 Tauri 预览版的用户数据会自动沿用，无需操作）：
-
-1. 完全退出旧版 MD Render，安装并打开新版。
-2. 到 **设置 → Electron 数据交接** 选择旧版 `knowledge.db`：
-   - macOS 通常在 `~/Library/Application Support/md-render/knowledge.db`
-   - Windows 通常在 `%APPDATA%\md-render\knowledge.db`（若无，可查看同级的 `@md-render/editor` 或 `MD Render` 目录）
-3. 导入会先自动备份当前数据库，再用旧版数据完整替换（不会修改或删除原 Electron 数据库）。如果两边都有新内容，请先在 **设置 → 备份（JSON）** 导出并另存重要文稿。
-4. 原来的「本地项目目录」需要重新选择一次以恢复写入权限。确认迁移无误前请勿删除旧库。
-
-</details>
+3. **版本更新**：应用会检查新版本；若当前平台不支持应用内安装，会引导你到 Releases 下载。
 
 ### 网页版
 
@@ -78,7 +64,7 @@
 
 ### 打开电脑上的文件夹（桌面版）
 
-在 **设置 → 本地项目目录** 选任意文件夹，里面的 `.md` 文件直接就是你的文档，新建的文档也存进去。在外部编辑器改过文件，点「从磁盘同步」就能拉回来（重启应用后需重新点一次目录授权写入）。
+在 **设置 → 本地项目目录** 选任意文件夹，里面的 `.md` 文件直接就是你的文档，新建的文档也存进去。在外部编辑器改过文件，点「从磁盘同步」就能拉回来。
 
 应用本身不做多设备同步。短期历史版本可按 `Cmd/Ctrl + K` →「查看文档版本历史」对比和恢复；长期版本管理和多设备同步，直接对这个文件夹用 Git 或网盘即可。
 
@@ -101,10 +87,10 @@ node server/ai-proxy/server.js                         # 默认监听 http://loc
 ```bash
 pnpm install
 pnpm dev            # 网页版（http://localhost:3000）
-pnpm tauri:dev      # 桌面版（Tauri 2）
+pnpm electron:dev   # 桌面版（Electron）
 ```
 
-项目从一个自研的 Markdown 解析器起步（`packages/markdown-core`），所以叫 MD Render。桌面端刚完成向 Tauri 2 的切换，PDF 导出、本机 CLI Agent / MCP 和自定义技能编辑等功能正在迁移中。
+项目从一个自研的 Markdown 解析器起步（`packages/markdown-core`），所以叫 MD Render。正式桌面端使用 Electron。
 
 - 产品定位与边界：[产品意图](./PRODUCT.md)
 - 构建、测试、架构与发版：[开发指南](./docs/development.md)

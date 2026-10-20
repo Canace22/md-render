@@ -20,28 +20,12 @@ const blocknoteCoreDist = path.join(
   'index.js',
 );
 
-// 桌面壳只影响构建入口；Electron 与 Tauri 不能同时启用。
+// 是否以 Electron 模式运行（pnpm electron:dev / electron:build）
 const isElectron = !!process.env.ELECTRON;
-const isTauri = !!process.env.TAURI_ENV_PLATFORM;
-const isDesktop = isElectron || isTauri;
-const tauriDevHost = process.env.TAURI_DEV_HOST;
-const WEB_DEV_PORT = 3000;
-const TAURI_DEV_PORT = 1420;
-const TAURI_HMR_PORT = 1421;
-
-if (isElectron && isTauri) {
-  throw new Error('Electron 与 Tauri 构建模式不能同时启用');
-}
-
-const normalizePlatform = (platform) => {
-  if (platform === 'macos') return 'darwin';
-  if (platform === 'windows') return 'win32';
-  return platform || '';
-};
 
 // GitHub Pages 部署时推断 base 路径
 const inferBase = () => {
-  if (isDesktop) return './';
+  if (isElectron) return './';
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) return '/';
   const repoName = repo.split('/')[1] || '';
@@ -57,12 +41,6 @@ export default defineConfig(({ mode }) => {
     base: inferBase(),
     define: {
       __MD_RENDER_AI_PROXY_BASE__: JSON.stringify(aiProxyBase),
-      __MD_RENDER_DESKTOP_RUNTIME__: JSON.stringify(
-        isElectron ? 'electron' : isTauri ? 'tauri' : 'web',
-      ),
-      __MD_RENDER_TAURI_PLATFORM__: JSON.stringify(
-        isTauri ? normalizePlatform(process.env.TAURI_ENV_PLATFORM) : '',
-      ),
     },
     resolve: {
       alias: {
@@ -116,21 +94,9 @@ export default defineConfig(({ mode }) => {
       }),
     ].filter(Boolean),
     server: {
-      port: isTauri ? TAURI_DEV_PORT : WEB_DEV_PORT,
-      strictPort: isTauri,
-      // 桌面壳会自己打开窗口，不额外打开浏览器。
-      open: !isDesktop,
-      host: isTauri ? (tauriDevHost || '127.0.0.1') : undefined,
-      hmr: isTauri && tauriDevHost
-        ? {
-            protocol: 'ws',
-            host: tauriDevHost,
-            port: TAURI_HMR_PORT,
-          }
-        : undefined,
-      watch: {
-        ignored: ['**/src-tauri/**'],
-      },
+      port: 3000,
+      // Electron 模式下不自动打开浏览器
+      open: !isElectron,
     },
   };
 });

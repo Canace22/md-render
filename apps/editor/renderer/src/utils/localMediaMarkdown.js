@@ -4,14 +4,7 @@
  * renderer 不能用 Node path，这里只用 POSIX 字符串运算。
  */
 
-import { getDesktopPlatform } from '../services/desktopBridge.js';
-
 const LOCAL_MEDIA_SCHEME = 'local-media:';
-const TAURI_WINDOWS_LOCAL_MEDIA_ORIGIN = 'http://local-media.localhost';
-const TAURI_MOUNT_ID_RE = /^tauri-(?:ro|rw):v1:[^/\\]+$/;
-const TAURI_LOCAL_MEDIA_RE = /^(?:local-media:\/\/localhost|https?:\/\/local-media\.localhost)\/tauri\/v1\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)$/i;
-const LOCAL_MEDIA_CAPABILITY_URL_RE = /^(?:local-media:\/\/|https?:\/\/local-media\.localhost\/)/i;
-const TAURI_MOUNT_TOKEN_RE = /tauri-(?:ro|rw):v1:[A-Za-z0-9_-]+/i;
 const REMOTE_OR_EMBEDDED_RE = /^(https?:|data:|blob:)/i;
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(\s*(<[^>\n]+>|[^\s)]+)((?:\s+"[^"]*")?)\s*\)/g;
 const WIKI_IMAGE_EMBED_RE = /!\[\[([^\]\n]+?)\]\]/g;
@@ -25,94 +18,6 @@ export const encodeLocalMediaPath = (value) => String(value ?? '')
   .join('/');
 
 export const isLocalMediaUrl = (url = '') => String(url).toLowerCase().startsWith(LOCAL_MEDIA_SCHEME);
-
-const isTauriMountId = (value) => TAURI_MOUNT_ID_RE.test(String(value ?? ''));
-
-const getTauriLocalMediaOrigin = () => (
-  getDesktopPlatform() === 'win32'
-    ? TAURI_WINDOWS_LOCAL_MEDIA_ORIGIN
-    : `${LOCAL_MEDIA_SCHEME}//localhost`
-);
-
-const encodeOpaqueToken = (value) => {
-  const bytes = new TextEncoder().encode(String(value ?? ''));
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-};
-
-const decodeOpaqueToken = (token) => {
-  if (!token || !/^[A-Za-z0-9_-]+$/.test(token)) return '';
-  const base64 = token.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = `${base64}${'='.repeat((4 - (base64.length % 4)) % 4)}`;
-  try {
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    return '';
-  }
-};
-
-const parseCurrentTauriLocalMediaUrl = (url) => {
-  const match = TAURI_LOCAL_MEDIA_RE.exec(String(url ?? '').trim());
-  if (!match) return null;
-  const mountId = decodeOpaqueToken(match[1]);
-  const relativePath = decodeOpaqueToken(match[2]);
-  if (!isTauriMountId(mountId) || !relativePath) return null;
-  return { mountId, relativePath };
-};
-
-// 兼容早期 Tauri 预览产生过的 local-media://<mount-id>/<relative-path> 内存地址。
-const parseLegacyTauriLocalMediaUrl = (url) => {
-  const text = String(url ?? '').trim();
-  if (!/^local-media:\/\//i.test(text)) return null;
-  const payload = text.replace(/^local-media:\/\//i, '');
-  const separator = payload.indexOf('/');
-  if (separator <= 0) return null;
-  try {
-    const mountId = decodeURIComponent(payload.slice(0, separator));
-    const relativePath = payload.slice(separator + 1)
-      .split('/')
-      .map((segment) => decodeURIComponent(segment))
-      .join('/');
-    if (!isTauriMountId(mountId) || !relativePath) return null;
-    return { mountId, relativePath };
-  } catch {
-    return null;
-  }
-};
-
-const parseTauriLocalMediaUrl = (url) => (
-  parseCurrentTauriLocalMediaUrl(url) ?? parseLegacyTauriLocalMediaUrl(url)
-);
-
-const unwrapUrl = (value) => {
-  let text = String(value ?? '').trim();
-  const hasWrappingPair = (start, end) => text.startsWith(start) && text.endsWith(end);
-  if (hasWrappingPair('<', '>')) text = text.slice(1, -1).trim();
-  if (hasWrappingPair('"', '"') || hasWrappingPair("'", "'")) {
-    text = text.slice(1, -1).trim();
-  }
-  return text;
-};
-
-export const assertNoLocalMediaCapabilityUrl = (value) => {
-  if (LOCAL_MEDIA_CAPABILITY_URL_RE.test(unwrapUrl(value))) {
-    throw new Error('内容仍引用临时本地媒体授权地址，请先将素材复制到当前项目后再保存。');
-  }
-  return value;
-};
-
-export const assertNoTauriMountTokens = (value) => {
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  if (TAURI_MOUNT_TOKEN_RE.test(text ?? '')) {
-    throw new Error('本地项目快照仍包含临时目录授权，已阻止持久化。');
-  }
-  return value;
-};
 
 export const decodeLocalMediaUrl = (url = '') => {
   const text = String(url).trim();
@@ -178,22 +83,6 @@ const posixRelative = (fromDir, toPath) => {
   return [...ups, ...downs].join('/') || toSegs[toSegs.length - 1] || '';
 };
 
-const normalizeProjectRelativePath = (baseDir, targetPath) => {
-  const target = toPosix(targetPath);
-  if (!target || target.startsWith('/') || /^[A-Za-z]:/.test(target)) return '';
-  const stack = toPosix(baseDir).split('/').filter(Boolean);
-  for (const segment of target.split('/')) {
-    if (!segment || segment === '.') continue;
-    if (segment === '..') {
-      if (stack.length === 0) return '';
-      stack.pop();
-      continue;
-    }
-    stack.push(segment);
-  }
-  return stack.join('/');
-};
-
 const toProjectRelativePath = (absPath, projectRootPath) => {
   const abs = stripTrailingSlash(toPosix(absPath));
   const root = stripTrailingSlash(toPosix(projectRootPath));
@@ -203,24 +92,9 @@ const toProjectRelativePath = (absPath, projectRootPath) => {
   return abs.slice(root.length + 1);
 };
 
-export const createLocalMediaUrl = (projectRootPath, projectRelativePath) => {
-  if (isTauriMountId(projectRootPath)) {
-    const relativePath = normalizeProjectRelativePath('', projectRelativePath);
-    if (!relativePath) return '';
-    return `${getTauriLocalMediaOrigin()}/tauri/v1/${encodeOpaqueToken(projectRootPath)}/${encodeOpaqueToken(relativePath)}`;
-  }
-  return `${LOCAL_MEDIA_SCHEME}//${encodeLocalMediaPath(posixJoin(projectRootPath, projectRelativePath))}`;
-};
-
-const resolveTauriProjectRelativePath = (src, projectRootPath, noteRelativePath) => {
-  const parsed = parseTauriLocalMediaUrl(src);
-  if (parsed) {
-    if (parsed.mountId !== projectRootPath) return '';
-    return normalizeProjectRelativePath('', parsed.relativePath);
-  }
-  if (isLocalMediaUrl(src) || REMOTE_OR_EMBEDDED_RE.test(src)) return '';
-  return normalizeProjectRelativePath(posixDirname(noteRelativePath), src);
-};
+const toLocalMediaUrl = (projectRootPath, projectRelativePath) => (
+  `${LOCAL_MEDIA_SCHEME}//${encodeLocalMediaPath(posixJoin(projectRootPath, projectRelativePath))}`
+);
 
 const resolveSrcToAbsPath = (src, projectRootPath, noteRelativePath) => {
   if (isLocalMediaUrl(src)) return decodeLocalMediaUrl(src);
@@ -231,24 +105,7 @@ const resolveSrcToAbsPath = (src, projectRootPath, noteRelativePath) => {
 };
 
 export const toDiskImageSrc = (src, projectRootPath, noteRelativePath) => {
-  if (!src || !projectRootPath) return src;
-  if (isTauriMountId(projectRootPath)) {
-    const parsed = parseTauriLocalMediaUrl(src);
-    if (parsed && parsed.mountId !== projectRootPath) {
-      throw new Error('图片来自另一个本地项目，请先将素材复制到当前项目后再保存。');
-    }
-    const projectRelativePath = resolveTauriProjectRelativePath(
-      src,
-      projectRootPath,
-      noteRelativePath,
-    );
-    if (projectRelativePath) {
-      return posixRelative(posixDirname(noteRelativePath), projectRelativePath);
-    }
-    assertNoLocalMediaCapabilityUrl(src);
-    return src;
-  }
-  if (REMOTE_OR_EMBEDDED_RE.test(src)) return src;
+  if (!src || REMOTE_OR_EMBEDDED_RE.test(src) || !projectRootPath) return src;
   const absPath = resolveSrcToAbsPath(src, projectRootPath, noteRelativePath);
   const projectRelativePath = toProjectRelativePath(absPath, projectRootPath);
   if (!projectRelativePath) return src;
@@ -258,22 +115,11 @@ export const toDiskImageSrc = (src, projectRootPath, noteRelativePath) => {
 };
 
 export const toEditorImageSrc = (src, projectRootPath, noteRelativePath) => {
-  if (!src || !projectRootPath) return src;
-  if (isTauriMountId(projectRootPath)) {
-    const projectRelativePath = resolveTauriProjectRelativePath(
-      src,
-      projectRootPath,
-      noteRelativePath,
-    );
-    return projectRelativePath
-      ? createLocalMediaUrl(projectRootPath, projectRelativePath)
-      : src;
-  }
-  if (REMOTE_OR_EMBEDDED_RE.test(src)) return src;
+  if (!src || REMOTE_OR_EMBEDDED_RE.test(src) || !projectRootPath) return src;
   const absPath = resolveSrcToAbsPath(src, projectRootPath, noteRelativePath);
   const projectRelativePath = toProjectRelativePath(absPath, projectRootPath);
   if (!projectRelativePath) return src;
-  return createLocalMediaUrl(projectRootPath, projectRelativePath);
+  return toLocalMediaUrl(projectRootPath, projectRelativePath);
 };
 
 const posixBasename = (filePath) => {
@@ -311,19 +157,10 @@ const resolveWikiImageAbsPath = (target, projectRootPath, noteRelativePath) => {
 };
 
 const toWikiImageSrc = (target, projectRootPath, noteRelativePath, forEditor) => {
-  if (isTauriMountId(projectRootPath)) {
-    const posixSrc = toPosix(target).replace(/^\/+/, '');
-    const projectRelativePath = posixSrc.includes('/')
-      ? normalizeProjectRelativePath('', posixSrc)
-      : normalizeProjectRelativePath(posixDirname(noteRelativePath), posixSrc);
-    if (!projectRelativePath) return '';
-    if (forEditor) return createLocalMediaUrl(projectRootPath, projectRelativePath);
-    return posixRelative(posixDirname(noteRelativePath), projectRelativePath);
-  }
   const absPath = resolveWikiImageAbsPath(target, projectRootPath, noteRelativePath);
   const projectRelativePath = toProjectRelativePath(absPath, projectRootPath);
   if (!projectRelativePath) return '';
-  if (forEditor) return createLocalMediaUrl(projectRootPath, projectRelativePath);
+  if (forEditor) return toLocalMediaUrl(projectRootPath, projectRelativePath);
   const fromDir = posixJoin(projectRootPath, posixDirname(noteRelativePath));
   const toPath = posixJoin(projectRootPath, projectRelativePath);
   return posixRelative(fromDir, toPath);
@@ -354,117 +191,14 @@ const replaceMarkdownImageUrls = (text, mapSrc) => text.replace(
 
 const mapOutsideCodeFences = (markdown, mapText) => {
   const lines = String(markdown ?? '').split('\n');
-  let activeFence = null;
+  let inFence = false;
   return lines.map((line) => {
-    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/);
-    if (fenceMatch) {
-      const marker = fenceMatch[1];
-      if (!activeFence) {
-        activeFence = { character: marker[0], length: marker.length };
-      } else if (
-        activeFence.character === marker[0]
-        && marker.length >= activeFence.length
-      ) {
-        activeFence = null;
-      }
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
       return line;
     }
-    return activeFence ? line : mapText(line);
+    return inFence ? line : mapText(line);
   }).join('\n');
-};
-
-const assertMarkdownDestinationsSafe = (text) => {
-  const scannable = text.replace(/(`+)(.*?)\1/g, '');
-  scannable.replace(
-    /!?\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^\s)]+)/g,
-    (_full, destination) => {
-      assertNoLocalMediaCapabilityUrl(destination);
-      return _full;
-    },
-  );
-  scannable.replace(
-    /\b(?:src|href|poster)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
-    (_full, doubleQuoted, singleQuoted, unquoted) => {
-      assertNoLocalMediaCapabilityUrl(doubleQuoted ?? singleQuoted ?? unquoted);
-      return _full;
-    },
-  );
-  scannable.replace(
-    /<((?:local-media:\/\/|https?:\/\/local-media\.localhost\/)[^>\s]+)>/gi,
-    (_full, destination) => {
-      assertNoLocalMediaCapabilityUrl(destination);
-      return _full;
-    },
-  );
-  scannable.replace(
-    /^\s{0,3}\[[^\]\n]+\]:\s*(<[^>\n]+>|\S+)/g,
-    (_full, destination) => {
-      assertNoLocalMediaCapabilityUrl(destination);
-      return _full;
-    },
-  );
-  scannable.replace(
-    /\burl\(\s*(?:"([^"]*)"|'([^']*)'|([^\s)]+))\s*\)/gi,
-    (_full, doubleQuoted, singleQuoted, unquoted) => {
-      assertNoLocalMediaCapabilityUrl(doubleQuoted ?? singleQuoted ?? unquoted);
-      return _full;
-    },
-  );
-  return text;
-};
-
-const assertFrontmatterUrlsSafe = (markdown) => {
-  const text = String(markdown ?? '');
-  if (!/^---\r?\n/.test(text)) return;
-  const endMatch = /\r?\n---(?:\r?\n|$)/.exec(text.slice(4));
-  if (!endMatch) return;
-  const frontmatter = text.slice(4, endMatch.index + 4);
-  frontmatter.replace(
-    /^\s*(?:cover|url|href|src|poster)\s*:\s*(.+?)\s*$/gim,
-    (_full, destination) => {
-      assertNoLocalMediaCapabilityUrl(destination);
-      return _full;
-    },
-  );
-};
-
-export const assertNoLocalMediaCapabilityUrlsInMarkdown = (markdown) => {
-  const text = String(markdown ?? '');
-  mapOutsideCodeFences(text, assertMarkdownDestinationsSafe);
-  assertFrontmatterUrlsSafe(text);
-  return markdown;
-};
-
-const STRUCTURED_URL_KEYS = new Set(['cover', 'href', 'poster', 'src', 'url']);
-
-export const assertNoLocalMediaCapabilityUrlsInObject = (value) => {
-  if (Array.isArray(value)) {
-    value.forEach(assertNoLocalMediaCapabilityUrlsInObject);
-    return value;
-  }
-  if (!value || typeof value !== 'object') return value;
-  Object.entries(value).forEach(([key, nestedValue]) => {
-    if (typeof nestedValue === 'string' && STRUCTURED_URL_KEYS.has(key.toLowerCase())) {
-      assertNoLocalMediaCapabilityUrl(nestedValue);
-      return;
-    }
-    assertNoLocalMediaCapabilityUrlsInObject(nestedValue);
-  });
-  return value;
-};
-
-export const assertNoLocalMediaCapabilityUrlsInBlockNote = (content) => {
-  if (typeof content !== 'string') return content;
-  try {
-    const blocks = JSON.parse(content);
-    if (Array.isArray(blocks)) {
-      assertNoLocalMediaCapabilityUrlsInObject(blocks);
-      return content;
-    }
-  } catch {
-    // 普通 Markdown 继续走链接目标校验。
-  }
-  return assertNoLocalMediaCapabilityUrlsInMarkdown(content);
 };
 
 const separateAdjacentImages = (text) => text.replace(/\)[ \t]*!\[/g, ')\n\n![');
@@ -484,54 +218,12 @@ const rewriteMarkdownImages = (markdown, context, forEditor) => {
   });
 };
 
-export const rewriteMarkdownImagesForDisk = (markdown, context = {}) => {
-  const rewritten = rewriteMarkdownImages(markdown, context, false);
-  return isTauriMountId(context.projectRootPath)
-    ? assertNoLocalMediaCapabilityUrlsInMarkdown(rewritten)
-    : rewritten;
-};
+export const rewriteMarkdownImagesForDisk = (markdown, context = {}) => (
+  rewriteMarkdownImages(markdown, context, false)
+);
 
 export const rewriteMarkdownImagesForEditor = (markdown, context = {}) => {
   const { projectRootPath = '' } = context;
   if (!projectRootPath) return markdown ?? '';
   return rewriteMarkdownImages(markdown, context, true);
 };
-
-const rewriteBlockNoteImageNodes = (blocks, context, forEditor) => blocks.map((block) => {
-  const children = Array.isArray(block?.children)
-    ? rewriteBlockNoteImageNodes(block.children, context, forEditor)
-    : block?.children;
-  if (block?.type !== 'image' || typeof block.props?.url !== 'string') {
-    return children === block?.children ? block : { ...block, children };
-  }
-  const url = forEditor
-    ? toEditorImageSrc(block.props.url, context.projectRootPath, context.noteRelativePath)
-    : toDiskImageSrc(block.props.url, context.projectRootPath, context.noteRelativePath);
-  return {
-    ...block,
-    props: { ...block.props, url },
-    ...(children === block.children ? {} : { children }),
-  };
-});
-
-const rewriteBlockNoteImages = (content, context, forEditor) => {
-  if (typeof content !== 'string' || !content.trim().startsWith('[')) return content;
-  try {
-    const blocks = JSON.parse(content);
-    if (!Array.isArray(blocks)) return content;
-    return JSON.stringify(rewriteBlockNoteImageNodes(blocks, context, forEditor));
-  } catch {
-    return content;
-  }
-};
-
-export const rewriteBlockNoteImagesForDisk = (content, context = {}) => {
-  const rewritten = rewriteBlockNoteImages(content, context, false);
-  return isTauriMountId(context.projectRootPath)
-    ? assertNoLocalMediaCapabilityUrlsInBlockNote(rewritten)
-    : rewritten;
-};
-
-export const rewriteBlockNoteImagesForEditor = (content, context = {}) => (
-  rewriteBlockNoteImages(content, context, true)
-);

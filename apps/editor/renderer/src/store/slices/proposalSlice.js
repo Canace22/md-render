@@ -20,7 +20,6 @@ import { saveProposalFile } from '../../utils/agentDataBridge.js';
 
 export const PROPOSAL_BUSY_MESSAGE = '写入被拒绝：这篇文档已有一处改动在等待用户确认，请等用户应用或放弃后再写。';
 export const PROPOSAL_STALE_MESSAGE = '写入被拒绝：内容已变化，请重新读取后再提交。';
-export const PROPOSAL_READ_ONLY_MESSAGE = '操作被拒绝：目标来自只读项目。';
 const MAX_RESOLVED_KEPT = 50;
 
 // 等待结果的回调不放进 store（不可序列化）
@@ -46,21 +45,13 @@ const prependProposal = (list, proposal) => {
 
 const applyEdit = (get, proposal) => {
   const target = findNodeById(get().workspace, proposal.targetId);
-  if (target?.readOnly) return { ok: false, error: PROPOSAL_READ_ONLY_MESSAGE, code: 'read_only' };
   const check = checkProposalApplicable(proposal, target?.content ?? '');
   if (!check.ok) return check;
-  return get().applyContentFromOutside(proposal.targetId, proposal.newText)
-    ? { ok: true }
-    : { ok: false, error: '提案应用失败，文档未变更。' };
+  get().applyContentFromOutside(proposal.targetId, proposal.newText);
+  return { ok: true };
 };
 
 const applyDelete = (get, proposal) => {
-  const hasReadOnlyTarget = proposal.targets.some(
-    (target) => findNodeById(get().workspace, target.id)?.readOnly,
-  );
-  if (hasReadOnlyTarget) {
-    return { ok: false, error: PROPOSAL_READ_ONLY_MESSAGE, code: 'read_only' };
-  }
   const failed = proposal.targets.filter((target) => !get().deleteNode(target.id)).map((target) => target.name);
   return failed.length
     ? { ok: true, note: `部分删除失败：${failed.map((name) => `「${name}」`).join('、')}` }
@@ -82,7 +73,6 @@ export const createProposalSlice = (set, get) => ({
   submitEditProposal: ({ targetId, newText, baseHash = '', who = 'app', tool = '' } = {}) => {
     const target = findNodeById(get().workspace, targetId);
     if (!target || target.type !== 'file') return { ok: false, error: '写入失败：找不到目标文档。', code: 'not_found' };
-    if (target.readOnly) return { ok: false, error: PROPOSAL_READ_ONLY_MESSAGE, code: 'read_only' };
     if (!isSameContentHash(target.content ?? '', baseHash)) return { ok: false, error: PROPOSAL_STALE_MESSAGE, code: 'stale' };
     const busy = get().agentProposals.some((item) => isPending(item) && item.kind === PROPOSAL_KINDS.EDIT && item.targetId === targetId);
     if (busy) return { ok: false, error: PROPOSAL_BUSY_MESSAGE, code: 'busy' };
@@ -100,9 +90,6 @@ export const createProposalSlice = (set, get) => ({
       .map((id) => findNodeById(workspace, id))
       .filter((node) => node && node.id !== 'root');
     if (!targets.length) return { ok: false, error: '删除失败：没有找到任何对应条目。', code: 'not_found' };
-    if (targets.some((target) => target.readOnly)) {
-      return { ok: false, error: PROPOSAL_READ_ONLY_MESSAGE, code: 'read_only' };
-    }
     const proposal = buildDeleteProposal({ targets, reason, who, tool });
     set((state) => ({ agentProposals: prependProposal(state.agentProposals, proposal) }));
     persistProposal(proposal);

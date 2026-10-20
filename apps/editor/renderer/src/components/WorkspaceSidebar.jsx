@@ -55,7 +55,6 @@ import { CREATION_STATUS_OPTIONS } from '../store/creationUtils.js';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
 import { PUBLISHING_PLATFORM_OPTIONS } from '../utils/publishingPlatforms.js';
 import { getPlatform } from '../services/electronBridge.js';
-import { openExternalUrl } from '../services/desktopShellBridge.js';
 
 const GITHUB_URL = 'https://github.com/Canace22/md-render';
 const DEFAULT_SIDEBAR_WIDTH = 320;
@@ -66,13 +65,6 @@ const SIDEBAR_KEYBOARD_RESIZE_STEP = 16;
 const FILE_MANAGER_LABEL = getPlatform() === 'darwin'
   ? '访达'
   : '文件管理器';
-
-const handleOpenGithub = (event) => {
-  event.preventDefault();
-  openExternalUrl(GITHUB_URL).catch((error) => {
-    message.error(error?.message || '无法打开 GitHub');
-  });
-};
 
 const copyAbsolutePath = async (absolutePath) => {
   try {
@@ -85,7 +77,6 @@ const copyAbsolutePath = async (absolutePath) => {
 
 const EMPTY_META_FILTERS = { status: null, platform: null, nodeType: null, tag: null };
 const META_FILTER_ALL = '__all__';
-const LOCAL_PROJECT_REAUTHORIZATION_REQUIRED = 'reauthorization-required';
 
 const hasActiveMetaFilters = (filters) =>
   Boolean(filters?.status || filters?.platform || filters?.nodeType || filters?.tag || filters?.fileKind);
@@ -184,7 +175,6 @@ const TreeNode = ({
   allowStructureActions,
   onRemoveLocalProject,
   onManualSyncLocalProject,
-  onReauthorizeLocalProject,
   onAddFile,
   onAddOutline,
   onAddScript,
@@ -214,24 +204,15 @@ const TreeNode = ({
   const isActive = node.id === selectedId;
   const isRoot = node.id === 'root';
   const isLocalProjectRoot = Boolean(node.localProjectRoot);
-  const needsReauthorization = node.access === LOCAL_PROJECT_REAUTHORIZATION_REQUIRED;
-  const canMutateNode = allowStructureActions && !node.readOnly;
   const channelLabel = getFolderChannelLabel(node);
-  const showCreateActions = canMutateNode && isFolder;
-  const showNodeActions = canMutateNode && !isRoot && !isLocalProjectRoot;
+  const showCreateActions = allowStructureActions && isFolder;
+  const showNodeActions = allowStructureActions && !isRoot && !isLocalProjectRoot;
   // 置顶对挂载的本地项目根也开放（它们不能移动/重命名，但可以排到最前）
   const showPinAction = allowStructureActions && !isRoot;
   const showRemoveProject = isLocalProjectRoot && onRemoveLocalProject;
-  const showReauthorizeProject = Boolean(
-    isLocalProjectRoot && needsReauthorization && onReauthorizeLocalProject,
-  );
-  const showManualSyncProject = Boolean(
-    !needsReauthorization && isFolder && node.projectRootPath && onManualSyncLocalProject,
-  );
-  const showRevealInFileManager = Boolean(
-    !needsReauthorization && node.projectRootPath && onRevealLocalProjectEntry,
-  );
-  const absolutePath = node.readOnly || node.projectMountId ? '' : buildLocalEntryPath(node);
+  const showManualSyncProject = Boolean(isFolder && node.projectRootPath && onManualSyncLocalProject);
+  const showRevealInFileManager = Boolean(node.projectRootPath && onRevealLocalProjectEntry);
+  const absolutePath = buildLocalEntryPath(node);
   const showCopyPath = Boolean(absolutePath);
   const showLocationActions = showRevealInFileManager || showCopyPath;
   const showDocActions = Boolean(docActions && isEditableDocNode(node));
@@ -284,7 +265,7 @@ const TreeNode = ({
   }, [isRenaming]);
 
   const handleContextMenu = (e) => {
-    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showReauthorizeProject && !showManualSyncProject && !showLocationActions && !showDocActions) return;
+    if (!showCreateActions && !showPinAction && !showNodeActions && !showRemoveProject && !showManualSyncProject && !showLocationActions && !showDocActions) return;
     e.preventDefault();
     e.stopPropagation();
     onSelect(node.id);
@@ -326,9 +307,9 @@ const TreeNode = ({
   };
 
   // 拖拽源：普通节点和磁盘文件/文件夹都可拖，项目挂载根和工作区根不可拖
-  const canDrag = canMutateNode && !isRoot && !isLocalProjectRoot;
+  const canDrag = allowStructureActions && !isRoot && !isLocalProjectRoot;
   // 放置目标：文件夹（含项目根）可接收「移入」，文件可接收「同级排序」；是否合法由 onMoveNode 判定
-  const canDrop = canMutateNode && (isFolder || !isRoot);
+  const canDrop = allowStructureActions && (isFolder || !isRoot);
   const sharedProps = {
     ...(canDrag ? { draggable: true, onDragStart: handleDragStart } : {}),
     ...(canDrop ? {
@@ -449,7 +430,7 @@ const TreeNode = ({
                   ? <><PinOff size={14} strokeWidth={1.5} /> 取消置顶</>
                   : <><Pin size={14} strokeWidth={1.5} /> 置顶</>}
               </button>
-              {(showNodeActions || showManualSyncProject || showReauthorizeProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
+              {(showNodeActions || showManualSyncProject || showRemoveProject) && <div className="tree-context-menu-divider" />}
             </>
           )}
           {showNodeActions && (
@@ -469,17 +450,6 @@ const TreeNode = ({
             <>
               <button type="button" onClick={runAndClose(() => onManualSyncLocalProject(node.projectRootPath))}>
                 <RefreshCw size={14} strokeWidth={1.5} /> 手动同步
-              </button>
-              {showRemoveProject && <div className="tree-context-menu-divider" />}
-            </>
-          )}
-          {showReauthorizeProject && (
-            <>
-              <button type="button" onClick={runAndClose(() => onReauthorizeLocalProject(node.id, 'read-only'))}>
-                <FolderInput size={14} strokeWidth={1.5} /> 重新授权目录（只读）
-              </button>
-              <button type="button" onClick={runAndClose(() => onReauthorizeLocalProject(node.id, 'read-write'))}>
-                <FolderInput size={14} strokeWidth={1.5} /> 重新授权目录（可编辑）
               </button>
               {showRemoveProject && <div className="tree-context-menu-divider" />}
             </>
@@ -505,7 +475,6 @@ const TreeNode = ({
               allowStructureActions={allowStructureActions}
               onRemoveLocalProject={onRemoveLocalProject}
               onManualSyncLocalProject={onManualSyncLocalProject}
-              onReauthorizeLocalProject={onReauthorizeLocalProject}
               onAddFile={onAddFile}
               onAddOutline={onAddOutline}
               onAddScript={onAddScript}
@@ -579,7 +548,6 @@ const WorkspaceSidebar = ({
   onSelect,
   onRemoveLocalProject,
   onManualSyncLocalProject,
-  onReauthorizeLocalProject,
   onAddFile,
   onAddOutline,
   onAddScript,
@@ -730,8 +698,6 @@ const WorkspaceSidebar = ({
   }, [closeContextMenu, contextMenu]);
 
   const handleCreateFromSidebar = useCallback(async (kind, contextNodeId) => {
-    const targetNode = findNodeById(workspace, contextNodeId ?? selectedId);
-    if (targetNode?.readOnly) return;
     const creators = { folder: onAddFolder, outline: onAddOutline, script: onAddScript, file: onAddFile };
     const create = creators[kind] ?? onAddFile;
     const result = await create?.(contextNodeId);
@@ -739,7 +705,7 @@ const WorkspaceSidebar = ({
       handleStartRename(result.nodeId, result.name);
       closeContextMenu();
     }
-  }, [closeContextMenu, onAddFile, onAddFolder, onAddOutline, onAddScript, selectedId, workspace]);
+  }, [closeContextMenu, onAddFile, onAddFolder, onAddOutline, onAddScript, workspace]);
 
   const handleTreeBackgroundContextMenu = useCallback((event) => {
     if (event.target.closest('.tree-node-row') || event.target.closest('.tree-node-context-menu')) {
@@ -778,8 +744,6 @@ const WorkspaceSidebar = ({
       }
       return;
     }
-
-    if (selectedNode.readOnly) return;
 
     if (event.key === 'F2') {
       event.preventDefault();
@@ -934,7 +898,6 @@ const WorkspaceSidebar = ({
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={handleOpenGithub}
             className="sidebar-rail-btn"
             title="GitHub 项目地址"
             aria-label="在 GitHub 打开项目"
@@ -1106,7 +1069,7 @@ const WorkspaceSidebar = ({
                 </svg>
               </button>
               <TreeSortMenu value={sidebarSortMode} onChange={setSidebarSortMode} />
-              {allowStructureActions && !selectedNode?.readOnly && (
+              {allowStructureActions && (
                 <button
                   type="button"
                   className="sidebar-add-icon"
@@ -1117,7 +1080,7 @@ const WorkspaceSidebar = ({
                   <File size={18} strokeWidth={1.5} />
                 </button>
               )}
-              {allowStructureActions && !selectedNode?.readOnly && (
+              {allowStructureActions && (
                 <button
                   type="button"
                   className="sidebar-add-icon"
@@ -1128,7 +1091,7 @@ const WorkspaceSidebar = ({
                   <ListTree size={18} strokeWidth={1.5} />
                 </button>
               )}
-              {allowStructureActions && !selectedNode?.readOnly && (
+              {allowStructureActions && (
                 <button
                   type="button"
                   className="sidebar-add-icon"
@@ -1167,7 +1130,6 @@ const WorkspaceSidebar = ({
                   allowStructureActions,
                   onRemoveLocalProject,
                   onManualSyncLocalProject,
-                  onReauthorizeLocalProject,
                   sortMode: sidebarSortMode,
                   ...renameHandlers,
                 },

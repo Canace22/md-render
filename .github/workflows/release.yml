@@ -1,4 +1,4 @@
-name: Release Desktop (Tauri)
+name: Release
 
 on:
   push:
@@ -6,71 +6,11 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
-
-concurrency:
-  group: desktop-release-${{ github.ref }}
-  cancel-in-progress: false
+  contents: write
 
 jobs:
-  validate-release:
-    name: 校验发布版本
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.release.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Validate version and release commit
-        id: release
-        shell: bash
-        run: |
-          root_version="$(node -p "require('./package.json').version")"
-          editor_version="$(node -p "require('./apps/editor/package.json').version")"
-          if [[ "$root_version" != "$editor_version" ]]; then
-            echo "Root and editor versions differ: $root_version != $editor_version" >&2
-            exit 1
-          fi
-
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            tag_version="${GITHUB_REF_NAME#v}"
-            if [[ "$tag_version" != "$root_version" ]]; then
-              echo "Tag and package versions differ: $tag_version != $root_version" >&2
-              exit 1
-            fi
-            git fetch origin main:refs/remotes/origin/main --no-tags
-            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-              echo "Release tag must point to a commit on origin/main." >&2
-              exit 1
-            fi
-          fi
-
-          echo "version=$root_version" >> "$GITHUB_OUTPUT"
-
-      - name: Validate optional AI proxy
-        shell: bash
-        env:
-          AI_PROXY_BASE: ${{ vars.AI_PROXY_BASE }}
-        run: |
-          if [[ -n "$AI_PROXY_BASE" && "$AI_PROXY_BASE" != https://* ]]; then
-            echo "Repository variable AI_PROXY_BASE must use HTTPS for a production build." >&2
-            exit 1
-          fi
-          if [[ -z "$AI_PROXY_BASE" ]]; then
-            echo "::warning::AI_PROXY_BASE is unset; users must configure an AI proxy in the app."
-          fi
-
-  release-macos:
-    name: macOS Universal 发布包
-    needs: validate-release
+  release-mac:
+    name: macOS 发布
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -83,131 +23,50 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
-
-      - name: Setup Rust targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Require macOS signing and notarization secrets
-        shell: bash
+      - name: Install mcp-bridge dependencies
+        # server/mcp-bridge 不在 pnpm workspace 里，打包时要把它 bundle 进 resources
+        run: npm ci --prefix server/mcp-bridge
+
+      - name: Build Electron app
+        run: pnpm electron:build
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Check build output
         run: |
-          missing=()
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID KEYCHAIN_PASSWORD; do
-            if [[ -z "${!name}" ]]; then
-              missing+=("$name")
-            fi
-          done
-          if (( ${#missing[@]} > 0 )); then
-            echo "Missing required macOS release secrets: ${missing[*]}" >&2
+          release_dir="apps/editor/release"
+          if [ ! -d "$release_dir" ]; then
+            echo "Error: release directory not found"
+            exit 1
+          fi
+          ls -la "$release_dir/"
+          if ! ls "$release_dir"/*.dmg >/dev/null 2>&1; then
+            echo "Error: dmg file not found"
+            exit 1
+          fi
+          if [ ! -f "$release_dir/latest-mac.yml" ]; then
+            echo "Error: latest-mac.yml not found (auto update needs it)"
             exit 1
           fi
 
-      - name: Import Apple Developer ID certificate
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          certificate_path="$RUNNER_TEMP/md-render-certificate.p12"
-          keychain_path="$RUNNER_TEMP/md-render-signing.keychain-db"
-          printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A -out "$certificate_path"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain_path"
-          security list-keychain -d user -s "$keychain_path"
-
-      - name: Build signed Tauri app and DMG
-        run: pnpm tauri:build:mac:universal
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          VITE_AI_PROXY: ${{ vars.AI_PROXY_BASE }}
-
-      - name: Notarize and staple macOS packages
-        shell: bash
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
-          app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
-          dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$app_path"
-          test -n "$dmg_path"
-          xcrun stapler staple "$app_path"
-          xcrun notarytool submit "$dmg_path" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-          xcrun stapler staple "$dmg_path"
-
-      - name: Verify macOS packages
-        shell: bash
-        run: |
-          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
-          app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
-          dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
-          app_binary="$app_path/Contents/MacOS/md-render"
-          test -x "$app_binary"
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          spctl --assess --type execute --verbose=4 "$app_path"
-          xcrun stapler validate "$app_path"
-          xcrun stapler validate "$dmg_path"
-          hdiutil verify "$dmg_path"
-          architectures="$(lipo -archs "$app_binary")"
-          [[ "$architectures" == *arm64* ]]
-          [[ "$architectures" == *x86_64* ]]
-
-      - name: Prepare macOS release assets
-        shell: bash
-        env:
-          APP_VERSION: ${{ needs.validate-release.outputs.version }}
-        run: |
-          bundle_root="apps/editor/src-tauri/target/universal-apple-darwin/release/bundle"
-          app_path="$(find "$bundle_root/macos" -maxdepth 1 -name '*.app' -print -quit)"
-          dmg_path="$(find "$bundle_root/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
-          release_dir="$bundle_root/release-assets"
-          mkdir -p "$release_dir"
-          cp "$dmg_path" "$release_dir/MD-Render-$APP_VERSION-macOS-universal.dmg"
-          ditto -c -k --sequesterRsrc --keepParent \
-            "$app_path" \
-            "$release_dir/MD-Render-$APP_VERSION-macOS-universal.app.zip"
-          (cd "$release_dir" && shasum -a 256 *.dmg *.zip > SHA256SUMS-macos.txt)
-
-      - name: Upload macOS release assets
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-macos
-          path: apps/editor/src-tauri/target/universal-apple-darwin/release/bundle/release-assets/*
-          if-no-files-found: error
-          retention-days: 14
+          name: release-mac
+          # 自动更新需要 latest-mac.yml 判断新版本，zip 是 mac 更新包
+          path: |
+            apps/editor/release/*.dmg
+            apps/editor/release/*.zip
+            apps/editor/release/*.blockmap
+            apps/editor/release/latest-mac.yml
 
-      - name: Delete temporary keychain
-        if: always()
-        shell: bash
-        run: security delete-keychain "$RUNNER_TEMP/md-render-signing.keychain-db" || true
-
-  release-windows:
-    name: Windows x64 Inno 发布包
-    needs: validate-release
+  release-win:
+    name: Windows 发布
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -220,178 +79,53 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup --version=6.7.1 --no-progress -y
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Require Windows signing secrets
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
-            throw 'WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD are required for a formal release.'
-          }
+      - name: Install mcp-bridge dependencies
+        # server/mcp-bridge 不在 pnpm workspace 里，打包时要把它 bundle 进 resources
+        run: npm ci --prefix server/mcp-bridge
 
-      - name: Import Windows code-signing certificate
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          $encodedCertificatePath = Join-Path $env:RUNNER_TEMP 'md-render-certificate.txt'
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'md-render-certificate.pfx'
-          [IO.File]::WriteAllText($encodedCertificatePath, $env:WINDOWS_CERTIFICATE)
-          & certutil.exe -f -decode $encodedCertificatePath $certificatePath | Out-Host
-          $certutilExitCode = $LASTEXITCODE
-          if ($certutilExitCode -ne 0 -or !(Test-Path $certificatePath)) {
-            Remove-Item $certificatePath -ErrorAction SilentlyContinue
-            $rawBase64 = (($env:WINDOWS_CERTIFICATE -split '\r?\n') |
-              Where-Object { $_ -notmatch '^-----' }) -join ''
-            [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String(($rawBase64 -replace '\s', '')))
-          }
+      - name: Build Electron app
+        run: pnpm electron:build:win
 
-          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password |
-            Where-Object HasPrivateKey |
-            Select-Object -First 1
-          if (!$certificate) {
-            throw 'No private-key certificate was imported.'
-          }
-
-          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if (!$signTool) {
-            throw 'signtool.exe was not found.'
-          }
-
-          "WINDOWS_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "WINDOWS_SIGNTOOL_PATH=$($signTool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $signCommand = '$q' + $signTool.FullName + '$q sign /sha1 ' + $certificate.Thumbprint + ' /fd SHA256 /tr https://timestamp.digicert.com /td SHA256 $f'
-          "WINDOWS_SIGNTOOL_COMMAND=$signCommand" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Build Tauri executable
-        run: pnpm tauri:build:win
-        env:
-          VITE_AI_PROXY: ${{ vars.AI_PROXY_BASE }}
-
-      - name: Build signed Inno Setup installer
-        run: pnpm tauri:inno:win
-
-      - name: Verify and install Windows package
+      - name: Check build output
         shell: pwsh
         run: |
-          $appExe = 'apps/editor/src-tauri/target/release/md-render.exe'
-          $installers = @(Get-ChildItem 'apps/editor/src-tauri/target/release/bundle/inno/*.exe')
-          if ($installers.Count -ne 1) {
-            throw "Expected exactly one Inno installer, found $($installers.Count)."
+          $releaseDir = "apps/editor/release"
+          if (!(Test-Path $releaseDir)) {
+            Write-Error "release directory not found"
+            exit 1
+          }
+          if (!(Test-Path "$releaseDir/latest.yml")) {
+            Write-Error "latest.yml not found (auto update needs it)"
+            exit 1
+          }
+          Get-ChildItem $releaseDir
+          $exeFiles = Get-ChildItem "$releaseDir/*.exe"
+          if ($exeFiles.Count -eq 0) {
+            Write-Error "exe file not found"
+            exit 1
           }
 
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $appExe
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Windows application signature verification failed.'
-          }
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $installers[0].FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Windows installer signature verification failed.'
-          }
-
-          $installDir = Join-Path $env:RUNNER_TEMP 'md-render-install-check'
-          $installLog = Join-Path $env:RUNNER_TEMP 'md-render-install.log'
-          $install = Start-Process -FilePath $installers[0].FullName -ArgumentList @(
-            '/VERYSILENT',
-            '/SUPPRESSMSGBOXES',
-            '/NORESTART',
-            "/DIR=`"$installDir`"",
-            "/LOG=`"$installLog`""
-          ) -Wait -PassThru
-          if ($install.ExitCode -ne 0) {
-            Get-Content $installLog -ErrorAction SilentlyContinue
-            throw "Windows installer smoke check failed with exit code $($install.ExitCode)."
-          }
-
-          $installedApp = Join-Path $installDir 'md-render.exe'
-          if (!(Test-Path $installedApp)) {
-            throw "Installed application was not found at $installedApp."
-          }
-          $uninstaller = Get-ChildItem "$installDir/unins*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (!$uninstaller) {
-            throw "Windows uninstaller was not found under $installDir."
-          }
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $installedApp
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Installed application signature verification failed.'
-          }
-          & $env:WINDOWS_SIGNTOOL_PATH verify /pa /all /v $uninstaller.FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Windows uninstaller signature verification failed.'
-          }
-
-          $appProcess = Start-Process -FilePath $installedApp -PassThru
-          Start-Sleep -Seconds 5
-          if ($appProcess.HasExited -and $appProcess.ExitCode -ne 0) {
-            throw "Installed application launch check failed with exit code $($appProcess.ExitCode)."
-          }
-          if (!$appProcess.HasExited) {
-            Stop-Process -Id $appProcess.Id -Force
-            Wait-Process -Id $appProcess.Id -ErrorAction SilentlyContinue
-          }
-
-          $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList @(
-            '/VERYSILENT',
-            '/SUPPRESSMSGBOXES',
-            '/NORESTART'
-          ) -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) {
-            throw "Windows uninstall smoke check failed with exit code $($uninstall.ExitCode)."
-          }
-
-      - name: Prepare Windows release assets
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ needs.validate-release.outputs.version }}
-        run: |
-          $installer = Get-ChildItem 'apps/editor/src-tauri/target/release/bundle/inno/*.exe' | Select-Object -First 1
-          $releaseDir = 'apps/editor/src-tauri/target/release/bundle/release-assets'
-          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-          $target = Join-Path $releaseDir "MD-Render-$env:APP_VERSION-windows-x64-setup.exe"
-          Copy-Item $installer.FullName $target
-          $hash = Get-FileHash -Algorithm SHA256 $target
-          "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($target))" |
-            Set-Content -Encoding ascii (Join-Path $releaseDir 'SHA256SUMS-windows.txt')
-
-      - name: Upload Windows release assets
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows
-          path: apps/editor/src-tauri/target/release/bundle/release-assets/*
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Remove temporary signing certificate
-        if: always()
-        shell: pwsh
-        run: |
-          if ($env:WINDOWS_CERT_THUMBPRINT) {
-            Remove-Item "Cert:\CurrentUser\My\$env:WINDOWS_CERT_THUMBPRINT" -ErrorAction SilentlyContinue
-          }
+          name: release-win
+          # 自动更新需要 latest.yml 判断新版本，blockmap 用于增量下载
+          path: |
+            apps/editor/release/*.exe
+            apps/editor/release/*.exe.blockmap
+            apps/editor/release/latest.yml
 
   publish-release:
     name: 发布 GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [validate-release, release-macos, release-windows]
+    needs: [release-mac, release-win]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Download release assets
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -408,28 +142,21 @@ jobs:
           body: |
             ## 下载
 
-            - **macOS**：下载 `MD-Render-*-macOS-universal.dmg`（Apple Silicon / Intel 通用）
-            - **Windows**：下载 `MD-Render-*-windows-x64-setup.exe`（Inno Setup）
-            - `SHA256SUMS-*` 可用于校验下载文件
+            - **macOS**: 下载 `.dmg` 文件（Universal，支持 Intel 与 Apple Silicon）
+            - **Windows**: 下载 `.exe` 安装包（x64）
 
-            ## 从 Electron 版升级
+            ## macOS 安装说明
 
-            这是桌面壳切换到 Tauri 2 后的正式包，需要手动安装一次：
+            CI 构建未做 Apple 代码签名。若系统提示「应用程序已损坏，无法打开」：
 
-            1. 先完全退出 Electron 旧版。
-            2. 安装并打开新版。用过 Tauri 预览版的话，原 Tauri 数据会自动沿用，不需要导入。
-            3. 需要恢复 Electron 旧数据时，在「设置 → Electron 数据交接」中选择旧 `knowledge.db`。导入不是合并：它会先备份当前 Tauri 数据库，再用 Electron 数据替换；Electron 源库不会被修改。
-            4. 如果两边都有新内容，先导出 Tauri JSON 备份并另存重要文稿，不要直接导入。
-            5. 原来的本地工作区需要重新选择授权。
+            1. 打开 **系统设置 → 隐私与安全性**，点击「仍要打开」；或
+            2. 在终端执行（路径按实际安装位置调整）：
+               ```bash
+               xattr -dr com.apple.quarantine "/Applications/MD Render.app"
+               ```
 
-            旧库通常在 macOS 的 `~/Library/Application Support/md-render/knowledge.db`，或 Windows 的 `%APPDATA%\md-render\knowledge.db`。如果找不到，再检查同级的 `@md-render/editor` 和 `MD Render` 目录。迁移确认前不要删除旧库。
+            ## Windows 安装说明
 
-            旧 Electron 自动更新无法跨框架直接安装这个版本；Tauri 内置更新也尚未接入，暂时请从 Releases 手动升级。
+            安装包未做代码签名。若 Windows Defender SmartScreen 弹出警告，点击「更多信息 → 仍要运行」即可。
 
-            ## 当前边界
-
-            - 正式发布必须通过 macOS 签名/公证和 Windows Authenticode 校验；缺少凭证时工作流会直接失败。
-            - PDF 导出、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑尚未迁移到 Tauri。
-            - 应用本身不需要 Node.js；AI 需要可达的 `ai-proxy`，若发布包未内置服务地址，请在 AI 设置中填写。
-
-            网页版仍通过 GitHub Pages 独立发布。
+            网页版见仓库 **Deployments → github-pages** 或 README 中的 Pages 链接。

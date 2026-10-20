@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { LOCAL_AGENTS, LOCAL_AGENT_KINDS, isRunnableAgent } from '@shared/localAgents.js';
-import { getDesktopRuntimeKind } from '../services/desktopBridge.js';
 
 const STATUS_TEXT = Object.freeze({
   ready: '可用',
@@ -42,7 +41,6 @@ export default function AgentLocalSources({
   detected,
   detecting,
   safeMode,
-  supportsLocalAgents,
   onSelectSource,
   onSelectModel,
   onRedetect,
@@ -51,7 +49,6 @@ export default function AgentLocalSources({
   const byId = new Map(detected.map((item) => [item.id, item]));
   const anyRunnable = detected.some((item) => isRunnableAgent(item));
   const agents = LOCAL_AGENTS.filter((agent) => agent.kind === LOCAL_AGENT_KINDS.AGENT || byId.get(agent.id)?.installed);
-  const runtimeKind = getDesktopRuntimeKind();
 
   return (
     <div className="agent-source-settings">
@@ -73,57 +70,44 @@ export default function AgentLocalSources({
         </select>
       </label>
 
-      {supportsLocalAgents && activeSource.kind === 'local' && (
-        <LocalModelInput activeSource={activeSource} onSelectModel={onSelectModel} />
-      )}
+      {activeSource.kind === 'local' && <LocalModelInput activeSource={activeSource} onSelectModel={onSelectModel} />}
 
-      {!supportsLocalAgents && (
+      <div className="agent-source-settings__head">
+        <strong>本机 agent</strong>
+        <button type="button" onClick={onRedetect} disabled={detecting} title="重新检测">
+          <RefreshCw size={12} className={detecting ? 'is-spinning' : ''} /> {detecting ? '检测中' : '重新检测'}
+        </button>
+      </div>
+      {!anyRunnable && !detecting && (
         <div className="agent-source-settings__hint">
-          {runtimeKind === 'tauri'
-            ? 'Tauri 版不内置 Node 运行时，当前仅支持 API 服务商。使用应用本身无需安装 Node。'
-            : '当前运行环境不支持本机 agent，请使用 API 服务商。'}
+          没检测到可用的本机 agent，当前使用 API 服务商。装好下面任意一个并登录后点「重新检测」，就能用你自己的 agent（含你的配置、skills、MCP）。
         </div>
       )}
-      {supportsLocalAgents && (
-        <>
-          <div className="agent-source-settings__head">
-            <strong>本机 agent</strong>
-            <button type="button" onClick={onRedetect} disabled={detecting} title="重新检测">
-              <RefreshCw size={12} className={detecting ? 'is-spinning' : ''} /> {detecting ? '检测中' : '重新检测'}
-            </button>
-          </div>
-          {!anyRunnable && !detecting && (
-            <div className="agent-source-settings__hint">
-              没检测到可用的本机 agent，当前使用 API 服务商。装好下面任意一个并登录后点「重新检测」，就能用你自己的 agent（含你的配置、skills、MCP）。
-            </div>
-          )}
-          <ul className="agent-source-settings__list">
-            {agents.map((agent) => {
-              const item = byId.get(agent.id);
-              return (
-                <li key={agent.id} className={isRunnableAgent(item) ? 'is-ready' : ''}>
-                  <div className="agent-source-settings__row">
-                    <span className="agent-source-settings__name">{agent.label}</span>
-                    {item?.version && <span className="agent-source-settings__version">{item.version}</span>}
-                    <span className="agent-source-settings__status">{describeAgent(agent, item)}</span>
-                  </div>
-                  {item?.path && <div className="agent-source-settings__path" title={item.path}>{item.path}</div>}
-                  {!item?.installed && agent.installHint && <code className="agent-source-settings__code">{agent.installHint}</code>}
-                  {item?.status === 'needs-login' && agent.loginHint && <div className="agent-source-settings__path">{agent.loginHint}</div>}
-                </li>
-              );
-            })}
-          </ul>
+      <ul className="agent-source-settings__list">
+        {agents.map((agent) => {
+          const item = byId.get(agent.id);
+          return (
+            <li key={agent.id} className={isRunnableAgent(item) ? 'is-ready' : ''}>
+              <div className="agent-source-settings__row">
+                <span className="agent-source-settings__name">{agent.label}</span>
+                {item?.version && <span className="agent-source-settings__version">{item.version}</span>}
+                <span className="agent-source-settings__status">{describeAgent(agent, item)}</span>
+              </div>
+              {item?.path && <div className="agent-source-settings__path" title={item.path}>{item.path}</div>}
+              {!item?.installed && agent.installHint && <code className="agent-source-settings__code">{agent.installHint}</code>}
+              {item?.status === 'needs-login' && agent.loginHint && <div className="agent-source-settings__path">{agent.loginHint}</div>}
+            </li>
+          );
+        })}
+      </ul>
 
-          <label className="agent-source-settings__toggle">
-            <input type="checkbox" checked={safeMode} onChange={(e) => onSafeModeChange(e.target.checked)} />
-            <span>
-              安全模式
-              <small>默认关闭：本机 agent 可直接改工作目录里的文件、跑命令，不逐条确认。打开后只允许改文件，命令等操作会被拒绝。</small>
-            </span>
-          </label>
-        </>
-      )}
+      <label className="agent-source-settings__toggle">
+        <input type="checkbox" checked={safeMode} onChange={(e) => onSafeModeChange(e.target.checked)} />
+        <span>
+          安全模式
+          <small>默认关闭：本机 agent 可直接改工作目录里的文件、跑命令，不逐条确认。打开后只允许改文件，命令等操作会被拒绝。</small>
+        </span>
+      </label>
     </div>
   );
 }

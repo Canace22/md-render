@@ -2,14 +2,13 @@ import { ChevronRight, Copy, Download, History } from 'lucide-react';
 import { getWorkspaceFileKind, SIDEBAR_FILE_KIND_DOCUMENT } from '../store/workspaceUtils.js';
 import { needsConversion } from '../utils/fileConverters.js';
 import { isOutlinePage } from '@shared/outline/outlineTree.js';
-import { shouldOfferPdfExport } from '../services/desktopShellBridge.js';
 
 export const EXPORT_FORMATS = Object.freeze([
   { key: 'md', label: 'Markdown' },
   { key: 'html', label: 'HTML' },
   { key: 'pdf', label: 'PDF' },
   { key: 'docx', label: 'Word' },
-].filter(({ key }) => key !== 'pdf' || shouldOfferPdfExport()));
+]);
 
 /** 只有能在正文编辑器里打开的文档才有这组操作（图片、视频、待转换的 docx/pdf 等排除） */
 export const isEditableDocNode = (node) => (

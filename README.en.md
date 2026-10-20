@@ -39,21 +39,7 @@ Copy to WeChat Official Account formatting in one click (multiple templates incl
    - **macOS**: `MD-Render-*.dmg` (Universal, supports both Intel and Apple Silicon)
    - **Windows**: `MD-Render-Setup-*.exe`
 2. **First launch notice**: If the package is unsigned, approve it on macOS under **System Settings → Privacy & Security**, or click **More info → Run anyway** on Windows SmartScreen (you can verify the download against `SHA256SUMS` on the release page).
-3. **Updates**: Automatic in-app updates are not enabled yet; install newer versions manually from Releases.
-
-<details>
-<summary><b>Upgrading from the legacy Electron app? Click for data migration steps</b></summary>
-
-The desktop app has moved from Electron to Tauri 2. If you are upgrading from an older Electron build, follow these steps once to bring your data over (existing Tauri preview users inherit their data automatically):
-
-1. Quit the old MD Render completely, then install and open the new version.
-2. Open **设置 → Electron 数据交接** and select your old `knowledge.db`:
-   - macOS: `~/Library/Application Support/md-render/knowledge.db`
-   - Windows: `%APPDATA%\md-render\knowledge.db` (or check sibling `@md-render/editor` / `MD Render` folders)
-3. The import backs up your current Tauri database and replaces it with the Electron data (the original Electron database is never modified or deleted). If both versions contain new work, export a JSON backup first under **设置 → 备份（JSON）**.
-4. Re-select your local workspace folders once to grant write access. Do not delete the old database until you have verified the migration.
-
-</details>
+3. **Updates**: The app checks for new releases. If in-app installation is unavailable on your platform, it opens the matching Release download page.
 
 ### Web version
 
@@ -80,7 +66,7 @@ Open <https://canace22.github.io/md-render/>.
 
 ### Open a folder on your computer (desktop)
 
-Choose any folder in **设置 → 本地项目目录** (Settings → Local project folder). The `.md` files inside become your documents, and new documents are saved there too. If you edit files outside the app, click **从磁盘同步** (Sync from disk). After restarting the app, re-authorize the folder once to resume writing.
+Choose any folder in **设置 → 本地项目目录** (Settings → Local project folder). The `.md` files inside become your documents, and new documents are saved there too. If you edit files outside the app, click **从磁盘同步** (Sync from disk).
 
 The app does not do multi-device sync by itself. Use `Cmd/Ctrl + K` → **查看文档版本历史** to compare and restore recent versions, or manage the folder with Git / cloud drive for long-term history and sync.
 
@@ -103,10 +89,10 @@ Then set **AI 助手 → 设置 → AI 代理地址** to `http://127.0.0.1:8788`
 ```bash
 pnpm install
 pnpm dev            # web version (http://localhost:3000)
-pnpm tauri:dev      # desktop app (Tauri 2)
+pnpm electron:dev   # desktop app (Electron)
 ```
 
-The project started as a custom Markdown parser (`packages/markdown-core`), hence the name MD Render. Following the Tauri 2 desktop migration, features like PDF export, local CLI Agent / MCP, and custom skill editing are still being migrated.
+The project started as a custom Markdown parser (`packages/markdown-core`), hence the name MD Render. The official desktop app uses Electron.
 
 - Product scope & principles: [PRODUCT.md](./PRODUCT.md) (Chinese)
 - Build, test, architecture & release guide: [docs/development.md](./docs/development.md) (Chinese)

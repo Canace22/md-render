@@ -1,12 +1,12 @@
-name: Legacy Electron Fallback
+name: CI
 
-# 仅用于手动验证 Electron 回退包；正式 tag 发布已由 release.yml 切换到 Tauri。
+# 日常提交 / PR 不自动跑，只在 Actions 页签手动触发（发版走 release.yml 的 tag 流程）
 on:
   workflow_dispatch:
 
 jobs:
   electron-pack:
-    name: Electron 回退包（macOS）
+    name: Electron 打包
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -57,14 +57,14 @@ jobs:
       - name: Upload Electron artifact
         uses: actions/upload-artifact@v4
         with:
-          name: electron-fallback-mac
+          name: electron-mac
           path: |
             apps/editor/release/*.dmg
             apps/editor/release/*.blockmap
           retention-days: 7
 
   electron-pack-win:
-    name: Electron 回退包（Windows）
+    name: Electron 打包（Windows）
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -101,14 +101,3 @@ jobs:
             Write-Error "exe file not found"
             exit 1
           }
-
-      - name: Upload Electron artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: electron-fallback-windows
-          path: |
-            apps/editor/release/*.exe
-            apps/editor/release/*.blockmap
-            apps/editor/release/latest.yml
-          if-no-files-found: error
-          retention-days: 7

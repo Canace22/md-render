@@ -1,17 +1,8 @@
 import { memo } from 'react';
-import { message } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { openExternalUrl } from '../services/desktopShellBridge.js';
 
 const MARKDOWN_PLUGINS = [remarkGfm];
-
-const handleExternalLink = (event, href) => {
-  event.preventDefault();
-  openExternalUrl(href).catch((error) => {
-    message.error(error?.message || '无法打开链接');
-  });
-};
 
 function AgentMessageContent({ text }) {
   if (!text) return null;
@@ -23,13 +14,7 @@ function AgentMessageContent({ text }) {
         skipHtml
         components={{
           a: ({ children, href, title }) => (
-            <a
-              href={href}
-              title={title}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => handleExternalLink(event, href)}
-            >
+            <a href={href} title={title} target="_blank" rel="noreferrer">
               {children}
             </a>
           ),

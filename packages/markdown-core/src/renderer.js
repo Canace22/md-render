@@ -74,9 +74,10 @@ export class MarkdownRenderer {
      * 渲染代码块
      */
     renderCodeBlock(token) {
-        // Mermaid 图表：保留 DSL 文本，由前端按需加载本地 Mermaid 渲染。
+        // Mermaid 图表：直接输出 mermaid 容器，由外部脚本初始化渲染
         if ((token.language || '').toLowerCase() === 'mermaid') {
-            return `<div class="mermaid">${this.escapeHtml(token.content)}</div>`;
+            // 不进行 HTML 转义，Mermaid 需要原始 DSL
+            return `<div class="mermaid">${token.content}</div>`;
         }
 
         const escaped = this.escapeHtml(token.content);

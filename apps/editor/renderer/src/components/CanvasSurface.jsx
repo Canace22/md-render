@@ -10,7 +10,6 @@ import {
   getCanvasSourceIdFromElement,
   getViewportCenterPosition,
 } from '../utils/excalidrawCanvas.js';
-import { registerTauriCloseDrain } from '../services/desktopCloseBridge.js';
 
 const CANVAS_TITLE = '灵感白板';
 const SAVE_DEBOUNCE_MS = 420;
@@ -125,14 +124,6 @@ export default function CanvasSurface({
     onChange?.(nextCanvasState);
   }, [onChange]);
 
-  const flushSceneBeforeClose = useCallback(() => {
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    flushScene();
-  }, [flushScene]);
-
   const syncSceneFromProps = useCallback(() => {
     const api = excalidrawApiRef.current;
     if (!api) return;
@@ -200,8 +191,6 @@ export default function CanvasSurface({
       flushScene();
     };
   }, [flushScene]);
-
-  useEffect(() => registerTauriCloseDrain(flushSceneBeforeClose), [flushSceneBeforeClose]);
 
   useEffect(() => {
     syncSceneFromProps();

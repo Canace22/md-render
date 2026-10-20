@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { exportWorkspaceToJSON, parseWorkspaceFromJSON } from '../utils/workspaceIO';
 import { findNodeById } from '../store/workspaceUtils.js';
-import { saveExportFile } from '../services/desktopShellBridge.js';
 
 /**
  * 工作区操作：重命名、删除、导入、导出
@@ -47,18 +46,15 @@ export function useWorkspaceActions({
     [workspace, selectedId, deleteNode],
   );
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(() => {
     const json = exportWorkspaceToJSON(workspace, dailyWorkspace);
-    try {
-      await saveExportFile({
-        defaultName: `workspace-${new Date().toISOString().slice(0, 10)}.json`,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        content: json,
-        encoding: 'utf8',
-      });
-    } catch (error) {
-      alert(error?.message || '导出工作区失败');
-    }
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `workspace-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }, [workspace, dailyWorkspace]);
 
   const handleImport = useCallback(

@@ -171,7 +171,6 @@ export function createHost({
       const state = getState();
       const file = findNodeById(state.workspace, id);
       if (!file || file.type !== 'file') return `修改失败：未找到 id 为「${id}」的文档。`;
-      if (file.readOnly) return `修改失败：「${file.name}」来自只读项目。`;
       const { knowledgePatch, tags } = splitMetaPatch(patch);
       if (Object.keys(knowledgePatch).length) state.setFileKnowledgeMeta(file.id, knowledgePatch);
       if (Array.isArray(tags)) state.setFileTags(file.id, tags);
@@ -245,7 +244,7 @@ export function createHost({
       const aiConfiguration = getAiServerConfiguration();
       const runtimeSnapshot = hasDiagnosticsBridge()
         ? await getDiagnosticsSnapshot({ aiProxyBase: aiConfiguration.resolved })
-        : { ok: false, error: '当前运行时不支持 Electron 本机诊断。' };
+        : { ok: false, error: '当前不在 Electron 环境，无法读取本机运行快照。', aiProxy: { reachable: false } };
       const activeFile = activeFileOf(state);
       return buildAgentHealthSnapshot({
         runtimeSnapshot,
@@ -264,9 +263,7 @@ export function createHost({
         clearAiServerOverride,
         restoreAiServerOverride: saveAiServerBase,
         verify: async (nextBase) => {
-          if (!hasDiagnosticsBridge()) {
-            return { ok: false, error: '当前运行时不支持 Electron 本机诊断。' };
-          }
+          if (!hasDiagnosticsBridge()) return { aiProxy: { reachable: false } };
           return getDiagnosticsSnapshot({ aiProxyBase: nextBase });
         },
       });

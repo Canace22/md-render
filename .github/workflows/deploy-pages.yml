@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 # 每次推 main 都自动部署；也可在 Actions 页签手动触发
 # 注意：不要用 tag 触发——github-pages 环境默认只允许从默认分支部署，tag 会被保护规则拒绝
-# 桌面客户端（Tauri）发版走 release.yml 的 v* tag 流程
+# 客户端（Electron）发版仍走 release.yml 的 v* tag 流程
 on:
   push:
     branches:
