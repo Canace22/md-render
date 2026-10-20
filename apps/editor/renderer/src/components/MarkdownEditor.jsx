@@ -54,6 +54,7 @@ import {
   looksLikeMarkdownClipboardText,
   looksLikePlainTextHtml,
   isVsCodeMarkdownClipboard,
+  normalizeClipboardHtmlListSpacing,
   normalizeFrontmatterForPaste,
   normalizeMarkdown,
   tightenListSpacing,
@@ -1592,6 +1593,12 @@ function MarkdownEditor() {
         if (plainText.trim() && hasPlainTextHtml) {
           const collapsed = plainText.replace(/\n{3,}/g, '\n\n');
           pasteEditor.pasteMarkdown(collapsed);
+          return true;
+        }
+
+        const normalizedListHtml = normalizeClipboardHtmlListSpacing(htmlText);
+        if (normalizedListHtml !== htmlText) {
+          pasteEditor.pasteHTML(normalizedListHtml);
           return true;
         }
 

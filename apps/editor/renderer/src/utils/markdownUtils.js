@@ -124,12 +124,10 @@ export const isVsCodeMarkdownClipboard = (clipboardData) => {
 };
 
 const IGNORED_CLIPBOARD_ELEMENT_TAGS = new Set(['META']);
-const PLAIN_TEXT_HTML_TAGS = new Set(['BR', 'DIV', 'P', 'SPAN']);
+const PLAIN_TEXT_HTML_TAGS = new Set(['BR', 'DIV', 'P']);
 const SAFARI_PLAIN_TEXT_BREAK_CLASS = 'Apple-interchange-newline';
-const RICH_TEXT_STYLE_PATTERN = new RegExp(
-  String.raw`(?:^|;)\s*(?:background(?:-color)?|color|font(?:-style|-weight)?|text-decoration(?:-line)?|vertical-align)\s*:`,
-  'i',
-);
+const EMPTY_LIST_SPACER_BLOCK_TAGS = new Set(['P', 'DIV']);
+const EMPTY_LIST_SPACER_TAGS = new Set(['BR', 'SPAN']);
 
 const getMeaningfulChildNodes = (node) => Array.from(node?.childNodes ?? []).filter((child) => {
   if (child.nodeType === Node.ELEMENT_NODE) {
@@ -183,16 +181,45 @@ export const looksLikePlainTextHtml = (value = '') => {
   return Array.from(container.querySelectorAll('*')).every((element) => {
     if (IGNORED_CLIPBOARD_ELEMENT_TAGS.has(element.tagName)) return true;
     if (!PLAIN_TEXT_HTML_TAGS.has(element.tagName)) return false;
-    if (element.tagName === 'BR') {
-      if (element.attributes.length === 0) return true;
-      return element.attributes.length === 1
-        && element.getAttribute('class') === SAFARI_PLAIN_TEXT_BREAK_CLASS;
-    }
-
-    // 浏览器、微信等来源常用 span/class/style 包裹纯文本；仅排版属性不应阻止空行归一化。
-    // 真正影响文字语义的颜色、粗斜体、删除线等样式仍交给 BlockNote 的 HTML 粘贴保留。
-    return !RICH_TEXT_STYLE_PATTERN.test(element.getAttribute('style') ?? '');
+    if (element.attributes.length === 0) return true;
+    return element.tagName === 'BR'
+      && element.attributes.length === 1
+      && element.getAttribute('class') === SAFARI_PLAIN_TEXT_BREAK_CLASS;
   });
+};
+
+const containsOnlyEmptyListSpacing = (node) => Array.from(node?.childNodes ?? []).every((child) => {
+  if (child.nodeType === Node.TEXT_NODE) return !child.textContent?.trim();
+  if (child.nodeType !== Node.ELEMENT_NODE) return true;
+  return EMPTY_LIST_SPACER_TAGS.has(child.tagName) && containsOnlyEmptyListSpacing(child);
+});
+
+/**
+ * 移除外部富文本列表项末尾的 <p><br></p> 占位。
+ * BlockNote 会把它转成空子段落，在相邻列表项之间显示整行空白和嵌套引导线。
+ */
+export const normalizeClipboardHtmlListSpacing = (value = '') => {
+  const html = value.trim();
+  if (!html || typeof window === 'undefined') return value;
+
+  const container = window.document.createElement('div');
+  container.innerHTML = html;
+  let changed = false;
+
+  Array.from(container.querySelectorAll('li')).forEach((listItem) => {
+    let trailingElement = listItem.lastElementChild;
+    while (
+      trailingElement
+      && EMPTY_LIST_SPACER_BLOCK_TAGS.has(trailingElement.tagName)
+      && containsOnlyEmptyListSpacing(trailingElement)
+    ) {
+      trailingElement.remove();
+      trailingElement = listItem.lastElementChild;
+      changed = true;
+    }
+  });
+
+  return changed ? container.innerHTML : value;
 };
 
 /**
