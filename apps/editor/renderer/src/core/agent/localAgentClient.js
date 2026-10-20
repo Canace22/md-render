@@ -14,12 +14,6 @@ import { recordToolActivity } from './activityLog.js';
 import { formatTaskContextPacket } from './taskContext.js';
 import { getToolLabel } from './toolRegistry.js';
 import { findNodeById } from '../../store/workspaceUtils.js';
-import {
-  isTauriLocalAgentBridgeAvailable,
-  onTauriLocalAgentEvent,
-  tauriLocalAgentCancel,
-  tauriLocalAgentRun,
-} from '../../services/tauriLocalAgentBridge.js';
 
 const LABEL_TARGET_MAX = 40;
 /** 只有改动类步骤进活动记录 */
@@ -32,19 +26,8 @@ const LOCAL_AGENT_RULES = [
   '删除文件、批量改动前先说明要做什么。',
 ].join('\n');
 
-const getLocalAgentBridge = () => {
-  if (typeof window !== 'undefined' && typeof window.electronAPI?.localAgent?.run === 'function') {
-    return window.electronAPI.localAgent;
-  }
-  if (!isTauriLocalAgentBridgeAvailable()) return null;
-  return {
-    run: tauriLocalAgentRun,
-    cancel: tauriLocalAgentCancel,
-    onEvent: onTauriLocalAgentEvent,
-  };
-};
-
-export const hasLocalAgentBridge = () => Boolean(getLocalAgentBridge());
+export const hasLocalAgentBridge = () =>
+  typeof window !== 'undefined' && typeof window.electronAPI?.localAgent?.run === 'function';
 
 /** 系统提示：和 app 内 AI 同源（ENGINE_RULES + AGENT_INSTRUCTIONS），再加本地 agent 的说明 */
 export const buildLocalAgentSystemPrompt = () => [ENGINE_RULES, AGENT_INSTRUCTIONS, LOCAL_AGENT_RULES].join('\n\n');
@@ -192,13 +175,13 @@ export const runLocalAgent = async ({
 }) => {
   if (!hasLocalAgentBridge()) throw new Error('本地 agent 只在桌面版可用');
   if (signal?.aborted) throw new Error('已取消');
-  const api = getLocalAgentBridge();
+  const api = window.electronAPI.localAgent;
   const agentId = config?.agentId;
   const agentLabel = getLocalAgent(agentId)?.label ?? agentId;
   const runId = nextRunId();
   const translator = createLocalEventTranslator({ agentLabel, onEvent });
 
-  const unsubscribe = await api.onEvent((payload) => {
+  const unsubscribe = api.onEvent((payload) => {
     if (payload?.runId === runId) translator.handle(payload.event);
   });
   const onAbort = () => { api.cancel({ runId }); };

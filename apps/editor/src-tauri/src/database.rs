@@ -1,31 +1,20 @@
 use std::{
     collections::{HashMap, HashSet},
-    env, fs,
-    io::Write,
+    fs,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{
-    params,
-    types::{Type, ValueRef},
-    Connection, OpenFlags, OptionalExtension, Transaction,
-};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use serde::Serialize;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
-use tempfile::NamedTempFile;
 
 const DATABASE_FILE_NAME: &str = "knowledge.db";
-const MD_RENDER_DIR_NAME: &str = "MdRender";
-const ARTIFACTS_DIR_NAME: &str = "Artifacts";
 const MIGRATION_STATE_KEY: &str = "migrated_from_localstorage";
 const MIGRATION_STATE_VALUE: &str = "done";
-const LEGACY_IMPORT_STATE_KEY: &str = "electron_database_imported";
-const LEGACY_IMPORT_STATE_VALUE: &str = "done";
-const LEGACY_IMPORT_BACKUP_PREFIX: &str = "knowledge.before-import.";
 const BUSY_TIMEOUT_MS: u64 = 5_000;
 const MAX_WORKSPACE_DEPTH: usize = 128;
 const MAX_WORKSPACE_DOCUMENTS: usize = 50_000;
@@ -37,7 +26,6 @@ const VERSION_LIST_LIMIT: i64 = 200;
 const VERSION_SNAPSHOT_INTERVAL_MS: i64 = 5 * 60 * 1_000;
 const VERSION_RETENTION_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
 const VERSION_PRUNE_INTERVAL_MS: i64 = 60 * 60 * 1_000;
-const MAX_ARTIFACT_FILE_NAME_CHARS: usize = 100;
 
 const EDITOR_STATE_KEYS: &[&str] = &[
     "workspace_json",
@@ -474,109 +462,6 @@ fn mutation_result(result: Result<(), String>) -> MutationResponse {
     }
 }
 
-fn artifacts_directory() -> Result<PathBuf, String> {
-    let home = env::var_os("HOME")
-        .or_else(|| env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .ok_or_else(|| "无法定位用户主目录".to_string())?;
-    Ok(home
-        .join("Documents")
-        .join(MD_RENDER_DIR_NAME)
-        .join(ARTIFACTS_DIR_NAME))
-}
-
-fn sanitize_artifact_file_name(name: &str) -> String {
-    let replaced: String = name
-        .chars()
-        .map(|character| match character {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            value => value,
-        })
-        .collect();
-    let collapsed = replaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    let trimmed: String = collapsed
-        .chars()
-        .take(MAX_ARTIFACT_FILE_NAME_CHARS)
-        .collect();
-    if trimmed.is_empty() {
-        "untitled".to_string()
-    } else {
-        trimmed
-    }
-}
-
-fn collect_builtin_artifacts(node: &JsonValue, artifacts: &mut Vec<(String, String, String)>) {
-    let Some(object) = node.as_object() else {
-        return;
-    };
-    let is_file = object.get("type").and_then(JsonValue::as_str) == Some("file");
-    let id = object
-        .get("id")
-        .and_then(JsonValue::as_str)
-        .unwrap_or_default();
-    let is_disk_backed = object
-        .get("projectRootPath")
-        .and_then(JsonValue::as_str)
-        .is_some_and(|path| !path.is_empty());
-    if is_file && !is_disk_backed && !id.is_empty() {
-        let name = object
-            .get("name")
-            .and_then(JsonValue::as_str)
-            .unwrap_or("untitled");
-        let content = object
-            .get("content")
-            .and_then(JsonValue::as_str)
-            .unwrap_or_default();
-        artifacts.push((
-            id.to_string(),
-            format!("{}.md", sanitize_artifact_file_name(name)),
-            content.to_string(),
-        ));
-    }
-    if let Some(children) = object.get("children").and_then(JsonValue::as_array) {
-        children
-            .iter()
-            .for_each(|child| collect_builtin_artifacts(child, artifacts));
-    }
-}
-
-fn write_builtin_docs_to_disk(workspace: &JsonValue) -> Result<HashMap<String, String>, String> {
-    let directory = artifacts_directory()?;
-    fs::create_dir_all(&directory)
-        .map_err(|error| format!("无法创建 MdRender Artifacts 目录：{error}"))?;
-    let mut artifacts = Vec::new();
-    collect_builtin_artifacts(workspace, &mut artifacts);
-    let mut disk_paths = HashMap::new();
-    for (id, file_name, content) in artifacts {
-        let target = directory.join(file_name);
-        let mut temporary = NamedTempFile::new_in(&directory)
-            .map_err(|error| format!("无法创建文档临时文件：{error}"))?;
-        temporary
-            .write_all(content.as_bytes())
-            .map_err(|error| format!("无法写入本地文档：{error}"))?;
-        temporary
-            .flush()
-            .map_err(|error| format!("无法刷新本地文档：{error}"))?;
-        temporary
-            .as_file()
-            .sync_all()
-            .map_err(|error| format!("无法落盘本地文档：{error}"))?;
-        temporary
-            .persist(&target)
-            .map_err(|error| format!("无法替换本地文档：{}", error.error))?;
-        disk_paths.insert(id, target.to_string_lossy().into_owned());
-    }
-    Ok(disk_paths)
-}
-
-fn apply_artifact_disk_paths(documents: &mut [DocumentRow], disk_paths: &HashMap<String, String>) {
-    documents.iter_mut().for_each(|document| {
-        if let Some(path) = disk_paths.get(&document.id) {
-            document.disk_path = Some(path.clone());
-        }
-    });
-}
-
 #[tauri::command]
 pub fn db_is_migrated(state: State<'_, DatabaseState>) -> Result<bool, String> {
     let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
@@ -595,40 +480,6 @@ pub fn db_is_migrated(state: State<'_, DatabaseState>) -> Result<bool, String> {
         )
         .map_err(db_error)?;
     Ok(has_existing_state)
-}
-
-#[tauri::command]
-pub fn db_has_legacy_import(state: State<'_, DatabaseState>) -> Result<bool, String> {
-    let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
-    let connection = open_read_connection(&state.path)?;
-    let has_marker = connection
-        .query_row(
-            "SELECT EXISTS(
-               SELECT 1 FROM app_state WHERE key = ?1 AND value = ?2
-             )",
-            params![LEGACY_IMPORT_STATE_KEY, LEGACY_IMPORT_STATE_VALUE],
-            |row| row.get::<_, bool>(0),
-        )
-        .map_err(db_error)?;
-    if has_marker {
-        return Ok(true);
-    }
-
-    let parent = state
-        .path
-        .parent()
-        .ok_or_else(|| "Tauri 数据库目录无效。".to_string())?;
-    let entries =
-        fs::read_dir(parent).map_err(|error| format!("无法读取 Tauri 数据库目录：{error}"))?;
-    for entry in entries {
-        let entry = entry.map_err(|error| format!("无法读取 Tauri 数据库备份：{error}"))?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with(LEGACY_IMPORT_BACKUP_PREFIX) && name.ends_with(".db") {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 #[tauri::command]
@@ -678,9 +529,7 @@ pub fn db_migrate(
     let result = (|| -> Result<(), String> {
         let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
         let workspace = workspace_from_state_map(state_map.as_ref())?;
-        let mut documents = flatten_workspace(&workspace)?;
-        let disk_paths = write_builtin_docs_to_disk(&workspace)?;
-        apply_artifact_disk_paths(&mut documents, &disk_paths);
+        let documents = flatten_workspace(&workspace)?;
         let mut connection = open_write_connection(&state.path)?;
         let transaction = connection.transaction().map_err(db_error)?;
         if let Some(values) = state_map.as_ref() {
@@ -708,11 +557,7 @@ pub fn db_save(
     let result = (|| -> Result<(), String> {
         let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
         let workspace = workspace_from_save_inputs(state_map.as_ref(), workspace_json.as_deref())?;
-        let mut documents = workspace.as_ref().map(flatten_workspace).transpose()?;
-        if let (Some(workspace), Some(documents)) = (workspace.as_ref(), documents.as_mut()) {
-            let disk_paths = write_builtin_docs_to_disk(workspace)?;
-            apply_artifact_disk_paths(documents, &disk_paths);
-        }
+        let documents = workspace.as_ref().map(flatten_workspace).transpose()?;
         let encoded_workspace = workspace
             .as_ref()
             .map(serde_json::to_string)
@@ -939,38 +784,7 @@ fn json_integer(node: &JsonMap<String, JsonValue>, key: &str) -> Option<i64> {
         value
             .as_i64()
             .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
-            .or_else(|| value.as_f64().and_then(integer_from_f64))
     })
-}
-
-fn integer_from_f64(value: f64) -> Option<i64> {
-    if value.is_finite() && value >= i64::MIN as f64 && value < i64::MAX as f64 {
-        Some(value.trunc() as i64)
-    } else {
-        None
-    }
-}
-
-fn legacy_optional_integer(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<Option<i64>> {
-    match row.get_ref(index)? {
-        ValueRef::Null => Ok(None),
-        ValueRef::Integer(value) => Ok(Some(value)),
-        ValueRef::Real(value) => integer_from_f64(value).map(Some).ok_or_else(|| {
-            rusqlite::Error::FromSqlConversionFailure(
-                index,
-                Type::Real,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "时间字段超出整数范围",
-                )),
-            )
-        }),
-        value => Err(rusqlite::Error::InvalidColumnType(
-            index,
-            row.as_ref().column_name(index).unwrap_or("").to_string(),
-            value.data_type(),
-        )),
-    }
 }
 
 fn json_non_empty_array(node: &JsonMap<String, JsonValue>, key: &str) -> Option<String> {
@@ -1664,13 +1478,6 @@ fn import_legacy_database(
         if fts_count != imported_counts.documents {
             return Err("导入后的全文索引与文档数不一致，已取消切换。".to_string());
         }
-        candidate
-            .execute(
-                "INSERT INTO app_state (key, value) VALUES (?1, ?2)
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                params![LEGACY_IMPORT_STATE_KEY, LEGACY_IMPORT_STATE_VALUE],
-            )
-            .map_err(db_error)?;
         let candidate_quick_check = quick_check(&candidate)?;
         if candidate_quick_check != "ok" {
             return Err(format!("导入库完整性检查失败：{candidate_quick_check}"));
@@ -1970,8 +1777,8 @@ fn copy_documents(
                 row.get::<_, Option<String>>(7)?,
                 row.get::<_, Option<String>>(8)?,
                 row.get::<_, Option<String>>(9)?,
-                legacy_optional_integer(row, 10)?,
-                legacy_optional_integer(row, 11)?,
+                row.get::<_, Option<i64>>(10)?,
+                row.get::<_, Option<i64>>(11)?,
                 row.get::<_, Option<String>>(12)?,
                 row.get::<_, Option<String>>(13)?,
             ))
@@ -2056,7 +1863,7 @@ fn copy_versions(
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, Option<String>>(2)?,
-                legacy_optional_integer(row, 3)?,
+                row.get::<_, Option<i64>>(3)?,
             ))
         })
         .map_err(db_error)?;
@@ -2230,112 +2037,4 @@ fn remove_sqlite_files(path: &Path) -> Result<(), String> {
         fs::remove_file(path).map_err(|error| format!("无法清理数据库临时文件：{error}"))?;
     }
     remove_sqlite_sidecars(path)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use tempfile::tempdir;
-
-    #[test]
-    fn imports_real_legacy_timestamps_as_integer_milliseconds() {
-        const LEGACY_TIMESTAMP: f64 = 1_780_557_027_766.75;
-        const EXPECTED_TIMESTAMP: i64 = 1_780_557_027_766;
-
-        let temp_dir = tempdir().unwrap();
-        let source_path = temp_dir.path().join("electron.db");
-        let destination_path = temp_dir.path().join("tauri.db");
-
-        {
-            let source = Connection::open(&source_path).unwrap();
-            source.execute_batch(SCHEMA).unwrap();
-            let workspace = json!({
-                "id": "root",
-                "children": [{
-                    "id": "legacy-doc",
-                    "type": "file",
-                    "name": "旧稿",
-                    "createdAt": LEGACY_TIMESTAMP,
-                    "updatedAt": LEGACY_TIMESTAMP
-                }]
-            });
-            source
-                .execute(
-                    "INSERT INTO app_state (key, value) VALUES ('workspace_json', ?1)",
-                    [workspace.to_string()],
-                )
-                .unwrap();
-            source
-                .execute(
-                    "INSERT INTO documents (
-                       id, type, name, node_type, created_at, updated_at
-                     ) VALUES (?1, 'file', ?2, 'document', ?3, ?3)",
-                    params!["legacy-doc", "旧稿", LEGACY_TIMESTAMP],
-                )
-                .unwrap();
-            source
-                .execute(
-                    "INSERT INTO versions (document_id, content, created_at)
-                     VALUES (?1, ?2, ?3)",
-                    params!["legacy-doc", "旧版本", LEGACY_TIMESTAMP],
-                )
-                .unwrap();
-
-            let storage_types: (String, String, String) = source
-                .query_row(
-                    "SELECT typeof(documents.created_at), typeof(documents.updated_at),
-                            (SELECT typeof(created_at) FROM versions LIMIT 1)
-                     FROM documents WHERE id = 'legacy-doc'",
-                    [],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                )
-                .unwrap();
-            assert_eq!(storage_types, ("real".into(), "real".into(), "real".into()));
-        }
-
-        initialize_schema(&destination_path).unwrap();
-        let (counts, _) = import_legacy_database(&source_path, &destination_path).unwrap();
-        assert_eq!(counts.documents, 1);
-        assert_eq!(counts.versions, 1);
-
-        let imported = Connection::open(&destination_path).unwrap();
-        let document_timestamps: (i64, i64, String, String) = imported
-            .query_row(
-                "SELECT created_at, updated_at, typeof(created_at), typeof(updated_at)
-                 FROM documents WHERE id = 'legacy-doc'",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .unwrap();
-        assert_eq!(
-            document_timestamps,
-            (
-                EXPECTED_TIMESTAMP,
-                EXPECTED_TIMESTAMP,
-                "integer".into(),
-                "integer".into()
-            )
-        );
-        let version_timestamp: (i64, String) = imported
-            .query_row(
-                "SELECT created_at, typeof(created_at) FROM versions LIMIT 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .unwrap();
-        assert_eq!(version_timestamp, (EXPECTED_TIMESTAMP, "integer".into()));
-
-        let workspace_json: String = imported
-            .query_row(
-                "SELECT value FROM app_state WHERE key = 'workspace_json'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let workspace: JsonValue = serde_json::from_str(&workspace_json).unwrap();
-        let documents = flatten_workspace(&workspace).unwrap();
-        assert_eq!(documents[0].created_at, Some(EXPECTED_TIMESTAMP));
-        assert_eq!(documents[0].updated_at, Some(EXPECTED_TIMESTAMP));
-    }
 }

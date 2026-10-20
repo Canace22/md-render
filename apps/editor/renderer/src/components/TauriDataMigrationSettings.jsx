@@ -13,7 +13,6 @@ import {
   pauseDesktopStatePersistence,
   resumeDesktopStatePersistence,
 } from '../store/useEditorStore.js';
-import { markLegacyImportReloadPending } from '../hooks/useLegacyDatabaseImport.js';
 
 export default function TauriDataMigrationSettings() {
   const [importing, setImporting] = useState(false);
@@ -47,7 +46,6 @@ export default function TauriDataMigrationSettings() {
       }
       shouldRestorePending = false;
       keepBarrierUntilReload = true;
-      markLegacyImportReloadPending();
       window.alert(
         'Electron 数据导入完成。\n\n'
         + `已用 Electron 数据替换当前 Tauri 数据，共 ${result.documents ?? 0} 篇文档和 ${result.versions ?? 0} 条历史版本。\n\n`

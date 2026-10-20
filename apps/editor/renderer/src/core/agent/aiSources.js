@@ -13,11 +13,6 @@ import {
   isRunnableAgent,
 } from '@shared/localAgents.js';
 import { AI_PROVIDERS, DEFAULT_PROVIDER_ID } from './aiProviders.js';
-import {
-  isTauriLocalAgentBridgeAvailable,
-  tauriLocalAgentDetect,
-  tauriLocalAgentModels,
-} from '../../services/tauriLocalAgentBridge.js';
 
 const ACTIVE_SOURCE_KEY = 'md-renderer-ai-source';
 const SAFE_MODE_KEY = 'md-renderer-local-agent-safe-mode';
@@ -94,21 +89,13 @@ let detectedAgents = [];
 let detectPromise = null;
 
 export const hasLocalAgentDetection = () =>
-  (typeof window !== 'undefined' && typeof window.electronAPI?.localAgent?.detect === 'function')
-  || isTauriLocalAgentBridgeAvailable();
-
-const detectLocalAgents = (payload) => {
-  if (typeof window !== 'undefined' && typeof window.electronAPI?.localAgent?.detect === 'function') {
-    return window.electronAPI.localAgent.detect(payload);
-  }
-  return tauriLocalAgentDetect(payload);
-};
+  typeof window !== 'undefined' && typeof window.electronAPI?.localAgent?.detect === 'function';
 
 /** 检测本机 agent；refresh 时重新检测（主进程也会重读 shell 环境） */
 export const loadLocalAgents = async ({ refresh = false } = {}) => {
   if (!hasLocalAgentDetection()) return [];
   if (detectPromise && !refresh) return detectPromise;
-  detectPromise = detectLocalAgents({ refresh })
+  detectPromise = window.electronAPI.localAgent.detect({ refresh })
     .then((res) => {
       detectedAgents = res?.ok && Array.isArray(res.agents) ? res.agents : [];
       return detectedAgents;
@@ -196,11 +183,9 @@ export const loadLocalAgentModelOptions = async (agentId) => {
   let efforts = agent?.effortLevels ?? [];
   let defaultEffort = '';
   let error = '';
-  if (hasLocalAgentDetection()) {
+  if (typeof window !== 'undefined' && window.electronAPI?.localAgent?.models) {
     try {
-      const res = typeof window !== 'undefined' && window.electronAPI?.localAgent?.models
-        ? await window.electronAPI.localAgent.models({ id: agentId })
-        : await tauriLocalAgentModels({ id: agentId });
+      const res = await window.electronAPI.localAgent.models({ id: agentId });
       if (res?.ok) {
         models = res.models?.length ? res.models : models;
         defaultModel = res.defaultModel ?? '';

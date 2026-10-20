@@ -125,9 +125,7 @@ import {
   getDocumentStatus,
 } from '../store/creationUtils.js';
 import {
-  collectRestorableLocalProjectSnapshots,
   flushDesktopStatePersistence,
-  getStoredLocalProjectIdentity,
   useEditorStore,
   useSelectedFile,
 } from '../store/useEditorStore.js';
@@ -177,9 +175,7 @@ import {
   openLocalProject,
   readLocalProjectDisk,
   readLocalProjectFileContent,
-  rememberLocalProjectAuthorization,
   revealLocalProjectEntry,
-  restoreLocalProjectAuthorizations,
   revokeLocalProjectAccess,
   renameLocalProjectEntryOnDisk,
   saveLocalProjectFile,
@@ -196,7 +192,6 @@ const JsonTool = lazy(() => import('@md-render/json-tool').then((module) => ({
 // publishing/json-tool/search/graph/settings
 const DOC_TAB_SURFACES = new Set(['paper', 'folder']);
 const LOCAL_PROJECT_REAUTHORIZATION_REQUIRED = 'reauthorization-required';
-const STABLE_LOCAL_PROJECT_IDENTITY_PREFIX = 'local-project:v1:';
 
 const needsLocalProjectReauthorization = (node) => (
   node?.access === LOCAL_PROJECT_REAUTHORIZATION_REQUIRED
@@ -213,37 +208,10 @@ const findLocalProjectRootByPath = (node, projectRootPath) => {
   return null;
 };
 
-const findReauthorizationRootForNode = (node, targetId, currentRoot = null) => {
-  if (!node || !targetId) return null;
-  const nextRoot = node.type === 'folder'
-    && needsLocalProjectReauthorization(node)
-    && node.projectRootPath
-    ? node
-    : currentRoot;
-  if (node.id === targetId) return nextRoot;
-  if (!Array.isArray(node.children)) return null;
-  for (const child of node.children) {
-    const match = findReauthorizationRootForNode(child, targetId, nextRoot);
-    if (match) return match;
-  }
-  return null;
-};
-
-const collectLocalProjectRelativePaths = (
-  node,
-  paths = new Set(),
-  rootRelativePath = node?.relativePath ?? '',
-  isRoot = true,
-) => {
+const collectLocalProjectRelativePaths = (node, paths = new Set()) => {
   if (!node) return paths;
-  const relativePath = String(node.relativePath ?? '');
-  const normalizedPath = rootRelativePath && relativePath.startsWith(`${rootRelativePath}/`)
-    ? relativePath.slice(rootRelativePath.length + 1)
-    : relativePath;
-  if (!isRoot && normalizedPath) paths.add(`${node.type}:${normalizedPath}`);
-  node.children?.forEach?.((child) => (
-    collectLocalProjectRelativePaths(child, paths, rootRelativePath, false)
-  ));
+  if (node.relativePath) paths.add(`${node.type}:${node.relativePath}`);
+  node.children?.forEach?.((child) => collectLocalProjectRelativePaths(child, paths));
   return paths;
 };
 
@@ -259,23 +227,6 @@ const matchesLocalProjectSnapshot = (snapshot, selectedWorkspace) => {
   return commonCount >= 3
     && commonCount / snapshotPaths.size >= 0.75
     && commonCount / selectedPaths.size >= 0.5;
-};
-
-const getReauthorizedProjectIdentity = (snapshot) => {
-  return getStoredLocalProjectIdentity(snapshot)
-    || `${STABLE_LOCAL_PROJECT_IDENTITY_PREFIX}${globalThis.crypto.randomUUID()}`;
-};
-
-const getLegacyWorkspaceReauthorizationSnapshots = (workspace, targetSnapshot) => {
-  if (!targetSnapshot || !needsLocalProjectReauthorization(targetSnapshot)) return [];
-  const projectRootPath = targetSnapshot.projectRootPath;
-  const workspaceSnapshots = (workspace?.children ?? []).filter((node) => (
-    node?.type === 'folder'
-    && needsLocalProjectReauthorization(node)
-    && node.projectRootPath === projectRootPath
-    && String(node.relativePath ?? '').startsWith('Projects/')
-  ));
-  return workspaceSnapshots.length > 0 ? workspaceSnapshots : [targetSnapshot];
 };
 
 const CODE_BLOCK_LANGUAGES = {
@@ -353,7 +304,6 @@ const BLOCKNOTE_OPTIONS = {
 const mediaContextFromFile = (file) => ({
   projectRootPath: file?.projectRootPath || '',
   noteRelativePath: file?.relativePath || '',
-  sharedAssetsMountId: file?.sharedAssetsMountId || '',
 });
 
 const contentToDiskMarkdown = (content, mediaContext) => {
@@ -567,10 +517,6 @@ function MarkdownEditor() {
   const selectedFile = useSelectedFile();
   const selectedReadOnly = Boolean(selectedFile?.readOnly);
   const selectedNode = useMemo(() => findNodeById(workspace, selectedId), [workspace, selectedId]);
-  const selectedReauthorizationRoot = useMemo(
-    () => findReauthorizationRootForNode(workspace, selectedId),
-    [workspace, selectedId],
-  );
   const selectedFolder = selectedNode?.type === 'folder' ? selectedNode : null;
   const selectedNeedsLocalProjectReauthorization = needsLocalProjectReauthorization(selectedNode);
   // 标题下方元信息里的「所属目录」
@@ -762,7 +708,6 @@ function MarkdownEditor() {
   const projectSaveQueuesRef = useRef(new Map());
   const projectPathChangesRef = useRef(new Map());
   const projectPathChangeDirtyRef = useRef(new Set());
-  const restoredProjectAuthorizationsRef = useRef(false);
   const activeEditorRef = useRef(null);
   const lastContentSurfaceRef = useRef(surface);
   const previousSurfaceRef = useRef(null);
@@ -1326,7 +1271,6 @@ function MarkdownEditor() {
   const editorReloadToken = useEditorStore((state) => state.editorReloadToken);
   const externalContentRequests = useEditorStore((state) => state.externalContentRequests);
   const applyContentFromOutside = useEditorStore((state) => state.applyContentFromOutside);
-  const selectedMediaContextKey = JSON.stringify(mediaContextFromFile(selectedFile));
   // agent 运行时（MCP 控制桥、提案收件箱）不依赖 AI 面板是否打开
   useAgentRuntime({ dialogs: AGENT_HOST_DIALOGS });
   // 数据层文件化：迁移后 Daily / 白板 / 编辑部记忆以内容库文件为准
@@ -1405,7 +1349,7 @@ function MarkdownEditor() {
     const parserEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
     const parsedBlocks = parserEditor.tryParseMarkdownToBlocks(sourceMarkdown);
     return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
-  }, [selectedId, selectedMediaContextKey, contentResetKey, editorReloadToken]);
+  }, [selectedId, contentResetKey, editorReloadToken]);
 
   const { uploadFile } = useEditorImageUpload({
     localProjectSupported,
@@ -1605,7 +1549,7 @@ function MarkdownEditor() {
         return useDefaultPaste();
       },
     },
-    [selectedId, selectedMediaContextKey, contentResetKey, editorReloadToken],
+    [selectedId, contentResetKey, editorReloadToken],
   );
   const outlinePage = useOutlinePage(editor, selectedFile);
   const scriptPage = useScriptPage(editor, selectedFile);
@@ -2263,21 +2207,7 @@ function MarkdownEditor() {
     }
     let closeLoading = null;
     try {
-      const currentWorkspace = useEditorStore.getState().workspace;
-      const replacementSnapshot = replaceNodeId
-        ? findNodeById(currentWorkspace, replaceNodeId)
-        : null;
-      const replacementSnapshots = getLegacyWorkspaceReauthorizationSnapshots(
-        currentWorkspace,
-        replacementSnapshot,
-      );
-      const result = await openLocalProject({
-        access,
-        allowLegacyProjectPath: Boolean(replaceNodeId),
-        legacyProjectPaths: replacementSnapshots
-          .map((snapshot) => snapshot.relativePath)
-          .filter(Boolean),
-      });
+      const result = await openLocalProject({ access });
       if (!result || result.canceled) return;
       const projects = Array.isArray(result.projects)
         ? result.projects
@@ -2285,11 +2215,11 @@ function MarkdownEditor() {
       const validProjects = projects.filter((project) => project?.workspace);
       if (validProjects.length === 0) return;
       closeLoading = message.loading('正在打开本地项目…', 0);
-      const replacementByRelativePath = new Map(
-        replacementSnapshots.map((snapshot) => [snapshot.relativePath, snapshot]),
-      );
-      const canReplaceSnapshot = replacementSnapshots.length > 0;
-      if (canReplaceSnapshot && validProjects.some((project) => project.complete === false)) {
+      const replacementSnapshot = replaceNodeId
+        ? findNodeById(useEditorStore.getState().workspace, replaceNodeId)
+        : null;
+      const canReplaceSnapshot = needsLocalProjectReauthorization(replacementSnapshot);
+      if (canReplaceSnapshot && validProjects[0]?.complete === false) {
         await Promise.all(validProjects.map(async (project) => {
           try {
             await revokeLocalProjectAccess(project.mountId);
@@ -2299,58 +2229,24 @@ function MarkdownEditor() {
         }));
         throw new Error('目录扫描不完整，旧快照已保留。请检查权限、超大文件或文件数量后重试。');
       }
-      const projectPlans = validProjects.map((project) => {
-        const snapshot = project.legacyRelativePath
-          ? replacementByRelativePath.get(project.legacyRelativePath)
-          : (validProjects.length === 1 ? replacementSnapshot : null);
-        return {
-          project,
-          snapshot,
-          replacesSnapshot: Boolean(
-            snapshot
-            && (project.legacyRelativePath || matchesLocalProjectSnapshot(snapshot, project.workspace)),
-          ),
-        };
+      const snapshotMatches = canReplaceSnapshot && matchesLocalProjectSnapshot(
+        replacementSnapshot,
+        validProjects[0]?.workspace,
+      );
+      validProjects.forEach((project, index) => {
+        const replacesSnapshot = snapshotMatches && index === 0;
+        openLocalProjectWorkspace(project.workspace, project.projectRootPath, {
+          projectMountId: project.mountId,
+          readOnly: project.access === 'read-only',
+          access: project.access,
+          projectRevision: project.revision,
+          ...(replacesSnapshot ? {
+            replaceNodeId,
+            persistenceSnapshot: replacementSnapshot,
+            projectIdentity: replacementSnapshot.projectRootPath,
+          } : {}),
+        });
       });
-      const mismatchedPlans = projectPlans.filter(({ snapshot, replacesSnapshot }) => (
-        snapshot && !replacesSnapshot
-      ));
-      await Promise.all(mismatchedPlans.map(async ({ project }) => {
-        try {
-          await revokeLocalProjectAccess(project.mountId);
-        } catch (error) {
-          console.warn('[local-project] 撤销不匹配的重授权会话失败:', error);
-        }
-      }));
-      let authorizationPersistenceFailures = 0;
-      for (const { project, snapshot, replacesSnapshot } of projectPlans
-        .filter((plan) => !plan.snapshot || plan.replacesSnapshot)) {
-        const mountedProject = openLocalProjectWorkspace(
-          project.workspace,
-          project.projectRootPath,
-          {
-            projectMountId: project.mountId,
-            sharedAssetsMountId: project.sharedAssetsMountId,
-            readOnly: project.access === 'read-only',
-            access: project.access,
-            projectRevision: project.revision,
-            ...(replacesSnapshot ? {
-              replaceNodeId: snapshot.id,
-              persistenceSnapshot: snapshot,
-              projectIdentity: getReauthorizedProjectIdentity(snapshot),
-            } : {}),
-          },
-        );
-        try {
-          await rememberLocalProjectAuthorization(
-            project.mountId,
-            mountedProject?.projectIdentity,
-          );
-        } catch (error) {
-          authorizationPersistenceFailures += 1;
-          console.warn('[local-project] 保存目录授权记录失败:', error);
-        }
-      }
       setContentResetKey((k) => k + 1);
       const readOnlyCount = validProjects.filter((project) => project.access === 'read-only').length;
       const skippedCount = validProjects.reduce(
@@ -2359,13 +2255,10 @@ function MarkdownEditor() {
       );
       const skippedText = skippedCount > 0 ? `，跳过 ${skippedCount} 个不支持或受限条目` : '';
       const incompleteCount = validProjects.filter((project) => project.complete === false).length;
-      const replacedCount = projectPlans.filter((plan) => plan.replacesSnapshot).length;
-      if (authorizationPersistenceFailures > 0) {
-        message.warning(`已打开目录，但 ${authorizationPersistenceFailures} 个授权未能记住，下次启动仍需重新选择。`);
-      } else if (mismatchedPlans.length > 0) {
-        message.warning(`${mismatchedPlans.length} 个目录与旧快照不匹配，已保留旧快照，未覆盖。`);
+      if (canReplaceSnapshot && !snapshotMatches) {
+        message.warning('所选目录与旧快照不匹配，已作为新项目打开，旧快照保留不变。');
       } else if (replaceNodeId) {
-        message.success(`已重新授权 ${replacedCount} 个本地目录${skippedText}`);
+        message.success(`已重新授权 ${validProjects.length} 个本地目录${skippedText}`);
       } else if (incompleteCount > 0) {
         message.warning(`已打开目录，但 ${incompleteCount} 个目录扫描不完整，自动刷新不会覆盖当前快照${skippedText}`);
       } else {
@@ -2385,7 +2278,7 @@ function MarkdownEditor() {
 
   const handleReauthorizeLocalProject = useCallback(async (nodeId, access = 'read-write') => {
     const node = findNodeById(workspace, nodeId);
-    if (node?.type !== 'folder' || !needsLocalProjectReauthorization(node)) return;
+    if (!node?.localProjectRoot || !needsLocalProjectReauthorization(node)) return;
     await handleOpenLocalProject(access, nodeId);
   }, [handleOpenLocalProject, workspace]);
 
@@ -2719,57 +2612,6 @@ function MarkdownEditor() {
       setDiskSavePending(fileId, false);
     });
   }, [diskSaveCancelSeq, diskSaveCancelFileIds, setDiskSavePending]);
-
-  useEffect(() => {
-    if (!canOpenLocalProject) return undefined;
-    let disposed = false;
-
-    const restoreRememberedProjects = async () => {
-      if (disposed || restoredProjectAuthorizationsRef.current) return;
-      restoredProjectAuthorizationsRef.current = true;
-      const currentWorkspace = useEditorStore.getState().workspace;
-      const snapshots = collectRestorableLocalProjectSnapshots(currentWorkspace);
-      const snapshotByIdentity = new Map(
-        snapshots.map((snapshot) => [getReauthorizedProjectIdentity(snapshot), snapshot]),
-      );
-      if (snapshotByIdentity.size === 0) return;
-
-      try {
-        const result = await restoreLocalProjectAuthorizations([...snapshotByIdentity.keys()]);
-        for (const project of result?.projects ?? []) {
-          if (disposed) return;
-          const snapshot = snapshotByIdentity.get(project.projectIdentity);
-          const canRestore = snapshot
-            && project.complete !== false
-            && matchesLocalProjectSnapshot(snapshot, project.workspace);
-          if (!canRestore) {
-            await revokeLocalProjectAccess(project.mountId);
-            continue;
-          }
-          openLocalProjectWorkspace(project.workspace, project.projectRootPath, {
-            projectMountId: project.mountId,
-            sharedAssetsMountId: project.sharedAssetsMountId,
-            readOnly: project.access === 'read-only',
-            access: project.access,
-            projectRevision: project.revision,
-            replaceNodeId: snapshot.id,
-            persistenceSnapshot: snapshot,
-            projectIdentity: project.projectIdentity,
-            preserveSelection: true,
-          });
-        }
-      } catch (error) {
-        console.warn('[local-project] 恢复已记住的目录授权失败:', error);
-      }
-    };
-
-    const unsubscribe = useEditorStore.persist.onFinishHydration(restoreRememberedProjects);
-    if (useEditorStore.persist.hasHydrated()) restoreRememberedProjects();
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  }, [canOpenLocalProject, openLocalProjectWorkspace]);
 
   useEffect(() => {
     if (!canUseDefaultWorkspace) return undefined;
@@ -3164,8 +3006,6 @@ function MarkdownEditor() {
             folder={selectedFolder}
             children={folderChildren}
             onSelectItem={selectNode}
-            needsReauthorization={selectedNeedsLocalProjectReauthorization}
-            onReauthorize={() => handleReauthorizeLocalProject(selectedFolder.id, 'read-write')}
             showSyncButton={canManualSyncLocalProject}
             syncLoading={manualSyncLoading}
             onSyncFromDisk={handleManualSyncLocalProject}
@@ -3288,24 +3128,6 @@ function MarkdownEditor() {
                 <div className="paper-surface" data-testid="paper-surface">
                   <DiffOverlay />
                   <ExternalChangeBanner />
-                  {selectedNeedsLocalProjectReauthorization && selectedReauthorizationRoot && (
-                    <div className="external-change-banner" role="status">
-                      <span>
-                        这篇文档是本地目录快照。重新授权原目录后，图片等本地素材才能显示。
-                      </span>
-                      <span className="external-change-banner__actions">
-                        <button
-                          type="button"
-                          onClick={() => handleReauthorizeLocalProject(
-                            selectedReauthorizationRoot.id,
-                            'read-write',
-                          )}
-                        >
-                          重新授权目录
-                        </button>
-                      </span>
-                    </div>
-                  )}
                   {/* 标题下沉进纸面，与正文同列 */}
                   <DocHeader
                     selectedFile={selectedFile}

@@ -1,6 +1,6 @@
 # md-render 桌面版发布流程
 
-正式桌面包使用 Tauri 2。推送 `v*` tag 后，`.github/workflows/release.yml` 会构建并发布 macOS Universal DMG 和 Windows x64 Inno Setup；签名凭证齐全时同时完成签名与公证，否则仍发布并在安装说明中提示系统拦截风险。Electron 只保留手动回退包，不进入正式 Release。
+正式桌面包使用 Tauri 2。推送 `v*` tag 后，`.github/workflows/release.yml` 会构建并发布 macOS Universal DMG 和 Windows x64 Inno Setup；签名凭证齐全时同时完成签名与公证，否则发布明确标记的未签名包。Electron 只保留手动回退包，不进入正式 Release。
 
 脚本路径：`scripts/release-tag.sh`
 
@@ -13,13 +13,13 @@ npm 命令：`pnpm release:tag`
 | 版本号 | 根目录和 `apps/editor/package.json` 必须一致 |
 | Tag | `v` + 版本号，如 `v1.0.21`；使用 annotated tag |
 | 发布提交 | tag 指向的 commit 必须已经进入 `origin/main` |
-| macOS | `MD-Render-<version>.dmg`，同时支持 Apple Silicon 和 Intel |
-| Windows | `MD-Render-Setup-<version>.exe`，使用 Inno Setup 安装到 `Program Files` |
-| 更新方式 | 应用内提示新版本并打开对应 Release；下载和安装仍手动完成 |
+| macOS | `MD-Render-<version>-macOS-universal[-unsigned].dmg`，同时支持 Apple Silicon 和 Intel |
+| Windows | `MD-Render-<version>-windows-x64[-unsigned]-setup.exe`，使用 Inno Setup 安装到 `Program Files` |
+| 更新方式 | 当前从 Releases 手动下载安装；尚未接入 Tauri updater |
 
 ## 2. 仓库一次性配置
 
-签名是可选增强。某个平台的 secrets 全部齐全时，该平台走签名和校验路径；任一项缺失时，该平台改为发布未签名包。签名状态不写入文件名，系统拦截处理固定写在 Release 安装说明中。
+签名是可选增强。某个平台的 secrets 全部齐全时，该平台走签名和校验路径；任一项缺失时，该平台改为发布文件名带 `-unsigned` 的未签名包。
 
 | 名称 | 用途 |
 |---|---|
@@ -83,13 +83,11 @@ pnpm release:tag
 4. Windows 始终构建 Tauri exe 和 Inno 安装包，并完成安装、启动、卸载冒烟检查；PFX secrets 齐全时额外验证应用、安装包、安装后应用和卸载器签名。
 5. 生成两端 SHA-256 校验文件，全部成功后才创建 GitHub Release。
 
-任何平台的构建或必做检查失败，都不会创建只含单平台文件的 Release。未签名不再视为构建失败，但 Release 必须保留 macOS Gatekeeper 和 Windows SmartScreen 的处理说明。
+任何平台的构建或必做检查失败，都不会创建只含单平台文件的 Release。未签名不再视为构建失败，但必须在文件名和 Release 说明中标记。
 
-## 6. Release 说明与升级文档
+## 6. 发布后的升级说明
 
-Release 固定保留“下载 / macOS 安装 / Windows 安装”三段和网页版入口，版本差异由 GitHub 自动追加到 `What's Changed`。不要为每个版本重写整篇 Release 说明。
-
-第一次从 Electron 版迁移的长期说明维护在 README，包含：
+第一次从 Electron 版迁移时，Release 说明必须保留这些步骤：
 
 1. 完全退出旧 Electron 版。
 2. 手动安装 Tauri 新版。已有 Tauri 预览数据会沿用，不需要重复导入。
@@ -99,7 +97,7 @@ Release 固定保留“下载 / macOS 安装 / Windows 安装”三段和网页�
 
 Electron 旧库通常在 macOS 的 `~/Library/Application Support/md-render/knowledge.db` 或 Windows 的 `%APPDATA%\md-render\knowledge.db`；找不到时再检查同级 `@md-render/editor` 和 `MD Render` 目录。
 
-旧 Electron updater 无法跨框架完成首次安装。Tauri 正式包会检查 GitHub 最新正式版并显示提示，但当前 Inno 安装包没有接入自动安装，所以用户仍从提示打开的 Release 页手动下载安装。PDF、本机 MCP、“数据文件化”和自定义 skill 编辑等边界继续维护在 README 和 CHANGELOG，不每版复制到 Release 正文。
+旧 Electron updater 无法跨框架完成首次安装。当前 Inno 安装包也没有接入 Tauri updater，所以后续版本暂时继续从 Releases 手动安装。PDF、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑未迁移时，也必须继续写在 Release 已知边界中。
 
 ## 7. Electron 回退
 

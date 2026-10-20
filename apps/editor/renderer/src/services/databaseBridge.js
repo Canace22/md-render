@@ -27,11 +27,6 @@ export const databaseIsMigrated = () => {
   return invokeTauri('db_is_migrated');
 };
 
-export const databaseHasLegacyImport = () => {
-  if (getDesktopRuntimeKind() !== 'tauri') return Promise.resolve(false);
-  return invokeTauri('db_has_legacy_import');
-};
-
 export const databaseMigrate = (stateMap) => {
   const electronDb = getElectronDb();
   const operation = electronDb

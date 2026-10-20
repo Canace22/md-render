@@ -1,9 +1,7 @@
 mod ai_proxy;
 mod database;
 mod desktop_shell;
-mod local_agent;
 mod local_project;
-mod update;
 
 use ai_proxy::{
     tauri_ai_abort_chat_stream, tauri_ai_chat, tauri_ai_chat_stream, tauri_ai_exec_tool,
@@ -11,26 +9,20 @@ use ai_proxy::{
     tauri_ai_search_knowledge, AiProxyState,
 };
 use database::{
-    db_get_backlinks, db_get_graph, db_get_version_content, db_get_versions, db_has_legacy_import,
+    db_get_backlinks, db_get_graph, db_get_version_content, db_get_versions,
     db_import_legacy_database, db_is_migrated, db_load, db_migrate, db_save,
     db_save_version_snapshot, db_search, DatabaseState,
 };
 use desktop_shell::{open_external_url, save_export_file};
-use local_agent::{
-    tauri_local_agent_cancel, tauri_local_agent_detect, tauri_local_agent_models,
-    tauri_local_agent_run, LocalAgentState,
-};
 use local_project::{
     create_local_project_file, create_local_project_folder, delete_local_project_entry,
     get_local_project_revision, local_media_protocol_response, read_local_project_file,
-    read_read_only_project_file, remember_local_project_authorization, rename_local_project_entry,
-    restore_local_project_authorizations, reveal_local_project_entry, revoke_local_project,
-    revoke_read_only_project, save_binary_asset, save_local_project_file,
+    read_read_only_project_file, rename_local_project_entry, reveal_local_project_entry,
+    revoke_local_project, revoke_read_only_project, save_binary_asset, save_local_project_file,
     save_local_project_metadata, scan_local_project, scan_read_only_project,
     select_read_only_projects, select_read_write_projects, LocalProjectRegistry,
 };
 use tauri::Manager;
-use update::check_for_update;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +64,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AiProxyState::default())
-        .manage(LocalAgentState::default())
         .manage(LocalProjectRegistry::default())
         .register_asynchronous_uri_scheme_protocol("local-media", |context, request, responder| {
             let app_handle = context.app_handle().clone();
@@ -97,7 +88,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             runtime_info,
-            check_for_update,
             open_external_url,
             save_export_file,
             tauri_ai_get_config,
@@ -109,12 +99,7 @@ pub fn run() {
             tauri_ai_search_knowledge,
             tauri_ai_read_url,
             tauri_ai_extract_attachment_text,
-            tauri_local_agent_detect,
-            tauri_local_agent_models,
-            tauri_local_agent_run,
-            tauri_local_agent_cancel,
             db_is_migrated,
-            db_has_legacy_import,
             db_load,
             db_migrate,
             db_save,
@@ -127,8 +112,6 @@ pub fn run() {
             db_import_legacy_database,
             select_read_only_projects,
             select_read_write_projects,
-            remember_local_project_authorization,
-            restore_local_project_authorizations,
             scan_read_only_project,
             scan_local_project,
             get_local_project_revision,

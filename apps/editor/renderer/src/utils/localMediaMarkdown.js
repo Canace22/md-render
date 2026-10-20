@@ -17,7 +17,6 @@ const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(\s*(<[^>\n]+>|[^\s)]+)((?:\s+"[^"]*")?
 const WIKI_IMAGE_EMBED_RE = /!\[\[([^\]\n]+?)\]\]/g;
 const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 const WIKI_SIZE_ALIAS_RE = /^\d+(?:x\d+)?$/i;
-const LEGACY_SHARED_ASSETS_DIR = 'assets';
 
 export const encodeLocalMediaPath = (value) => String(value ?? '')
   .replace(/\\/g, '/')
@@ -223,27 +222,6 @@ const resolveTauriProjectRelativePath = (src, projectRootPath, noteRelativePath)
   return normalizeProjectRelativePath(posixDirname(noteRelativePath), src);
 };
 
-const resolveLegacySharedAssetPath = (src, noteRelativePath) => {
-  if (isLocalMediaUrl(src) || REMOTE_OR_EMBEDDED_RE.test(src)) return '';
-  const virtualNoteDir = posixJoin(
-    'Projects',
-    'project',
-    posixDirname(noteRelativePath),
-  );
-  const virtualTarget = normalizeProjectRelativePath(virtualNoteDir, src);
-  const assetsPrefix = `${LEGACY_SHARED_ASSETS_DIR}/`;
-  return virtualTarget.startsWith(assetsPrefix)
-    ? virtualTarget.slice(assetsPrefix.length)
-    : '';
-};
-
-const legacySharedAssetDiskSrc = (assetRelativePath, noteRelativePath) => (
-  posixRelative(
-    posixJoin('Projects', 'project', posixDirname(noteRelativePath)),
-    posixJoin(LEGACY_SHARED_ASSETS_DIR, assetRelativePath),
-  )
-);
-
 const resolveSrcToAbsPath = (src, projectRootPath, noteRelativePath) => {
   if (isLocalMediaUrl(src)) return decodeLocalMediaUrl(src);
   const posixSrc = toPosix(src);
@@ -252,18 +230,10 @@ const resolveSrcToAbsPath = (src, projectRootPath, noteRelativePath) => {
   return posixJoin(projectRootPath, noteDir, posixSrc);
 };
 
-export const toDiskImageSrc = (
-  src,
-  projectRootPath,
-  noteRelativePath,
-  sharedAssetsMountId = '',
-) => {
+export const toDiskImageSrc = (src, projectRootPath, noteRelativePath) => {
   if (!src || !projectRootPath) return src;
   if (isTauriMountId(projectRootPath)) {
     const parsed = parseTauriLocalMediaUrl(src);
-    if (parsed && sharedAssetsMountId && parsed.mountId === sharedAssetsMountId) {
-      return legacySharedAssetDiskSrc(parsed.relativePath, noteRelativePath);
-    }
     if (parsed && parsed.mountId !== projectRootPath) {
       throw new Error('图片来自另一个本地项目，请先将素材复制到当前项目后再保存。');
     }
@@ -287,20 +257,9 @@ export const toDiskImageSrc = (
   return posixRelative(fromDir, toPath);
 };
 
-export const toEditorImageSrc = (
-  src,
-  projectRootPath,
-  noteRelativePath,
-  sharedAssetsMountId = '',
-) => {
+export const toEditorImageSrc = (src, projectRootPath, noteRelativePath) => {
   if (!src || !projectRootPath) return src;
   if (isTauriMountId(projectRootPath)) {
-    const sharedAssetPath = sharedAssetsMountId
-      ? resolveLegacySharedAssetPath(src, noteRelativePath)
-      : '';
-    if (sharedAssetPath) {
-      return createLocalMediaUrl(sharedAssetsMountId, sharedAssetPath);
-    }
     const projectRelativePath = resolveTauriProjectRelativePath(
       src,
       projectRootPath,
@@ -511,19 +470,15 @@ export const assertNoLocalMediaCapabilityUrlsInBlockNote = (content) => {
 const separateAdjacentImages = (text) => text.replace(/\)[ \t]*!\[/g, ')\n\n![');
 
 const rewriteMarkdownImages = (markdown, context, forEditor) => {
-  const {
-    projectRootPath = '',
-    noteRelativePath = '',
-    sharedAssetsMountId = '',
-  } = context;
+  const { projectRootPath = '', noteRelativePath = '' } = context;
   return mapOutsideCodeFences(markdown ?? '', (text) => {
     const withWiki = convertWikiImageEmbeds(text, (target) => (
       toWikiImageSrc(target, projectRootPath, noteRelativePath, forEditor)
     ));
     const withUrls = replaceMarkdownImageUrls(withWiki, (src) => (
       forEditor
-        ? toEditorImageSrc(src, projectRootPath, noteRelativePath, sharedAssetsMountId)
-        : toDiskImageSrc(src, projectRootPath, noteRelativePath, sharedAssetsMountId)
+        ? toEditorImageSrc(src, projectRootPath, noteRelativePath)
+        : toDiskImageSrc(src, projectRootPath, noteRelativePath)
     ));
     return separateAdjacentImages(withUrls);
   });
@@ -550,18 +505,8 @@ const rewriteBlockNoteImageNodes = (blocks, context, forEditor) => blocks.map((b
     return children === block?.children ? block : { ...block, children };
   }
   const url = forEditor
-    ? toEditorImageSrc(
-        block.props.url,
-        context.projectRootPath,
-        context.noteRelativePath,
-        context.sharedAssetsMountId,
-      )
-    : toDiskImageSrc(
-        block.props.url,
-        context.projectRootPath,
-        context.noteRelativePath,
-        context.sharedAssetsMountId,
-      );
+    ? toEditorImageSrc(block.props.url, context.projectRootPath, context.noteRelativePath)
+    : toDiskImageSrc(block.props.url, context.projectRootPath, context.noteRelativePath);
   return {
     ...block,
     props: { ...block.props, url },

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     env, fs,
     hash::Hasher,
     io::{Read, Write},
@@ -13,8 +13,8 @@ use base64::{
     engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD as BASE64_URL_SAFE},
     Engine as _,
 };
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use serde::Serialize;
+use tauri::{State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -26,7 +26,6 @@ const READ_WRITE_ACCESS: &str = "read-write";
 const ASSETS_DIRECTORY_NAME: &str = "assets";
 const LOCAL_PROJECT_META_DIR_NAME: &str = ".md-render";
 const LOCAL_PROJECT_META_SIDECAR_SUFFIX: &str = ".md-render-meta.json";
-const VAULT_PROJECTS_DIR_NAME: &str = "Projects";
 const MAX_DIRECTORY_DEPTH: usize = 16;
 const MAX_RELATIVE_PATH_BYTES: usize = 4_096;
 const MAX_PATH_SEGMENT_BYTES: usize = 255;
@@ -39,9 +38,6 @@ const MAX_BINARY_ASSET_BYTES: usize = 16 * 1024 * 1024;
 const LOCAL_MEDIA_PROTOCOL_PATH_PREFIX: &str = "/tauri/v1/";
 const MAX_METADATA_FILE_BYTES: u64 = 256 * 1024;
 const MAX_TOTAL_METADATA_BYTES: u64 = 8 * 1024 * 1024;
-const PROJECT_AUTHORIZATIONS_FILE_NAME: &str = "local-project-authorizations.json";
-const MAX_PROJECT_AUTHORIZATIONS_FILE_BYTES: u64 = 256 * 1024;
-const MAX_PROJECT_AUTHORIZATIONS: usize = 100;
 
 const ELECTRON_USER_DATA_PATH_SEGMENTS: &[&[&str]] =
     &[&["md-render"], &["@md-render", "editor"], &["MD Render"]];
@@ -96,14 +92,6 @@ impl ProjectAccess {
     fn is_read_only(self) -> bool {
         self == Self::ReadOnly
     }
-
-    fn from_label(value: &str) -> Option<Self> {
-        match value {
-            READ_ONLY_ACCESS => Some(Self::ReadOnly),
-            READ_WRITE_ACCESS => Some(Self::ReadWrite),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -112,33 +100,11 @@ struct LocalProjectMount {
     display_name: String,
     window_label: String,
     access: ProjectAccess,
-    legacy_relative_path: Option<String>,
-    shared_assets_mount_id: Option<String>,
-    protected_media_only: bool,
 }
 
 #[derive(Default)]
 pub(crate) struct LocalProjectRegistry {
     mounts: Mutex<HashMap<String, LocalProjectMount>>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredProjectAuthorization {
-    project_identity: String,
-    root_path: PathBuf,
-    display_name: String,
-    access: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    legacy_relative_path: Option<String>,
-}
-
-pub(crate) fn resolve_agent_work_dir(
-    registry: &LocalProjectRegistry,
-    mount_id: &str,
-    window_label: &str,
-) -> Result<PathBuf, String> {
-    resolve_mount(registry, mount_id, window_label).map(|mount| mount.root)
 }
 
 #[derive(Serialize)]
@@ -172,17 +138,11 @@ pub(crate) struct LocalProject {
     mount_id: String,
     project_root_path: String,
     display_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    legacy_relative_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    shared_assets_mount_id: Option<String>,
     access: &'static str,
     workspace: WorkspaceNode,
     skipped_count: usize,
     complete: bool,
     revision: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    project_identity: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -615,7 +575,7 @@ fn read_local_media_asset(
     mount_id: &str,
     relative_path: &str,
 ) -> Result<(Vec<u8>, &'static str), String> {
-    let mount = resolve_any_mount(registry, mount_id, window_label)?;
+    let mount = resolve_mount(registry, mount_id, window_label)?;
     let normalized = validate_relative_path(relative_path, false, false)?;
     let file_name = normalized
         .file_name()
@@ -624,18 +584,7 @@ fn read_local_media_asset(
     if !is_media_file(file_name) {
         return Err("unsupported local media type".to_string());
     }
-    let target = if mount.protected_media_only {
-        let normalized = validate_relative_path(relative_path, false, false)?;
-        reject_symbolic_link_components(&mount.root, &normalized)?;
-        let target = fs::canonicalize(mount.root.join(normalized))
-            .map_err(|_| "目标不存在或无法访问".to_string())?;
-        if !is_path_within_root(&mount.root, &target) {
-            return Err("目标不在共享素材目录内".to_string());
-        }
-        target
-    } else {
-        resolve_existing_target(&mount.root, relative_path, false)?
-    };
+    let target = resolve_existing_target(&mount.root, relative_path, false)?;
     let (bytes, _) = read_file_bytes(&target, MAX_PREVIEW_FILE_BYTES)?;
     Ok((bytes, media_mime_type(file_name)))
 }
@@ -748,7 +697,7 @@ fn push_electron_user_data_roots(roots: &mut Vec<PathBuf>, base: &Path) {
     }
 }
 
-fn protected_electron_data_roots() -> &'static [PathBuf] {
+fn protected_electron_roots() -> &'static [PathBuf] {
     static ROOTS: OnceLock<Vec<PathBuf>> = OnceLock::new();
     ROOTS.get_or_init(|| {
         let mut roots = Vec::new();
@@ -757,26 +706,16 @@ fn protected_electron_data_roots() -> &'static [PathBuf] {
                 &mut roots,
                 &home.join("Library").join("Application Support"),
             );
+            push_protected_root(&mut roots, home.join("Documents").join("MdRender"));
             push_electron_user_data_roots(&mut roots, &home.join(".config"));
+        }
+        if let Some(profile) = env::var_os("USERPROFILE").map(PathBuf::from) {
+            push_protected_root(&mut roots, profile.join("Documents").join("MdRender"));
         }
         for variable in ["APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME"] {
             if let Some(base) = env::var_os(variable).map(PathBuf::from) {
                 push_electron_user_data_roots(&mut roots, &base);
             }
-        }
-        roots
-    })
-}
-
-fn protected_vault_roots() -> &'static [PathBuf] {
-    static ROOTS: OnceLock<Vec<PathBuf>> = OnceLock::new();
-    ROOTS.get_or_init(|| {
-        let mut roots = Vec::new();
-        if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
-            push_protected_root(&mut roots, home.join("Documents").join("MdRender"));
-        }
-        if let Some(profile) = env::var_os("USERPROFILE").map(PathBuf::from) {
-            push_protected_root(&mut roots, profile.join("Documents").join("MdRender"));
         }
         roots
     })
@@ -799,81 +738,15 @@ fn is_same_or_within(path: &Path, parent: &Path) -> bool {
 }
 
 fn is_protected_electron_path(path: &Path) -> bool {
-    protected_electron_data_roots()
+    protected_electron_roots()
         .iter()
         .any(|protected_root| is_same_or_within(path, protected_root))
-        || protected_vault_roots().iter().any(|vault_root| {
-            is_same_or_within(path, vault_root) && !is_legacy_vault_project_path(path, vault_root)
-        })
 }
 
 fn overlaps_protected_electron_tree(path: &Path) -> bool {
-    protected_electron_data_roots()
-        .iter()
-        .any(|protected_root| {
-            is_same_or_within(path, protected_root) || is_same_or_within(protected_root, path)
-        })
-        || protected_vault_roots().iter().any(|vault_root| {
-            is_same_or_within(vault_root, path)
-                || (is_same_or_within(path, vault_root)
-                    && !is_legacy_vault_project_path(path, vault_root))
-        })
-}
-
-fn is_legacy_vault_project_path(path: &Path, vault_root: &Path) -> bool {
-    let projects_root = vault_root.join(VAULT_PROJECTS_DIR_NAME);
-    path != projects_root && is_same_or_within(path, &projects_root)
-}
-
-fn can_reauthorize_legacy_project(path: &Path) -> bool {
-    protected_vault_roots()
-        .iter()
-        .any(|vault_root| is_legacy_vault_project_path(path, vault_root))
-}
-
-fn legacy_vault_root_for_selection(path: &Path) -> Option<&PathBuf> {
-    protected_vault_roots().iter().find(|vault_root| {
-        path == vault_root.as_path() || path == vault_root.join(VAULT_PROJECTS_DIR_NAME)
+    protected_electron_roots().iter().any(|protected_root| {
+        is_same_or_within(path, protected_root) || is_same_or_within(protected_root, path)
     })
-}
-
-fn resolve_legacy_workspace_projects(
-    selected_root: &Path,
-    legacy_project_paths: &[String],
-) -> Result<Vec<(PathBuf, String, Option<String>)>, String> {
-    let Some(vault_root) = legacy_vault_root_for_selection(selected_root) else {
-        return Ok(Vec::new());
-    };
-    if legacy_project_paths.is_empty() {
-        return Err("没有找到需要重新授权的旧项目".to_string());
-    }
-
-    legacy_project_paths
-        .iter()
-        .map(|relative_path| {
-            let normalized = validate_relative_path(relative_path, false, false)?;
-            let mut components = normalized.components();
-            let is_projects_child = components
-                .next()
-                .is_some_and(|component| component.as_os_str() == VAULT_PROJECTS_DIR_NAME)
-                && components.next().is_some()
-                && components.next().is_none();
-            if !is_projects_child {
-                return Err("旧项目路径不在 Projects 目录下".to_string());
-            }
-
-            let project_root = fs::canonicalize(vault_root.join(&normalized))
-                .map_err(|_| format!("旧项目目录不存在：{relative_path}"))?;
-            if !project_root.is_dir() || !can_reauthorize_legacy_project(&project_root) {
-                return Err(format!("旧项目目录无法授权：{relative_path}"));
-            }
-            Ok((
-                project_root.clone(),
-                display_name_from_path(&project_root),
-                Some(relative_path.clone()),
-            ))
-        })
-        .collect()
 }
 
 fn is_path_within_root(root: &Path, target: &Path) -> bool {
@@ -1282,79 +1155,12 @@ fn lock_mounts(
         .map_err(|_| "本地项目会话异常，请重新打开目录".to_string())
 }
 
-fn project_authorizations_path(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|directory| directory.join(PROJECT_AUTHORIZATIONS_FILE_NAME))
-        .map_err(|error| format!("无法定位本地项目授权记录：{error}"))
-}
-
-fn load_project_authorizations(app: &AppHandle) -> Result<Vec<StoredProjectAuthorization>, String> {
-    let path = project_authorizations_path(app)?;
-    let Ok(metadata) = fs::metadata(&path) else {
-        return Ok(Vec::new());
-    };
-    if metadata.len() > MAX_PROJECT_AUTHORIZATIONS_FILE_BYTES {
-        return Err("本地项目授权记录过大，已拒绝读取".to_string());
-    }
-    let bytes = fs::read(&path).map_err(|error| format!("无法读取本地项目授权记录：{error}"))?;
-    let records: Vec<StoredProjectAuthorization> = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("本地项目授权记录已损坏：{error}"))?;
-    if records.len() > MAX_PROJECT_AUTHORIZATIONS {
-        return Err("本地项目授权记录超过安全上限".to_string());
-    }
-    Ok(records)
-}
-
-fn save_project_authorizations(
-    app: &AppHandle,
-    records: &[StoredProjectAuthorization],
-) -> Result<(), String> {
-    if records.len() > MAX_PROJECT_AUTHORIZATIONS {
-        return Err("本地项目授权记录超过安全上限".to_string());
-    }
-    let path = project_authorizations_path(app)?;
-    let directory = path
-        .parent()
-        .ok_or_else(|| "本地项目授权记录路径无效".to_string())?;
-    fs::create_dir_all(directory).map_err(|error| format!("无法创建本地项目授权目录：{error}"))?;
-    let mut temporary = NamedTempFile::new_in(directory)
-        .map_err(|error| format!("无法创建本地项目授权临时文件：{error}"))?;
-    serde_json::to_writer(&mut temporary, records)
-        .map_err(|error| format!("无法写入本地项目授权记录：{error}"))?;
-    temporary
-        .flush()
-        .map_err(|error| format!("无法刷新本地项目授权记录：{error}"))?;
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|error| format!("无法落盘本地项目授权记录：{error}"))?;
-    temporary
-        .persist(&path)
-        .map_err(|error| format!("无法替换本地项目授权记录：{}", error.error))?;
-    Ok(())
-}
-
-fn validate_project_identity(project_identity: &str) -> Result<(), String> {
-    let trimmed = project_identity.trim();
-    if trimmed.is_empty() || trimmed.len() > MAX_RELATIVE_PATH_BYTES {
-        return Err("本地项目身份无效".to_string());
-    }
-    if has_known_mount_prefix(trimmed) {
-        return Err("临时挂载标识不能作为项目身份保存".to_string());
-    }
-    Ok(())
-}
-
 fn register_mount(
     registry: &LocalProjectRegistry,
     root: PathBuf,
     display_name: String,
     window_label: String,
     access: ProjectAccess,
-    legacy_relative_path: Option<String>,
-    shared_assets_mount_id: Option<String>,
-    protected_media_only: bool,
 ) -> Result<String, String> {
     let mount_id = format!("{}{}", access.mount_id_prefix(), Uuid::new_v4());
     lock_mounts(registry)?.insert(
@@ -1364,23 +1170,9 @@ fn register_mount(
             display_name,
             window_label,
             access,
-            legacy_relative_path,
-            shared_assets_mount_id,
-            protected_media_only,
         },
     );
     Ok(mount_id)
-}
-
-fn legacy_assets_root(root: &Path, legacy_relative_path: &str) -> Option<PathBuf> {
-    protected_vault_roots().iter().find_map(|vault_root| {
-        let project_root = canonical_or_original(vault_root.join(legacy_relative_path));
-        if project_root != root {
-            return None;
-        }
-        let assets_root = canonical_or_original(vault_root.join(ASSETS_DIRECTORY_NAME));
-        assets_root.is_dir().then_some(assets_root)
-    })
 }
 
 fn remove_mounts(registry: &LocalProjectRegistry, mount_ids: &[String]) {
@@ -1396,7 +1188,7 @@ fn has_known_mount_prefix(mount_id: &str) -> bool {
         || mount_id.starts_with(READ_WRITE_MOUNT_ID_PREFIX)
 }
 
-fn resolve_any_mount(
+fn resolve_mount(
     registry: &LocalProjectRegistry,
     mount_id: &str,
     window_label: &str,
@@ -1414,18 +1206,6 @@ fn resolve_any_mount(
     }
     if !mount_id.starts_with(mount.access.mount_id_prefix()) {
         return Err("本地项目会话权限不匹配".to_string());
-    }
-    Ok(mount)
-}
-
-fn resolve_mount(
-    registry: &LocalProjectRegistry,
-    mount_id: &str,
-    window_label: &str,
-) -> Result<LocalProjectMount, String> {
-    let mount = resolve_any_mount(registry, mount_id, window_label)?;
-    if mount.protected_media_only {
-        return Err("该会话仅用于读取已授权的共享图片".to_string());
     }
     Ok(mount)
 }
@@ -1461,14 +1241,11 @@ fn build_project(mount_id: String, mount: &LocalProjectMount) -> LocalProject {
         project_root_path: mount_id.clone(),
         mount_id,
         display_name: mount.display_name.clone(),
-        legacy_relative_path: mount.legacy_relative_path.clone(),
-        shared_assets_mount_id: mount.shared_assets_mount_id.clone(),
         access: mount.access.label(),
         workspace,
         skipped_count,
         complete,
         revision,
-        project_identity: None,
     }
 }
 
@@ -1763,23 +1540,17 @@ async fn select_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
     access: ProjectAccess,
-    allow_legacy_project_path: bool,
-    legacy_project_paths: Vec<String>,
 ) -> Result<SelectProjectsResult, String> {
     let title = if access.is_read_only() {
         "选择只读项目目录"
-    } else if allow_legacy_project_path {
-        "选择原项目目录并恢复编辑"
     } else {
         "选择可读写项目目录（不会访问正式版数据）"
     };
-    let mut dialog = window.dialog().file().set_title(title);
-    if allow_legacy_project_path {
-        if let Some(vault_root) = protected_vault_roots().iter().find(|path| path.is_dir()) {
-            dialog = dialog.set_directory(vault_root);
-        }
-    }
-    let selected_paths = dialog.blocking_pick_folders();
+    let selected_paths = window
+        .dialog()
+        .file()
+        .set_title(title)
+        .blocking_pick_folders();
     let Some(selected_paths) = selected_paths else {
         return Ok(SelectProjectsResult {
             canceled: true,
@@ -1796,73 +1567,25 @@ async fn select_projects(
         if !root.is_dir() {
             return Err("所选路径不是目录".to_string());
         }
-        if allow_legacy_project_path && legacy_vault_root_for_selection(&root).is_some() {
-            let resolved = resolve_legacy_workspace_projects(&root, &legacy_project_paths)?;
-            selected_roots.extend(resolved);
-            continue;
-        }
-        let is_legacy_project = can_reauthorize_legacy_project(&root);
-        if overlaps_protected_electron_tree(&root)
-            || (is_legacy_project && !allow_legacy_project_path)
-        {
+        if overlaps_protected_electron_tree(&root) {
             return Err(
-                "为保护旧版数据，请选择独立目录；重新授权时可选择 Documents/MdRender 工作空间或 Projects 下的具体项目"
+                "为保护正式版数据，请选择不包含 Electron 数据或 Documents/MdRender 的独立目录"
                     .to_string(),
             );
         }
 
-        let legacy_relative_path = legacy_project_paths.iter().find_map(|relative_path| {
-            protected_vault_roots().iter().find_map(|vault_root| {
-                let candidate = canonical_or_original(vault_root.join(relative_path));
-                (candidate == root).then(|| relative_path.clone())
-            })
-        });
-        selected_roots.push((
-            root.clone(),
-            display_name_from_path(&root),
-            legacy_relative_path,
-        ));
+        selected_roots.push((root.clone(), display_name_from_path(&root)));
     }
 
     let mut projects = Vec::new();
     let mut registered_mount_ids = Vec::new();
-    for (root, display_name, legacy_relative_path) in selected_roots {
-        let shared_assets_mount_id = if let Some(relative_path) = &legacy_relative_path {
-            let assets_root = legacy_assets_root(&root, relative_path);
-            if let Some(assets_root) = assets_root {
-                let mount_id = match register_mount(
-                    registry.inner(),
-                    assets_root,
-                    ASSETS_DIRECTORY_NAME.to_string(),
-                    window.label().to_string(),
-                    ProjectAccess::ReadOnly,
-                    None,
-                    None,
-                    true,
-                ) {
-                    Ok(mount_id) => mount_id,
-                    Err(error) => {
-                        remove_mounts(registry.inner(), &registered_mount_ids);
-                        return Err(error);
-                    }
-                };
-                registered_mount_ids.push(mount_id.clone());
-                Some(mount_id)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+    for (root, display_name) in selected_roots {
         let mount_id = match register_mount(
             registry.inner(),
             root,
             display_name,
             window.label().to_string(),
             access,
-            legacy_relative_path,
-            shared_assets_mount_id,
-            false,
         ) {
             Ok(mount_id) => mount_id,
             Err(error) => {
@@ -1909,11 +1632,7 @@ fn revoke_project(
     if required_access.is_some_and(|access| mount.access != access) {
         return Err("本地项目会话权限不匹配".to_string());
     }
-    let shared_assets_mount_id = mount.shared_assets_mount_id.clone();
     mounts.remove(mount_id);
-    if let Some(shared_assets_mount_id) = shared_assets_mount_id {
-        mounts.remove(&shared_assets_mount_id);
-    }
     Ok(())
 }
 
@@ -1958,175 +1677,19 @@ fn open_in_system_file_manager(target: &Path, is_directory: bool) -> Result<(), 
 }
 
 #[tauri::command]
-pub(crate) fn remember_local_project_authorization(
-    app: AppHandle,
-    window: WebviewWindow,
-    registry: State<'_, LocalProjectRegistry>,
-    mount_id: String,
-    project_identity: String,
-) -> Result<(), String> {
-    validate_project_identity(&project_identity)?;
-    let mount = resolve_mount(registry.inner(), &mount_id, window.label())?;
-    if mount.legacy_relative_path.is_none() && overlaps_protected_electron_tree(&mount.root) {
-        return Err("受保护的旧工作区只能通过重新授权记录".to_string());
-    }
-
-    let mut records = load_project_authorizations(&app)?;
-    let record = StoredProjectAuthorization {
-        project_identity: project_identity.clone(),
-        root_path: mount.root,
-        display_name: mount.display_name,
-        access: mount.access.label().to_string(),
-        legacy_relative_path: mount.legacy_relative_path,
-    };
-    if let Some(existing) = records
-        .iter_mut()
-        .find(|item| item.project_identity == project_identity)
-    {
-        *existing = record;
-    } else {
-        if records.len() >= MAX_PROJECT_AUTHORIZATIONS {
-            return Err("本地项目授权记录超过安全上限".to_string());
-        }
-        records.push(record);
-    }
-    save_project_authorizations(&app, &records)
-}
-
-#[tauri::command]
-pub(crate) async fn restore_local_project_authorizations(
-    app: AppHandle,
-    window: WebviewWindow,
-    registry: State<'_, LocalProjectRegistry>,
-    project_identities: Vec<String>,
-) -> Result<SelectProjectsResult, String> {
-    if project_identities.len() > MAX_PROJECT_AUTHORIZATIONS {
-        return Err("待恢复的本地项目超过安全上限".to_string());
-    }
-    let requested: HashSet<String> = project_identities
-        .into_iter()
-        .filter(|identity| validate_project_identity(identity).is_ok())
-        .collect();
-    if requested.is_empty() {
-        return Ok(SelectProjectsResult {
-            canceled: true,
-            projects: Vec::new(),
-        });
-    }
-
-    let records = load_project_authorizations(&app)?;
-    let mut projects = Vec::new();
-    let mut registered_mount_ids = Vec::new();
-    for record in records {
-        if !requested.contains(&record.project_identity) {
-            continue;
-        }
-        let Some(access) = ProjectAccess::from_label(&record.access) else {
-            continue;
-        };
-        let Ok(root) = fs::canonicalize(&record.root_path) else {
-            continue;
-        };
-        if !root.is_dir() {
-            continue;
-        }
-        if let Some(relative_path) = &record.legacy_relative_path {
-            let Ok(normalized) = validate_relative_path(relative_path, false, false) else {
-                continue;
-            };
-            let matches_legacy_root = protected_vault_roots().iter().any(|vault_root| {
-                canonical_or_original(vault_root.join(&normalized)) == root
-                    && can_reauthorize_legacy_project(&root)
-            });
-            if !matches_legacy_root {
-                continue;
-            }
-        } else if overlaps_protected_electron_tree(&root) {
-            continue;
-        }
-
-        let shared_assets_mount_id = if let Some(relative_path) = &record.legacy_relative_path {
-            if let Some(assets_root) = legacy_assets_root(&root, relative_path) {
-                let mount_id = register_mount(
-                    registry.inner(),
-                    assets_root,
-                    ASSETS_DIRECTORY_NAME.to_string(),
-                    window.label().to_string(),
-                    ProjectAccess::ReadOnly,
-                    None,
-                    None,
-                    true,
-                )?;
-                registered_mount_ids.push(mount_id.clone());
-                Some(mount_id)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let mount_id = register_mount(
-            registry.inner(),
-            root,
-            record.display_name,
-            window.label().to_string(),
-            access,
-            record.legacy_relative_path,
-            shared_assets_mount_id,
-            false,
-        )?;
-        registered_mount_ids.push(mount_id.clone());
-        let mount = resolve_mount(registry.inner(), &mount_id, window.label())?;
-        match build_project_in_background(mount_id, mount).await {
-            Ok(mut project) => {
-                project.project_identity = Some(record.project_identity);
-                projects.push(project);
-            }
-            Err(error) => {
-                remove_mounts(registry.inner(), &registered_mount_ids);
-                return Err(error);
-            }
-        }
-    }
-
-    Ok(SelectProjectsResult {
-        canceled: projects.is_empty(),
-        projects,
-    })
-}
-
-#[tauri::command]
 pub(crate) async fn select_read_only_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
-    allow_legacy_project_path: bool,
-    legacy_project_paths: Vec<String>,
 ) -> Result<SelectProjectsResult, String> {
-    select_projects(
-        window,
-        registry,
-        ProjectAccess::ReadOnly,
-        allow_legacy_project_path,
-        legacy_project_paths,
-    )
-    .await
+    select_projects(window, registry, ProjectAccess::ReadOnly).await
 }
 
 #[tauri::command]
 pub(crate) async fn select_read_write_projects(
     window: WebviewWindow,
     registry: State<'_, LocalProjectRegistry>,
-    allow_legacy_project_path: bool,
-    legacy_project_paths: Vec<String>,
 ) -> Result<SelectProjectsResult, String> {
-    select_projects(
-        window,
-        registry,
-        ProjectAccess::ReadWrite,
-        allow_legacy_project_path,
-        legacy_project_paths,
-    )
-    .await
+    select_projects(window, registry, ProjectAccess::ReadWrite).await
 }
 
 #[tauri::command]

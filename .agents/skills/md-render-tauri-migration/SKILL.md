@@ -24,44 +24,21 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 一次只迁移一个能力。先在副本上验证读，再验证写、监听、取消和错误路径；通过后才替换对应 Electron 路径。
 8. 每个独立功能验证通过后立即提交。正式 tag 只发布 Tauri；Electron 回退包保持可独立构建、可启动，但不挂到正式 Release，稳定一个发布周期后再决定是否删除。
 
-### 本机 Agent 迁移
-
-- 本机 Agent 是一组能力，不是一个下拉项：同时检查 `detect / models / run / cancel / event` 是否有 Tauri 通道。只改 `hasLocalAgentDetection` 会把不能运行的来源伪装成可用。
-- Renderer 通过独立 service 在 Electron preload 和 Tauri command 之间选路；不伪造 `window.electronAPI`，不把 Rust 进程管理写进组件。
-- Tauri 运行 Agent 时，前端只传当前窗口的 mount id，Rust 从 `LocalProjectRegistry` 解析真实目录；禁止因为 Agent 需要 cwd 就把绝对路径重新暴露给 Renderer。
-- CLI 检测与运行都要合并 login shell 环境和常见安装目录；macOS 从 Finder 启动时不能依赖父进程 PATH。
-- 不要默认 Tauri 已继承 Electron 的 MCP 注入。Electron 用自身 Node 运行 `mcp-bridge`；Tauri 没有 Node 时必须另行迁移，迁移前要在结果里明确说明降级，不能宣称 md-render 内部工具可用。
-
 ### 正式切换与发布门禁
 
 - 正式 Release 只由 `v*` tag 触发；tag、根目录版本和 editor 版本必须一致，发布 commit 必须属于 `origin/main`。
-- Apple Developer ID / 公证凭证和 Windows Authenticode 凭证齐全时执行正式签名校验；缺少凭证时仍可发布，但文件名保持简洁稳定，Release 固定说明 Gatekeeper / SmartScreen 风险，不把签名状态塞进文件名。
-- Release 正文固定保留下载、macOS 安装、Windows 安装和网页版入口，版本差异只由 GitHub 自动追加到 `What's Changed`，不要每版重写整篇说明。
+- Apple Developer ID 签名 / 公证和 Windows Authenticode 缺一即失败。禁止把 ad-hoc 或 unsigned 包降级成正式产物。
 - Electron updater 不能跨壳完成首次升级。首次切换必须写清“手动安装 → 显式导入旧库 → 重新授权本地目录”，且源库保持不变。
-- 自定义 Inno 包没有天然接入 Tauri updater。当发布仍允许无签名降级时，先实现可信的“新版本提示 + 跳转 Releases 手动安装”，不生成假的 updater 元数据，不把手动下载说成自动更新。
-- Windows 有凭证时同时验证 app、installer、installed app 和 uninstaller 签名；有无凭证都要完成安装、启动、卸载冒烟检查。
+- 自定义 Inno 包没有天然接入 Tauri updater。未完成可信更新方案前，明确从 Releases 手动升级，不生成假的 updater 元数据。
+- Windows 正式链同时验证 app、installer、installed app 和 uninstaller 签名，并完成安装、启动、卸载冒烟检查。
 - Electron 回退工作流只能手动触发、短期保存 artifact，不能混入 Tauri 正式 Release。
-
-### Tauri 更新提示
-
-- 沿用现有 Renderer 通知条，在独立 service 中选择 Electron preload 或 Tauri command；不伪造 `window.electronAPI`。
-- Tauri 由 Rust 请求 GitHub `releases/latest`，只读取最新正式 Release，使用 semver 比较当前包版本，不做字符串大小比较。
-- 只在生产包启用，启动后延迟检查，后台间隔要有上限；无更新和网络错误都保持界面安静。
-- 发现新版本时显示精确版本号，并打开 API 返回的该版 Release 页；外链仍走现有 `http/https` 白名单校验。
-- 要升级成真正的下载/安装，先单独设计 Tauri 更新签名密钥、可验证元数据和 Windows 安装器兼容方案；不要在提示功能里顺手塞一个不可验证的自动安装。
 
 ### 本地目录的授权与快照
 
 - 部分能力要单独声明，例如 `canOpen / canRead / canWrite / canUseDefaultWorkspace`；不要因为 Tauri 能读目录，就让原来的“本地项目完整可用”判断返回 true。
-- Electron 数据库中的节点可能带 `projectRootPath`，这只说明它曾有本地存档/同步位置，不代表数据库节点就是外部目录挂载。导入 Tauri 后保留原 ID、内容和关联，递归去掉旧的磁盘路径、只读和授权字段，继续作为 SQLite 可编辑数据；不显示“本地”，不要求重新授权。只有用户在 Tauri 里明确“打开本地目录”的项目才持久化 `tauri-directory` 来源标记，下次启动按本地挂载恢复。
-- 保护目录要区分“Electron 配置/数据库”和“用户内容项目”：普通打开始终拒绝 `Documents/MdRender` 和 Electron user-data；旧快照重授权可让用户一次选择 `Documents/MdRender`，但 Rust 必须只把请求中的 `Projects/<具体项目>` 展开成相互独立的 mount，不能把根目录、数据库、Daily、配置等一并暴露。放行后的扫描、新建、保存、改名和删除必须共用同一边界，否则会出现“能授权但不能编辑”。
-- Electron 默认工作区的笔记在 `Projects/<目录>`，粘贴图却可能统一存在库根 `assets/`。重授权把各个 `Projects/*` 独立挂载后，不要放宽项目根边界；另建绑定当前窗口的 `assets/` 只读媒体 mount，仅允许自定义媒体协议读图片/音视频。Renderer 打开时把 `../../assets/...` 改成该 mount 的短期 URL，保存时再还原原相对路径；这个素材 token 和项目 token 一样不得持久化。
 - 真实目录由 Rust registry 持有，Renderer 只拿绑定当前窗口的短期不透明 token；后续读取只传 token 与相对路径，不返回或接受任意绝对根路径。
-- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，只持久化最新内容快照；下次加载时去掉挂载字段，不持久化或复用 token。批量重新授权 `Projects/*` 时，每个项目必须使用各自稳定身份，不能共用父目录路径，否则会生成重复根 ID 并被数据库拒绝。
-- 兼容旧版快照时，不能只靠 `localProjectRoot` / `localProjectSource` 这些可能已被持久化逻辑剥离的会话字段。顶层节点的稳定 `project:local-project:v1:*` ID 也要进入恢复候选，再交给 Rust 私有授权表筛出真正可恢复的项目；不要仅凭 ID 就在 Renderer 里把所有节点当成已授权挂载。
-- 用户已明确选过的目录可记住授权，但绝对路径和访问级别只写入 Rust 私有授权表，以稳定项目身份关联；Renderer 和工作区 SQLite 仍不得持有真实路径或会话 token。重启后 Rust 重新 canonicalize 目录、校验保护边界与访问级别，再签发新 token；Renderer 只在扫描完整且与快照匹配时替换快照，失败时继续保留数据库副本并显示重新授权入口。
-- Zustand 从 SQLite 异步水合完成前，禁止 `persist` 和任何启动 effect 把默认工作区写回数据库。真实启动验收必须在启动前后对比 `documents` 数量、顶层节点和 `quick_check`；只看窗口曾经显示正确内容，抓不住延迟发生的默认状态覆盖。
-- 旧 Markdown 可能残留 Electron 时代的绝对 `local-media://` 引用。它不能阻断当前会话挂载；若因此无法生成可持久化的新快照，就保留授权前的安全快照并让磁盘项目继续可编辑，不能把快照失败升级成授权失败。
+- mount token 只属于当前会话，不得进 SQLite、BlockNote 内容、关系 ID 或封面地址。新挂载使用稳定的 opaque identity，持久化的是“最新内容 + 只读 + 待重授权”快照。
+- 重启后保留快照与历史 ID，但不使用其中的旧路径或 token 读写。重授权只有在扫描完整且目录结构高置信匹配时才复用旧 identity；否则作为新项目打开，旧快照保留。
 - 扫描结果必须单独返回 `complete/authoritative`，不能用 `skippedCount > 0` 代替。文件数/总体积/深度截断、I/O 或 UTF-8 读取失败时为不完整；隐藏、忽略和不支持类型只计跳过。不完整扫描禁止自动刷新、手动 `use-disk` 和重授权覆盖。
 - 移除挂载时先排空正文、图片、metadata 和 Rust mutation，成功后才 revoke token 并删节点；任一保存失败都保留挂载。
 - `readOnly` 从挂载根递归传给后代，并同时约束 UI、store action、AI/Agent 提案和元数据入口；不能只靠隐藏按钮。
@@ -69,23 +46,17 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 
 ### SQLite 与旧数据导入
 
-- Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入；源库拒绝非空 WAL / journal 后用 immutable + read-only/query-only 打开，导入前后复核主文件未变化。
-- 不要只迁移 SQLite 读写，还要检查数据库保存后的文件副作用。未迁成真文件的内置文档，Electron 会同步写入 `Documents/MdRender/Artifacts`；Tauri 也要在 `db_migrate` / `db_save` 成功返回前完成同等落盘，沿用文件名规则并回填 `disk_path`。已有 `projectRootPath` 的真实本地项目必须排除，避免重复导出或覆盖源文件。
-- Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿带非空边车日志的单独 `.db` 冒充完整备份。零字节 WAL 或孤立 SHM 可能来自正常退出，不要仅凭文件存在就误拒。
+- Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入，源库以 read-only/query-only 打开。
+- Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿单独拷贝的 `.db` 冒充完整备份。
 - Electron 导入是“备份当前 Tauri 库后整库替换”，不是合并。已有 Tauri 内容和 Electron 内容同时有价值时，先导出用户可读备份并明确提示；成功结果要展示 `knowledge.before-import.<timestamp>.db` 的实际文件名。
 - 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
-- 导入成功要在 Tauri SQLite 里留下持久标记；旧版未留标记时，可用同目录的 `knowledge.before-import.*.db` 作一次性兼容识别。升级提示不能只看 WebView `localStorage`，已交接的用户不再反复提示或诱导覆盖当前 Tauri 数据。
-- 旧 Electron `documents` 是工作区的派生索引，历史库可能残留孤儿行。源库只要求 workspace ID 全部能在 documents 找到；复制时按 workspace ID 过滤 documents、双端有效的 links 和对应 versions。candidate DB 仍要求 workspace JSON 与文档 ID 精确一致。
-- SQLite 的列声明不是运行时强类型：Electron 把 JS `mtimeMs` 写进 `INTEGER` 列时，小数毫秒会实际存成 `REAL`。迁移前用 `typeof()` 检查真实存储类型；时间戳只兼容 `NULL`、`INTEGER` 和有限且范围合法的 `REAL`（截成整数毫秒），文本、二进制和越界值继续报错。`workspace_json` 中的 `createdAt` / `updatedAt` 使用同一规则，避免导入后再次保存时变成 `NULL`。
-- 先建 candidate DB，校验 schema 白名单、`quick_check`、过滤后的记录数和 FTS，再备份当前 Tauri DB 并原子切换。切换前失败要清理 candidate 和未使用的 backup；切换失败优先保留可恢复备份。
-- Electron `daily_workspace_json.currentDate` 只是旧端最后查看的日期，不能当成导入日或数据新旧标志。导入 reload 后等 Zustand/SQLite 水合完成，再走现有 `setDailyCurrentDate(今天)` 进入真实今天、按既定规则幂等结转，并确认 SQLite 落盘后才清除待处理标记。不要在 Rust 里重写一套 Daily 结转算法。
-- Tauri 自有 WAL 库缺少 `-wal/-shm` 时，纯 `READ_ONLY` 可能无法打开。自有库用 `READ_WRITE`（不带 `CREATE`）打开后立即设 `query_only=ON`；不要把这种放宽用于外部旧库。
+- 先建 candidate DB，校验 schema 白名单、`quick_check`、记录数、workspace JSON 与文档 ID 精确集合，然后备份当前 Tauri DB 并原子切换。失败恢复旧库，同时清理 candidate/backup 的 WAL/SHM 边车文件。
 - 迁移标记不能代替数据验证；启动时同时检查 marker、workspace 和 documents，异常库进只读恢复而不自动覆写。
 
 ### 关窗与单实例
 
 - 单实例插件必须最先注册；第二实例只聚焦已有窗口，不能再打开一套 SQLite/挂载会话。
-- Tauri `close-requested` 先 `preventDefault`。安全顺序是：界面 inert → 排空图片生命周期、Daily/画布 debounce、正文 timer/queue、metadata 和 Rust mutation → 冻结新的 store/Rust 写入 → 排空 SQLite。最后动作要跟产品语义一致：红点关闭如果约定为最小化，就 `minimize` 后立即解除 barrier，继续允许编辑；只有明确退出才 `destroy`。
+- Tauri `close-requested` 先 `preventDefault`。安全顺序是：界面 inert → 排空图片生命周期、Daily/画布 debounce、正文 timer/queue、metadata 和 Rust mutation → 冻结新的 store/Rust 写入 → 排空 SQLite → `destroy`。
 - 任一写入失败必须 latch，后续同一对象保存成功才清除；否则关窗、移除项目、手动同步和导入都要取消。
 
 ## 关键约束与易踩坑
@@ -114,7 +85,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 7. 预览空工作区不会修改 Electron 数据库、WAL 或工作区文件；导入前后源库 hash 一致。
 8. 正文、metadata、图片、Daily 或画布 debounce 期间关窗，必须先落盘；注入失败时窗口保留。
 9. 扫描不完整、重授权选错目录或移除前保存失败时，旧快照、文档 ID 和版本历史仍保留。
-10. 正式 tag 只生成 Tauri 包且发布门禁生效；当 GitHub 出现更高正式版本时 Tauri 显示提示并打开该版 Release，当前 Inno 的下载安装边界仍明确为手动。
+10. 正式 tag 只生成签名 / 公证后的 Tauri 包且发布门禁生效；Electron 只保留手动回退，当前 Inno 更新边界明确为手动。
 
 执行过构建或测试后，检查并清理 `vite.config.*.timestamp-*.mjs`、`vitest.config.*.timestamp-*.mjs` 等临时产物；`src-tauri/target/` 和生成 schema 保持忽略。
 
@@ -123,6 +94,6 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 - 当前功能在真实 Tauri 窗口中有可复核证据。
 - Electron 旧数据未被移动、覆盖或重建，已有 Tauri 数据身份保持稳定。
 - 权限、数据隔离、签名和未迁移能力在文档中说清楚。
-- 有凭证时正式包签名 / 公证通过，没凭证时风险说明保留；tag / main / version 门禁生效，一次性手动迁移和当前手动更新边界已写入文档。
+- 正式包签名 / 公证通过，tag / main / version 门禁生效；一次性手动迁移和当前手动更新边界已写入 Release 与文档。
 - 相关 Tauri 构建通过；Electron 回退可独立构建，但不参与正式 tag。
 - 总结明确区分已完成、尚未迁移和未经证明的性能结论。

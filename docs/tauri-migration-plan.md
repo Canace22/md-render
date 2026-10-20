@@ -4,7 +4,7 @@
 
 正式桌面发布已经从 Electron 切到 Tauri 2。它复用现有 React/Vite 界面，系统能力改由 Rust command 提供，macOS 使用 WKWebView，Windows 使用 WebView2。Electron 只保留一个稳定发布周期的手动回退包，不再进入 `v*` tag 的 GitHub Release。
 
-当前代码已接入可控本地目录、Tauri 私有 SQLite/FTS、显式旧库导入、远程 AI 代理、本地媒体、原生保存导出、外链打开、本机 Agent 和新版本提示。PDF、应用内自动安装、本机 MCP、“数据文件化”和自定义 skill 编辑仍未迁移；这些入口会隐藏，不伪装成可用。
+当前代码已接入可控本地目录、Tauri 私有 SQLite/FTS、显式旧库导入、远程 AI 代理、本地媒体、原生保存导出和外链打开。首个正式版明确不包含 PDF、自动更新、本机 Agent、本机 MCP、“数据文件化”和自定义 skill 编辑；这些入口会隐藏，不伪装成可用。
 
 最终用户不需要安装 Node.js、pnpm 或 Rust。Node.js 和 Rust 只用于开发与构建。但 AI 功能仍需要一个可达的 `ai-proxy`：Tauri 客户端不会自动启动本地 Node 服务。
 
@@ -35,10 +35,8 @@ Electron 与 Tauri 的 WebView profile、应用标识和数据目录彼此独立
 | MD / HTML / DOCX 导出 | 已接入原生保存对话框 | Rust 原子写入；需真实产物交互验收 |
 | 外部链接 | 已接入系统打开 | 只允许 `http` / `https` |
 | PDF 导出 | 未迁移 | Tauri 中不展示 PDF 导出入口 |
-| 新版本提示 | 已迁移 | 查询 GitHub 最新正式版，按 semver 比较，有更新时跳转该版 Release |
-| 自动下载 / 安装 | 未迁移 | 自定义 Inno 包仍需手动下载安装 |
-| 本机 Agent | 已迁移 | 支持检测、模型选择、运行、续接、事件和取消，工作目录不向 Renderer 暴露真实路径 |
-| 本机 MCP | 未迁移 | 不伪装继承 Electron 的 Node `mcp-bridge` |
+| 自动更新 | 未迁移 | Electron updater 不在 Tauri 中误报可用 |
+| 本机 Agent / MCP | 未迁移 | 不会调用系统 Node 或 Electron `run-as-node` |
 | 数据文件化 / 外部 Agent 设置 | 未迁移 | 依赖 Electron vault bridge，Tauri 中隐藏 |
 | 自定义 skill 新建 / 编辑 | 未迁移 | 内置 skill 可运行，文件编辑依赖 Electron vault bridge |
 
@@ -93,7 +91,7 @@ Tauri 客户端的 AI 请求、流式事件、取消、知识库搜索和附件�
 - 应用程序默认安装到 `Program Files`，不把可执行文件安装到 AppData。
 - 用户内容留在用户选择的目录。配置、缓存和 Tauri 私有 SQLite 仍遵守 Windows 的用户数据目录约定；不能把这些可变数据写进 `Program Files`，也不承诺“完全不用 AppData”。
 - 安装包携带并调用 Microsoft WebView2 Evergreen Bootstrapper，构建脚本会验证其 Microsoft 数字签名。
-- CI 在 PFX secrets 齐全时签名应用、安装包和卸载器；缺少证书时仍生成未签名包，并在 Release 安装说明中提示 SmartScreen 风险。
+- CI 在 PFX secrets 齐全时签名应用、安装包和卸载器；缺少证书时生成文件名带 `-unsigned` 的未签名包。
 
 Inno Setup 不能代替代码签名。是否出现 SmartScreen 提示还取决于签名状态、可信证书和发布信誉，不能承诺绝不弹窗。CI 会完成静默安装、启动和卸载，有签名时再复核签名；旧 Electron NSIS 与新 Inno 的并存、快捷方式和卸载顺序仍需 Windows 实机回归。
 
@@ -101,7 +99,7 @@ Inno Setup 不能代替代码签名。是否出现 SmartScreen 提示还取决�
 
 - 本地可构建当前架构的 `.app` 和 `.dmg`。
 - 正式 tag 工作流构建 `universal-apple-darwin` 产物，同时包含 Apple Silicon 和 Intel 架构。
-- Developer ID secrets 齐全时执行正式签名、Apple 公证与 stapling；缺少任一 secret 时使用 ad-hoc 签名，并在 Release 安装说明中提示 Gatekeeper 风险。
+- Developer ID secrets 齐全时执行正式签名、Apple 公证与 stapling；缺少任一 secret 时使用 ad-hoc 签名，并生成文件名带 `-unsigned` 的包。
 
 Windows 和 macOS 的包体、启动时间与空闲内存都以同一台机器、同一份数据下的实际测量为准，不预设数字。
 
@@ -121,6 +119,6 @@ Windows 和 macOS 的包体、启动时间与空闲内存都以同一台机器�
 1. 在 macOS 和 Windows 正式签名 CI 中完成首个 tag 发布，并保存签名、公证、安装和卸载证据。
 2. 在 Windows 实机验证与旧 Electron NSIS 共存、快捷方式、中文输入和两边卸载顺序。
 3. 继续回归旧库导入、重启持久化、搜索、双链、版本历史和工作区重新授权。
-4. 若要从“新版本提示”升级为自动下载/安装，单独设计 Tauri 更新签名、元数据和 Windows 安装器兼容方案。
-5. 逐项迁移 PDF、MCP、数据文件化和自定义 skill 编辑，再恢复对应入口。
+4. 单独规划 Tauri updater；当前自定义 Inno 包继续从 Releases 手动更新，不冒充已支持自动升级。
+5. 逐项迁移 PDF、本机 Agent、MCP、数据文件化和自定义 skill 编辑，再恢复对应入口。
 6. 至少保留一个稳定发布周期的 Electron 回退包，确认迁移无阻断后再决定是否删除 Electron 专用代码。

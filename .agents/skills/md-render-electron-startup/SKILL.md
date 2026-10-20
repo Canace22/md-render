@@ -29,7 +29,7 @@ Tauri Release 只在推 `v*` tag 时跑；Pages 每次推 `main` 自动部署（
 
 - macOS 只有在 Developer ID / 公证 secrets 全部齐全时才导入证书并执行公证、stapling 和 Gatekeeper 校验；否则给 Tauri 传 `APPLE_SIGNING_IDENTITY=-` 做 ad-hoc 签名。两条路径都要校验 app 签名结构、DMG 完整性和 Universal 双架构。
 - Windows 打包脚本已支持可选 `WINDOWS_SIGNTOOL_COMMAND`；PFX secrets 不齐时不导入证书、不做 Authenticode 校验，但仍要完成安装、启动和卸载冒烟检查。
-- 公开产物使用稳定、简洁的文件名，不把 `-unsigned` 等签名状态塞进名称；Release 固定说明必须明示 macOS 系统确认和 Windows SmartScreen 风险，每版只更新 GitHub 自动生成的 `What's Changed`。
+- 没有受信任开发者签名的产物文件名必须带 `-unsigned`，Release 说明必须明示 macOS 系统确认和 Windows SmartScreen 风险。
 
 **推了却没触发流水线**：先 `git ls-remote --tags origin` 看远端有没有这个 `v*` tag——多半是 tag 根本没推上去，只推了分支（分支 push 不触发任何流水线）。`release:tag` 现在默认自动提交 bump，并用 `git push --atomic origin <分支> <tag>` 一起推、推完核对远端 tag；改这个脚本不要退回「bump 后不提交就退出」的旧行为。
 

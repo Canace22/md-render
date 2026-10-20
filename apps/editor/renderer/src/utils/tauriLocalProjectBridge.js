@@ -209,34 +209,10 @@ const normalizeProject = (project) => {
   };
 };
 
-export async function openLocalProject({
-  access = 'read-only',
-  allowLegacyProjectPath = false,
-  legacyProjectPaths = [],
-} = {}) {
+export async function openLocalProject({ access = 'read-only' } = {}) {
   const result = await invokeTauri(
     access === 'read-write' ? 'select_read_write_projects' : 'select_read_only_projects',
-    { allowLegacyProjectPath, legacyProjectPaths },
   );
-  return {
-    ...result,
-    projects: (result?.projects ?? []).map(normalizeProject),
-  };
-}
-
-export async function rememberLocalProjectAuthorization(mountId, projectIdentity) {
-  assertTauriMountId(mountId);
-  return invokeTauri('remember_local_project_authorization', { mountId, projectIdentity });
-}
-
-export async function restoreLocalProjectAuthorizations(projectIdentities) {
-  const identities = [...new Set(
-    (projectIdentities ?? []).map((identity) => String(identity ?? '').trim()).filter(Boolean),
-  )];
-  if (identities.length === 0) return { canceled: true, projects: [] };
-  const result = await invokeTauri('restore_local_project_authorizations', {
-    projectIdentities: identities,
-  });
   return {
     ...result,
     projects: (result?.projects ?? []).map(normalizeProject),
@@ -293,12 +269,7 @@ export async function saveLocalProjectFile({ mountId, relativePath, content, exp
   }, `file:${mountId}:${relativePath}`);
 }
 
-export async function saveLocalProjectMetadata({
-  mountId,
-  relativePath,
-  sharedAssetsMountId,
-  metadata,
-}) {
+export async function saveLocalProjectMetadata({ mountId, relativePath, metadata }) {
   assertTauriReadWriteMountId(mountId);
   return queueMountMutation(mountId, async () => {
     const current = await readLocalProjectFileContent({ mountId, relativePath });
@@ -308,12 +279,7 @@ export async function saveLocalProjectMetadata({
     const relation = createLocalProjectRelation(mountId);
     const patch = metadataToFrontmatterPatch(metadata, relation);
     if (typeof patch.cover === 'string') {
-      patch.cover = toDiskImageSrc(
-        patch.cover,
-        mountId,
-        relativePath,
-        sharedAssetsMountId,
-      );
+      patch.cover = toDiskImageSrc(patch.cover, mountId, relativePath);
     }
     const rawContent = updateFrontmatterInMarkdown(current.data, patch, {
       preserveEmptyKeys: metadata?.preserveEmptyFrontmatterKeys ?? [],

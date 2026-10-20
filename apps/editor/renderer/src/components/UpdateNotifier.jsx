@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { message } from 'antd';
-import { getPlatform } from '../services/electronBridge.js';
+import { getPlatform, getUpdaterBridge } from '../services/electronBridge.js';
 import { openExternalUrl } from '../services/desktopShellBridge.js';
-import { getUpdaterBridge } from '../services/updateBridge.js';
 
-// Electron macOS 和 Tauri 包都只提示新版本，由用户前往 Release 页安装
+// mac 包未签名，Squirrel.Mac 会拒绝安装更新，只能引导用户去 Release 页手动下载
 const RELEASES_URL = 'https://github.com/Canace22/md-render/releases/latest';
-const isManualUpdate = (state) => state?.manual === true || getPlatform() === 'darwin';
+const isManualUpdate = () => getPlatform() === 'darwin';
 
 const BACKGROUND_STATUSES = ['checking', 'up-to-date', 'available'];
 const BUSY_STATUSES = ['downloading', 'downloaded'];
@@ -51,10 +50,10 @@ export default function UpdateNotifier() {
   }, []);
 
   const handleOpenReleases = useCallback(() => {
-    openExternalUrl(state?.releaseUrl || RELEASES_URL).catch((error) => {
+    openExternalUrl(RELEASES_URL).catch((error) => {
       message.error(error?.message || '无法打开下载页');
     });
-  }, [state?.releaseUrl]);
+  }, []);
 
   const handleInstall = useCallback(() => {
     getUpdaterBridge()?.install();
@@ -70,7 +69,7 @@ export default function UpdateNotifier() {
         {state.status === 'available' && (
           <>
             <span>新版本 v{state.version} 可用</span>
-            {isManualUpdate(state) ? (
+            {isManualUpdate() ? (
               <button className="update-banner-btn" onClick={handleOpenReleases}>
                 前往下载
               </button>

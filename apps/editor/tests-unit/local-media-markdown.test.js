@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createLocalMediaUrl,
   encodeLocalMediaPath,
   rewriteMarkdownImagesForDisk,
   rewriteMarkdownImagesForEditor,
@@ -149,37 +148,5 @@ describe('Obsidian wiki image embeds', () => {
     const markdown = `![[${PASTED}]]`;
     expect(rewriteMarkdownImagesForEditor(markdown, {})).toBe(markdown);
     expect(rewriteMarkdownImagesForDisk(markdown, {})).toBe(markdown);
-  });
-});
-
-describe('Tauri 旧 MdRender 共享素材', () => {
-  const PROJECT_MOUNT = 'tauri-rw:v1:project-test';
-  const ASSETS_MOUNT = 'tauri-ro:v1:assets-test';
-  const context = {
-    projectRootPath: PROJECT_MOUNT,
-    noteRelativePath: 'claude被封.md',
-    sharedAssetsMountId: ASSETS_MOUNT,
-  };
-
-  it('库根 assets 图片通过只读共享素材授权显示', () => {
-    const markdown = '![image.png](../../assets/截图.png)';
-    const editor = rewriteMarkdownImagesForEditor(markdown, context);
-    expect(editor).toBe(
-      `![image.png](${createLocalMediaUrl(ASSETS_MOUNT, '截图.png')})`,
-    );
-  });
-
-  it('共享素材保存时恢复原有相对路径', () => {
-    const editorUrl = createLocalMediaUrl(ASSETS_MOUNT, '截图.png');
-    const disk = rewriteMarkdownImagesForDisk(`![image.png](${editorUrl})`, context);
-    expect(disk).toBe('![image.png](../../assets/截图.png)');
-  });
-
-  it('项目内自己的 assets 仍使用项目挂载', () => {
-    const markdown = '![local](assets/local.png)';
-    const editor = rewriteMarkdownImagesForEditor(markdown, context);
-    expect(editor).toBe(
-      `![local](${createLocalMediaUrl(PROJECT_MOUNT, 'assets/local.png')})`,
-    );
   });
 });
