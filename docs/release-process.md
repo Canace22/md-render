@@ -2,7 +2,7 @@
 
 > 日常发版用固定脚本，避免手工打 tag 时版本号不一致或漏推远程。
 >
-> 脚本路径：`scripts/release-tag.sh`  
+> 脚本路径：`scripts/release-tag.sh`
 > npm 命令：`pnpm release:tag`
 
 正式桌面壳是 Electron，只从 `main` 的 `v*` tag 发布。Tauri 代码保留在实验分支，不进入正式安装包。
