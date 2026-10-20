@@ -30,7 +30,7 @@ description: 在 renderer 里接入/改动 @narrative/blocknote-core（编辑器
 
 6. **自定义粘贴不能打乱 BlockNote 的 MIME 优先级**。在用 `text/plain` / `text/html` 做 Markdown 启发式判断前，先把 `vscode-editor-data`、`blocknote/html`、`text/markdown` 交回 `defaultPasteHandler`，否则内部复制会丢颜色/背景等不可用 Markdown 表达的结构，VS Code 代码也可能被误判成列表/标题。代码块特判只能在 HTML 确实是“纯单代码块”时执行；混合 HTML 必须走默认粘贴，且自定义插入要用 `pasteHTML` / `pasteMarkdown` 保留 ProseMirror 的选区替换语义，不要手工 `updateBlock/insertBlocks` 绕过选区。
 
-   外部纯文本 HTML 的识别不要限制得过严：浏览器、微信等常用带 `class` / `data-*` / 排版 `style` 的 `span` 包裹文本。这些仍应走纯文本空行归一化，否则 BlockNote 的 HTML 粘贴会把 `<br><br>` 变成多余空段落；但链接、列表、代码块及颜色/粗斜体/删除线等语义样式仍要交回默认 HTML 粘贴。现成判断：`apps/editor/renderer/src/utils/markdownUtils.js` 的 `looksLikePlainTextHtml`。
+   外部富文本列表可能在每个 `<li>` 末尾附带 `<p><br></p>`。BlockNote 会把它解析成空子段落，界面上表现为列表项之间多一整行，并带嵌套引导线。别把整段降级成纯文本，只在粘贴前删除列表项末尾“仅含空白 / `br` / 空 `span`”的直接子段落，保留链接、粗体和真正的多段列表内容。现成实现：`apps/editor/renderer/src/utils/markdownUtils.js` 的 `normalizeClipboardHtmlListSpacing`。
 
 7. **迁到通用组件后，旧类名的样式会静默失效——先查暗色主题**。业务侧自绘按钮换成 `EditorToolbar` 渲染时，DOM 类名从业务名（如 `.editor-quick-toolbar-btn`）变成包内通用名（`.toolbar-button` / `.editor-toolbar` / `.toolbar-center`）。迁移时通常只补了亮色的作用域覆盖，`body.theme-dark` 那几条还挂在旧类名上，于是暗色下按钮保持白底浅灰字——亮色看着正常，问题能潜伏很久。改完务必 `grep` 一遍旧类名：只剩 CSS 命中、没有 JSX 命中的，就是死规则，删掉并把对应的暗色规则改挂到新类名上。
 
