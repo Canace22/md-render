@@ -23,7 +23,9 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
 
 ## 打包 / CI 发版（`package-electron.mjs`、`ci.yml`、`release.yml`）
 
-Release 只在推 `v*` tag 时跑；Pages 每次推 `main` 自动部署（别改回 tag 触发，`github-pages` 环境保护规则只放行默认分支，deploy 会无日志失败）；`ci.yml` 有 macOS 和 Windows 两个打包任务，但只能手动触发（push/PR 不跑），改打包链路先在 Actions 页签手动跑一次 CI 确认两项全绿再打 tag。CI 日志过期会返回 410，排查要趁早。
+正式桌面壳是 Electron，正式发布只认 `main` 上的 `v*` tag；Tauri 代码留在独立实验分支，不要把实验壳、依赖或 workflow 合回 `main` 的正式发布链。`release-tag.sh` 默认拒绝从非 `main` 分支推正式 tag，`release.yml` 还会校验 tag 提交属于 `origin/main`。
+
+Pages 每次推 `main` 自动部署（别改回 tag 触发，`github-pages` 环境保护规则只放行默认分支，deploy 会无日志失败）；`ci.yml` 有 macOS 和 Windows 两个打包任务，但只能手动触发（push/PR 不跑），改打包链路先在 Actions 页签手动跑一次 CI 确认两项全绿再打 tag。CI 日志过期会返回 410，排查要趁早。
 
 **推了却没触发流水线**：先 `git ls-remote --tags origin` 看远端有没有这个 `v*` tag——多半是 tag 根本没推上去，只推了分支（分支 push 不触发任何流水线）。`release:tag` 现在默认自动提交 bump，并用 `git push --atomic origin <分支> <tag>` 一起推、推完核对远端 tag；改这个脚本不要退回「bump 后不提交就退出」的旧行为。
 
@@ -40,6 +42,7 @@ macOS universal 包踩过的坑：
 自动更新（electron-updater）踩过的坑：
 
 5. **Release 要带更新元数据**：updater 先读 Release 里的 `latest.yml`（win）/ `latest-mac.yml`（mac）判断新版本，mac 更新包是 `.zip` 不是 `.dmg`。`release.yml` 上传 artifact 时只传 `.exe` / `.dmg` 会让检查一直报错，而 `UpdateNotifier` 遇到 error 不显示，表现为「自动更新静默失效」。改上传路径时保留这些文件，Check output 步骤里有兜底检查。
+   - 对外产物名固定为 `MD-Render-<version>.dmg`、`MD-Render-<version>-mac.zip` 和 `MD-Render-Setup-<version>.exe`；ZIP 文件名必须与 `latest-mac.yml` 的 URL 完全一致，不要在壳切换或 workflow 重构时随意改名。
 6. **mac 未签名装不上更新**：Squirrel.Mac 校验签名，CI 当前 `CSC_IDENTITY_AUTO_DISCOVERY=false` 不签名，所以 mac 只提示并跳转 Release 页下载（`UpdateNotifier` 的 `isManualUpdate`）。配好 Apple 签名和公证后才能去掉这个降级。
 7. **点下载像没反应**：第一条 `download-progress` 要等连上 GitHub、拿到 blockmap 之后才推，网络慢时会等很久。所以点击时提示条先自己切到「下载中 0%」；用户点了下载之后的 `error` 要显示出来并给「前往下载」；30 分钟一次的后台检查不能把下载中的状态覆盖掉（`UpdateNotifier` 的 `mergeUpdaterStatus`）。
 

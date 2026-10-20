@@ -136,6 +136,11 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   fail "当前目录不是 git 仓库"
 fi
 
+CURRENT_BRANCH="$(git branch --show-current)"
+if [[ "$DRY_RUN" != true && "$PUSH" == true && "$CURRENT_BRANCH" != "main" ]]; then
+  fail "正式版本只能从 main 分支发布；当前分支是 ${CURRENT_BRANCH:-detached HEAD}。实验分支请使用 --no-push，或切回 main。"
+fi
+
 if [[ ! -f "$PKG_ROOT" ]]; then
   fail "未找到根目录 package.json"
 fi

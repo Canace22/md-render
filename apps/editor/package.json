@@ -91,6 +91,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "defaultArch": "universal",
+      "artifactName": "MD-Render-${version}-mac.${ext}",
       "target": [
         {
           "target": "dmg",
@@ -109,6 +110,7 @@
     },
     "dmg": {
       "title": "MD Render",
+      "artifactName": "MD-Render-${version}.${ext}",
       "contents": [
         {
           "x": 130,
@@ -134,6 +136,7 @@
       "icon": "assets/icon.ico"
     },
     "nsis": {
+      "artifactName": "MD-Render-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,

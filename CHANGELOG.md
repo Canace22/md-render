@@ -6,6 +6,12 @@
 
 这些改动已经在 main 上，但还没打进安装包。想提前用，需要从源码运行（见 [开发指南](./docs/development.md)）。
 
+### 桌面壳调整
+
+- **正式桌面版恢复为 Electron**：`main` 和 `v*` Release 只构建 Electron 的 macOS / Windows 安装包，自动更新元数据也随 Release 一起发布。
+- **Tauri 降为实验分支**：相关代码保留在 `codex/tauri-experiment`，不再混入正式分支。两个壳的数据目录彼此独立，不承诺自动合并实验版数据。
+- Electron 继续使用原有 `com.mdrender.app` 应用标识和数据目录；从旧 Electron 正式版升级不需要重新选择工作区。
+
 ### 升级前必读：app 内的 Notion 同步和云端快照已移除
 
 - **改了什么**：设置里的 Notion 同步、云端快照入口都没有了。

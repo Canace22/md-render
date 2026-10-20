@@ -53,6 +53,10 @@ jobs:
             echo "Error: dmg file not found"
             exit 1
           fi
+          if [ ! -f "$release_dir/latest-mac.yml" ]; then
+            echo "Error: latest-mac.yml not found"
+            exit 1
+          fi
 
       - name: Upload Electron artifact
         uses: actions/upload-artifact@v4
@@ -60,7 +64,9 @@ jobs:
           name: electron-mac
           path: |
             apps/editor/release/*.dmg
+            apps/editor/release/*.zip
             apps/editor/release/*.blockmap
+            apps/editor/release/latest-mac.yml
           retention-days: 7
 
   electron-pack-win:
@@ -101,3 +107,18 @@ jobs:
             Write-Error "exe file not found"
             exit 1
           }
+          if (!(Test-Path "$releaseDir/latest.yml")) {
+            Write-Error "latest.yml not found"
+            exit 1
+          }
+
+      - name: Upload Electron artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-windows
+          path: |
+            apps/editor/release/*.exe
+            apps/editor/release/*.blockmap
+            apps/editor/release/latest.yml
+          if-no-files-found: error
+          retention-days: 7
