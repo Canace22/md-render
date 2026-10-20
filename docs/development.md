@@ -88,9 +88,9 @@ pnpm preview              # 本地预览网页版构建（默认 http://localhos
 
 ### Tauri 打包说明
 
-正式发布由 `.github/workflows/release.yml` 在 `v*` tag 推送后触发，只接受版本号一致且位于 `origin/main` 历史上的提交。macOS 构建 Universal `.app` 和 `.dmg`；Developer ID 和公证 secrets 齐全时执行正式签名、公证与 Gatekeeper 校验，否则使用 ad-hoc 签名并发布文件名带 `-unsigned` 的包。
+正式发布由 `.github/workflows/release.yml` 在 `v*` tag 推送后触发，只接受版本号一致且位于 `origin/main` 历史上的提交。macOS 构建 Universal `.app` 和 `.dmg`；Developer ID、Apple 账号或 Team ID 等 secrets 缺一时工作流直接失败，不发布 ad-hoc 包。
 
-Windows 先构建 Tauri exe，再用 Inno Setup 6 生成现代化安装程序。应用程序默认进入 `Program Files`，安装包会运行 Microsoft WebView2 Evergreen Bootstrapper。PFX secrets 齐全时，CI 会签名并校验应用、安装包和卸载器；否则发布文件名带 `-unsigned` 的未签名包。两种路径都会执行安装、启动和卸载冒烟检查。
+Windows 先构建 Tauri exe，再用 Inno Setup 6 生成现代化安装程序。应用程序默认进入 `Program Files`，安装包会运行 Microsoft WebView2 Evergreen Bootstrapper。PFX secrets 是正式发布的必需项；CI 会验证应用、安装包和卸载器签名，并执行安装、启动和卸载冒烟检查。签名不能保证 SmartScreen 永不提示，新证书仍需要积累信誉。
 
 Electron 回退包只能通过 `.github/workflows/ci.yml` 手动构建，不会挂到正式 Release。旧 Electron updater 无法跨框架完成首次升级，当前自定义 Inno 包也未接入 Tauri updater；用户暂时从 Releases 手动安装更新。包体大小、启动速度和内存占用以实际产物与同条件测量为准。
 
@@ -169,7 +169,7 @@ pnpm release:tag -- --dry-run   # 2. 预览 tag
 pnpm release:tag                # 3. 创建 annotated tag 并推送
 ```
 
-推送 tag 后 CI 会构建 Tauri 的 macOS Universal `.dmg` 和 Windows x64 Inno 安装包，再发布到 GitHub Releases。有完整凭证时执行签名和对应校验；没有时发布带 `-unsigned` 标记的包。完整检查清单见 [release-process.md](./release-process.md)。
+推送 tag 后 CI 会构建、签名并校验 Tauri 的 macOS Universal `.dmg` 和 Windows x64 Inno 安装包，再发布到 GitHub Releases。缺少任一平台正式签名凭证时不会发布。完整检查清单见 [release-process.md](./release-process.md)。
 
 ## 部署网页版到 GitHub Pages
 

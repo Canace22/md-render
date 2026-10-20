@@ -1,6 +1,6 @@
 # md-render 桌面版发布流程
 
-正式桌面包使用 Tauri 2。推送 `v*` tag 后，`.github/workflows/release.yml` 会构建并发布 macOS Universal DMG 和 Windows x64 Inno Setup；签名凭证齐全时同时完成签名与公证，否则发布明确标记的未签名包。Electron 只保留手动回退包，不进入正式 Release。
+正式桌面包使用 Tauri 2。推送 `v*` tag 后，`.github/workflows/release.yml` 会构建、签名并发布 macOS Universal DMG 和 Windows x64 Inno Setup；Electron 只保留手动回退包，不进入正式 Release。
 
 脚本路径：`scripts/release-tag.sh`
 
@@ -13,13 +13,13 @@ npm 命令：`pnpm release:tag`
 | 版本号 | 根目录和 `apps/editor/package.json` 必须一致 |
 | Tag | `v` + 版本号，如 `v1.0.21`；使用 annotated tag |
 | 发布提交 | tag 指向的 commit 必须已经进入 `origin/main` |
-| macOS | `MD-Render-<version>-macOS-universal[-unsigned].dmg`，同时支持 Apple Silicon 和 Intel |
-| Windows | `MD-Render-<version>-windows-x64[-unsigned]-setup.exe`，使用 Inno Setup 安装到 `Program Files` |
+| macOS | `MD-Render-<version>-macOS-universal.dmg`，同时支持 Apple Silicon 和 Intel |
+| Windows | `MD-Render-<version>-windows-x64-setup.exe`，使用 Inno Setup 安装到 `Program Files` |
 | 更新方式 | 当前从 Releases 手动下载安装；尚未接入 Tauri updater |
 
 ## 2. 仓库一次性配置
 
-签名是可选增强。某个平台的 secrets 全部齐全时，该平台走签名和校验路径；任一项缺失时，该平台改为发布文件名带 `-unsigned` 的未签名包。
+正式发布没有无签名降级路径；缺少任一必需 secret，整个 Release 都会失败。
 
 | 名称 | 用途 |
 |---|---|
@@ -75,15 +75,15 @@ pnpm release:tag
 
 ## 5. CI 会做什么
 
-发布工作流按以下顺序执行：
+发布工作流按以下顺序 fail-closed：
 
 1. 校验根目录版本、editor 版本和 tag 版本完全一致，并确认发布 commit 属于 `origin/main`。
 2. 校验可选 `AI_PROXY_BASE` 使用 HTTPS。
-3. macOS 始终构建 Universal app / DMG 并检查 app 签名结构、DMG 完整性和双架构；secrets 齐全时执行 Developer ID 签名、公证、stapling 和 Gatekeeper 校验，否则使用 ad-hoc 签名。
-4. Windows 始终构建 Tauri exe 和 Inno 安装包，并完成安装、启动、卸载冒烟检查；PFX secrets 齐全时额外验证应用、安装包、安装后应用和卸载器签名。
+3. macOS 导入临时证书，构建 Universal app / DMG，完成签名、公证和 stapling，再检查 Gatekeeper、DMG 完整性和双架构。
+4. Windows 导入 PFX，构建 Tauri exe 和 Inno 安装包，验证应用、安装包、安装后应用和卸载器签名，并完成安装、启动、卸载冒烟检查。
 5. 生成两端 SHA-256 校验文件，全部成功后才创建 GitHub Release。
 
-任何平台的构建或必做检查失败，都不会创建只含单平台文件的 Release。未签名不再视为构建失败，但必须在文件名和 Release 说明中标记。
+任何平台失败都不会创建只含单平台或未签名文件的正式 Release。
 
 ## 6. 发布后的升级说明
 

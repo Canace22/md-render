@@ -23,13 +23,7 @@ description: 诊断 md-render 的 Electron 开发启动、白屏、端口冲突�
 
 ## 打包 / CI 发版（`package-electron.mjs`、`ci.yml`、`release.yml`）
 
-Tauri Release 只在推 `v*` tag 时跑；Pages 每次推 `main` 自动部署（别改回 tag 触发，`github-pages` 环境保护规则只放行默认分支，deploy 会无日志失败）。`.github/workflows/ci.yml` 是手动触发的旧 Electron 回退包，不能代替 Tauri Release 验收。GitHub 重跑旧 tag 会继续使用该 tag 中的 workflow；改了 `release.yml` 后要新建 tag 才能验证新逻辑。CI 日志过期会返回 410，排查要趁早。
-
-正式签名是可选增强，不是发布前置条件：
-
-- macOS 只有在 Developer ID / 公证 secrets 全部齐全时才导入证书并执行公证、stapling 和 Gatekeeper 校验；否则给 Tauri 传 `APPLE_SIGNING_IDENTITY=-` 做 ad-hoc 签名。两条路径都要校验 app 签名结构、DMG 完整性和 Universal 双架构。
-- Windows 打包脚本已支持可选 `WINDOWS_SIGNTOOL_COMMAND`；PFX secrets 不齐时不导入证书、不做 Authenticode 校验，但仍要完成安装、启动和卸载冒烟检查。
-- 没有受信任开发者签名的产物文件名必须带 `-unsigned`，Release 说明必须明示 macOS 系统确认和 Windows SmartScreen 风险。
+Release 只在推 `v*` tag 时跑；Pages 每次推 `main` 自动部署（别改回 tag 触发，`github-pages` 环境保护规则只放行默认分支，deploy 会无日志失败）；`ci.yml` 有 macOS 和 Windows 两个打包任务，但只能手动触发（push/PR 不跑），改打包链路先在 Actions 页签手动跑一次 CI 确认两项全绿再打 tag。CI 日志过期会返回 410，排查要趁早。
 
 **推了却没触发流水线**：先 `git ls-remote --tags origin` 看远端有没有这个 `v*` tag——多半是 tag 根本没推上去，只推了分支（分支 push 不触发任何流水线）。`release:tag` 现在默认自动提交 bump，并用 `git push --atomic origin <分支> <tag>` 一起推、推完核对远端 tag；改这个脚本不要退回「bump 后不提交就退出」的旧行为。
 
@@ -38,18 +32,16 @@ Windows 上踩过的坑（macOS 都不会暴露）：
 1. **Node 版本**：workflow 的 `node-version` 要和本地一致（现为 22）。`better-sqlite3@12` 只发 Node 20+ 预编译包，Node 18 会退回 node-gyp 源码编译，而 `windows-latest` 的新版 Visual Studio 不被 pnpm 9 自带的 node-gyp 识别 → `find VS` 报错。
 2. **spawn pnpm**：Windows 上 pnpm 是 `pnpm.cmd`，`spawn('pnpm')` 不开 shell 会 `ENOENT`。脚本里调 pnpm 一律走 `runPnpm()`（优先用 `npm_execpath` 交给 `process.execPath` 执行），不要新增裸 `spawn('pnpm')`。
 3. **staging 必须与仓库同盘**：pnpm 9 `deploy` 用 `path.relative(项目目录, 目标/node_modules)` 算 modulesDir，跨盘（仓库 D:、TEMP 在 C:）会得到绝对路径并被拼回项目目录，报 symlink `ENOENT`，路径形如 `D:\...\apps\editor\C:\...`。所以 Windows staging 放在仓库同级 `.md-render-electron-builder`，不要改回 `%TEMP%`。
-4. **PowerShell 7 不要污染 Windows PowerShell 5.1 的模块路径**：GitHub Actions 的 `pwsh` 步骤里通过 npm 启动 `powershell.exe` 时，子进程会继承 PowerShell 7 的 `PSModulePath`，导致 `Microsoft.PowerShell.Security` 加载失败，`Get-AuthenticodeSignature` / `Get-ExecutionPolicy` 报 `CouldNotAutoloadMatchingModule`。`build-tauri-inno.ps1` 要在 Desktop edition 入口处先剔除 `...\PowerShell\...` 路径，保留 `...\WindowsPowerShell\...`；不要只加 `Import-Module`，它仍可能命中不兼容模块。
-5. **Inno 6.7.1 不会安装简体中文翻译**：`ChineseSimplified.isl` 位于对应源码 tag 的 `Files/Languages/Unofficial/`，Chocolatey 安装后的 `compiler:Languages\ChineseSimplified.isl` 不存在。打包脚本应下载与 Inno 版本锁定的翻译文件、校验 SHA-256，再把实际路径传给 `.iss`；不要假设 CI 编译器目录自带非官方翻译。
 
 macOS universal 包踩过的坑：
 
-6. **CI 上 `.node` 只有 arm64**：electron-builder 在 CI 默认用硬链接拷文件，universal 构建先打 x64 再 rebuild arm64，arm64 的 `.node` 原地覆盖时把 x64 临时包里的那份也改了，合并时两份相同就跳过 lipo → Intel Mac 打不开（Electron 本体仍是 universal，很难察觉）。脚本里已设 `USE_HARD_LINKS=false`，并在 mac 打包后用 `lipo -archs` 检查所有 `.node` 同时含 `x86_64 + arm64`，缺了直接失败。验证已发布的包：解开 dmg（`7z x`），对 `app.asar.unpacked/**/*.node` 执行 `file`。
+4. **CI 上 `.node` 只有 arm64**：electron-builder 在 CI 默认用硬链接拷文件，universal 构建先打 x64 再 rebuild arm64，arm64 的 `.node` 原地覆盖时把 x64 临时包里的那份也改了，合并时两份相同就跳过 lipo → Intel Mac 打不开（Electron 本体仍是 universal，很难察觉）。脚本里已设 `USE_HARD_LINKS=false`，并在 mac 打包后用 `lipo -archs` 检查所有 `.node` 同时含 `x86_64 + arm64`，缺了直接失败。验证已发布的包：解开 dmg（`7z x`），对 `app.asar.unpacked/**/*.node` 执行 `file`。
 
 自动更新（electron-updater）踩过的坑：
 
-7. **Release 要带更新元数据**：updater 先读 Release 里的 `latest.yml`（win）/ `latest-mac.yml`（mac）判断新版本，mac 更新包是 `.zip` 不是 `.dmg`。`release.yml` 上传 artifact 时只传 `.exe` / `.dmg` 会让检查一直报错，而 `UpdateNotifier` 遇到 error 不显示，表现为「自动更新静默失效」。改上传路径时保留这些文件，Check output 步骤里有兜底检查。
-8. **mac 未签名装不上更新**：Squirrel.Mac 校验签名，CI 当前 `CSC_IDENTITY_AUTO_DISCOVERY=false` 不签名，所以 mac 只提示并跳转 Release 页下载（`UpdateNotifier` 的 `isManualUpdate`）。配好 Apple 签名和公证后才能去掉这个降级。
-9. **点下载像没反应**：第一条 `download-progress` 要等连上 GitHub、拿到 blockmap 之后才推，网络慢时会等很久。所以点击时提示条先自己切到「下载中 0%」；用户点了下载之后的 `error` 要显示出来并给「前往下载」；30 分钟一次的后台检查不能把下载中的状态覆盖掉（`UpdateNotifier` 的 `mergeUpdaterStatus`）。
+5. **Release 要带更新元数据**：updater 先读 Release 里的 `latest.yml`（win）/ `latest-mac.yml`（mac）判断新版本，mac 更新包是 `.zip` 不是 `.dmg`。`release.yml` 上传 artifact 时只传 `.exe` / `.dmg` 会让检查一直报错，而 `UpdateNotifier` 遇到 error 不显示，表现为「自动更新静默失效」。改上传路径时保留这些文件，Check output 步骤里有兜底检查。
+6. **mac 未签名装不上更新**：Squirrel.Mac 校验签名，CI 当前 `CSC_IDENTITY_AUTO_DISCOVERY=false` 不签名，所以 mac 只提示并跳转 Release 页下载（`UpdateNotifier` 的 `isManualUpdate`）。配好 Apple 签名和公证后才能去掉这个降级。
+7. **点下载像没反应**：第一条 `download-progress` 要等连上 GitHub、拿到 blockmap 之后才推，网络慢时会等很久。所以点击时提示条先自己切到「下载中 0%」；用户点了下载之后的 `error` 要显示出来并给「前往下载」；30 分钟一次的后台检查不能把下载中的状态覆盖掉（`UpdateNotifier` 的 `mergeUpdaterStatus`）。
 
 排查顺序：先看失败在哪一步（Install / Build / Check output），再拿日志最后 60 行定位；能在 Linux 复现的部分（vite build、pnpm deploy）可用 `pnpm --filter @md-render/editor electron:pack --linux` 验证，Windows 专属问题用 `path.win32` 模拟路径或以 CI 的 Windows 任务为准。重推同名 tag 前先删远端 tag。
 

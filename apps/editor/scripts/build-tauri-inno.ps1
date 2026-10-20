@@ -9,16 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# npm can launch Windows PowerShell from pwsh with incompatible PowerShell 7 module paths.
-if ($PSVersionTable.PSEdition -eq 'Desktop' -and $env:PSModulePath) {
-  $modulePathSeparator = [System.IO.Path]::PathSeparator
-  $env:PSModulePath = (($env:PSModulePath -split [regex]::Escape($modulePathSeparator)) |
-    Where-Object { $_ -and $_ -notmatch '[\\/]PowerShell(?:[\\/]|$)' }) -join $modulePathSeparator
-}
-
 $WebView2BootstrapperUrl = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703'
-$ChineseLanguageUrl = 'https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_1/Files/Languages/Unofficial/ChineseSimplified.isl'
-$ChineseLanguageSha256 = '7d544b9bb1d142cfa11f2e5d3cc8abe2e55f8e066c5124e3772675aa236e1278'
 $EditorDir = Split-Path -Parent $PSScriptRoot
 $TauriDir = Join-Path $EditorDir 'src-tauri'
 $InnoScript = Join-Path $TauriDir 'installers\windows\md-render-tauri.iss'
@@ -60,30 +51,6 @@ function Resolve-WebView2Bootstrapper([string]$RequestedPath) {
   return $resolvedPath
 }
 
-function Resolve-ChineseLanguageFile {
-  $cacheDir = Join-Path $TauriDir 'target\inno-cache'
-  $languagePath = Join-Path $cacheDir 'ChineseSimplified.isl'
-  New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
-
-  $needsDownload = !(Test-Path -LiteralPath $languagePath -PathType Leaf)
-  if (!$needsDownload) {
-    $cachedHash = (Get-FileHash -LiteralPath $languagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    $needsDownload = $cachedHash -ne $ChineseLanguageSha256
-  }
-
-  if ($needsDownload) {
-    Write-Host 'Downloading the Inno Setup 6.7.1 Simplified Chinese translation...'
-    Invoke-WebRequest -Uri $ChineseLanguageUrl -OutFile $languagePath
-  }
-
-  $languageHash = (Get-FileHash -LiteralPath $languagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($languageHash -ne $ChineseLanguageSha256) {
-    throw "Simplified Chinese translation checksum mismatch: $languagePath"
-  }
-
-  return (Resolve-Path -LiteralPath $languagePath).Path
-}
-
 if (!$AppExePath) {
   $AppExePath = Join-Path $TauriDir 'target\release\md-render.exe'
 }
@@ -93,7 +60,6 @@ if (!$OutputDir) {
 
 $resolvedAppExePath = (Resolve-Path -LiteralPath $AppExePath).Path
 $resolvedWebView2Path = Resolve-WebView2Bootstrapper $WebView2BootstrapperPath
-$resolvedChineseLanguagePath = Resolve-ChineseLanguageFile
 $resolvedOutputDir = [System.IO.Path]::GetFullPath($OutputDir)
 $version = (Get-Content -LiteralPath $PackageJsonPath -Raw | ConvertFrom-Json).version
 $compiler = Resolve-InnoCompiler
@@ -104,7 +70,6 @@ $compilerArguments = @(
   "/DAppVersion=$version",
   "/DAppExePath=$resolvedAppExePath",
   "/DWebView2BootstrapperPath=$resolvedWebView2Path",
-  "/DChineseLanguageFile=$resolvedChineseLanguagePath",
   "/DOutputDir=$resolvedOutputDir",
   "/DOutputSuffix=$OutputSuffix"
 )
