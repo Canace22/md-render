@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    env, fs,
+    io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
@@ -15,8 +16,11 @@ use serde::Serialize;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use tempfile::NamedTempFile;
 
 const DATABASE_FILE_NAME: &str = "knowledge.db";
+const MD_RENDER_DIR_NAME: &str = "MdRender";
+const ARTIFACTS_DIR_NAME: &str = "Artifacts";
 const MIGRATION_STATE_KEY: &str = "migrated_from_localstorage";
 const MIGRATION_STATE_VALUE: &str = "done";
 const LEGACY_IMPORT_STATE_KEY: &str = "electron_database_imported";
@@ -33,6 +37,7 @@ const VERSION_LIST_LIMIT: i64 = 200;
 const VERSION_SNAPSHOT_INTERVAL_MS: i64 = 5 * 60 * 1_000;
 const VERSION_RETENTION_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
 const VERSION_PRUNE_INTERVAL_MS: i64 = 60 * 60 * 1_000;
+const MAX_ARTIFACT_FILE_NAME_CHARS: usize = 100;
 
 const EDITOR_STATE_KEYS: &[&str] = &[
     "workspace_json",
@@ -469,6 +474,109 @@ fn mutation_result(result: Result<(), String>) -> MutationResponse {
     }
 }
 
+fn artifacts_directory() -> Result<PathBuf, String> {
+    let home = env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .ok_or_else(|| "无法定位用户主目录".to_string())?;
+    Ok(home
+        .join("Documents")
+        .join(MD_RENDER_DIR_NAME)
+        .join(ARTIFACTS_DIR_NAME))
+}
+
+fn sanitize_artifact_file_name(name: &str) -> String {
+    let replaced: String = name
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            value => value,
+        })
+        .collect();
+    let collapsed = replaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed: String = collapsed
+        .chars()
+        .take(MAX_ARTIFACT_FILE_NAME_CHARS)
+        .collect();
+    if trimmed.is_empty() {
+        "untitled".to_string()
+    } else {
+        trimmed
+    }
+}
+
+fn collect_builtin_artifacts(node: &JsonValue, artifacts: &mut Vec<(String, String, String)>) {
+    let Some(object) = node.as_object() else {
+        return;
+    };
+    let is_file = object.get("type").and_then(JsonValue::as_str) == Some("file");
+    let id = object
+        .get("id")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default();
+    let is_disk_backed = object
+        .get("projectRootPath")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|path| !path.is_empty());
+    if is_file && !is_disk_backed && !id.is_empty() {
+        let name = object
+            .get("name")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("untitled");
+        let content = object
+            .get("content")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default();
+        artifacts.push((
+            id.to_string(),
+            format!("{}.md", sanitize_artifact_file_name(name)),
+            content.to_string(),
+        ));
+    }
+    if let Some(children) = object.get("children").and_then(JsonValue::as_array) {
+        children
+            .iter()
+            .for_each(|child| collect_builtin_artifacts(child, artifacts));
+    }
+}
+
+fn write_builtin_docs_to_disk(workspace: &JsonValue) -> Result<HashMap<String, String>, String> {
+    let directory = artifacts_directory()?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("无法创建 MdRender Artifacts 目录：{error}"))?;
+    let mut artifacts = Vec::new();
+    collect_builtin_artifacts(workspace, &mut artifacts);
+    let mut disk_paths = HashMap::new();
+    for (id, file_name, content) in artifacts {
+        let target = directory.join(file_name);
+        let mut temporary = NamedTempFile::new_in(&directory)
+            .map_err(|error| format!("无法创建文档临时文件：{error}"))?;
+        temporary
+            .write_all(content.as_bytes())
+            .map_err(|error| format!("无法写入本地文档：{error}"))?;
+        temporary
+            .flush()
+            .map_err(|error| format!("无法刷新本地文档：{error}"))?;
+        temporary
+            .as_file()
+            .sync_all()
+            .map_err(|error| format!("无法落盘本地文档：{error}"))?;
+        temporary
+            .persist(&target)
+            .map_err(|error| format!("无法替换本地文档：{}", error.error))?;
+        disk_paths.insert(id, target.to_string_lossy().into_owned());
+    }
+    Ok(disk_paths)
+}
+
+fn apply_artifact_disk_paths(documents: &mut [DocumentRow], disk_paths: &HashMap<String, String>) {
+    documents.iter_mut().for_each(|document| {
+        if let Some(path) = disk_paths.get(&document.id) {
+            document.disk_path = Some(path.clone());
+        }
+    });
+}
+
 #[tauri::command]
 pub fn db_is_migrated(state: State<'_, DatabaseState>) -> Result<bool, String> {
     let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
@@ -570,7 +678,9 @@ pub fn db_migrate(
     let result = (|| -> Result<(), String> {
         let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
         let workspace = workspace_from_state_map(state_map.as_ref())?;
-        let documents = flatten_workspace(&workspace)?;
+        let mut documents = flatten_workspace(&workspace)?;
+        let disk_paths = write_builtin_docs_to_disk(&workspace)?;
+        apply_artifact_disk_paths(&mut documents, &disk_paths);
         let mut connection = open_write_connection(&state.path)?;
         let transaction = connection.transaction().map_err(db_error)?;
         if let Some(values) = state_map.as_ref() {
@@ -598,7 +708,11 @@ pub fn db_save(
     let result = (|| -> Result<(), String> {
         let _guard = state.operation_lock.lock().map_err(|_| lock_error())?;
         let workspace = workspace_from_save_inputs(state_map.as_ref(), workspace_json.as_deref())?;
-        let documents = workspace.as_ref().map(flatten_workspace).transpose()?;
+        let mut documents = workspace.as_ref().map(flatten_workspace).transpose()?;
+        if let (Some(workspace), Some(documents)) = (workspace.as_ref(), documents.as_mut()) {
+            let disk_paths = write_builtin_docs_to_disk(workspace)?;
+            apply_artifact_disk_paths(documents, &disk_paths);
+        }
         let encoded_workspace = workspace
             .as_ref()
             .map(serde_json::to_string)

@@ -70,6 +70,7 @@ Tauri WebView 还有独立浏览器 profile。首次打开看不到 Electron 的
 ### SQLite 与旧数据导入
 
 - Electron 和 Tauri 使用不同 app identifier 和数据库，禁止双壳共写一库。Tauri 只在用户明确选文件时导入；源库拒绝非空 WAL / journal 后用 immutable + read-only/query-only 打开，导入前后复核主文件未变化。
+- 不要只迁移 SQLite 读写，还要检查数据库保存后的文件副作用。未迁成真文件的内置文档，Electron 会同步写入 `Documents/MdRender/Artifacts`；Tauri 也要在 `db_migrate` / `db_save` 成功返回前完成同等落盘，沿用文件名规则并回填 `disk_path`。已有 `projectRootPath` 的真实本地项目必须排除，避免重复导出或覆盖源文件。
 - Electron 运行时最新数据可能还在 WAL；必须先退出 Electron，不拿带非空边车日志的单独 `.db` 冒充完整备份。零字节 WAL 或孤立 SHM 可能来自正常退出，不要仅凭文件存在就误拒。
 - Electron 导入是“备份当前 Tauri 库后整库替换”，不是合并。已有 Tauri 内容和 Electron 内容同时有价值时，先导出用户可读备份并明确提示；成功结果要展示 `knowledge.before-import.<timestamp>.db` 的实际文件名。
 - 导入前先锁住交互、排空文件/图片/metadata/SQLite，再冻结新的 store 和 Rust 写入。关窗与导入互斥，导入成功后保持冻结直到 reload，失败才恢复。
