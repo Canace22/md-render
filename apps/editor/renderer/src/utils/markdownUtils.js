@@ -124,8 +124,12 @@ export const isVsCodeMarkdownClipboard = (clipboardData) => {
 };
 
 const IGNORED_CLIPBOARD_ELEMENT_TAGS = new Set(['META']);
-const PLAIN_TEXT_HTML_TAGS = new Set(['BR', 'DIV', 'P']);
+const PLAIN_TEXT_HTML_TAGS = new Set(['BR', 'DIV', 'P', 'SPAN']);
 const SAFARI_PLAIN_TEXT_BREAK_CLASS = 'Apple-interchange-newline';
+const RICH_TEXT_STYLE_PATTERN = new RegExp(
+  String.raw`(?:^|;)\s*(?:background(?:-color)?|color|font(?:-style|-weight)?|text-decoration(?:-line)?|vertical-align)\s*:`,
+  'i',
+);
 
 const getMeaningfulChildNodes = (node) => Array.from(node?.childNodes ?? []).filter((child) => {
   if (child.nodeType === Node.ELEMENT_NODE) {
@@ -179,10 +183,15 @@ export const looksLikePlainTextHtml = (value = '') => {
   return Array.from(container.querySelectorAll('*')).every((element) => {
     if (IGNORED_CLIPBOARD_ELEMENT_TAGS.has(element.tagName)) return true;
     if (!PLAIN_TEXT_HTML_TAGS.has(element.tagName)) return false;
-    if (element.attributes.length === 0) return true;
-    return element.tagName === 'BR'
-      && element.attributes.length === 1
-      && element.getAttribute('class') === SAFARI_PLAIN_TEXT_BREAK_CLASS;
+    if (element.tagName === 'BR') {
+      if (element.attributes.length === 0) return true;
+      return element.attributes.length === 1
+        && element.getAttribute('class') === SAFARI_PLAIN_TEXT_BREAK_CLASS;
+    }
+
+    // 浏览器、微信等来源常用 span/class/style 包裹纯文本；仅排版属性不应阻止空行归一化。
+    // 真正影响文字语义的颜色、粗斜体、删除线等样式仍交给 BlockNote 的 HTML 粘贴保留。
+    return !RICH_TEXT_STYLE_PATTERN.test(element.getAttribute('style') ?? '');
   });
 };
 
