@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  convertStandaloneMarkdownImageParagraphs,
   encodeLocalMediaPath,
   rewriteMarkdownImagesForDisk,
   rewriteMarkdownImagesForEditor,
@@ -93,6 +94,39 @@ describe('local-media markdown round-trip', () => {
     const src = localMedia('assets/foo.png');
     const markdown = ['```md', `![x](${src})`, '```'].join('\n');
     expect(rewriteMarkdownImagesForDisk(markdown, CONTEXT_NESTED)).toBe(markdown);
+  });
+});
+
+describe('standalone markdown image paragraphs', () => {
+  it('把旧 BlockNote 里的绝对路径 GIF 段落转成图片块', () => {
+    const blocks = [{
+      id: 'gif-block',
+      type: 'paragraph',
+      props: { textAlignment: 'left', backgroundColor: 'default' },
+      content: [{ type: 'text', text: '![动画 demo](/Users/test/assets/walk.gif)', styles: {} }],
+      children: [],
+    }];
+    expect(convertStandaloneMarkdownImageParagraphs(blocks)).toEqual([{
+      id: 'gif-block',
+      type: 'image',
+      props: {
+        textAlignment: 'left',
+        backgroundColor: 'default',
+        name: '动画 demo',
+        url: '/Users/test/assets/walk.gif',
+      },
+      children: [],
+    }]);
+  });
+
+  it('保留包含其他文字的普通段落', () => {
+    const blocks = [{
+      id: 'text-block',
+      type: 'paragraph',
+      content: [{ type: 'text', text: '参考 ![demo](/tmp/a.gif)', styles: {} }],
+      children: [],
+    }];
+    expect(convertStandaloneMarkdownImageParagraphs(blocks)).toBe(blocks);
   });
 });
 

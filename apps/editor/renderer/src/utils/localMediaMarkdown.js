@@ -7,6 +7,7 @@
 const LOCAL_MEDIA_SCHEME = 'local-media:';
 const REMOTE_OR_EMBEDDED_RE = /^(https?:|data:|blob:)/i;
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(\s*(<[^>\n]+>|[^\s)]+)((?:\s+"[^"]*")?)\s*\)/g;
+const STANDALONE_MARKDOWN_IMAGE_RE = /^!\[([^\]\n]*)\]\(\s*(?:<([^>\n]+)>|([^\s)\n]+))(?:\s+"[^"\n]*")?\s*\)$/;
 const WIKI_IMAGE_EMBED_RE = /!\[\[([^\]\n]+?)\]\]/g;
 const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 const WIKI_SIZE_ALIAS_RE = /^\d+(?:x\d+)?$/i;
@@ -33,6 +34,49 @@ export const decodeLocalMediaUrl = (url = '') => {
   if (!decoded) return '';
   if (/^[A-Za-z]:/.test(decoded)) return decoded;
   return decoded.startsWith('/') ? decoded : `/${decoded}`;
+};
+
+const getInlineText = (content) => {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.map((item) => (item?.type === 'text' ? item.text ?? '' : '')).join('');
+};
+
+const parseStandaloneMarkdownImage = (content) => {
+  const match = getInlineText(content).trim().match(STANDALONE_MARKDOWN_IMAGE_RE);
+  if (!match) return null;
+  return { name: match[1], url: match[2] || match[3] };
+};
+
+export const convertStandaloneMarkdownImageParagraphs = (blocks) => {
+  if (!Array.isArray(blocks)) return blocks;
+  let changed = false;
+  const converted = blocks.map((block) => {
+    const children = convertStandaloneMarkdownImageParagraphs(block?.children);
+    const image = block?.type === 'paragraph'
+      ? parseStandaloneMarkdownImage(block.content)
+      : null;
+
+    if (image) {
+      changed = true;
+      return {
+        id: block.id,
+        type: 'image',
+        props: {
+          textAlignment: block.props?.textAlignment,
+          backgroundColor: block.props?.backgroundColor,
+          ...image,
+        },
+        children: children ?? [],
+      };
+    }
+    if (children !== block?.children) {
+      changed = true;
+      return { ...block, children };
+    }
+    return block;
+  });
+  return changed ? converted : blocks;
 };
 
 const toPosix = (value) => String(value ?? '').replace(/\\/g, '/');

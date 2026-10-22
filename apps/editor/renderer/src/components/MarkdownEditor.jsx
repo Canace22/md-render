@@ -60,6 +60,7 @@ import {
   tightenListSpacing,
 } from '../utils/markdownUtils';
 import {
+  convertStandaloneMarkdownImageParagraphs,
   rewriteMarkdownImagesForDisk,
   rewriteMarkdownImagesForEditor,
   toEditorImageSrc,
@@ -271,11 +272,13 @@ const blockNoteContentToMarkdown = (content) => {
 /** 存储正文（BlockNote JSON 或 Markdown）→ 编辑器块，版本恢复时整篇替换用 */
 const contentToEditorBlocks = (content, mediaContext) => {
   const blocks = parseBlockNoteContent(content);
-  if (blocks?.length) return blocks;
+  if (blocks?.length) return convertStandaloneMarkdownImageParagraphs(blocks);
   const source = rewriteMarkdownImagesForEditor(normalizeMarkdown(content ?? ''), mediaContext);
   if (!source) return createEmptyDocument();
   const parsed = BlockNoteEditor.create(BLOCKNOTE_OPTIONS).tryParseMarkdownToBlocks(source);
-  return parsed.length > 0 ? parsed : createEmptyDocument();
+  return parsed.length > 0
+    ? convertStandaloneMarkdownImageParagraphs(parsed)
+    : createEmptyDocument();
 };
 
 const DEFAULT_PASTE_MIME_TYPES = new Set([
@@ -1171,7 +1174,7 @@ function MarkdownEditor() {
       if (blocks && blocks.length > 0) {
         // lastSyncedMarkdownRef 存原始 content 字符串，用于变更检测
         lastSyncedMarkdownRef.current = markdown;
-        return blocks;
+        return convertStandaloneMarkdownImageParagraphs(blocks);
       }
     }
 
@@ -1187,7 +1190,9 @@ function MarkdownEditor() {
 
     const parserEditor = BlockNoteEditor.create(BLOCKNOTE_OPTIONS);
     const parsedBlocks = parserEditor.tryParseMarkdownToBlocks(sourceMarkdown);
-    return parsedBlocks.length > 0 ? parsedBlocks : createEmptyDocument();
+    return parsedBlocks.length > 0
+      ? convertStandaloneMarkdownImageParagraphs(parsedBlocks)
+      : createEmptyDocument();
   }, [selectedId, contentResetKey, editorReloadToken]);
 
   const { uploadFile } = useEditorImageUpload({
