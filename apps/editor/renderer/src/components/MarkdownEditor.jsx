@@ -62,6 +62,7 @@ import {
 import {
   rewriteMarkdownImagesForDisk,
   rewriteMarkdownImagesForEditor,
+  toEditorImageSrc,
 } from '../utils/localMediaMarkdown.js';
 import { applyThemeToBody } from '../utils/themeUtils';
 import { stripFileExtension } from '../utils/fileDisplayName.js';
@@ -1303,6 +1304,11 @@ function MarkdownEditor() {
       ...BLOCKNOTE_OPTIONS,
       initialContent,
       uploadFile,
+      resolveFileUrl: async (url) => toEditorImageSrc(
+        url,
+        selectedProjectRootPath,
+        selectedFile?.relativePath ?? '',
+      ),
       pasteHandler: ({ event, editor: pasteEditor, defaultPasteHandler }) => {
         const clipboardData = event.clipboardData;
         const useDefaultPaste = () => defaultPasteHandler({

@@ -96,6 +96,10 @@ const toLocalMediaUrl = (projectRootPath, projectRelativePath) => (
   `${LOCAL_MEDIA_SCHEME}//${encodeLocalMediaPath(posixJoin(projectRootPath, projectRelativePath))}`
 );
 
+const absolutePathToLocalMediaUrl = (absPath) => (
+  `${LOCAL_MEDIA_SCHEME}//${encodeLocalMediaPath(absPath)}`
+);
+
 const resolveSrcToAbsPath = (src, projectRootPath, noteRelativePath) => {
   if (isLocalMediaUrl(src)) return decodeLocalMediaUrl(src);
   const posixSrc = toPosix(src);
@@ -106,6 +110,7 @@ const resolveSrcToAbsPath = (src, projectRootPath, noteRelativePath) => {
 
 export const toDiskImageSrc = (src, projectRootPath, noteRelativePath) => {
   if (!src || REMOTE_OR_EMBEDDED_RE.test(src) || !projectRootPath) return src;
+  if (toPosix(src).startsWith('/') && !isLocalMediaUrl(src)) return src;
   const absPath = resolveSrcToAbsPath(src, projectRootPath, noteRelativePath);
   const projectRelativePath = toProjectRelativePath(absPath, projectRootPath);
   if (!projectRelativePath) return src;
@@ -115,7 +120,11 @@ export const toDiskImageSrc = (src, projectRootPath, noteRelativePath) => {
 };
 
 export const toEditorImageSrc = (src, projectRootPath, noteRelativePath) => {
-  if (!src || REMOTE_OR_EMBEDDED_RE.test(src) || !projectRootPath) return src;
+  if (!src || REMOTE_OR_EMBEDDED_RE.test(src)) return src;
+  if (!projectRootPath) {
+    const posixSrc = toPosix(src);
+    return posixSrc.startsWith('/') ? absolutePathToLocalMediaUrl(posixSrc) : src;
+  }
   const absPath = resolveSrcToAbsPath(src, projectRootPath, noteRelativePath);
   const projectRelativePath = toProjectRelativePath(absPath, projectRootPath);
   if (!projectRelativePath) return src;
@@ -211,7 +220,7 @@ const rewriteMarkdownImages = (markdown, context, forEditor) => {
     ));
     const withUrls = replaceMarkdownImageUrls(withWiki, (src) => (
       forEditor
-        ? toEditorImageSrc(src, projectRootPath, noteRelativePath)
+        ? (toPosix(src).startsWith('/') ? src : toEditorImageSrc(src, projectRootPath, noteRelativePath))
         : toDiskImageSrc(src, projectRootPath, noteRelativePath)
     ));
     return separateAdjacentImages(withUrls);

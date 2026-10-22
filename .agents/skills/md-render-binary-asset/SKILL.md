@@ -45,6 +45,7 @@ flowchart TD
 
 - **不要改 `save-local-project-file`**：它是文本路径，二进制必须走新 IPC。
 - **`local-media://` 只存在编辑器内存里**：`saveBinaryAsset` 返回相对项目根的路径，renderer 拼 `local-media://${projectRoot}/${relativePath}` 给 BlockNote 显示。不要对整条路径用 `encodeURI`（它不编码 `#` / `?`），要保留 `/` 并对每个路径段分别 `encodeURIComponent`。写盘走 `rewriteMarkdownImagesForDisk`，打开走 `rewriteMarkdownImagesForEditor`。
+- **绝对媒体路径用显示 URL 解析，不要改源文**：Obsidian 会把 vault 文件转成浏览器可嵌入的资源 URI。md-render 对 `![说明](/absolute/file.gif)` 采用同样思路：在 BlockNote `resolveFileUrl` 中临时映射为 `local-media://`，保存时仍保留原来的绝对 Markdown 路径。数据库文档没有 `projectRootPath`，也必须能解析这种绝对路径。
 - **磁盘路径相对当前笔记，不要 percent-encode 中文**：`Projects/原稿/a.md` 引用 `assets/foo.png` 应写成 `../../assets/foo.png`。Obsidian 不认 `local-media://`，也不喜欢 `%E7%B4%A0%E6%9D%90` 这种编码。
 - **Obsidian 粘贴图是 `![[Pasted image xxx.png]]`**：标准 `![]()` 改写覆盖不到。打开时在 `localMediaMarkdown.js` 把带图片后缀的 wiki 嵌入转成 `![]()` 再变 `local-media://`。只有文件名按笔记同目录解析，带 `/` 按库根路径；普通 `[[笔记]]` / `![[某篇笔记]]` 不要转成图。第一次保存可能把 wiki 图写成标准相对路径，Obsidian 也认。
 - **mime 子类型来自 data URL**：`data:image/png;base64,...` 里的 `png` 才是 mime 子类型；`jpeg` 要映射成 `.jpg`，`svg+xml` 映射成 `.svg`。

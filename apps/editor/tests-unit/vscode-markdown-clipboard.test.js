@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isVsCodeMarkdownClipboard,
+  looksLikeMarkdownClipboardText,
   normalizeFrontmatterForPaste,
 } from '../renderer/src/utils/markdownUtils.js';
 
@@ -85,5 +86,13 @@ describe('normalizeFrontmatterForPaste', () => {
   it('空输入不抛错', () => {
     expect(normalizeFrontmatterForPaste('')).toBe('');
     expect(normalizeFrontmatterForPaste(null)).toBe('');
+  });
+});
+
+describe('looksLikeMarkdownClipboardText', () => {
+  it('识别绝对路径 GIF 图片语法', () => {
+    expect(looksLikeMarkdownClipboardText(
+      '![动画 demo](/Users/test/Documents/MdRender/assets/walk-runtime.gif)',
+    )).toBe(true);
   });
 });

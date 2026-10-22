@@ -69,6 +69,20 @@ describe('local-media markdown round-trip', () => {
     expect(rewriteMarkdownImagesForEditor(markdown, {})).toBe(markdown);
   });
 
+  it('无项目根时也能为绝对路径 GIF 生成显示 URL', () => {
+    const markdown = '![动画 demo](/Users/test/Documents/MdRender/assets/walk-runtime.gif)';
+    expect(toEditorImageSrc('/Users/test/Documents/MdRender/assets/walk-runtime.gif', '', '')).toBe(
+      'local-media:///Users/test/Documents/MdRender/assets/walk-runtime.gif',
+    );
+    expect(rewriteMarkdownImagesForEditor(markdown, {})).toBe(markdown);
+  });
+
+  it('绝对路径 GIF 显示后仍保留 Obsidian 可识别的原格式', () => {
+    const markdown = '![动画 demo](/Users/test/Documents/MdRender/assets/walk-runtime.gif)';
+    expect(rewriteMarkdownImagesForEditor(markdown, CONTEXT_NESTED)).toBe(markdown);
+    expect(rewriteMarkdownImagesForDisk(markdown, CONTEXT_NESTED)).toBe(markdown);
+  });
+
   it('中文文件名落盘不 percent-encode', () => {
     const src = localMedia('素材/截图-中文.png');
     expect(toDiskImageSrc(src, PROJECT_ROOT, NESTED_NOTE)).toBe('../../素材/截图-中文.png');
