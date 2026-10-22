@@ -1,6 +1,6 @@
 {
   "name": "@md-render/editor",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "private": true,
   "type": "module",
   "description": "MD Render editor app",
